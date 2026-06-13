@@ -54,7 +54,7 @@ diff --git a/src/ftxui/component/terminal_input_parser.cpp b/src/ftxui/component
      // See: https://github.com/ArthurSonzogni/FTXUI/issues/626
      //
      // Depending on the Cursor Key Mode (DECCKM), the terminal sends different
-@@ -176,10 +176,6 @@ TerminalInputParser::Output TerminalInputParser::Parse() {
+@@ -176,9 +176,5 @@ TerminalInputParser::Output TerminalInputParser::Parse() {
    }
  
    switch (Current()) {

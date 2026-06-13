@@ -2,11 +2,13 @@
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 #include <fstream>
 #include <stdexcept>
 #include <utility>
 
 #include "ftxui/component/event.hpp"
+#include "syntax_highlighter.hpp"
 
 namespace textlt {
 
@@ -150,6 +152,7 @@ ftxui::Element EditorComponent::Render() {
     const bool smart_word_wrap = config_ && config_->smart_word_wrap;
     const bool syntax_highlighting = !config_ || config_->syntax_highlighting;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    const std::string file_extension = std::filesystem::path(current_filepath_).extension().string();
     const size_t line_number_columns =
         show_line_numbers ? LineNumberText(0, line_number_width).size() : 0;
     const size_t editor_columns = editor_box_.x_max >= editor_box_.x_min
@@ -211,7 +214,16 @@ ftxui::Element EditorComponent::Render() {
         const size_t cursor_x = line_index == cursor_y_
             ? std::min(cursor_x_, line_content.size())
             : line_content.size() + 1;
-        auto render_raw_segment = [&] {
+        auto render_colored_segment = [&](const std::vector<SyntaxHighlighter::Token>* syntax_tokens) {
+            size_t syntax_token_index = 0;
+            if (syntax_tokens) {
+                while (syntax_token_index < syntax_tokens->size() &&
+                       (*syntax_tokens)[syntax_token_index].start +
+                           (*syntax_tokens)[syntax_token_index].length <= segment_start) {
+                    ++syntax_token_index;
+                }
+            }
+
             for (size_t x = segment_start; x <= segment_end; ++x) {
                 if (line_index == cursor_y_ && x == cursor_x) {
                     line_parts.push_back(
@@ -223,6 +235,21 @@ ftxui::Element EditorComponent::Render() {
                 }
 
                 ftxui::Element character = ftxui::text(line_content.substr(x, 1));
+                ftxui::Color text_color = theme.editor_text;
+                if (syntax_tokens) {
+                    while (syntax_token_index + 1 < syntax_tokens->size() &&
+                           x >= (*syntax_tokens)[syntax_token_index].start +
+                               (*syntax_tokens)[syntax_token_index].length) {
+                        ++syntax_token_index;
+                    }
+                    if (syntax_token_index < syntax_tokens->size()) {
+                        const SyntaxHighlighter::Token& token = (*syntax_tokens)[syntax_token_index];
+                        if (x >= token.start && x < token.start + token.length) {
+                            text_color = SyntaxHighlighter::ColorForStyle(token.style, theme);
+                        }
+                    }
+                }
+
                 const SearchMatch* search_match = SearchMatchAt(x, line_index);
                 if (IsCharacterSelected(x, line_index)) {
                     character = character |
@@ -237,19 +264,19 @@ ftxui::Element EditorComponent::Render() {
                         ftxui::bgcolor(match_bg) |
                         ftxui::color(theme.selection_fg);
                 } else {
-                    character = character | ftxui::color(theme.editor_text);
+                    character = character | ftxui::color(text_color);
                 }
                 line_parts.push_back(std::move(character));
             }
         };
 
         if (syntax_highlighting) {
-            // Placeholder branch where the state-machine lexer will inject colored tokens.
-            // For now, render the line normally using the standard theme text colors.
-            render_raw_segment();
+            const std::vector<SyntaxHighlighter::Token> syntax_tokens =
+                SyntaxHighlighter::TokenizeLine(line_content, file_extension);
+            render_colored_segment(&syntax_tokens);
         } else {
             // Standard raw rendering branch used when syntax highlighting is disabled.
-            render_raw_segment();
+            render_colored_segment(nullptr);
         }
 
         return ftxui::hbox(std::move(line_parts));

@@ -28,6 +28,7 @@ add_executable(textlt
   src/file_utils.cpp
   src/help_dialog.cpp
   src/main.cpp
+  src/syntax_highlighter.cpp
   src/terminal_flow_control_guard.cpp
   src/theme_dialog.cpp
   src/theme.cpp
