@@ -329,6 +329,7 @@ void EditorComponent::SaveToFile(const std::string& path) {
     }
 
     current_filepath_ = save_path;
+    is_dirty_ = false;
 }
 
 void EditorComponent::LoadFromFile(const std::string& path) {
@@ -354,6 +355,7 @@ void EditorComponent::LoadFromFile(const std::string& path) {
     undo_stack_.clear();
     redo_stack_.clear();
     typing_group_active_ = false;
+    is_dirty_ = false;
     ClearSearchHighlights();
     ClearSelection();
 }
@@ -368,6 +370,7 @@ void EditorComponent::NewFile(const std::string& path) {
     undo_stack_.clear();
     redo_stack_.clear();
     typing_group_active_ = false;
+    is_dirty_ = false;
     ClearSearchHighlights();
     ClearSelection();
 }
@@ -516,6 +519,53 @@ void EditorComponent::InsertText(const std::string& text) {
     }
 
     ClearSelection();
+    UpdateScroll();
+}
+
+void EditorComponent::ConvertTabsToSpaces() {
+    const int configured_tab_size = config_ ? config_->tab_size : 4;
+    const size_t tab_size = configured_tab_size == 2 ? 2 : 4;
+
+    bool has_tabs = false;
+    for (const std::string& line : text_lines_) {
+        if (line.find('\t') != std::string::npos) {
+            has_tabs = true;
+            break;
+        }
+    }
+    if (!has_tabs) {
+        return;
+    }
+
+    EndTypingGroup();
+    ClampCursorToBuffer();
+    SaveSnapshot();
+
+    size_t adjusted_cursor_x = cursor_x_;
+    const std::string spaces(tab_size, ' ');
+    for (size_t y = 0; y < text_lines_.size(); ++y) {
+        std::string& line = text_lines_[y];
+        if (y == cursor_y_) {
+            size_t tabs_before_cursor = 0;
+            const size_t cursor_limit = std::min(cursor_x_, line.size());
+            for (size_t x = 0; x < cursor_limit; ++x) {
+                if (line[x] == '\t') {
+                    ++tabs_before_cursor;
+                }
+            }
+            adjusted_cursor_x = cursor_x_ + tabs_before_cursor * (tab_size - 1);
+        }
+
+        size_t tab_position = line.find('\t');
+        while (tab_position != std::string::npos) {
+            line.replace(tab_position, 1, spaces);
+            tab_position = line.find('\t', tab_position + tab_size);
+        }
+    }
+
+    cursor_x_ = std::min(adjusted_cursor_x, text_lines_[cursor_y_].size());
+    ClearSelection();
+    is_dirty_ = true;
     UpdateScroll();
 }
 

@@ -50,6 +50,7 @@ TextltApp::TextltApp()
               " Smart Word Wrap [ ] ",
               " Syntax Highlighting [X] ",
               " Tab Size: 4 spaces ",
+              " Convert Tabs to Spaces ",
               " Theme... ",
           },
           {" About textlt ", " Keyboard Shortcuts "},
@@ -459,7 +460,7 @@ void TextltApp::SaveConfig() {
 }
 
 void TextltApp::UpdateOptionsMenuLabels() {
-    if (dropdown_entries_.size() <= 2 || dropdown_entries_[2].size() <= 4) {
+    if (dropdown_entries_.size() <= 2 || dropdown_entries_[2].size() <= 5) {
         return;
     }
 
@@ -622,6 +623,11 @@ void TextltApp::HandleOptionsMenu(int item) {
         SaveConfig();
         screen_.PostEvent(ftxui::Event::Custom);
     } else if (item == 5) {
+        auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+        editor_ptr->ConvertTabsToSpaces();
+        active_action_ = "Converted tabs to spaces";
+        screen_.PostEvent(ftxui::Event::Custom);
+    } else if (item == 6) {
         OpenThemeDialog();
         return;
     }
