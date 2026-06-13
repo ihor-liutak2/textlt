@@ -264,6 +264,7 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         return true;
     }
     if (help_dialog_.IsOpen()) {
+        help_dialog_.OnEvent(event);
         return true;
     }
 
