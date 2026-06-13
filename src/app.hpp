@@ -23,6 +23,12 @@ public:
     void Run();
 
 private:
+    enum class SearchMode {
+        None,
+        Find,
+        Replace,
+    };
+
     void CloseDropdown();
     void OpenDropdown();
     void CloseFileDialog();
@@ -87,10 +93,9 @@ private:
     int active_dropdown_ = -1;
     int focused_layer_ = 0;
     int selected_dropdown_item_ = 0;
-    int find_panel_mode_index_ = 0;
+    int search_panel_tab_index_ = 0;
     bool explorer_has_focus_ = false;
-    bool find_panel_active_ = false;
-    bool replace_panel_mode_ = false;
+    SearchMode current_search_mode_ = SearchMode::None;
     ftxui::Box top_menu_box_;
 
     ftxui::Component top_menu_;
@@ -99,7 +104,10 @@ private:
     ftxui::Component main_container_;
     ftxui::Component root_container_;
     ftxui::Component find_input_;
+    ftxui::Component replace_find_input_;
     ftxui::Component replace_input_;
+    ftxui::Component find_next_button_;
+    ftxui::Component find_previous_button_;
     ftxui::Component replace_next_button_;
     ftxui::Component replace_all_button_;
     ftxui::Component find_panel_find_container_;

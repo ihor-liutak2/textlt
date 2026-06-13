@@ -46,7 +46,7 @@ ftxui::Element HelpDialog::Render() {
             color(theme.modal_text_color) |
             frame |
             color(theme.modal_border) |
-            size(HEIGHT, LESS_THAN, 18),
+            size(HEIGHT, LESS_THAN, 24),
         separator() | color(theme.modal_border),
         text("Press Escape to close.") | dim | color(theme.modal_text_color),
     }) |

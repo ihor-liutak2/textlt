@@ -35,7 +35,15 @@ TextltApp::TextltApp()
       }),
       dropdown_entries_({
           {" New ", " Open ", " Save ", " Save As ", " Exit "},
-          {" Undo ", " Redo ", " Cut ", " Copy ", " Paste "},
+          {
+              " Undo ",
+              " Redo ",
+              " Cut ",
+              " Copy ",
+              " Paste ",
+              " Find... ",
+              " Replace... ",
+          },
           {
               " Toggle Line Numbers ",
               " Toggle File Explorer ",
@@ -86,20 +94,25 @@ TextltApp::TextltApp()
     find_input_option.on_change = [this] { RefreshFindMatches(); };
     find_input_option.on_enter = [this] { FindNext(); };
     find_input_ = ftxui::Input(&find_query_, "find text", find_input_option);
+    replace_find_input_ = ftxui::Input(&find_query_, "find text", find_input_option);
 
     ftxui::InputOption replace_input_option;
     replace_input_option.multiline = false;
     replace_input_option.on_enter = [this] { FindNext(); };
     replace_input_ = ftxui::Input(&replace_text_, "replacement", replace_input_option);
 
+    find_next_button_ = ftxui::Button("Find Next", [this] { FindNext(); });
+    find_previous_button_ = ftxui::Button("Find Prev", [this] { FindPrevious(); });
     replace_next_button_ = ftxui::Button("Replace Next", [this] { ReplaceNext(); });
     replace_all_button_ = ftxui::Button("Replace All", [this] { ReplaceAll(); });
 
     find_panel_find_container_ = ftxui::Container::Horizontal({
         find_input_,
+        find_next_button_,
+        find_previous_button_,
     });
     find_panel_replace_container_ = ftxui::Container::Horizontal({
-        find_input_,
+        replace_find_input_,
         replace_input_,
         replace_next_button_,
         replace_all_button_,
@@ -107,7 +120,7 @@ TextltApp::TextltApp()
     find_panel_container_ = ftxui::Container::Tab({
         find_panel_find_container_,
         find_panel_replace_container_,
-    }, &find_panel_mode_index_);
+    }, &search_panel_tab_index_);
 
     root_container_ = ftxui::Container::Tab({
         main_container_,
@@ -232,17 +245,19 @@ void TextltApp::FocusExplorer() {
 
 void TextltApp::OpenFindPanel(bool replace_mode) {
     active_dropdown_ = -1;
-    find_panel_active_ = true;
-    replace_panel_mode_ = replace_mode;
-    find_panel_mode_index_ = replace_mode ? 1 : 0;
+    current_search_mode_ = replace_mode ? SearchMode::Replace : SearchMode::Find;
+    search_panel_tab_index_ = replace_mode ? 1 : 0;
     focused_layer_ = 5;
     RefreshFindMatches();
-    find_input_->TakeFocus();
+    if (replace_mode) {
+        replace_find_input_->TakeFocus();
+    } else {
+        find_input_->TakeFocus();
+    }
 }
 
 void TextltApp::CloseFindPanel() {
-    find_panel_active_ = false;
-    replace_panel_mode_ = false;
+    current_search_mode_ = SearchMode::None;
     std::static_pointer_cast<EditorComponent>(text_editor_)->ClearSearchHighlights();
     FocusEditor();
 }
@@ -466,6 +481,21 @@ void TextltApp::HandleEditMenu(int item) {
         }
         return;
     }
+
+    if (item == 5) { // Find...
+        CloseDropdown();
+        OpenFindPanel(false);
+        active_action_ = "Find";
+        return;
+    }
+
+    if (item == 6) { // Replace...
+        CloseDropdown();
+        OpenFindPanel(true);
+        active_action_ = "Replace";
+        return;
+    }
+
     CloseDropdown();
 }
 

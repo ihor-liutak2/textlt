@@ -40,7 +40,7 @@ ftxui::Element TextltApp::Render() {
         workspace | yflex,
     };
 
-    if (find_panel_active_) {
+    if (current_search_mode_ != SearchMode::None) {
         base_rows.push_back(separator());
         base_rows.push_back(RenderFindPanel());
     }
@@ -95,11 +95,33 @@ ftxui::Element TextltApp::Render() {
 ftxui::Element TextltApp::RenderFindPanel() {
     using namespace ftxui;
 
-    const std::string mode = replace_panel_mode_ ? " Replace " : " Find ";
+    Element controls = emptyElement();
+    std::string mode = " Find ";
+    if (current_search_mode_ == SearchMode::Replace) {
+        mode = " Replace ";
+        controls = hbox({
+            text(" Find: "),
+            replace_find_input_->Render() | size(WIDTH, GREATER_THAN, 20) | xflex,
+            text(" Replace: "),
+            replace_input_->Render() | size(WIDTH, GREATER_THAN, 20) | xflex,
+            separator(),
+            replace_next_button_->Render(),
+            replace_all_button_->Render(),
+        });
+    } else {
+        controls = hbox({
+            text(" Find: "),
+            find_input_->Render() | size(WIDTH, GREATER_THAN, 28) | xflex,
+            separator(),
+            find_next_button_->Render(),
+            find_previous_button_->Render(),
+        });
+    }
+
     return hbox({
         text(mode) | bold | color(current_theme_.menu_foreground),
         separator(),
-        find_panel_container_->Render() | xflex,
+        controls | xflex,
         separator(),
         text(" " + FindMatchStatus() + " ") | color(current_theme_.menu_foreground),
         text(" Esc closes ") | dim | color(current_theme_.foreground),
@@ -113,7 +135,7 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     const std::string& input = event.input();
     const bool has_input = !input.empty();
 
-    if (find_panel_active_) {
+    if (current_search_mode_ != SearchMode::None) {
         if (event == ftxui::Event::Escape) {
             CloseFindPanel();
             return true;

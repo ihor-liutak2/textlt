@@ -12,6 +12,13 @@ Navigation
   Ctrl+Left     Jump to the previous word
   Ctrl+Right    Jump to the next word
 
+Search & Replace
+  Ctrl+F        Open Find Panel
+  Ctrl+H        Open Replace Panel
+  F3            Find Next Match
+  Shift+Enter   Find Previous Match
+  Escape        Close Find/Replace Panel
+
 Menus
   Tab           Switch focus between File Explorer and Editor
   F1            Open this help window
