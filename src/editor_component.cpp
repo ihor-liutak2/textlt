@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "ftxui/component/event.hpp"
+#include "ftxui/component/screen_interactive.hpp"
 #include "syntax_highlighter.hpp"
 
 namespace textlt {
@@ -388,6 +389,10 @@ int EditorComponent::GetCursorRow() const {
 
 int EditorComponent::GetCursorCol() const {
     return static_cast<int>(cursor_x_);
+}
+
+void EditorComponent::SetBottomOverlayRows(size_t rows) {
+    bottom_overlay_rows_ = rows;
 }
 
 void EditorComponent::JumpToLine(int line_number) {
@@ -870,11 +875,22 @@ bool EditorComponent::Focusable() const {
 }
 
 size_t EditorComponent::VisibleHeight() const {
-    if (editor_box_.y_max >= editor_box_.y_min) {
-        return static_cast<size_t>(
-            std::max(1, editor_box_.y_max - editor_box_.y_min + 1));
+    if (editor_box_.y_max < editor_box_.y_min) {
+        return 1;
     }
-    return 1;
+
+    int visible_y_max = editor_box_.y_max;
+    const ftxui::ScreenInteractive* screen = ftxui::ScreenInteractive::Active();
+    if (screen && screen->dimy() > 0 && bottom_overlay_rows_ > 0) {
+        const int reserved_rows = static_cast<int>(
+            std::min(bottom_overlay_rows_, static_cast<size_t>(screen->dimy())));
+        visible_y_max = std::min(visible_y_max, screen->dimy() - reserved_rows - 1);
+    }
+
+    if (visible_y_max < editor_box_.y_min) {
+        return 1;
+    }
+    return static_cast<size_t>(visible_y_max - editor_box_.y_min + 1);
 }
 
 size_t EditorComponent::LineNumberWidth() const {

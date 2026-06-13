@@ -13,6 +13,14 @@ ftxui::Element TextltApp::Render() {
     using namespace ftxui;
 
     const auto editor = std::static_pointer_cast<EditorComponent>(text_editor_);
+    size_t bottom_overlay_rows = 2; // Status separator + status bar.
+    if (current_search_mode_ != SearchMode::None) {
+        bottom_overlay_rows += 4; // Find separator + bordered panel.
+    }
+    if (show_goto_line_bar_) {
+        bottom_overlay_rows += 4; // Go-to-line separator + bordered panel.
+    }
+    editor->SetBottomOverlayRows(bottom_overlay_rows);
     
     Element top_menu_element =
         top_menu_->Render() |
