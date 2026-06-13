@@ -25,6 +25,7 @@ enum class Language {
     Php,
     Plain,
     Python,
+    Typescript,
 };
 
 Language LanguageFromExtension(const std::string& extension) {
@@ -48,6 +49,9 @@ Language LanguageFromExtension(const std::string& extension) {
     }
     if (extension == ".py") {
         return Language::Python;
+    }
+    if (extension == ".ts") {
+        return Language::Typescript;
     }
     if (extension == ".c" || extension == ".cc" || extension == ".cpp" ||
         extension == ".cxx" || extension == ".h" || extension == ".hh" ||
@@ -258,6 +262,60 @@ const std::unordered_set<std::string>& JsTypes() {
         "undefined",
         "document",
         "window",
+    };
+    return types;
+}
+
+const std::unordered_set<std::string>& TypescriptKeywords() {
+    static const std::unordered_set<std::string> keywords = {
+        "const",
+        "let",
+        "var",
+        "function",
+        "return",
+        "if",
+        "else",
+        "for",
+        "while",
+        "switch",
+        "case",
+        "break",
+        "class",
+        "export",
+        "import",
+        "from",
+        "as",
+        "extends",
+        "implements",
+        "new",
+        "this",
+        "yield",
+        "await",
+        "async",
+    };
+    return keywords;
+}
+
+const std::unordered_set<std::string>& TypescriptTypes() {
+    static const std::unordered_set<std::string> types = {
+        "interface",
+        "type",
+        "enum",
+        "public",
+        "private",
+        "protected",
+        "readonly",
+        "abstract",
+        "keyof",
+        "any",
+        "unknown",
+        "never",
+        "void",
+        "string",
+        "number",
+        "boolean",
+        "undefined",
+        "null",
     };
     return types;
 }
@@ -750,7 +808,8 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
         }
 
         if ((language == Language::Cpp || language == Language::Javascript ||
-             language == Language::Java || language == Language::Php) &&
+             language == Language::Java || language == Language::Php ||
+             language == Language::Typescript) &&
             line[index] == '/' && index + 1 < line.size() && line[index + 1] == '/') {
             state = STATE_COMMENT;
             PushToken(tokens, index, line.size(), Style::Comment);
@@ -764,7 +823,8 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
         }
 
         if ((language == Language::Cpp || language == Language::Javascript ||
-             language == Language::Java || language == Language::Php) &&
+             language == Language::Java || language == Language::Php ||
+             language == Language::Typescript) &&
             StartsWith(line, index, "/*")) {
             state = STATE_COMMENT;
             const size_t end = FindCommentEnd(line, index + 2, "*/");
@@ -775,7 +835,8 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
 
         if (line[index] == '"' ||
             ((language == Language::Cpp || language == Language::Javascript ||
-              language == Language::Java || language == Language::Php) &&
+              language == Language::Java || language == Language::Php ||
+              language == Language::Typescript) &&
              (line[index] == '\'' || line[index] == '`'))) {
             state = STATE_STRING;
             const size_t start = index;
@@ -808,7 +869,8 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             continue;
         }
 
-        const bool is_identifier_start = language == Language::Javascript
+        const bool is_identifier_start =
+            (language == Language::Javascript || language == Language::Typescript)
             ? IsJsIdentifierStart(line[index])
             : IsIdentifierStart(line[index]);
         if (is_identifier_start) {
@@ -818,7 +880,8 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
                 while (index < line.size() && IsCppWordBody(line[index])) {
                     ++index;
                 }
-            } else if (language == Language::Javascript) {
+            } else if (language == Language::Javascript ||
+                       language == Language::Typescript) {
                 while (index < line.size() && IsJsIdentifierBody(line[index])) {
                     ++index;
                 }
@@ -846,6 +909,12 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
                 if (JsKeywords().find(word) != JsKeywords().end()) {
                     style = Style::Keyword;
                 } else if (JsTypes().find(word) != JsTypes().end()) {
+                    style = Style::Type;
+                }
+            } else if (language == Language::Typescript) {
+                if (TypescriptKeywords().find(word) != TypescriptKeywords().end()) {
+                    style = Style::Keyword;
+                } else if (TypescriptTypes().find(word) != TypescriptTypes().end()) {
                     style = Style::Type;
                 }
             } else if (language == Language::Php) {
