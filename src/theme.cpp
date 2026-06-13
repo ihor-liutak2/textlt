@@ -70,6 +70,16 @@ namespace textlt {
                 ExtractString(content, "menu_foreground"), theme.menu_foreground);
             theme.status = ColorFromName(ExtractString(content, "status"), theme.status);
             theme.editor_text = ColorFromName(ExtractString(content, "editor_text"), theme.editor_text);
+            theme.syntax_keyword = ColorFromName(
+                ExtractString(content, "syntax_keyword"), theme.syntax_keyword);
+            theme.syntax_type = ColorFromName(
+                ExtractString(content, "syntax_type"), theme.syntax_type);
+            theme.syntax_string = ColorFromName(
+                ExtractString(content, "syntax_string"), theme.syntax_string);
+            theme.syntax_number = ColorFromName(
+                ExtractString(content, "syntax_number"), theme.syntax_number);
+            theme.syntax_comment = ColorFromName(
+                ExtractString(content, "syntax_comment"), theme.syntax_comment);
             theme.gutter = ColorFromName(ExtractString(content, "gutter"), theme.gutter);
             theme.cursor = ColorFromName(ExtractString(content, "cursor"), theme.cursor);
             theme.selection_bg = ColorFromName(

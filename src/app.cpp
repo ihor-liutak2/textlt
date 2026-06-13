@@ -48,6 +48,7 @@ TextltApp::TextltApp()
               " Toggle Line Numbers ",
               " Toggle File Explorer ",
               " Smart Word Wrap [ ] ",
+              " Syntax Highlighting [X] ",
               " Theme... ",
           },
           {" About textlt ", " Keyboard Shortcuts "},
@@ -412,13 +413,16 @@ void TextltApp::SaveConfig() {
 }
 
 void TextltApp::UpdateOptionsMenuLabels() {
-    if (dropdown_entries_.size() <= 2 || dropdown_entries_[2].size() <= 2) {
+    if (dropdown_entries_.size() <= 2 || dropdown_entries_[2].size() <= 3) {
         return;
     }
 
     dropdown_entries_[2][2] = editor_config_.smart_word_wrap
         ? " Smart Word Wrap [X] "
         : " Smart Word Wrap [ ] ";
+    dropdown_entries_[2][3] = editor_config_.syntax_highlighting
+        ? " Syntax Highlighting [X] "
+        : " Syntax Highlighting [ ] ";
 
     if (active_dropdown_ == 2) {
         current_dropdown_entries_ = dropdown_entries_[2];
@@ -558,6 +562,12 @@ void TextltApp::HandleOptionsMenu(int item) {
         SaveConfig();
         screen_.PostEvent(ftxui::Event::Custom);
     } else if (item == 3) {
+        editor_config_.syntax_highlighting = !editor_config_.syntax_highlighting;
+        active_action_ = editor_config_.syntax_highlighting ? "Syntax Highlighting enabled" : "Syntax Highlighting disabled";
+        UpdateOptionsMenuLabels();
+        SaveConfig();
+        screen_.PostEvent(ftxui::Event::Custom);
+    } else if (item == 4) {
         OpenThemeDialog();
         return;
     }

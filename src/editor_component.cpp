@@ -148,6 +148,7 @@ ftxui::Element EditorComponent::Render() {
     const size_t line_number_width = LineNumberWidth();
     const bool show_line_numbers = config_ && config_->show_line_numbers;
     const bool smart_word_wrap = config_ && config_->smart_word_wrap;
+    const bool syntax_highlighting = !config_ || config_->syntax_highlighting;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     const size_t line_number_columns =
         show_line_numbers ? LineNumberText(0, line_number_width).size() : 0;
@@ -210,34 +211,45 @@ ftxui::Element EditorComponent::Render() {
         const size_t cursor_x = line_index == cursor_y_
             ? std::min(cursor_x_, line_content.size())
             : line_content.size() + 1;
-        for (size_t x = segment_start; x <= segment_end; ++x) {
-            if (line_index == cursor_y_ && x == cursor_x) {
-                line_parts.push_back(
-                    ftxui::text("█") | ftxui::blink | ftxui::color(theme.cursor));
-            }
+        auto render_raw_segment = [&] {
+            for (size_t x = segment_start; x <= segment_end; ++x) {
+                if (line_index == cursor_y_ && x == cursor_x) {
+                    line_parts.push_back(
+                        ftxui::text("█") | ftxui::blink | ftxui::color(theme.cursor));
+                }
 
-            if (x == segment_end || x == line_content.size()) {
-                continue;
-            }
+                if (x == segment_end || x == line_content.size()) {
+                    continue;
+                }
 
-            ftxui::Element character = ftxui::text(line_content.substr(x, 1));
-            const SearchMatch* search_match = SearchMatchAt(x, line_index);
-            if (IsCharacterSelected(x, line_index)) {
-                character = character |
-                    ftxui::bgcolor(theme.selection_bg) |
-                    ftxui::color(theme.selection_fg);
-            } else if (search_match) {
-                const ftxui::Color match_bg =
-                    IsActiveSearchMatch(*search_match)
-                        ? theme.active_match_bg
-                        : theme.match_bg;
-                character = character |
-                    ftxui::bgcolor(match_bg) |
-                    ftxui::color(theme.selection_fg);
-            } else {
-                character = character | ftxui::color(theme.editor_text);
+                ftxui::Element character = ftxui::text(line_content.substr(x, 1));
+                const SearchMatch* search_match = SearchMatchAt(x, line_index);
+                if (IsCharacterSelected(x, line_index)) {
+                    character = character |
+                        ftxui::bgcolor(theme.selection_bg) |
+                        ftxui::color(theme.selection_fg);
+                } else if (search_match) {
+                    const ftxui::Color match_bg =
+                        IsActiveSearchMatch(*search_match)
+                            ? theme.active_match_bg
+                            : theme.match_bg;
+                    character = character |
+                        ftxui::bgcolor(match_bg) |
+                        ftxui::color(theme.selection_fg);
+                } else {
+                    character = character | ftxui::color(theme.editor_text);
+                }
+                line_parts.push_back(std::move(character));
             }
-            line_parts.push_back(std::move(character));
+        };
+
+        if (syntax_highlighting) {
+            // Placeholder branch where the state-machine lexer will inject colored tokens.
+            // For now, render the line normally using the standard theme text colors.
+            render_raw_segment();
+        } else {
+            // Standard raw rendering branch used when syntax highlighting is disabled.
+            render_raw_segment();
         }
 
         return ftxui::hbox(std::move(line_parts));
