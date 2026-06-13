@@ -34,6 +34,7 @@ public:
     void ClearSelection();
     void InsertText(const std::string& text);
     void ConvertTabsToSpaces();
+    void ToggleComment();
     void Undo();
     void Redo();
     void HighlightMatches(const std::string& query);
@@ -92,7 +93,6 @@ private:
     size_t FindMatchAtOrAfterCursor() const;
     void MoveCursorToSearchMatch(const SearchMatch& match);
     std::string GetCommentPrefix() const;
-    void ToggleComment();
 
     std::vector<std::string> text_lines_;
     std::vector<EditorState> undo_stack_;

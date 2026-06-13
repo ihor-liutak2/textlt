@@ -41,6 +41,7 @@ TextltApp::TextltApp()
               " Cut ",
               " Copy ",
               " Paste ",
+              " Toggle Comment   Ctrl+/ ",
               " Find... ",
               " Replace... ",
           },
@@ -633,14 +634,23 @@ void TextltApp::HandleEditMenu(int item) {
         return;
     }
 
-    if (item == 5) { // Find...
+    if (item == 5) { // Toggle Comment
+        FocusEditor();
+        editor_ptr->ToggleComment();
+        active_action_ = "Toggle Comment";
+        CloseDropdown();
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+
+    if (item == 6) { // Find...
         CloseDropdown();
         OpenFindPanel(false);
         active_action_ = "Find";
         return;
     }
 
-    if (item == 6) { // Replace...
+    if (item == 7) { // Replace...
         CloseDropdown();
         OpenFindPanel(true);
         active_action_ = "Replace";
