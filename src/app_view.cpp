@@ -242,10 +242,6 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         CloseDropdown();
         return true;
     }
-    if (event == ftxui::Event::Tab && active_dropdown_ < 0) {
-        SwitchEditorFocus();
-        return true;
-    }
     if (event == ftxui::Event::ArrowLeft && active_dropdown_ >= 0) {
         selected_menu_item_ =
             (selected_menu_item_ + static_cast<int>(menu_entries_.size()) - 1) %

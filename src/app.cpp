@@ -83,9 +83,22 @@ TextltApp::TextltApp()
     dropdown_menu_ = ftxui::Menu(
         &current_dropdown_entries_, &selected_dropdown_item_, dropdown_option);
 
-    body_container_ = ftxui::Container::Horizontal({
+    auto body_content = ftxui::Container::Horizontal({
         file_explorer_,
         text_editor_,
+    });
+    body_container_ = ftxui::CatchEvent(body_content, [this](ftxui::Event event) {
+        if (event == ftxui::Event::Tab &&
+            focused_layer_ == 0 &&
+            active_dropdown_ < 0 &&
+            !file_dialog_.IsOpen() &&
+            !help_dialog_.IsOpen() &&
+            !theme_dialog_.IsOpen() &&
+            !explorer_has_focus_) {
+            text_editor_->OnEvent(event);
+            return true;
+        }
+        return false;
     });
 
     // FIXED: Added missing underscore to match class declaration
