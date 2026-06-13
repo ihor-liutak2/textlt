@@ -336,6 +336,15 @@ std::string TextltApp::FileTypeLabel(const std::string& file_path) const {
     if (extension == ".md") {
         return "Markdown Document";
     }
+    if (extension == ".html" || extension == ".htm") {
+        return "HTML Document";
+    }
+    if (extension == ".css") {
+        return "CSS Stylesheet";
+    }
+    if (extension == ".js") {
+        return "JavaScript Source";
+    }
     return "Plain Text";
 }
 

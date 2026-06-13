@@ -1,5 +1,6 @@
 #include "syntax_highlighter.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <unordered_set>
 
@@ -16,11 +17,23 @@ enum State {
 
 enum class Language {
     Cpp,
+    Css,
+    Html,
+    Javascript,
     Json,
     Plain,
 };
 
 Language LanguageFromExtension(const std::string& extension) {
+    if (extension == ".css") {
+        return Language::Css;
+    }
+    if (extension == ".html" || extension == ".htm") {
+        return Language::Html;
+    }
+    if (extension == ".js") {
+        return Language::Javascript;
+    }
     if (extension == ".json") {
         return Language::Json;
     }
@@ -40,6 +53,14 @@ bool IsIdentifierStart(char character) {
 bool IsIdentifierBody(char character) {
     const unsigned char value = static_cast<unsigned char>(character);
     return std::isalnum(value) || character == '_';
+}
+
+bool IsJsIdentifierStart(char character) {
+    return IsIdentifierStart(character) || character == '$';
+}
+
+bool IsJsIdentifierBody(char character) {
+    return IsIdentifierBody(character) || character == '$';
 }
 
 bool IsCppWordBody(char character) {
@@ -123,6 +144,45 @@ size_t ParseNumberEnd(const std::string& line, size_t index) {
     return current;
 }
 
+bool StartsWith(const std::string& line, size_t index, const std::string& marker) {
+    return index + marker.size() <= line.size() &&
+        line.compare(index, marker.size(), marker) == 0;
+}
+
+size_t FindCommentEnd(const std::string& line,
+                      size_t index,
+                      const std::string& close_marker) {
+    const size_t close = line.find(close_marker, index);
+    return close == std::string::npos ? line.size() : close + close_marker.size();
+}
+
+size_t ParseQuotedStringEnd(const std::string& line, size_t index) {
+    const char quote = line[index];
+    ++index;
+    bool escaped = false;
+    while (index < line.size()) {
+        const char current = line[index];
+        if (current == quote && !escaped) {
+            ++index;
+            break;
+        }
+        escaped = current == '\\' && !escaped;
+        if (current != '\\') {
+            escaped = false;
+        }
+        ++index;
+    }
+    return index;
+}
+
+size_t SkipWhitespace(const std::string& line, size_t index) {
+    while (index < line.size() &&
+           std::isspace(static_cast<unsigned char>(line[index]))) {
+        ++index;
+    }
+    return index;
+}
+
 const std::unordered_set<std::string>& CppKeywords() {
     static const std::unordered_set<std::string> keywords = {
         "if",
@@ -153,6 +213,39 @@ const std::unordered_set<std::string>& CppTypes() {
         "size_t",
         "std::string",
         "std::vector",
+    };
+    return types;
+}
+
+const std::unordered_set<std::string>& JsKeywords() {
+    static const std::unordered_set<std::string> keywords = {
+        "if",
+        "else",
+        "return",
+        "for",
+        "while",
+        "switch",
+        "case",
+        "break",
+        "function",
+        "class",
+        "export",
+        "import",
+    };
+    return keywords;
+}
+
+const std::unordered_set<std::string>& JsTypes() {
+    static const std::unordered_set<std::string> types = {
+        "const",
+        "let",
+        "var",
+        "true",
+        "false",
+        "null",
+        "undefined",
+        "document",
+        "window",
     };
     return types;
 }
@@ -191,6 +284,220 @@ void PushToken(std::vector<SyntaxHighlighter::Token>& tokens,
     tokens.push_back({start, end - start, style});
 }
 
+bool IsHtmlNameStart(char character) {
+    const unsigned char value = static_cast<unsigned char>(character);
+    return std::isalpha(value) || character == '_' || character == ':' || character == '!';
+}
+
+bool IsHtmlNameBody(char character) {
+    const unsigned char value = static_cast<unsigned char>(character);
+    return std::isalnum(value) || character == '-' || character == '_' ||
+        character == ':' || character == '!';
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizeHtml(const std::string& line) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    size_t index = 0;
+    while (index < line.size()) {
+        if (StartsWith(line, index, "<!--")) {
+            const size_t end = FindCommentEnd(line, index + 4, "-->");
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::Comment);
+            index = end;
+            continue;
+        }
+
+        if (line[index] != '<') {
+            const size_t next_tag = line.find('<', index);
+            const size_t end = next_tag == std::string::npos ? line.size() : next_tag;
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::Normal);
+            index = end;
+            continue;
+        }
+
+        PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+        ++index;
+
+        if (index < line.size() && line[index] == '/') {
+            PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+            ++index;
+        }
+
+        const size_t tag_name_start = SkipWhitespace(line, index);
+        if (tag_name_start > index) {
+            PushToken(tokens, index, tag_name_start, SyntaxHighlighter::Style::Normal);
+            index = tag_name_start;
+        }
+
+        if (index < line.size() && IsHtmlNameStart(line[index])) {
+            const size_t start = index;
+            while (index < line.size() && IsHtmlNameBody(line[index])) {
+                ++index;
+            }
+            PushToken(tokens, start, index, SyntaxHighlighter::Style::Keyword);
+        }
+
+        while (index < line.size() && line[index] != '>') {
+            if (line[index] == '"' || line[index] == '\'') {
+                const size_t end = ParseQuotedStringEnd(line, index);
+                PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+                index = end;
+                continue;
+            }
+
+            if (IsHtmlNameStart(line[index])) {
+                const size_t start = index;
+                while (index < line.size() && IsHtmlNameBody(line[index])) {
+                    ++index;
+                }
+
+                const size_t lookahead = SkipWhitespace(line, index);
+                const SyntaxHighlighter::Style style =
+                    lookahead < line.size() && line[lookahead] == '='
+                        ? SyntaxHighlighter::Style::Type
+                        : SyntaxHighlighter::Style::Normal;
+                PushToken(tokens, start, index, style);
+                continue;
+            }
+
+            PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+            ++index;
+        }
+
+        if (index < line.size() && line[index] == '>') {
+            PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+            ++index;
+        }
+    }
+
+    return tokens;
+}
+
+bool HasCssPropertyAhead(const std::string& line, size_t index) {
+    const size_t colon = line.find(':', index);
+    if (colon == std::string::npos) {
+        return false;
+    }
+
+    const size_t open_brace = line.find('{', index);
+    const size_t close_brace = line.find('}', index);
+    return open_brace == std::string::npos &&
+        (close_brace == std::string::npos || colon < close_brace);
+}
+
+void PushCssValueTokens(std::vector<SyntaxHighlighter::Token>& tokens,
+                        const std::string& line,
+                        size_t start,
+                        size_t end) {
+    size_t index = start;
+    while (index < end) {
+        if (line[index] == '"' || line[index] == '\'') {
+            const size_t string_end = std::min(ParseQuotedStringEnd(line, index), end);
+            PushToken(tokens, index, string_end, SyntaxHighlighter::Style::String);
+            index = string_end;
+            continue;
+        }
+        if (IsNumberStart(line, index)) {
+            const size_t number_end = std::min(ParseNumberEnd(line, index), end);
+            PushToken(tokens, index, number_end, SyntaxHighlighter::Style::Number);
+            index = number_end;
+            continue;
+        }
+        if (std::isspace(static_cast<unsigned char>(line[index]))) {
+            PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+        } else {
+            PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::String);
+        }
+        ++index;
+    }
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizeCss(const std::string& line) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    bool inside_block = false;
+    size_t index = 0;
+    while (index < line.size()) {
+        if (StartsWith(line, index, "/*")) {
+            const size_t end = FindCommentEnd(line, index + 2, "*/");
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::Comment);
+            index = end;
+            continue;
+        }
+
+        if (line[index] == '"' || line[index] == '\'') {
+            const size_t end = ParseQuotedStringEnd(line, index);
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+            index = end;
+            continue;
+        }
+
+        if (line[index] == '{') {
+            PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+            ++index;
+            inside_block = true;
+            continue;
+        }
+
+        if (line[index] == '}') {
+            PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+            ++index;
+            inside_block = false;
+            continue;
+        }
+
+        if (!inside_block && !HasCssPropertyAhead(line, index)) {
+            const size_t brace = line.find('{', index);
+            const size_t comment = line.find("/*", index);
+            size_t end = brace == std::string::npos ? line.size() : brace;
+            if (comment != std::string::npos && comment < end) {
+                end = comment;
+            }
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::Type);
+            index = end;
+            continue;
+        }
+
+        const size_t colon = line.find(':', index);
+        if (colon == std::string::npos) {
+            PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Normal);
+            break;
+        }
+
+        const size_t property_start = SkipWhitespace(line, index);
+        if (property_start > index) {
+            PushToken(tokens, index, property_start, SyntaxHighlighter::Style::Normal);
+        }
+
+        size_t property_end = colon;
+        while (property_end > property_start &&
+               std::isspace(static_cast<unsigned char>(line[property_end - 1]))) {
+            --property_end;
+        }
+        PushToken(tokens, property_start, property_end, SyntaxHighlighter::Style::Keyword);
+        PushToken(tokens, property_end, colon + 1, SyntaxHighlighter::Style::Normal);
+
+        size_t value_end = colon + 1;
+        while (value_end < line.size() && line[value_end] != ';' && line[value_end] != '}') {
+            if (StartsWith(line, value_end, "/*")) {
+                break;
+            }
+            ++value_end;
+        }
+        PushCssValueTokens(tokens, line, colon + 1, value_end);
+        index = value_end;
+
+        if (index < line.size() && line[index] == ';') {
+            PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+            ++index;
+        }
+    }
+
+    return tokens;
+}
+
 } // namespace
 
 ftxui::Color SyntaxHighlighter::ColorForStyle(Style style, const Theme& theme) {
@@ -211,6 +518,12 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
     const Language language = LanguageFromExtension(file_extension);
     std::vector<Token> tokens;
     tokens.reserve(line.size() / 4 + 1);
+    if (language == Language::Html) {
+        return TokenizeHtml(line);
+    }
+    if (language == Language::Css) {
+        return TokenizeCss(line);
+    }
     if (language == Language::Plain) {
         PushToken(tokens, 0, line.size(), Style::Normal);
         return tokens;
@@ -227,23 +540,21 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             break;
         }
 
-        if (line[index] == '"') {
+        if ((language == Language::Cpp || language == Language::Javascript) &&
+            StartsWith(line, index, "/*")) {
+            state = STATE_COMMENT;
+            const size_t end = FindCommentEnd(line, index + 2, "*/");
+            PushToken(tokens, index, end, Style::Comment);
+            index = end;
+            continue;
+        }
+
+        if (line[index] == '"' ||
+            ((language == Language::Cpp || language == Language::Javascript) &&
+             (line[index] == '\'' || line[index] == '`'))) {
             state = STATE_STRING;
             const size_t start = index;
-            ++index;
-            bool escaped = false;
-            while (index < line.size()) {
-                const char current = line[index];
-                if (current == '"' && !escaped) {
-                    ++index;
-                    break;
-                }
-                escaped = current == '\\' && !escaped;
-                if (current != '\\') {
-                    escaped = false;
-                }
-                ++index;
-            }
+            index = ParseQuotedStringEnd(line, index);
 
             const Style style =
                 language == Language::Json && IsJsonKey(line, index)
@@ -261,11 +572,18 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             continue;
         }
 
-        if (IsIdentifierStart(line[index])) {
+        const bool is_identifier_start = language == Language::Javascript
+            ? IsJsIdentifierStart(line[index])
+            : IsIdentifierStart(line[index]);
+        if (is_identifier_start) {
             state = STATE_KEYWORD;
             const size_t start = index;
             if (language == Language::Cpp) {
                 while (index < line.size() && IsCppWordBody(line[index])) {
+                    ++index;
+                }
+            } else if (language == Language::Javascript) {
+                while (index < line.size() && IsJsIdentifierBody(line[index])) {
                     ++index;
                 }
             } else {
@@ -280,6 +598,12 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
                 if (CppKeywords().find(word) != CppKeywords().end()) {
                     style = Style::Keyword;
                 } else if (CppTypes().find(word) != CppTypes().end()) {
+                    style = Style::Type;
+                }
+            } else if (language == Language::Javascript) {
+                if (JsKeywords().find(word) != JsKeywords().end()) {
+                    style = Style::Keyword;
+                } else if (JsTypes().find(word) != JsTypes().end()) {
                     style = Style::Type;
                 }
             } else if (language == Language::Json &&
