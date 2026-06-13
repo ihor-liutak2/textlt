@@ -1,0 +1,21 @@
+{
+  "name": "Pantone Classic Blue",
+  "background": "#0F2042",
+  "foreground": "#FFFFFF",
+  "header": "#1F3A60",
+  "menu_background": "#0F2042",
+  "menu_foreground": "#E2E8F0",
+  "status": "#1F3A60",
+  "editor_text": "#FFFFFF",
+  "gutter": "#475569",
+  "cursor": "#38BDF8",
+  "modal_background": "#1F3A60",
+  "modal_foreground": "#FFFFFF",
+  "modal_border": "#38BDF8",
+  "modal_accent": "#38BDF8",
+  "modal_text_color": "#E2E8F0",
+  "modal_input_bg": "#0B1528",
+  "modal_input_fg": "#FFFFFF",
+  "modal_selected_item_bg": "#38BDF8",
+  "modal_selected_item_fg": "#0F2042"
+}

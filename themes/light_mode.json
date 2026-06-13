@@ -1,0 +1,21 @@
+{
+  "name": "Light Mode",
+  "background": "white",
+  "foreground": "black",
+  "header": "blue",
+  "menu_background": "gray_light",
+  "menu_foreground": "black",
+  "status": "black",
+  "editor_text": "black",
+  "gutter": "gray_dark",
+  "cursor": "blue",
+  "modal_background": "white",
+  "modal_foreground": "black",
+  "modal_border": "blue",
+  "modal_accent": "blue",
+  "modal_text_color": "black",
+  "modal_input_bg": "gray_light",
+  "modal_input_fg": "black",
+  "modal_selected_item_bg": "blue",
+  "modal_selected_item_fg": "white"
+}

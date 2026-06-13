@@ -1,0 +1,21 @@
+{
+  "name": "Pantone Marsala",
+  "background": "#3A1F23",
+  "foreground": "#F5E6E8",
+  "header": "#532B30",
+  "menu_background": "#3A1F23",
+  "menu_foreground": "#E0C3C7",
+  "status": "#532B30",
+  "editor_text": "#F5E6E8",
+  "gutter": "#6B3F44",
+  "cursor": "#E8A7A1",
+  "modal_background": "#532B30",
+  "modal_foreground": "#F5E6E8",
+  "modal_border": "#E8A7A1",
+  "modal_accent": "#E8A7A1",
+  "modal_text_color": "#E0C3C7",
+  "modal_input_bg": "#2A1619",
+  "modal_input_fg": "#FFFFFF",
+  "modal_selected_item_bg": "#E8A7A1",
+  "modal_selected_item_fg": "#3A1F23"
+}

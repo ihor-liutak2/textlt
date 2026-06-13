@@ -1,0 +1,21 @@
+{
+  "name": "Pantone Peach Fuzz",
+  "background": "#FFF5EE",
+  "foreground": "#4A3728",
+  "header": "#FFDAB9",
+  "menu_background": "#FFF5EE",
+  "menu_foreground": "#5C4033",
+  "status": "#FFDAB9",
+  "editor_text": "#4A3728",
+  "gutter": "#D2B48C",
+  "cursor": "#E97451",
+  "modal_background": "#FFDAB9",
+  "modal_foreground": "#4A3728",
+  "modal_border": "#E97451",
+  "modal_accent": "#E97451",
+  "modal_text_color": "#5C4033",
+  "modal_input_bg": "#FFFFFF",
+  "modal_input_fg": "#4A3728",
+  "modal_selected_item_bg": "#E97451",
+  "modal_selected_item_fg": "#FFFFFF"
+}

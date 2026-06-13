@@ -1,0 +1,21 @@
+{
+  "name": "Pantone Emerald Mint",
+  "background": "#122620",
+  "foreground": "#F4EBD0",
+  "header": "#1F4037",
+  "menu_background": "#122620",
+  "menu_foreground": "#B68D40",
+  "status": "#1F4037",
+  "editor_text": "#F4EBD0",
+  "gutter": "#2D5A27",
+  "cursor": "#A8DF8E",
+  "modal_background": "#1F4037",
+  "modal_foreground": "#F4EBD0",
+  "modal_border": "#B68D40",
+  "modal_accent": "#A8DF8E",
+  "modal_text_color": "#F4EBD0",
+  "modal_input_bg": "#0B1814",
+  "modal_input_fg": "#F4EBD0",
+  "modal_selected_item_bg": "#B68D40",
+  "modal_selected_item_fg": "#122620"
+}

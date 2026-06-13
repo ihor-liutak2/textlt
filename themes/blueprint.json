@@ -1,0 +1,21 @@
+{
+  "name": "Blueprint",
+  "background": "blue",
+  "foreground": "white",
+  "header": "cyan",
+  "menu_background": "blue",
+  "menu_foreground": "white",
+  "status": "white",
+  "editor_text": "white",
+  "gutter": "gray_light",
+  "cursor": "cyan",
+  "modal_background": "blue",
+  "modal_foreground": "white",
+  "modal_border": "cyan",
+  "modal_accent": "cyan",
+  "modal_text_color": "white",
+  "modal_input_bg": "black",
+  "modal_input_fg": "white",
+  "modal_selected_item_bg": "cyan",
+  "modal_selected_item_fg": "black"
+}

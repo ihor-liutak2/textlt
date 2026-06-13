@@ -1,0 +1,21 @@
+{
+  "name": "Pantone Deep Sea Teal",
+  "background": "#062229",
+  "foreground": "#E0F2F1",
+  "header": "#004D40",
+  "menu_background": "#062229",
+  "menu_foreground": "#B2DFDB",
+  "status": "#004D40",
+  "editor_text": "#E0F2F1",
+  "gutter": "#00796B",
+  "cursor": "#26A69A",
+  "modal_background": "#004D40",
+  "modal_foreground": "#E0F2F1",
+  "modal_border": "#26A69A",
+  "modal_accent": "#26A69A",
+  "modal_text_color": "#B2DFDB",
+  "modal_input_bg": "#021114",
+  "modal_input_fg": "#E0F2F1",
+  "modal_selected_item_bg": "#26A69A",
+  "modal_selected_item_fg": "#062229"
+}
