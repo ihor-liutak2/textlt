@@ -47,6 +47,7 @@ TextltApp::TextltApp()
           {
               " Toggle Line Numbers ",
               " Toggle File Explorer ",
+              " Smart Word Wrap [ ] ",
               " Theme... ",
           },
           {" About textlt ", " Keyboard Shortcuts "},
@@ -54,6 +55,7 @@ TextltApp::TextltApp()
       }),
       current_dropdown_entries_(dropdown_entries_[0]) {
     editor_config_.active_theme_name = current_theme_.name;
+    UpdateOptionsMenuLabels();
 
     ftxui::MenuOption top_menu_option = ftxui::MenuOption::Toggle();
     top_menu_option.on_enter = [this] { ActivateTopMenu(); };
@@ -382,6 +384,20 @@ void TextltApp::SaveConfig() {
     config_manager_.Save(editor_config_);
 }
 
+void TextltApp::UpdateOptionsMenuLabels() {
+    if (dropdown_entries_.size() <= 2 || dropdown_entries_[2].size() <= 2) {
+        return;
+    }
+
+    dropdown_entries_[2][2] = editor_config_.smart_word_wrap
+        ? " Smart Word Wrap [X] "
+        : " Smart Word Wrap [ ] ";
+
+    if (active_dropdown_ == 2) {
+        current_dropdown_entries_ = dropdown_entries_[2];
+    }
+}
+
 void TextltApp::RunDropdownAction() {
     // Generate simple trace actions for debugging inside the app status-bar
     active_action_ = "DEBUG: Menu=" + std::to_string(active_dropdown_) + 
@@ -509,6 +525,12 @@ void TextltApp::HandleOptionsMenu(int item) {
         active_action_ = editor_config_.show_file_explorer ? "File Explorer enabled" : "File Explorer disabled";
         SaveConfig();
     } else if (item == 2) {
+        editor_config_.smart_word_wrap = !editor_config_.smart_word_wrap;
+        active_action_ = editor_config_.smart_word_wrap ? "Smart Word Wrap enabled" : "Smart Word Wrap disabled";
+        UpdateOptionsMenuLabels();
+        SaveConfig();
+        screen_.PostEvent(ftxui::Event::Custom);
+    } else if (item == 3) {
         OpenThemeDialog();
         return;
     }

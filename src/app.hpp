@@ -48,6 +48,7 @@ private:
     bool ConfirmFileDialog(FilePromptMode mode, const std::string& path, std::string& error);
     void SelectTheme(const std::string& theme_name);
     void SaveConfig();
+    void UpdateOptionsMenuLabels();
     void RunDropdownAction();
     ftxui::Element Render();
     ftxui::Element RenderFindPanel();

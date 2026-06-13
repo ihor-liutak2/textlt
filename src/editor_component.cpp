@@ -147,32 +147,82 @@ ftxui::Element EditorComponent::Render() {
         std::min(text_lines_.size(), scroll_y_ + visible_height);
     const size_t line_number_width = LineNumberWidth();
     const bool show_line_numbers = config_ && config_->show_line_numbers;
+    const bool smart_word_wrap = config_ && config_->smart_word_wrap;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    const size_t line_number_columns =
+        show_line_numbers ? LineNumberText(0, line_number_width).size() : 0;
+    const size_t editor_columns = editor_box_.x_max >= editor_box_.x_min
+        ? static_cast<size_t>(editor_box_.x_max - editor_box_.x_min + 1)
+        : 80;
+    const size_t wrap_width = std::max<size_t>(
+        1,
+        editor_columns > line_number_columns ? editor_columns - line_number_columns : editor_columns);
 
-    // Render only the visible part of the buffer.
-    for (size_t i = scroll_y_; i < last_visible_line; ++i) {
-        const std::string& line_content = text_lines_[i];
+    auto wrapped_segments = [&](const std::string& line_content) {
+        std::vector<std::pair<size_t, size_t>> segments;
+        if (!smart_word_wrap || line_content.size() <= wrap_width) {
+            segments.push_back({0, line_content.size()});
+            return segments;
+        }
+
+        size_t start = 0;
+        while (start < line_content.size()) {
+            const size_t remaining = line_content.size() - start;
+            if (remaining <= wrap_width) {
+                segments.push_back({start, line_content.size()});
+                break;
+            }
+
+            const size_t boundary = start + wrap_width;
+            const size_t lower_bound = boundary > start + 10 ? boundary - 10 : start;
+            size_t end = boundary;
+            for (size_t pos = boundary; pos-- > lower_bound;) {
+                if (line_content[pos] == ' ') {
+                    end = pos + 1;
+                    break;
+                }
+            }
+
+            if (end <= start) {
+                end = boundary;
+            }
+            segments.push_back({start, end});
+            start = end;
+        }
+
+        return segments;
+    };
+
+    auto render_segment = [&](size_t line_index,
+                              size_t segment_start,
+                              size_t segment_end,
+                              bool show_line_number) {
+        const std::string& line_content = text_lines_[line_index];
 
         ftxui::Element line_number = show_line_numbers
-            ? ftxui::text(LineNumberText(i, line_number_width)) |
+            ? ftxui::text(show_line_number
+                  ? LineNumberText(line_index, line_number_width)
+                  : std::string(line_number_columns, ' ')) |
                 ftxui::color(theme.gutter)
             : ftxui::text("");
 
         ftxui::Elements line_parts{line_number};
-        const size_t cursor_x = i == cursor_y_ ? std::min(cursor_x_, line_content.size()) : 0;
-        for (size_t x = 0; x <= line_content.size(); ++x) {
-            if (i == cursor_y_ && x == cursor_x) {
+        const size_t cursor_x = line_index == cursor_y_
+            ? std::min(cursor_x_, line_content.size())
+            : line_content.size() + 1;
+        for (size_t x = segment_start; x <= segment_end; ++x) {
+            if (line_index == cursor_y_ && x == cursor_x) {
                 line_parts.push_back(
                     ftxui::text("█") | ftxui::blink | ftxui::color(theme.cursor));
             }
 
-            if (x == line_content.size()) {
+            if (x == segment_end || x == line_content.size()) {
                 continue;
             }
 
             ftxui::Element character = ftxui::text(line_content.substr(x, 1));
-            const SearchMatch* search_match = SearchMatchAt(x, i);
-            if (IsCharacterSelected(x, i)) {
+            const SearchMatch* search_match = SearchMatchAt(x, line_index);
+            if (IsCharacterSelected(x, line_index)) {
                 character = character |
                     ftxui::bgcolor(theme.selection_bg) |
                     ftxui::color(theme.selection_fg);
@@ -189,7 +239,27 @@ ftxui::Element EditorComponent::Render() {
             }
             line_parts.push_back(std::move(character));
         }
-        lines_elements.push_back(ftxui::hbox(std::move(line_parts)));
+
+        return ftxui::hbox(std::move(line_parts));
+    };
+
+    // Render only the visible part of the buffer.
+    for (size_t i = scroll_y_; i < last_visible_line; ++i) {
+        const std::string& line_content = text_lines_[i];
+        const auto segments = wrapped_segments(line_content);
+        for (size_t segment_index = 0; segment_index < segments.size(); ++segment_index) {
+            if (lines_elements.size() >= visible_height) {
+                break;
+            }
+            lines_elements.push_back(render_segment(
+                i,
+                segments[segment_index].first,
+                segments[segment_index].second,
+                segment_index == 0));
+        }
+        if (lines_elements.size() >= visible_height) {
+            break;
+        }
     }
 
     while (lines_elements.size() < visible_height) {

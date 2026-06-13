@@ -60,6 +60,7 @@ EditorConfig ConfigManager::Load() const {
     config.show_line_numbers = ExtractBool(content, "show_line_numbers", config.show_line_numbers);
     config.show_file_explorer = ExtractBool(
         content, "show_file_explorer", config.show_file_explorer);
+    config.smart_word_wrap = ExtractBool(content, "smart_word_wrap", config.smart_word_wrap);
     config.active_theme_name = ExtractString(
         content, "active_theme_name", config.active_theme_name);
     return config;
@@ -74,6 +75,7 @@ void ConfigManager::Save(const EditorConfig& config) const {
     file << "{\n";
     file << "  \"show_line_numbers\": " << (config.show_line_numbers ? "true" : "false") << ",\n";
     file << "  \"show_file_explorer\": " << (config.show_file_explorer ? "true" : "false") << ",\n";
+    file << "  \"smart_word_wrap\": " << (config.smart_word_wrap ? "true" : "false") << ",\n";
     file << "  \"active_theme_name\": \"" << config.active_theme_name << "\"\n";
     file << "}\n";
 }
