@@ -992,17 +992,19 @@ void EditorComponent::MoveCursorRight() {
 }
 
 void EditorComponent::MoveCursorUp() {
+    ClampCursorToBuffer();
     if (cursor_y_ > 0) {
         cursor_y_--;
-        cursor_x_ = std::min(cursor_x_, text_lines_[cursor_y_].size());
     }
+    cursor_x_ = std::min(cursor_x_, text_lines_[cursor_y_].size());
 }
 
 void EditorComponent::MoveCursorDown() {
-    if (cursor_y_ + 1 < text_lines_.size()) {
+    ClampCursorToBuffer();
+    if (cursor_y_ < text_lines_.size() - 1) {
         cursor_y_++;
-        cursor_x_ = std::min(cursor_x_, text_lines_[cursor_y_].size());
     }
+    cursor_x_ = std::min(cursor_x_, text_lines_[cursor_y_].size());
 }
 
 void EditorComponent::MoveCursorToPreviousWord() {
