@@ -20,10 +20,22 @@ public:
         Number,
     };
 
+    enum class EmbeddedLanguage {
+        None,
+        Html,
+        Css,
+        Javascript,
+    };
+
     struct Token {
         size_t start = 0;
         size_t length = 0;
         Style style = Style::Normal;
+    };
+
+    struct TokenizationContext {
+        EmbeddedLanguage php_heredoc_language = EmbeddedLanguage::None;
+        std::string php_heredoc_identifier;
     };
 
     static ftxui::Element HighlightLine(const std::string& line,
@@ -31,6 +43,9 @@ public:
                                         const std::string& file_path);
     static std::vector<Token> TokenizeLine(const std::string& line,
                                            const std::string& file_path);
+    static std::vector<Token> TokenizeLine(const std::string& line,
+                                           const std::string& file_path,
+                                           TokenizationContext* context);
     static ftxui::Color ColorForStyle(Style style, const Theme& theme);
 };
 

@@ -261,6 +261,23 @@ size_t SkipWhitespace(const std::string& line, size_t index) {
     return index;
 }
 
+size_t TrimRight(const std::string& line, size_t end) {
+    while (end > 0 && std::isspace(static_cast<unsigned char>(line[end - 1]))) {
+        --end;
+    }
+    return end;
+}
+
+bool IsLineExactlyIdentifier(const std::string& line, const std::string& identifier) {
+    const size_t start = SkipWhitespace(line, 0);
+    size_t end = TrimRight(line, line.size());
+    if (end > start && line[end - 1] == ';') {
+        --end;
+        end = TrimRight(line, end);
+    }
+    return end >= start && line.substr(start, end - start) == identifier;
+}
+
 const std::unordered_set<std::string>& CppKeywords() {
     static const std::unordered_set<std::string> keywords = {
         "if",
@@ -635,6 +652,67 @@ std::string ToUpper(std::string value) {
         return static_cast<char>(std::toupper(character));
     });
     return value;
+}
+
+SyntaxHighlighter::EmbeddedLanguage EmbeddedLanguageFromIdentifier(
+    const std::string& identifier) {
+    const std::string upper = ToUpper(identifier);
+    if (upper == "HTML") {
+        return SyntaxHighlighter::EmbeddedLanguage::Html;
+    }
+    if (upper == "CSS") {
+        return SyntaxHighlighter::EmbeddedLanguage::Css;
+    }
+    if (upper == "JS" || upper == "JAVASCRIPT") {
+        return SyntaxHighlighter::EmbeddedLanguage::Javascript;
+    }
+    return SyntaxHighlighter::EmbeddedLanguage::None;
+}
+
+bool ParsePhpHeredocStart(const std::string& line,
+                          size_t index,
+                          std::string* identifier,
+                          SyntaxHighlighter::EmbeddedLanguage* language,
+                          size_t* end) {
+    if (!StartsWith(line, index, "<<<")) {
+        return false;
+    }
+
+    size_t current = SkipWhitespace(line, index + 3);
+    char quote = '\0';
+    if (current < line.size() && (line[current] == '\'' || line[current] == '"')) {
+        quote = line[current];
+        ++current;
+    }
+
+    if (current >= line.size() || !IsIdentifierStart(line[current])) {
+        return false;
+    }
+
+    const size_t identifier_start = current;
+    while (current < line.size() && IsIdentifierBody(line[current])) {
+        ++current;
+    }
+
+    if (quote != '\0') {
+        if (current >= line.size() || line[current] != quote) {
+            return false;
+        }
+        ++current;
+    }
+
+    const std::string parsed_identifier =
+        line.substr(identifier_start, current - identifier_start - (quote != '\0' ? 1 : 0));
+    const SyntaxHighlighter::EmbeddedLanguage parsed_language =
+        EmbeddedLanguageFromIdentifier(parsed_identifier);
+    if (parsed_language == SyntaxHighlighter::EmbeddedLanguage::None) {
+        return false;
+    }
+
+    *identifier = parsed_identifier;
+    *language = parsed_language;
+    *end = current;
+    return true;
 }
 
 bool IsJsonKey(const std::string& line, size_t after_string) {
@@ -1456,6 +1534,19 @@ size_t PushJsLikeToken(std::vector<SyntaxHighlighter::Token>& tokens,
     return index + 1;
 }
 
+std::vector<SyntaxHighlighter::Token> TokenizeJsLikeLine(const std::string& line,
+                                                         bool typescript) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    size_t index = 0;
+    while (index < line.size()) {
+        index = PushJsLikeToken(tokens, line, index, line.size(), typescript);
+    }
+
+    return tokens;
+}
+
 size_t TokenizeJsxExpression(std::vector<SyntaxHighlighter::Token>& tokens,
                              const std::string& line,
                              size_t index,
@@ -1595,9 +1686,38 @@ ftxui::Color SyntaxHighlighter::ColorForStyle(Style style, const Theme& theme) {
 std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
     const std::string& line,
     const std::string& file_path) {
+    return TokenizeLine(line, file_path, nullptr);
+}
+
+std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
+    const std::string& line,
+    const std::string& file_path,
+    TokenizationContext* context) {
     const Language language = LanguageFromPath(file_path);
     std::vector<Token> tokens;
     tokens.reserve(line.size() / 4 + 1);
+
+    if (language == Language::Php && context &&
+        context->php_heredoc_language != EmbeddedLanguage::None) {
+        if (IsLineExactlyIdentifier(line, context->php_heredoc_identifier)) {
+            PushToken(tokens, 0, line.size(), Style::Keyword);
+            context->php_heredoc_language = EmbeddedLanguage::None;
+            context->php_heredoc_identifier.clear();
+            return tokens;
+        }
+
+        switch (context->php_heredoc_language) {
+            case EmbeddedLanguage::Html:
+                return TokenizeHtml(line);
+            case EmbeddedLanguage::Css:
+                return TokenizeCss(line);
+            case EmbeddedLanguage::Javascript:
+                return TokenizeJsLikeLine(line, false);
+            case EmbeddedLanguage::None:
+                break;
+        }
+    }
+
     if (language == Language::Csharp) {
         return TokenizeCsharp(line);
     }
@@ -1657,6 +1777,22 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             PushToken(tokens, index, index + 2, Style::Keyword);
             index += 2;
             continue;
+        }
+
+        if (language == Language::Php && StartsWith(line, index, "<<<")) {
+            std::string heredoc_identifier;
+            EmbeddedLanguage heredoc_language = EmbeddedLanguage::None;
+            size_t heredoc_end = index;
+            if (ParsePhpHeredocStart(
+                    line, index, &heredoc_identifier, &heredoc_language, &heredoc_end)) {
+                PushToken(tokens, index, heredoc_end, Style::String);
+                if (context) {
+                    context->php_heredoc_identifier = heredoc_identifier;
+                    context->php_heredoc_language = heredoc_language;
+                }
+                index = heredoc_end;
+                continue;
+            }
         }
 
         if ((language == Language::Cpp || language == Language::Javascript ||

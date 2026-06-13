@@ -34,13 +34,13 @@ Options
 
 Syntax Highlighting
   Language        Supported Extensions / Filenames
-  C++             .cpp, .hpp, .h, .cc, .cxx
+  C / C++         .c, .cpp, .hpp, .h
   C#              .cs
   JavaScript      .js, .mjs, .cjs
   TypeScript      .ts, .mts
   React JSX/TSX   .jsx, .tsx
   GraphQL         .graphql, .gql
-  PHP             .php
+  PHP             .php (with HTML/CSS/JS Heredoc)
   Python          .py
   Ruby            .rb, Gemfile
   Java            .java

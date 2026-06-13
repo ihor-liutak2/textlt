@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 #include <fstream>
 #include <stdexcept>
 #include <utility>
@@ -163,6 +164,12 @@ ftxui::Element EditorComponent::Render() {
     const size_t slider_top = needs_scrollbar
         ? (scroll_y_ * available_track_space) / (total_lines - visible_height)
         : 0;
+    SyntaxHighlighter::TokenizationContext syntax_context;
+    if (syntax_highlighting) {
+        for (size_t line_index = 0; line_index < scroll_y_; ++line_index) {
+            SyntaxHighlighter::TokenizeLine(text_lines_[line_index], file_path, &syntax_context);
+        }
+    }
 
     auto render_scrollbar_cell = [&](size_t viewport_y) {
         if (!needs_scrollbar) {
@@ -251,7 +258,7 @@ ftxui::Element EditorComponent::Render() {
 
         if (syntax_highlighting) {
             const std::vector<SyntaxHighlighter::Token> syntax_tokens =
-                SyntaxHighlighter::TokenizeLine(line_content, file_path);
+                SyntaxHighlighter::TokenizeLine(line_content, file_path, &syntax_context);
             render_visible_text(&syntax_tokens);
         } else {
             // Standard raw rendering branch used when syntax highlighting is disabled.
@@ -481,6 +488,73 @@ void EditorComponent::MoveCursorToSearchMatch(const SearchMatch& match) {
     UpdateScroll();
 }
 
+std::string EditorComponent::GetCommentPrefix() const {
+    const std::string filename =
+        std::filesystem::path(current_filepath_).filename().string();
+    const std::string extension =
+        std::filesystem::path(current_filepath_).extension().string();
+
+    if (extension == ".sql" || extension == ".graphql" || extension == ".gql") {
+        return "--";
+    }
+
+    if (filename.rfind("Dockerfile", 0) == 0 ||
+        filename == ".env" || filename == ".env.local" ||
+        filename == ".env.development" || filename == ".env.production" ||
+        (filename.size() >= 4 && filename.compare(filename.size() - 4, 4, ".env") == 0) ||
+        extension == ".conf" || extension == ".ini" || extension == ".py" ||
+        extension == ".rb" || extension == ".yaml" || extension == ".yml") {
+        return "#";
+    }
+
+    return "//";
+}
+
+void EditorComponent::ToggleComment() {
+    if (text_lines_.empty()) {
+        text_lines_.push_back("");
+    }
+
+    EndTypingGroup();
+    ClampCursorToBuffer();
+    SaveSnapshot();
+
+    size_t start_row = cursor_y_;
+    size_t end_row = cursor_y_;
+    if (HasSelection()) {
+        auto [start, end] = OrderedSelection(
+            {selection_anchor_x_, selection_anchor_y_},
+            {cursor_x_, cursor_y_},
+            text_lines_);
+        start_row = start.y;
+        end_row = end.y;
+        if (end.x == 0 && end_row > start_row) {
+            --end_row;
+        }
+    }
+
+    const std::string prefix = GetCommentPrefix();
+    for (size_t row = start_row; row <= end_row; ++row) {
+        std::string& line = text_lines_[row];
+        const size_t first_text = line.find_first_not_of(" \t");
+        const size_t insert_position =
+            first_text == std::string::npos ? line.size() : first_text;
+
+        if (line.compare(insert_position, prefix.size(), prefix) == 0) {
+            line.erase(insert_position, prefix.size());
+            if (insert_position < line.size() && line[insert_position] == ' ') {
+                line.erase(insert_position, 1);
+            }
+        } else {
+            line.insert(insert_position, prefix + " ");
+        }
+    }
+
+    is_dirty_ = true;
+    ClampCursorToBuffer();
+    UpdateScroll();
+}
+
 void EditorComponent::ClearSelection() {
     ClampCursorToBuffer();
     has_selection_ = false;
@@ -692,6 +766,10 @@ bool EditorComponent::OnEvent(ftxui::Event event) {
     }
     if (input == "\x19" || input == "Ctrl+Y") {
         Redo();
+        return true;
+    }
+    if (input == "\x1F" || input == "Ctrl+/" || event == ftxui::Event::Special("\x1F")) {
+        ToggleComment();
         return true;
     }
 
