@@ -44,6 +44,16 @@ diff --git a/src/ftxui/component/screen_interactive.cpp b/src/ftxui/component/sc
 diff --git a/src/ftxui/component/terminal_input_parser.cpp b/src/ftxui/component/terminal_input_parser.cpp
 --- a/src/ftxui/component/terminal_input_parser.cpp
 +++ b/src/ftxui/component/terminal_input_parser.cpp
+@@ -22,9 +22,6 @@ const std::map<std::string, std::string> g_uniformize = {
+     // Here, we uniformize the new line character to `\n`.
+     {"\r", "\n"},
+ 
+-    // See: https://github.com/ArthurSonzogni/FTXUI/issues/508
+-    {std::string({8}), std::string({127})},
+-
+     // See: https://github.com/ArthurSonzogni/FTXUI/issues/626
+     //
+     // Depending on the Cursor Key Mode (DECCKM), the terminal sends different
 @@ -176,10 +176,6 @@ TerminalInputParser::Output TerminalInputParser::Parse() {
    }
  

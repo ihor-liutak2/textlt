@@ -30,27 +30,30 @@ ftxui::Element TextltApp::Render() {
               text_editor_->Render() | xflex,
           });
 
-    // CRITICAL FIX: Enhanced visibility for top header and bottom status bar text
-    // Force highly-contrast colors using theme fields or direct safe white color mapping
-    Element base_layout = vbox({
-        // Top header text line with explicit high-contrast foreground color fallback
+    Elements base_rows = {
         text(" textlt v0.1.0 - Native Non-Modal Text Editor") |
             bold |
-            color(current_theme_.menu_foreground), // Uses crisp theme text color instead of muddy header value
-            
+            color(current_theme_.menu_foreground),
         separator(),
         top_menu_element,
         separator(),
         workspace | yflex,
-        separator(),
-        
-        // Bottom status information line styled with explicit high-contrast text color
+    };
+
+    if (find_panel_active_) {
+        base_rows.push_back(separator());
+        base_rows.push_back(RenderFindPanel());
+    }
+
+    base_rows.push_back(separator());
+    base_rows.push_back(
         text(" Active Action: " + active_action_ +
              " | File: " + editor->CurrentFilePath() +
              " | File Type: " + FileTypeLabel(editor->CurrentFilePath()) +
              " | Theme: " + current_theme_.name) |
-            color(current_theme_.menu_foreground), // Replaced dark status color with active menu text color
-    }) |
+            color(current_theme_.menu_foreground));
+
+    Element base_layout = vbox(std::move(base_rows)) |
         bgcolor(current_theme_.background) |
         color(current_theme_.foreground);
 
@@ -89,9 +92,54 @@ ftxui::Element TextltApp::Render() {
     return dbox(std::move(layers));
 }
 
+ftxui::Element TextltApp::RenderFindPanel() {
+    using namespace ftxui;
+
+    const std::string mode = replace_panel_mode_ ? " Replace " : " Find ";
+    return hbox({
+        text(mode) | bold | color(current_theme_.menu_foreground),
+        separator(),
+        find_panel_container_->Render() | xflex,
+        separator(),
+        text(" " + FindMatchStatus() + " ") | color(current_theme_.menu_foreground),
+        text(" Esc closes ") | dim | color(current_theme_.foreground),
+    }) |
+        border |
+        bgcolor(current_theme_.menu_background) |
+        color(current_theme_.menu_foreground);
+}
+
 bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     const std::string& input = event.input();
     const bool has_input = !input.empty();
+
+    if (find_panel_active_) {
+        if (event == ftxui::Event::Escape) {
+            CloseFindPanel();
+            return true;
+        }
+        if (event == ftxui::Event::F3) {
+            FindNext();
+            return true;
+        }
+        if (input == "\x1B[13;2u" || input == "\x1B[27;2;13~") {
+            FindPrevious();
+            return true;
+        }
+    }
+
+    const bool can_open_find_panel =
+        !file_dialog_.IsOpen() && !help_dialog_.IsOpen() && !theme_dialog_.IsOpen();
+
+    if (can_open_find_panel && (input == "\x06" || input == "Ctrl+F")) {
+        OpenFindPanel(false);
+        return true;
+    }
+
+    if (can_open_find_panel && (input == "\x08" || input == "Ctrl+H")) {
+        OpenFindPanel(true);
+        return true;
+    }
 
     if (event == ftxui::Event::Special("\x03") ||
         (has_input && input[0] == '\x03') ||

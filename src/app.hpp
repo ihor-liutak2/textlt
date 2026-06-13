@@ -44,8 +44,17 @@ private:
     void SaveConfig();
     void RunDropdownAction();
     ftxui::Element Render();
+    ftxui::Element RenderFindPanel();
     bool HandleGlobalEvent(ftxui::Event event);
     int DropdownX() const;
+    void OpenFindPanel(bool replace_mode);
+    void CloseFindPanel();
+    void RefreshFindMatches();
+    void FindNext();
+    void FindPrevious();
+    void ReplaceNext();
+    void ReplaceAll();
+    std::string FindMatchStatus() const;
     
     // Sub-routers for handling dropdown actions by category
     void HandleFileMenu(int item);
@@ -70,13 +79,18 @@ private:
     std::vector<std::string> menu_entries_;
     std::vector<std::vector<std::string>> dropdown_entries_;
     std::vector<std::string> current_dropdown_entries_;
+    std::string find_query_;
+    std::string replace_text_;
     std::string active_action_ = "Ready";
 
     int selected_menu_item_ = 0;
     int active_dropdown_ = -1;
     int focused_layer_ = 0;
     int selected_dropdown_item_ = 0;
+    int find_panel_mode_index_ = 0;
     bool explorer_has_focus_ = false;
+    bool find_panel_active_ = false;
+    bool replace_panel_mode_ = false;
     ftxui::Box top_menu_box_;
 
     ftxui::Component top_menu_;
@@ -84,6 +98,13 @@ private:
     ftxui::Component body_container_;
     ftxui::Component main_container_;
     ftxui::Component root_container_;
+    ftxui::Component find_input_;
+    ftxui::Component replace_input_;
+    ftxui::Component replace_next_button_;
+    ftxui::Component replace_all_button_;
+    ftxui::Component find_panel_find_container_;
+    ftxui::Component find_panel_replace_container_;
+    ftxui::Component find_panel_container_;
     ftxui::Component renderer_;
     ftxui::Component global_shortcuts_;
 };

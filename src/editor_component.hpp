@@ -29,6 +29,14 @@ public:
     void InsertText(const std::string& text);
     void Undo();
     void Redo();
+    void HighlightMatches(const std::string& query);
+    void ClearSearchHighlights();
+    void JumpToNextMatch();
+    void JumpToPreviousMatch();
+    void ExecuteReplaceNext(const std::string& query, const std::string& replacement);
+    void ExecuteReplaceAll(const std::string& query, const std::string& replacement);
+    size_t SearchMatchCount() const;
+    size_t CurrentSearchMatchIndex() const;
     
     std::string GetCurrentLineText() const;
     void DeleteCurrentLine();
@@ -40,6 +48,12 @@ private:
         int cursor_y = 0;
     };
 
+    struct SearchMatch {
+        size_t x = 0;
+        size_t y = 0;
+        size_t length = 0;
+    };
+
     static constexpr size_t kMaxHistory = 100;
 
     size_t VisibleHeight() const;
@@ -48,6 +62,7 @@ private:
     void UpdateScroll();
     static bool IsWordCharacter(char character);
     bool IsCharacterSelected(size_t x, size_t y) const;
+    bool IsSearchMatchCharacter(size_t x, size_t y) const;
     void BeginSelection();
     void ClampCursorToBuffer();
     void MoveCursorHome();
@@ -64,10 +79,13 @@ private:
     void SaveSnapshotForTyping(const std::string& input);
     void EndTypingGroup();
     void DeleteSelectionWithoutSnapshot();
+    size_t FindMatchAtOrAfterCursor() const;
+    void MoveCursorToSearchMatch(const SearchMatch& match);
 
     std::vector<std::string> text_lines_;
     std::vector<EditorState> undo_stack_;
     std::vector<EditorState> redo_stack_;
+    std::vector<SearchMatch> search_matches_;
     std::string current_filepath_ = "untitled.txt";
     EditorConfig* config_ = nullptr;
     const Theme* theme_ = nullptr;
@@ -78,6 +96,7 @@ private:
     size_t selection_anchor_y_ = 0;
     bool has_selection_ = false;
     bool typing_group_active_ = false;
+    size_t current_search_match_ = 0;
     ftxui::Box editor_box_;
 };
 
