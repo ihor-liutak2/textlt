@@ -106,6 +106,7 @@ private:
     bool has_selection_ = false;
     bool typing_group_active_ = false;
     bool is_dirty_ = false;
+    bool mouse_selecting_ = false;
     size_t current_search_match_ = 0;
     size_t bottom_overlay_rows_ = 0;
     ftxui::Box editor_box_;
