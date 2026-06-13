@@ -67,6 +67,7 @@ private:
     size_t LineNumberWidth() const;
     std::string LineNumberText(size_t line_index, size_t width) const;
     void UpdateScroll();
+    bool HandleMouseEvent(ftxui::Event event);
     static bool IsWordCharacter(char character);
     bool IsCharacterSelected(size_t x, size_t y) const;
     const SearchMatch* SearchMatchAt(size_t x, size_t y) const;
