@@ -9,6 +9,7 @@ struct EditorConfig {
     bool show_file_explorer = true;
     bool smart_word_wrap = false;
     bool syntax_highlighting = true;
+    int tab_size = 4;
     std::string active_theme_name = "Blueprint";
 };
 

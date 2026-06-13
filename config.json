@@ -3,5 +3,6 @@
   "show_file_explorer": true,
   "smart_word_wrap": true,
   "syntax_highlighting": true,
+  "tab_size": 4,
   "active_theme_name": "Pantone Deep Sea Teal"
 }

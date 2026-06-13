@@ -28,6 +28,34 @@ bool ExtractBool(const std::string& content, const std::string& key, bool fallba
     return fallback;
 }
 
+int ExtractInt(const std::string& content, const std::string& key, int fallback) {
+    const std::string token = "\"" + key + "\"";
+    size_t key_pos = content.find(token);
+    if (key_pos == std::string::npos) {
+        return fallback;
+    }
+    size_t colon = content.find(':', key_pos + token.size());
+    size_t value_pos = content.find_first_not_of(" \t\n\r", colon + 1);
+    if (colon == std::string::npos || value_pos == std::string::npos) {
+        return fallback;
+    }
+
+    size_t end_pos = value_pos;
+    while (end_pos < content.size() &&
+           content[end_pos] >= '0' && content[end_pos] <= '9') {
+        ++end_pos;
+    }
+    if (end_pos == value_pos) {
+        return fallback;
+    }
+
+    try {
+        return std::stoi(content.substr(value_pos, end_pos - value_pos));
+    } catch (...) {
+        return fallback;
+    }
+}
+
 std::string ExtractString(const std::string& content, const std::string& key, std::string fallback) {
     const std::string token = "\"" + key + "\"";
     size_t key_pos = content.find(token);
@@ -63,6 +91,10 @@ EditorConfig ConfigManager::Load() const {
     config.smart_word_wrap = ExtractBool(content, "smart_word_wrap", config.smart_word_wrap);
     config.syntax_highlighting = ExtractBool(
         content, "syntax_highlighting", config.syntax_highlighting);
+    config.tab_size = ExtractInt(content, "tab_size", config.tab_size);
+    if (config.tab_size != 2 && config.tab_size != 4) {
+        config.tab_size = 4;
+    }
     config.active_theme_name = ExtractString(
         content, "active_theme_name", config.active_theme_name);
     return config;
@@ -79,6 +111,7 @@ void ConfigManager::Save(const EditorConfig& config) const {
     file << "  \"show_file_explorer\": " << (config.show_file_explorer ? "true" : "false") << ",\n";
     file << "  \"smart_word_wrap\": " << (config.smart_word_wrap ? "true" : "false") << ",\n";
     file << "  \"syntax_highlighting\": " << (config.syntax_highlighting ? "true" : "false") << ",\n";
+    file << "  \"tab_size\": " << config.tab_size << ",\n";
     file << "  \"active_theme_name\": \"" << config.active_theme_name << "\"\n";
     file << "}\n";
 }

@@ -49,6 +49,7 @@ TextltApp::TextltApp()
               " Toggle File Explorer ",
               " Smart Word Wrap [ ] ",
               " Syntax Highlighting [X] ",
+              " Tab Size: 4 spaces ",
               " Theme... ",
           },
           {" About textlt ", " Keyboard Shortcuts "},
@@ -458,7 +459,7 @@ void TextltApp::SaveConfig() {
 }
 
 void TextltApp::UpdateOptionsMenuLabels() {
-    if (dropdown_entries_.size() <= 2 || dropdown_entries_[2].size() <= 3) {
+    if (dropdown_entries_.size() <= 2 || dropdown_entries_[2].size() <= 4) {
         return;
     }
 
@@ -468,6 +469,8 @@ void TextltApp::UpdateOptionsMenuLabels() {
     dropdown_entries_[2][3] = editor_config_.syntax_highlighting
         ? " Syntax Highlighting [X] "
         : " Syntax Highlighting [ ] ";
+    dropdown_entries_[2][4] =
+        " Tab Size: " + std::to_string(editor_config_.tab_size) + " spaces ";
 
     if (active_dropdown_ == 2) {
         current_dropdown_entries_ = dropdown_entries_[2];
@@ -613,6 +616,12 @@ void TextltApp::HandleOptionsMenu(int item) {
         SaveConfig();
         screen_.PostEvent(ftxui::Event::Custom);
     } else if (item == 4) {
+        editor_config_.tab_size = editor_config_.tab_size == 2 ? 4 : 2;
+        active_action_ = "Tab size set to " + std::to_string(editor_config_.tab_size) + " spaces";
+        UpdateOptionsMenuLabels();
+        SaveConfig();
+        screen_.PostEvent(ftxui::Event::Custom);
+    } else if (item == 5) {
         OpenThemeDialog();
         return;
     }

@@ -656,6 +656,13 @@ bool EditorComponent::OnEvent(ftxui::Event event) {
         return true;
     }
 
+    if (event == ftxui::Event::Tab) {
+        const int configured_tab_size = config_ ? config_->tab_size : 4;
+        const size_t tab_size = configured_tab_size == 2 ? 2 : 4;
+        InsertText(std::string(tab_size, ' '));
+        return true;
+    }
+
     if (event.is_character()) {
         // Insert incoming characters at the current cursor position.
         SaveSnapshotForTyping(event.input());
