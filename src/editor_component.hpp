@@ -20,6 +20,7 @@ public:
 
     void SaveToFile(const std::string& path);
     void LoadFromFile(const std::string& path);
+    void NewFile(const std::string& path);
     const std::string& CurrentFilePath() const;
 
     bool HasSelection() const;

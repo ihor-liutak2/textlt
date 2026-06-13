@@ -20,6 +20,7 @@ namespace textlt {
 class TextltApp {
 public:
     TextltApp();
+    explicit TextltApp(const std::vector<std::string>& files_to_open);
     void Run();
 
 private:
@@ -43,6 +44,7 @@ private:
     void FocusExplorer();
     bool SaveFile(const std::string& path, std::string& error);
     bool OpenFile(const std::string& path, std::string& error);
+    void InitializeWithFiles(const std::vector<std::string>& files_to_open);
     void OpenExplorerFile(const std::filesystem::path& path);
     void SaveCurrentFile();
     bool ConfirmFileDialog(FilePromptMode mode, const std::string& path, std::string& error);

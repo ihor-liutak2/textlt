@@ -140,6 +140,11 @@ TextltApp::TextltApp()
     FocusEditor();
 }
 
+TextltApp::TextltApp(const std::vector<std::string>& files_to_open)
+    : TextltApp() {
+    InitializeWithFiles(files_to_open);
+}
+
 void TextltApp::Run() {
     screen_.ForceHandleCtrlC(false);
     screen_.Loop(global_shortcuts_);
@@ -337,6 +342,28 @@ bool TextltApp::OpenFile(const std::string& path, std::string& error) {
         active_action_ = error;
         return false;
     }
+}
+
+void TextltApp::InitializeWithFiles(const std::vector<std::string>& files_to_open) {
+    if (files_to_open.empty()) {
+        return;
+    }
+
+    const std::filesystem::path active_path = files_to_open.front();
+    std::string error;
+    if (std::filesystem::exists(active_path)) {
+        OpenFile(active_path.string(), error);
+    } else {
+        std::static_pointer_cast<EditorComponent>(text_editor_)->NewFile(active_path.string());
+        active_action_ = "New file " + active_path.string();
+    }
+
+    if (files_to_open.size() > 1) {
+        active_action_ += " (" + std::to_string(files_to_open.size() - 1) +
+            " additional path(s) ignored: tabs not implemented)";
+    }
+
+    FocusEditor();
 }
 
 void TextltApp::OpenExplorerFile(const std::filesystem::path& path) {

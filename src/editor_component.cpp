@@ -319,6 +319,20 @@ void EditorComponent::LoadFromFile(const std::string& path) {
     ClearSelection();
 }
 
+void EditorComponent::NewFile(const std::string& path) {
+    text_lines_.clear();
+    text_lines_.push_back("");
+    current_filepath_ = path.empty() ? "untitled.txt" : path;
+    cursor_x_ = 0;
+    cursor_y_ = 0;
+    scroll_y_ = 0;
+    undo_stack_.clear();
+    redo_stack_.clear();
+    typing_group_active_ = false;
+    ClearSearchHighlights();
+    ClearSelection();
+}
+
 const std::string& EditorComponent::CurrentFilePath() const {
     return current_filepath_;
 }
