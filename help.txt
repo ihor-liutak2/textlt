@@ -31,3 +31,19 @@ Options
   Toggle Line Numbers changes the editor gutter immediately.
   Toggle File Explorer shows or hides the sidebar.
   Theme opens the dynamic theme selector.
+
+Syntax Highlighting
+  Language        Supported Extensions / Filenames
+  C++             .cpp, .hpp, .h, .cc, .cxx
+  JavaScript      .js, .mjs, .cjs
+  TypeScript      .ts, .mts
+  React JSX/TSX   .jsx, .tsx
+  PHP             .php
+  Python          .py
+  Java            .java
+  HTML            .html, .htm
+  CSS             .css
+  JSON            .json
+  YAML            .yaml, .yml
+  Docker          Dockerfile, docker-compose.yml
+  SQL             .sql

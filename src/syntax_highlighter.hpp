@@ -28,9 +28,9 @@ public:
 
     static ftxui::Element HighlightLine(const std::string& line,
                                         const Theme& theme,
-                                        const std::string& file_extension);
+                                        const std::string& file_path);
     static std::vector<Token> TokenizeLine(const std::string& line,
-                                           const std::string& file_extension);
+                                           const std::string& file_path);
     static ftxui::Color ColorForStyle(Style style, const Theme& theme);
 };
 

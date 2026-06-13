@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <filesystem>
 #include <fstream>
 #include <stdexcept>
 #include <utility>
@@ -152,7 +151,7 @@ ftxui::Element EditorComponent::Render() {
     const bool show_line_numbers = config_ && config_->show_line_numbers;
     const bool syntax_highlighting = !config_ || config_->syntax_highlighting;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    const std::string file_extension = std::filesystem::path(current_filepath_).extension().string();
+    const std::string file_path = current_filepath_;
     const size_t total_lines = text_lines_.size();
     const bool needs_scrollbar = total_lines > visible_height;
     const size_t slider_height = needs_scrollbar
@@ -252,7 +251,7 @@ ftxui::Element EditorComponent::Render() {
 
         if (syntax_highlighting) {
             const std::vector<SyntaxHighlighter::Token> syntax_tokens =
-                SyntaxHighlighter::TokenizeLine(line_content, file_extension);
+                SyntaxHighlighter::TokenizeLine(line_content, file_path);
             render_visible_text(&syntax_tokens);
         } else {
             // Standard raw rendering branch used when syntax highlighting is disabled.

@@ -18,6 +18,7 @@ enum State {
 enum class Language {
     Cpp,
     Css,
+    Dockerfile,
     Html,
     Java,
     Javascript,
@@ -26,18 +27,39 @@ enum class Language {
     Php,
     Plain,
     Python,
+    Sql,
     Typescript,
     Tsx,
+    Yaml,
 };
 
-Language LanguageFromExtension(const std::string& extension) {
+std::string BaseName(const std::string& path) {
+    const size_t separator = path.find_last_of("/\\");
+    return separator == std::string::npos ? path : path.substr(separator + 1);
+}
+
+std::string ExtensionFromName(const std::string& filename) {
+    const size_t dot = filename.find_last_of('.');
+    return dot == std::string::npos ? "" : filename.substr(dot);
+}
+
+Language LanguageFromPath(const std::string& path) {
+    const std::string filename = BaseName(path);
+    const std::string extension = ExtensionFromName(filename);
+
+    if (filename.rfind("Dockerfile", 0) == 0) {
+        return Language::Dockerfile;
+    }
+    if (filename == "docker-compose.yml" || filename == "docker-compose.yaml") {
+        return Language::Yaml;
+    }
     if (extension == ".css") {
         return Language::Css;
     }
     if (extension == ".html" || extension == ".htm") {
         return Language::Html;
     }
-    if (extension == ".js") {
+    if (extension == ".js" || extension == ".mjs" || extension == ".cjs") {
         return Language::Javascript;
     }
     if (extension == ".jsx") {
@@ -55,11 +77,17 @@ Language LanguageFromExtension(const std::string& extension) {
     if (extension == ".py") {
         return Language::Python;
     }
-    if (extension == ".ts") {
+    if (extension == ".sql") {
+        return Language::Sql;
+    }
+    if (extension == ".ts" || extension == ".mts") {
         return Language::Typescript;
     }
     if (extension == ".tsx") {
         return Language::Tsx;
+    }
+    if (extension == ".yaml" || extension == ".yml") {
+        return Language::Yaml;
     }
     if (extension == ".c" || extension == ".cc" || extension == ".cpp" ||
         extension == ".cxx" || extension == ".h" || extension == ".hh" ||
@@ -467,6 +495,57 @@ const std::unordered_set<std::string>& JsonKeywords() {
     return keywords;
 }
 
+const std::unordered_set<std::string>& DockerfileKeywords() {
+    static const std::unordered_set<std::string> keywords = {
+        "ADD",
+        "ARG",
+        "CMD",
+        "COPY",
+        "ENTRYPOINT",
+        "ENV",
+        "EXPOSE",
+        "FROM",
+        "RUN",
+        "USER",
+        "VOLUME",
+        "WORKDIR",
+    };
+    return keywords;
+}
+
+const std::unordered_set<std::string>& SqlKeywords() {
+    static const std::unordered_set<std::string> keywords = {
+        "BY",
+        "CREATE",
+        "DELETE",
+        "DROP",
+        "FROM",
+        "GROUP",
+        "INDEX",
+        "INNER",
+        "INSERT",
+        "INTO",
+        "JOIN",
+        "LEFT",
+        "ON",
+        "ORDER",
+        "RIGHT",
+        "SELECT",
+        "TABLE",
+        "UPDATE",
+        "VALUES",
+        "WHERE",
+    };
+    return keywords;
+}
+
+std::string ToUpper(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
+        return static_cast<char>(std::toupper(character));
+    });
+    return value;
+}
+
 bool IsJsonKey(const std::string& line, size_t after_string) {
     size_t current = after_string;
     while (current < line.size() &&
@@ -474,6 +553,154 @@ bool IsJsonKey(const std::string& line, size_t after_string) {
         ++current;
     }
     return current < line.size() && line[current] == ':';
+}
+
+void PushToken(std::vector<SyntaxHighlighter::Token>& tokens,
+               size_t start,
+               size_t end,
+               SyntaxHighlighter::Style style);
+
+bool IsYamlKeyBody(char character) {
+    const unsigned char value = static_cast<unsigned char>(character);
+    return std::isalnum(value) || character == '_' || character == '-';
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizeYaml(const std::string& line) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    size_t index = 0;
+    while (index < line.size()) {
+        if (line[index] == '#') {
+            PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Comment);
+            break;
+        }
+
+        if (line[index] == '"' || line[index] == '\'') {
+            const size_t end = ParseQuotedStringEnd(line, index);
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+            index = end;
+            continue;
+        }
+
+        if (IsIdentifierStart(line[index]) || line[index] == '-') {
+            const size_t start = index;
+            while (index < line.size() && IsYamlKeyBody(line[index])) {
+                ++index;
+            }
+            const size_t lookahead = SkipWhitespace(line, index);
+            const SyntaxHighlighter::Style style =
+                lookahead < line.size() && line[lookahead] == ':'
+                    ? SyntaxHighlighter::Style::Keyword
+                    : SyntaxHighlighter::Style::Normal;
+            PushToken(tokens, start, index, style);
+            continue;
+        }
+
+        if (IsNumberStart(line, index)) {
+            const size_t start = index;
+            index = ParseNumberEnd(line, index);
+            PushToken(tokens, start, index, SyntaxHighlighter::Style::Number);
+            continue;
+        }
+
+        PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+        ++index;
+    }
+
+    return tokens;
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizeDockerfile(const std::string& line) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    size_t index = 0;
+    while (index < line.size()) {
+        if (line[index] == '#') {
+            PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Comment);
+            break;
+        }
+
+        if (line[index] == '"' || line[index] == '\'') {
+            const size_t end = ParseQuotedStringEnd(line, index);
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+            index = end;
+            continue;
+        }
+
+        if (IsIdentifierStart(line[index])) {
+            const size_t start = index;
+            while (index < line.size() && IsIdentifierBody(line[index])) {
+                ++index;
+            }
+            const std::string word = line.substr(start, index - start);
+            const SyntaxHighlighter::Style style =
+                DockerfileKeywords().find(word) != DockerfileKeywords().end()
+                    ? SyntaxHighlighter::Style::Keyword
+                    : SyntaxHighlighter::Style::Normal;
+            PushToken(tokens, start, index, style);
+            continue;
+        }
+
+        PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+        ++index;
+    }
+
+    return tokens;
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizeSql(const std::string& line) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    size_t index = 0;
+    while (index < line.size()) {
+        if (StartsWith(line, index, "--")) {
+            PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Comment);
+            break;
+        }
+
+        if (StartsWith(line, index, "/*")) {
+            const size_t end = FindCommentEnd(line, index + 2, "*/");
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::Comment);
+            index = end;
+            continue;
+        }
+
+        if (line[index] == '"' || line[index] == '\'') {
+            const size_t end = ParseQuotedStringEnd(line, index);
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+            index = end;
+            continue;
+        }
+
+        if (IsNumberStart(line, index)) {
+            const size_t start = index;
+            index = ParseNumberEnd(line, index);
+            PushToken(tokens, start, index, SyntaxHighlighter::Style::Number);
+            continue;
+        }
+
+        if (IsIdentifierStart(line[index])) {
+            const size_t start = index;
+            while (index < line.size() && IsIdentifierBody(line[index])) {
+                ++index;
+            }
+            const std::string word = ToUpper(line.substr(start, index - start));
+            const SyntaxHighlighter::Style style =
+                SqlKeywords().find(word) != SqlKeywords().end()
+                    ? SyntaxHighlighter::Style::Keyword
+                    : SyntaxHighlighter::Style::Normal;
+            PushToken(tokens, start, index, style);
+            continue;
+        }
+
+        PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+        ++index;
+    }
+
+    return tokens;
 }
 
 void PushToken(std::vector<SyntaxHighlighter::Token>& tokens,
@@ -981,10 +1208,13 @@ ftxui::Color SyntaxHighlighter::ColorForStyle(Style style, const Theme& theme) {
 
 std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
     const std::string& line,
-    const std::string& file_extension) {
-    const Language language = LanguageFromExtension(file_extension);
+    const std::string& file_path) {
+    const Language language = LanguageFromPath(file_path);
     std::vector<Token> tokens;
     tokens.reserve(line.size() / 4 + 1);
+    if (language == Language::Dockerfile) {
+        return TokenizeDockerfile(line);
+    }
     if (language == Language::Html) {
         return TokenizeHtml(line);
     }
@@ -993,6 +1223,12 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
     }
     if (language == Language::Python) {
         return TokenizePython(line);
+    }
+    if (language == Language::Sql) {
+        return TokenizeSql(line);
+    }
+    if (language == Language::Yaml) {
+        return TokenizeYaml(line);
     }
     if (language == Language::Jsx) {
         return TokenizeJsx(line, false);
@@ -1154,9 +1390,9 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
 
 ftxui::Element SyntaxHighlighter::HighlightLine(const std::string& line,
                                                 const Theme& theme,
-                                                const std::string& file_extension) {
+                                                const std::string& file_path) {
     ftxui::Elements elements;
-    for (const Token& token : TokenizeLine(line, file_extension)) {
+    for (const Token& token : TokenizeLine(line, file_path)) {
         elements.push_back(
             ftxui::text(line.substr(token.start, token.length)) |
             ftxui::color(ColorForStyle(token.style, theme)));
