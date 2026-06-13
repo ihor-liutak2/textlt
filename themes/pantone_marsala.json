@@ -9,6 +9,8 @@
   "editor_text": "#F5E6E8",
   "gutter": "#6B3F44",
   "cursor": "#E8A7A1",
+  "match_bg": "#4A70D7",
+  "active_match_bg": "#CCEE00",
   "modal_background": "#532B30",
   "modal_foreground": "#F5E6E8",
   "modal_border": "#E8A7A1",

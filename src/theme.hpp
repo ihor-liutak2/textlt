@@ -21,6 +21,8 @@ struct Theme {
     ftxui::Color cursor = ftxui::Color::Cyan;
     ftxui::Color selection_bg = ftxui::Color::Cyan;
     ftxui::Color selection_fg = ftxui::Color::Black;
+    ftxui::Color match_bg = ftxui::Color::RGB(74, 112, 215);
+    ftxui::Color active_match_bg = ftxui::Color::RGB(204, 238, 0);
     ftxui::Color modal_background = ftxui::Color::Blue;
     ftxui::Color modal_foreground = ftxui::Color::White;
     ftxui::Color modal_border = ftxui::Color::Cyan;

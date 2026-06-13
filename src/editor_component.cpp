@@ -171,13 +171,18 @@ ftxui::Element EditorComponent::Render() {
             }
 
             ftxui::Element character = ftxui::text(line_content.substr(x, 1));
+            const SearchMatch* search_match = SearchMatchAt(x, i);
             if (IsCharacterSelected(x, i)) {
                 character = character |
                     ftxui::bgcolor(theme.selection_bg) |
                     ftxui::color(theme.selection_fg);
-            } else if (IsSearchMatchCharacter(x, i)) {
+            } else if (search_match) {
+                const ftxui::Color match_bg =
+                    IsActiveSearchMatch(*search_match)
+                        ? theme.active_match_bg
+                        : theme.match_bg;
                 character = character |
-                    ftxui::bgcolor(theme.selection_bg) |
+                    ftxui::bgcolor(match_bg) |
                     ftxui::color(theme.selection_fg);
             } else {
                 character = character | ftxui::color(theme.editor_text);
@@ -708,13 +713,28 @@ bool EditorComponent::IsCharacterSelected(size_t x, size_t y) const {
         PositionLess(character_position, end);
 }
 
-bool EditorComponent::IsSearchMatchCharacter(size_t x, size_t y) const {
+const EditorComponent::SearchMatch* EditorComponent::SearchMatchAt(size_t x, size_t y) const {
     for (const SearchMatch& match : search_matches_) {
         if (match.y == y && x >= match.x && x < match.x + match.length) {
+            return &match;
+        }
+    }
+    return nullptr;
+}
+
+bool EditorComponent::IsActiveSearchMatch(const SearchMatch& match) const {
+    if (!search_matches_.empty() && current_search_match_ < search_matches_.size()) {
+        const SearchMatch& active_match = search_matches_[current_search_match_];
+        if (match.x == active_match.x &&
+            match.y == active_match.y &&
+            match.length == active_match.length) {
             return true;
         }
     }
-    return false;
+
+    return match.y == cursor_y_ &&
+        cursor_x_ >= match.x &&
+        cursor_x_ < match.x + match.length;
 }
 
 void EditorComponent::BeginSelection() {

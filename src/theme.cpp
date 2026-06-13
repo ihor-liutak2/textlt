@@ -76,6 +76,9 @@ namespace textlt {
                 ExtractString(content, "selection_bg"), theme.selection_bg);
             theme.selection_fg = ColorFromName(
                 ExtractString(content, "selection_fg"), theme.selection_fg);
+            theme.match_bg = ColorFromName(ExtractString(content, "match_bg"), theme.match_bg);
+            theme.active_match_bg = ColorFromName(
+                ExtractString(content, "active_match_bg"), theme.active_match_bg);
             theme.modal_background = ColorFromName(
                 ExtractString(content, "modal_background"), theme.modal_background);
             theme.modal_foreground = ColorFromName(

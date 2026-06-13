@@ -62,7 +62,8 @@ private:
     void UpdateScroll();
     static bool IsWordCharacter(char character);
     bool IsCharacterSelected(size_t x, size_t y) const;
-    bool IsSearchMatchCharacter(size_t x, size_t y) const;
+    const SearchMatch* SearchMatchAt(size_t x, size_t y) const;
+    bool IsActiveSearchMatch(const SearchMatch& match) const;
     void BeginSelection();
     void ClampCursorToBuffer();
     void MoveCursorHome();
