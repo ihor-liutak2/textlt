@@ -64,6 +64,7 @@ private:
     void ReplaceNext();
     void ReplaceAll();
     std::string FindMatchStatus() const;
+    std::string FileTypeLabel(const std::string& file_path) const;
     
     // Sub-routers for handling dropdown actions by category
     void HandleFileMenu(int item);

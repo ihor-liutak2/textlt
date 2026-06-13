@@ -321,6 +321,24 @@ std::string TextltApp::FindMatchStatus() const {
         " of " + std::to_string(count);
 }
 
+std::string TextltApp::FileTypeLabel(const std::string& file_path) const {
+    const std::string extension = std::filesystem::path(file_path).extension().string();
+    if (extension == ".cpp" || extension == ".hpp" ||
+        extension == ".cc" || extension == ".h") {
+        return "C++ Source";
+    }
+    if (extension == ".json") {
+        return "JSON Document";
+    }
+    if (extension == ".txt") {
+        return "Text Document";
+    }
+    if (extension == ".md") {
+        return "Markdown Document";
+    }
+    return "Plain Text";
+}
+
 bool TextltApp::SaveFile(const std::string& path, std::string& error) {
     try {
         std::static_pointer_cast<EditorComponent>(text_editor_)->SaveToFile(path);
