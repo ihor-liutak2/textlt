@@ -24,6 +24,7 @@ public:
     const std::string& CurrentFilePath() const;
     int GetCursorRow() const;
     int GetCursorCol() const;
+    void JumpToLine(int line_number);
 
     bool HasSelection() const;
     std::string GetSelectedText() const;

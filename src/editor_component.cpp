@@ -387,6 +387,26 @@ int EditorComponent::GetCursorCol() const {
     return static_cast<int>(cursor_x_);
 }
 
+void EditorComponent::JumpToLine(int line_number) {
+    if (text_lines_.empty()) {
+        text_lines_.push_back("");
+    }
+
+    if (line_number < 1) {
+        line_number = 1;
+    }
+    const int max_line = static_cast<int>(text_lines_.size());
+    if (line_number > max_line) {
+        line_number = max_line;
+    }
+
+    EndTypingGroup();
+    cursor_y_ = static_cast<size_t>(line_number - 1);
+    cursor_x_ = 0;
+    ClearSelection();
+    UpdateScroll();
+}
+
 bool EditorComponent::HasSelection() const {
     return has_selection_ &&
         (cursor_x_ != selection_anchor_x_ || cursor_y_ != selection_anchor_y_);

@@ -44,6 +44,10 @@ ftxui::Element TextltApp::Render() {
         base_rows.push_back(separator());
         base_rows.push_back(RenderFindPanel());
     }
+    if (show_goto_line_bar_) {
+        base_rows.push_back(separator());
+        base_rows.push_back(RenderGoToLinePanel());
+    }
 
     base_rows.push_back(separator());
     const int cursor_row = editor->GetCursorRow() + 1;
@@ -134,9 +138,34 @@ ftxui::Element TextltApp::RenderFindPanel() {
         color(current_theme_.menu_foreground);
 }
 
+ftxui::Element TextltApp::RenderGoToLinePanel() {
+    using namespace ftxui;
+
+    return hbox({
+        text(" Go to Line: ") | bold | color(current_theme_.menu_foreground),
+        goto_line_input_component_->Render() | size(WIDTH, GREATER_THAN, 12) | xflex,
+        separator(),
+        text(" Enter jumps | Esc closes ") | dim | color(current_theme_.foreground),
+    }) |
+        border |
+        bgcolor(current_theme_.menu_background) |
+        color(current_theme_.menu_foreground);
+}
+
 bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     const std::string& input = event.input();
     const bool has_input = !input.empty();
+
+    if (show_goto_line_bar_) {
+        if (event == ftxui::Event::Escape) {
+            CloseGoToLinePanel();
+            return true;
+        }
+        if (event == ftxui::Event::Return) {
+            SubmitGoToLine();
+            return true;
+        }
+    }
 
     if (current_search_mode_ != SearchMode::None) {
         if (event == ftxui::Event::Escape) {
@@ -163,6 +192,12 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
 
     if (can_open_find_panel && (input == "\x08" || input == "Ctrl+H")) {
         OpenFindPanel(true);
+        return true;
+    }
+
+    if (can_open_find_panel &&
+        (event == ftxui::Event::Special("\x07") || input == "\x07" || input == "Ctrl+G")) {
+        OpenGoToLinePanel();
         return true;
     }
 

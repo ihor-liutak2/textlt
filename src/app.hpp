@@ -54,10 +54,14 @@ private:
     void RunDropdownAction();
     ftxui::Element Render();
     ftxui::Element RenderFindPanel();
+    ftxui::Element RenderGoToLinePanel();
     bool HandleGlobalEvent(ftxui::Event event);
     int DropdownX() const;
     void OpenFindPanel(bool replace_mode);
     void CloseFindPanel();
+    void OpenGoToLinePanel();
+    void CloseGoToLinePanel();
+    void SubmitGoToLine();
     void RefreshFindMatches();
     void FindNext();
     void FindPrevious();
@@ -91,6 +95,7 @@ private:
     std::vector<std::string> current_dropdown_entries_;
     std::string find_query_;
     std::string replace_text_;
+    std::string goto_line_input_;
     std::string active_action_ = "Ready";
 
     int selected_menu_item_ = 0;
@@ -99,6 +104,7 @@ private:
     int selected_dropdown_item_ = 0;
     int search_panel_tab_index_ = 0;
     bool explorer_has_focus_ = false;
+    bool show_goto_line_bar_ = false;
     SearchMode current_search_mode_ = SearchMode::None;
     ftxui::Box top_menu_box_;
 
@@ -117,6 +123,7 @@ private:
     ftxui::Component find_panel_find_container_;
     ftxui::Component find_panel_replace_container_;
     ftxui::Component find_panel_container_;
+    ftxui::Component goto_line_input_component_;
     ftxui::Component renderer_;
     ftxui::Component global_shortcuts_;
 };

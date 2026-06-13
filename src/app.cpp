@@ -119,6 +119,12 @@ TextltApp::TextltApp()
     replace_input_option.on_enter = [this] { FindNext(); };
     replace_input_ = ftxui::Input(&replace_text_, "replacement", replace_input_option);
 
+    ftxui::InputOption goto_line_input_option;
+    goto_line_input_option.multiline = false;
+    goto_line_input_option.on_enter = [this] { SubmitGoToLine(); };
+    goto_line_input_component_ = ftxui::Input(
+        &goto_line_input_, "line number", goto_line_input_option);
+
     find_next_button_ = ftxui::Button("Find Next", [this] { FindNext(); });
     find_previous_button_ = ftxui::Button("Find Prev", [this] { FindPrevious(); });
     replace_next_button_ = ftxui::Button("Replace Next", [this] { ReplaceNext(); });
@@ -147,6 +153,7 @@ TextltApp::TextltApp()
         help_dialog_.View(),
         theme_dialog_.View(),
         find_panel_container_,
+        goto_line_input_component_,
     }, &focused_layer_);
 
     renderer_ = ftxui::Renderer(root_container_, [this] { return Render(); });
@@ -282,6 +289,41 @@ void TextltApp::OpenFindPanel(bool replace_mode) {
 void TextltApp::CloseFindPanel() {
     current_search_mode_ = SearchMode::None;
     std::static_pointer_cast<EditorComponent>(text_editor_)->ClearSearchHighlights();
+    FocusEditor();
+}
+
+void TextltApp::OpenGoToLinePanel() {
+    active_dropdown_ = -1;
+    current_search_mode_ = SearchMode::None;
+    std::static_pointer_cast<EditorComponent>(text_editor_)->ClearSearchHighlights();
+    show_goto_line_bar_ = true;
+    goto_line_input_.clear();
+    focused_layer_ = 6;
+    goto_line_input_component_->TakeFocus();
+    active_action_ = "Go to line";
+}
+
+void TextltApp::CloseGoToLinePanel() {
+    show_goto_line_bar_ = false;
+    FocusEditor();
+}
+
+void TextltApp::SubmitGoToLine() {
+    try {
+        size_t parsed_chars = 0;
+        const int line_number = std::stoi(goto_line_input_, &parsed_chars);
+        if (parsed_chars != goto_line_input_.size()) {
+            active_action_ = "Invalid line number";
+        } else {
+            auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+            editor_ptr->JumpToLine(line_number);
+            active_action_ = "Jumped to line " + std::to_string(line_number);
+        }
+    } catch (const std::exception&) {
+        active_action_ = "Invalid line number";
+    }
+
+    show_goto_line_bar_ = false;
     FocusEditor();
 }
 
