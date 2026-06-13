@@ -211,9 +211,10 @@ ftxui::Element EditorComponent::Render() {
             : ftxui::text("");
 
         ftxui::Elements line_parts{line_number};
-        const size_t cursor_x = line_index == cursor_y_
+        const bool is_cursor_line = line_index == cursor_y_;
+        const size_t cursor_x = is_cursor_line
             ? std::min(cursor_x_, line_content.size())
-            : line_content.size() + 1;
+            : line_content.size();
         auto render_colored_segment = [&](const std::vector<SyntaxHighlighter::Token>* syntax_tokens) {
             size_t syntax_token_index = 0;
             if (syntax_tokens) {
@@ -224,16 +225,7 @@ ftxui::Element EditorComponent::Render() {
                 }
             }
 
-            for (size_t x = segment_start; x <= segment_end; ++x) {
-                if (line_index == cursor_y_ && x == cursor_x) {
-                    line_parts.push_back(
-                        ftxui::text("█") | ftxui::blink | ftxui::color(theme.cursor));
-                }
-
-                if (x == segment_end || x == line_content.size()) {
-                    continue;
-                }
-
+            for (size_t x = segment_start; x < segment_end && x < line_content.size(); ++x) {
                 ftxui::Element character = ftxui::text(line_content.substr(x, 1));
                 ftxui::Color text_color = theme.editor_text;
                 if (syntax_tokens) {
@@ -266,7 +258,18 @@ ftxui::Element EditorComponent::Render() {
                 } else {
                     character = character | ftxui::color(text_color);
                 }
+
+                if (is_cursor_line && x == cursor_x) {
+                    character = character | ftxui::inverted;
+                }
                 line_parts.push_back(std::move(character));
+            }
+
+            if (is_cursor_line &&
+                cursor_x == line_content.size() &&
+                cursor_x >= segment_start &&
+                cursor_x <= segment_end) {
+                line_parts.push_back(ftxui::text(" ") | ftxui::inverted);
             }
         };
 
