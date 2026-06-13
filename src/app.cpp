@@ -345,6 +345,15 @@ std::string TextltApp::FileTypeLabel(const std::string& file_path) const {
     if (extension == ".js") {
         return "JavaScript Source";
     }
+    if (extension == ".php") {
+        return "PHP Script";
+    }
+    if (extension == ".java") {
+        return "Java Source";
+    }
+    if (extension == ".py") {
+        return "Python Script";
+    }
     return "Plain Text";
 }
 

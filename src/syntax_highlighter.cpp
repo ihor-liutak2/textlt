@@ -19,9 +19,12 @@ enum class Language {
     Cpp,
     Css,
     Html,
+    Java,
     Javascript,
     Json,
+    Php,
     Plain,
+    Python,
 };
 
 Language LanguageFromExtension(const std::string& extension) {
@@ -34,8 +37,17 @@ Language LanguageFromExtension(const std::string& extension) {
     if (extension == ".js") {
         return Language::Javascript;
     }
+    if (extension == ".java") {
+        return Language::Java;
+    }
     if (extension == ".json") {
         return Language::Json;
+    }
+    if (extension == ".php") {
+        return Language::Php;
+    }
+    if (extension == ".py") {
+        return Language::Python;
     }
     if (extension == ".c" || extension == ".cc" || extension == ".cpp" ||
         extension == ".cxx" || extension == ".h" || extension == ".hh" ||
@@ -246,6 +258,136 @@ const std::unordered_set<std::string>& JsTypes() {
         "undefined",
         "document",
         "window",
+    };
+    return types;
+}
+
+const std::unordered_set<std::string>& JavaKeywords() {
+    static const std::unordered_set<std::string> keywords = {
+        "public",
+        "private",
+        "protected",
+        "class",
+        "interface",
+        "enum",
+        "extends",
+        "implements",
+        "return",
+        "if",
+        "else",
+        "for",
+        "while",
+        "switch",
+        "case",
+        "new",
+        "this",
+        "super",
+        "final",
+        "static",
+        "void",
+        "abstract",
+        "synchronized",
+        "throw",
+        "throws",
+        "try",
+        "catch",
+    };
+    return keywords;
+}
+
+const std::unordered_set<std::string>& JavaTypes() {
+    static const std::unordered_set<std::string> types = {
+        "int",
+        "float",
+        "double",
+        "boolean",
+        "char",
+        "byte",
+        "long",
+        "short",
+        "String",
+        "Object",
+        "System",
+        "Integer",
+        "List",
+        "ArrayList",
+        "Map",
+        "HashMap",
+    };
+    return types;
+}
+
+const std::unordered_set<std::string>& PhpKeywords() {
+    static const std::unordered_set<std::string> keywords = {
+        "function",
+        "class",
+        "public",
+        "private",
+        "protected",
+        "return",
+        "if",
+        "else",
+        "elseif",
+        "foreach",
+        "as",
+        "while",
+        "switch",
+        "case",
+        "echo",
+        "include",
+        "require",
+        "namespace",
+        "use",
+        "array",
+    };
+    return keywords;
+}
+
+const std::unordered_set<std::string>& PythonKeywords() {
+    static const std::unordered_set<std::string> keywords = {
+        "def",
+        "class",
+        "return",
+        "if",
+        "elif",
+        "else",
+        "for",
+        "while",
+        "break",
+        "continue",
+        "import",
+        "from",
+        "as",
+        "try",
+        "except",
+        "with",
+        "lambda",
+        "pass",
+        "in",
+        "is",
+        "and",
+        "or",
+        "not",
+    };
+    return keywords;
+}
+
+const std::unordered_set<std::string>& PythonTypes() {
+    static const std::unordered_set<std::string> types = {
+        "print",
+        "len",
+        "range",
+        "str",
+        "int",
+        "float",
+        "list",
+        "dict",
+        "set",
+        "tuple",
+        "True",
+        "False",
+        "None",
+        "self",
     };
     return types;
 }
@@ -498,6 +640,64 @@ std::vector<SyntaxHighlighter::Token> TokenizeCss(const std::string& line) {
     return tokens;
 }
 
+std::vector<SyntaxHighlighter::Token> TokenizePython(const std::string& line) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    size_t index = 0;
+    while (index < line.size()) {
+        if (line[index] == '#') {
+            PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Comment);
+            break;
+        }
+
+        if (StartsWith(line, index, "\"\"\"") || StartsWith(line, index, "'''")) {
+            const std::string close_marker = line.substr(index, 3);
+            const size_t close = line.find(close_marker, index + 3);
+            const size_t end = close == std::string::npos ? line.size() : close + 3;
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+            index = end;
+            continue;
+        }
+
+        if (line[index] == '"' || line[index] == '\'') {
+            const size_t end = ParseQuotedStringEnd(line, index);
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+            index = end;
+            continue;
+        }
+
+        if (IsNumberStart(line, index)) {
+            const size_t start = index;
+            index = ParseNumberEnd(line, index);
+            PushToken(tokens, start, index, SyntaxHighlighter::Style::Number);
+            continue;
+        }
+
+        if (IsIdentifierStart(line[index])) {
+            const size_t start = index;
+            while (index < line.size() && IsIdentifierBody(line[index])) {
+                ++index;
+            }
+
+            const std::string word = line.substr(start, index - start);
+            SyntaxHighlighter::Style style = SyntaxHighlighter::Style::Normal;
+            if (PythonKeywords().find(word) != PythonKeywords().end()) {
+                style = SyntaxHighlighter::Style::Keyword;
+            } else if (PythonTypes().find(word) != PythonTypes().end()) {
+                style = SyntaxHighlighter::Style::Type;
+            }
+            PushToken(tokens, start, index, style);
+            continue;
+        }
+
+        PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+        ++index;
+    }
+
+    return tokens;
+}
+
 } // namespace
 
 ftxui::Color SyntaxHighlighter::ColorForStyle(Style style, const Theme& theme) {
@@ -524,6 +724,9 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
     if (language == Language::Css) {
         return TokenizeCss(line);
     }
+    if (language == Language::Python) {
+        return TokenizePython(line);
+    }
     if (language == Language::Plain) {
         PushToken(tokens, 0, line.size(), Style::Normal);
         return tokens;
@@ -534,13 +737,34 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
     while (index < line.size()) {
         state = STATE_NORMAL;
 
-        if (line[index] == '/' && index + 1 < line.size() && line[index + 1] == '/') {
+        if (language == Language::Php && StartsWith(line, index, "<?php")) {
+            PushToken(tokens, index, index + 5, Style::Keyword);
+            index += 5;
+            continue;
+        }
+
+        if (language == Language::Php && StartsWith(line, index, "?>")) {
+            PushToken(tokens, index, index + 2, Style::Keyword);
+            index += 2;
+            continue;
+        }
+
+        if ((language == Language::Cpp || language == Language::Javascript ||
+             language == Language::Java || language == Language::Php) &&
+            line[index] == '/' && index + 1 < line.size() && line[index + 1] == '/') {
             state = STATE_COMMENT;
             PushToken(tokens, index, line.size(), Style::Comment);
             break;
         }
 
-        if ((language == Language::Cpp || language == Language::Javascript) &&
+        if (language == Language::Php && line[index] == '#') {
+            state = STATE_COMMENT;
+            PushToken(tokens, index, line.size(), Style::Comment);
+            break;
+        }
+
+        if ((language == Language::Cpp || language == Language::Javascript ||
+             language == Language::Java || language == Language::Php) &&
             StartsWith(line, index, "/*")) {
             state = STATE_COMMENT;
             const size_t end = FindCommentEnd(line, index + 2, "*/");
@@ -550,7 +774,8 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
         }
 
         if (line[index] == '"' ||
-            ((language == Language::Cpp || language == Language::Javascript) &&
+            ((language == Language::Cpp || language == Language::Javascript ||
+              language == Language::Java || language == Language::Php) &&
              (line[index] == '\'' || line[index] == '`'))) {
             state = STATE_STRING;
             const size_t start = index;
@@ -561,6 +786,17 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
                     ? Style::Type
                     : Style::String;
             PushToken(tokens, start, index, style);
+            continue;
+        }
+
+        if (language == Language::Php && line[index] == '$' &&
+            index + 1 < line.size() && IsIdentifierStart(line[index + 1])) {
+            const size_t start = index;
+            index += 2;
+            while (index < line.size() && IsIdentifierBody(line[index])) {
+                ++index;
+            }
+            PushToken(tokens, start, index, Style::Type);
             continue;
         }
 
@@ -600,11 +836,21 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
                 } else if (CppTypes().find(word) != CppTypes().end()) {
                     style = Style::Type;
                 }
+            } else if (language == Language::Java) {
+                if (JavaKeywords().find(word) != JavaKeywords().end()) {
+                    style = Style::Keyword;
+                } else if (JavaTypes().find(word) != JavaTypes().end()) {
+                    style = Style::Type;
+                }
             } else if (language == Language::Javascript) {
                 if (JsKeywords().find(word) != JsKeywords().end()) {
                     style = Style::Keyword;
                 } else if (JsTypes().find(word) != JsTypes().end()) {
                     style = Style::Type;
+                }
+            } else if (language == Language::Php) {
+                if (PhpKeywords().find(word) != PhpKeywords().end()) {
+                    style = Style::Keyword;
                 }
             } else if (language == Language::Json &&
                        JsonKeywords().find(word) != JsonKeywords().end()) {
