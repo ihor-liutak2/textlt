@@ -345,8 +345,14 @@ std::string TextltApp::FileTypeLabel(const std::string& file_path) const {
     if (extension == ".js") {
         return "JavaScript Source";
     }
+    if (extension == ".jsx") {
+        return "React JSX Source";
+    }
     if (extension == ".ts") {
         return "TypeScript Source";
+    }
+    if (extension == ".tsx") {
+        return "React TSX Source";
     }
     if (extension == ".php") {
         return "PHP Script";

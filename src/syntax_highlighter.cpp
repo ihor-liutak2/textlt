@@ -21,11 +21,13 @@ enum class Language {
     Html,
     Java,
     Javascript,
+    Jsx,
     Json,
     Php,
     Plain,
     Python,
     Typescript,
+    Tsx,
 };
 
 Language LanguageFromExtension(const std::string& extension) {
@@ -37,6 +39,9 @@ Language LanguageFromExtension(const std::string& extension) {
     }
     if (extension == ".js") {
         return Language::Javascript;
+    }
+    if (extension == ".jsx") {
+        return Language::Jsx;
     }
     if (extension == ".java") {
         return Language::Java;
@@ -52,6 +57,9 @@ Language LanguageFromExtension(const std::string& extension) {
     }
     if (extension == ".ts") {
         return Language::Typescript;
+    }
+    if (extension == ".tsx") {
+        return Language::Tsx;
     }
     if (extension == ".c" || extension == ".cc" || extension == ".cpp" ||
         extension == ".cxx" || extension == ".h" || extension == ".hh" ||
@@ -756,6 +764,207 @@ std::vector<SyntaxHighlighter::Token> TokenizePython(const std::string& line) {
     return tokens;
 }
 
+SyntaxHighlighter::Style JsLikeWordStyle(const std::string& word, bool typescript) {
+    if (typescript) {
+        if (TypescriptKeywords().find(word) != TypescriptKeywords().end()) {
+            return SyntaxHighlighter::Style::Keyword;
+        }
+        if (TypescriptTypes().find(word) != TypescriptTypes().end()) {
+            return SyntaxHighlighter::Style::Type;
+        }
+        return SyntaxHighlighter::Style::Normal;
+    }
+
+    if (JsKeywords().find(word) != JsKeywords().end()) {
+        return SyntaxHighlighter::Style::Keyword;
+    }
+    if (JsTypes().find(word) != JsTypes().end()) {
+        return SyntaxHighlighter::Style::Type;
+    }
+    return SyntaxHighlighter::Style::Normal;
+}
+
+bool IsJsxTagStart(const std::string& line, size_t index) {
+    if (index + 1 >= line.size() || line[index] != '<') {
+        return false;
+    }
+
+    if (std::isalpha(static_cast<unsigned char>(line[index + 1]))) {
+        return true;
+    }
+
+    return index + 2 < line.size() && line[index + 1] == '/' &&
+        std::isalpha(static_cast<unsigned char>(line[index + 2]));
+}
+
+size_t PushJsLikeToken(std::vector<SyntaxHighlighter::Token>& tokens,
+                       const std::string& line,
+                       size_t index,
+                       size_t end,
+                       bool typescript) {
+    if (index >= end) {
+        return index;
+    }
+
+    if (index + 1 < end && line[index] == '/' && line[index + 1] == '/') {
+        PushToken(tokens, index, end, SyntaxHighlighter::Style::Comment);
+        return end;
+    }
+
+    if (index + 1 < end && StartsWith(line, index, "/*")) {
+        const size_t comment_end = std::min(FindCommentEnd(line, index + 2, "*/"), end);
+        PushToken(tokens, index, comment_end, SyntaxHighlighter::Style::Comment);
+        return comment_end;
+    }
+
+    if (line[index] == '"' || line[index] == '\'' || line[index] == '`') {
+        const size_t string_end = std::min(ParseQuotedStringEnd(line, index), end);
+        PushToken(tokens, index, string_end, SyntaxHighlighter::Style::String);
+        return string_end;
+    }
+
+    if (IsNumberStart(line, index)) {
+        const size_t number_end = std::min(ParseNumberEnd(line, index), end);
+        PushToken(tokens, index, number_end, SyntaxHighlighter::Style::Number);
+        return number_end;
+    }
+
+    if (IsJsIdentifierStart(line[index])) {
+        const size_t start = index;
+        while (index < end && IsJsIdentifierBody(line[index])) {
+            ++index;
+        }
+        const std::string word = line.substr(start, index - start);
+        PushToken(tokens, start, index, JsLikeWordStyle(word, typescript));
+        return index;
+    }
+
+    PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+    return index + 1;
+}
+
+size_t TokenizeJsxExpression(std::vector<SyntaxHighlighter::Token>& tokens,
+                             const std::string& line,
+                             size_t index,
+                             bool typescript);
+
+size_t TokenizeJsxTag(std::vector<SyntaxHighlighter::Token>& tokens,
+                      const std::string& line,
+                      size_t index,
+                      bool typescript) {
+    PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+    ++index;
+
+    if (index < line.size() && line[index] == '/') {
+        PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+        ++index;
+    }
+
+    const size_t tag_name_start = SkipWhitespace(line, index);
+    if (tag_name_start > index) {
+        PushToken(tokens, index, tag_name_start, SyntaxHighlighter::Style::Normal);
+        index = tag_name_start;
+    }
+
+    if (index < line.size() && IsHtmlNameStart(line[index])) {
+        const size_t start = index;
+        while (index < line.size() && IsHtmlNameBody(line[index])) {
+            ++index;
+        }
+        PushToken(tokens, start, index, SyntaxHighlighter::Style::Keyword);
+    }
+
+    while (index < line.size()) {
+        if (line[index] == '>') {
+            PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+            return index + 1;
+        }
+
+        if (line[index] == '"' || line[index] == '\'') {
+            const size_t end = ParseQuotedStringEnd(line, index);
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+            index = end;
+            continue;
+        }
+
+        if (line[index] == '{') {
+            index = TokenizeJsxExpression(tokens, line, index, typescript);
+            continue;
+        }
+
+        if (IsHtmlNameStart(line[index])) {
+            const size_t start = index;
+            while (index < line.size() && IsHtmlNameBody(line[index])) {
+                ++index;
+            }
+
+            const size_t lookahead = SkipWhitespace(line, index);
+            const SyntaxHighlighter::Style style =
+                lookahead < line.size() && line[lookahead] == '='
+                    ? SyntaxHighlighter::Style::Type
+                    : SyntaxHighlighter::Style::Normal;
+            PushToken(tokens, start, index, style);
+            continue;
+        }
+
+        PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+        ++index;
+    }
+
+    return index;
+}
+
+size_t TokenizeJsxExpression(std::vector<SyntaxHighlighter::Token>& tokens,
+                             const std::string& line,
+                             size_t index,
+                             bool typescript) {
+    size_t depth = 0;
+    while (index < line.size()) {
+        if (line[index] == '{') {
+            ++depth;
+            PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+            ++index;
+            continue;
+        }
+
+        if (line[index] == '}') {
+            PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+            ++index;
+            if (depth <= 1) {
+                return index;
+            }
+            --depth;
+            continue;
+        }
+
+        if (IsJsxTagStart(line, index)) {
+            index = TokenizeJsxTag(tokens, line, index, typescript);
+            continue;
+        }
+
+        index = PushJsLikeToken(tokens, line, index, line.size(), typescript);
+    }
+
+    return index;
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizeJsx(const std::string& line, bool typescript) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    size_t index = 0;
+    while (index < line.size()) {
+        if (IsJsxTagStart(line, index)) {
+            index = TokenizeJsxTag(tokens, line, index, typescript);
+            continue;
+        }
+
+        index = PushJsLikeToken(tokens, line, index, line.size(), typescript);
+    }
+
+    return tokens;
+}
+
 } // namespace
 
 ftxui::Color SyntaxHighlighter::ColorForStyle(Style style, const Theme& theme) {
@@ -784,6 +993,12 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
     }
     if (language == Language::Python) {
         return TokenizePython(line);
+    }
+    if (language == Language::Jsx) {
+        return TokenizeJsx(line, false);
+    }
+    if (language == Language::Tsx) {
+        return TokenizeJsx(line, true);
     }
     if (language == Language::Plain) {
         PushToken(tokens, 0, line.size(), Style::Normal);
