@@ -48,6 +48,7 @@ Syntax Highlighting
   CSS             .css
   JSON            .json
   INI             .ini, .conf
+  Environment Configs .env, .env.local, .env.*
   YAML            .yaml, .yml
   Docker          Dockerfile, docker-compose.yml
   SQL             .sql

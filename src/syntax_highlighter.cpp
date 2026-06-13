@@ -20,6 +20,7 @@ enum class Language {
     Csharp,
     Css,
     Dockerfile,
+    Env,
     Graphql,
     Ini,
     Html,
@@ -59,6 +60,12 @@ Language LanguageFromPath(const std::string& path) {
     }
     if (filename == "Gemfile") {
         return Language::Ruby;
+    }
+    if (filename == ".env" || filename == ".env.local" ||
+        filename == ".env.development" || filename == ".env.production" ||
+        (filename.size() >= 4 &&
+         filename.compare(filename.size() - 4, 4, ".env") == 0)) {
+        return Language::Env;
     }
     if (extension == ".conf" || extension == ".ini") {
         return Language::Ini;
@@ -692,6 +699,66 @@ std::vector<SyntaxHighlighter::Token> TokenizeCsharp(const std::string& line) {
 
         PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
         ++index;
+    }
+
+    return tokens;
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizeEnv(const std::string& line) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    size_t index = SkipWhitespace(line, 0);
+    if (index > 0) {
+        PushToken(tokens, 0, index, SyntaxHighlighter::Style::Normal);
+    }
+
+    if (index < line.size() && line[index] == '#') {
+        PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Comment);
+        return tokens;
+    }
+
+    const size_t equals = line.find('=', index);
+    if (equals == std::string::npos) {
+        PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Normal);
+        return tokens;
+    }
+
+    size_t key_end = equals;
+    while (key_end > index && std::isspace(static_cast<unsigned char>(line[key_end - 1]))) {
+        --key_end;
+    }
+    PushToken(tokens, index, key_end, SyntaxHighlighter::Style::Keyword);
+    PushToken(tokens, key_end, equals, SyntaxHighlighter::Style::Normal);
+    PushToken(tokens, equals, equals + 1, SyntaxHighlighter::Style::Type);
+
+    index = equals + 1;
+    while (index < line.size()) {
+        if (line[index] == '#') {
+            PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Comment);
+            break;
+        }
+
+        if (line[index] == '"' || line[index] == '\'') {
+            const size_t end = ParseQuotedStringEnd(line, index);
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+            index = end;
+            continue;
+        }
+
+        if (IsNumberStart(line, index)) {
+            const size_t start = index;
+            index = ParseNumberEnd(line, index);
+            PushToken(tokens, start, index, SyntaxHighlighter::Style::Number);
+            continue;
+        }
+
+        const size_t start = index;
+        while (index < line.size() && line[index] != '#' &&
+               line[index] != '"' && line[index] != '\'') {
+            ++index;
+        }
+        PushToken(tokens, start, index, SyntaxHighlighter::Style::String);
     }
 
     return tokens;
@@ -1536,6 +1603,9 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
     }
     if (language == Language::Dockerfile) {
         return TokenizeDockerfile(line);
+    }
+    if (language == Language::Env) {
+        return TokenizeEnv(line);
     }
     if (language == Language::Graphql) {
         return TokenizeGraphql(line);
