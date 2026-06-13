@@ -360,6 +360,10 @@ int EditorComponent::GetCursorCol() const {
     return static_cast<int>(cursor_x_);
 }
 
+size_t EditorComponent::GetLineCount() const {
+    return text_lines_.size();
+}
+
 void EditorComponent::SetBottomOverlayRows(size_t rows) {
     bottom_overlay_rows_ = rows;
 }

@@ -24,6 +24,7 @@ public:
     const std::string& CurrentFilePath() const;
     int GetCursorRow() const;
     int GetCursorCol() const;
+    size_t GetLineCount() const;
     void SetBottomOverlayRows(size_t rows);
     void JumpToLine(int line_number);
 

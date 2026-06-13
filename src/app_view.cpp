@@ -1,6 +1,7 @@
 #include "app.hpp"
 
 #include <algorithm>
+#include <filesystem>
 
 #include "ftxui/component/event.hpp"
 #include "ftxui/component/mouse.hpp"
@@ -58,13 +59,23 @@ ftxui::Element TextltApp::Render() {
     }
 
     base_rows.push_back(separator());
-    const int cursor_row = editor->GetCursorRow() + 1;
+    const int cursor_row_index = editor->GetCursorRow();
+    const int cursor_row = cursor_row_index + 1;
     const int cursor_col = editor->GetCursorCol() + 1;
+    const size_t total_lines = editor->GetLineCount();
+    int document_percent = 100;
+    if (total_lines > 1) {
+        document_percent =
+            (cursor_row_index * 100) / static_cast<int>(total_lines - 1);
+    }
+    const std::string file_path = editor->CurrentFilePath();
+    const std::string filename =
+        std::filesystem::path(file_path).filename().string();
     base_rows.push_back(
-        text(" Active Action: " + active_action_ +
-             " | File: " + editor->CurrentFilePath() +
-             " | File Type: " + FileTypeLabel(editor->CurrentFilePath()) +
+        text(" File: " + (filename.empty() ? file_path : filename) +
+             " | File Type: " + FileTypeLabel(file_path) +
              " | Ln " + std::to_string(cursor_row) + ", Col " + std::to_string(cursor_col) +
+             " | " + std::to_string(document_percent) + "%" +
              " | Theme: " + current_theme_.name) |
             color(current_theme_.menu_foreground));
 
