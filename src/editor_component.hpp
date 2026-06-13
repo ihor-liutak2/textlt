@@ -63,6 +63,7 @@ private:
     static constexpr size_t kMaxHistory = 100;
 
     size_t VisibleHeight() const;
+    size_t VisibleTextWidth() const;
     size_t LineNumberWidth() const;
     std::string LineNumberText(size_t line_index, size_t width) const;
     void UpdateScroll();
@@ -98,6 +99,7 @@ private:
     const Theme* theme_ = nullptr;
     size_t cursor_x_ = 0;
     size_t cursor_y_ = 0;
+    size_t scroll_x_ = 0;
     size_t scroll_y_ = 0;
     size_t selection_anchor_x_ = 0;
     size_t selection_anchor_y_ = 0;

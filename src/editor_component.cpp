@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "ftxui/component/event.hpp"
-#include "ftxui/component/screen_interactive.hpp"
 #include "syntax_highlighter.hpp"
 
 namespace textlt {
@@ -146,68 +145,42 @@ ftxui::Element EditorComponent::Render() {
 
     ftxui::Elements lines_elements;
     const size_t visible_height = VisibleHeight();
+    const size_t visible_width = VisibleTextWidth();
     const size_t last_visible_line =
         std::min(text_lines_.size(), scroll_y_ + visible_height);
     const size_t line_number_width = LineNumberWidth();
     const bool show_line_numbers = config_ && config_->show_line_numbers;
-    const bool smart_word_wrap = config_ && config_->smart_word_wrap;
     const bool syntax_highlighting = !config_ || config_->syntax_highlighting;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     const std::string file_extension = std::filesystem::path(current_filepath_).extension().string();
-    const size_t line_number_columns =
-        show_line_numbers ? LineNumberText(0, line_number_width).size() : 0;
-    const size_t editor_columns = editor_box_.x_max >= editor_box_.x_min
-        ? static_cast<size_t>(editor_box_.x_max - editor_box_.x_min + 1)
-        : 80;
-    const size_t wrap_width = std::max<size_t>(
-        1,
-        editor_columns > line_number_columns ? editor_columns - line_number_columns : editor_columns);
+    const size_t total_lines = text_lines_.size();
+    const bool needs_scrollbar = total_lines > visible_height;
+    const size_t slider_height = needs_scrollbar
+        ? std::max<size_t>(1, (visible_height * visible_height) / total_lines)
+        : visible_height;
+    const size_t available_track_space = visible_height > slider_height
+        ? visible_height - slider_height
+        : 0;
+    const size_t slider_top = needs_scrollbar
+        ? (scroll_y_ * available_track_space) / (total_lines - visible_height)
+        : 0;
 
-    auto wrapped_segments = [&](const std::string& line_content) {
-        std::vector<std::pair<size_t, size_t>> segments;
-        if (!smart_word_wrap || line_content.size() <= wrap_width) {
-            segments.push_back({0, line_content.size()});
-            return segments;
+    auto render_scrollbar_cell = [&](size_t viewport_y) {
+        if (!needs_scrollbar) {
+            return ftxui::text(" ") | ftxui::bgcolor(theme.background);
         }
 
-        size_t start = 0;
-        while (start < line_content.size()) {
-            const size_t remaining = line_content.size() - start;
-            if (remaining <= wrap_width) {
-                segments.push_back({start, line_content.size()});
-                break;
-            }
-
-            const size_t boundary = start + wrap_width;
-            const size_t lower_bound = boundary > start + 10 ? boundary - 10 : start;
-            size_t end = boundary;
-            for (size_t pos = boundary; pos-- > lower_bound;) {
-                if (line_content[pos] == ' ') {
-                    end = pos + 1;
-                    break;
-                }
-            }
-
-            if (end <= start) {
-                end = boundary;
-            }
-            segments.push_back({start, end});
-            start = end;
+        if (viewport_y >= slider_top && viewport_y < slider_top + slider_height) {
+            return ftxui::text("█") | ftxui::color(theme.cursor);
         }
-
-        return segments;
+        return ftxui::text("│") | ftxui::color(theme.gutter) | ftxui::dim;
     };
 
-    auto render_segment = [&](size_t line_index,
-                              size_t segment_start,
-                              size_t segment_end,
-                              bool show_line_number) {
+    auto render_line = [&](size_t line_index, size_t viewport_y) {
         const std::string& line_content = text_lines_[line_index];
 
         ftxui::Element line_number = show_line_numbers
-            ? ftxui::text(show_line_number
-                  ? LineNumberText(line_index, line_number_width)
-                  : std::string(line_number_columns, ' ')) |
+            ? ftxui::text(LineNumberText(line_index, line_number_width)) |
                 ftxui::color(theme.gutter)
             : ftxui::text("");
 
@@ -216,17 +189,20 @@ ftxui::Element EditorComponent::Render() {
         const size_t cursor_x = is_cursor_line
             ? std::min(cursor_x_, line_content.size())
             : line_content.size();
-        auto render_colored_segment = [&](const std::vector<SyntaxHighlighter::Token>* syntax_tokens) {
+        const size_t render_start = scroll_x_;
+        const size_t render_end = scroll_x_ + visible_width;
+
+        auto render_visible_text = [&](const std::vector<SyntaxHighlighter::Token>* syntax_tokens) {
             size_t syntax_token_index = 0;
             if (syntax_tokens) {
                 while (syntax_token_index < syntax_tokens->size() &&
                        (*syntax_tokens)[syntax_token_index].start +
-                           (*syntax_tokens)[syntax_token_index].length <= segment_start) {
+                           (*syntax_tokens)[syntax_token_index].length <= render_start) {
                     ++syntax_token_index;
                 }
             }
 
-            for (size_t x = segment_start; x < segment_end && x < line_content.size(); ++x) {
+            for (size_t x = render_start; x < render_end && x < line_content.size(); ++x) {
                 ftxui::Element character = ftxui::text(line_content.substr(x, 1));
                 ftxui::Color text_color = theme.editor_text;
                 if (syntax_tokens) {
@@ -268,8 +244,8 @@ ftxui::Element EditorComponent::Render() {
 
             if (is_cursor_line &&
                 cursor_x == line_content.size() &&
-                cursor_x >= segment_start &&
-                cursor_x <= segment_end) {
+                cursor_x >= render_start &&
+                cursor_x < render_end) {
                 line_parts.push_back(ftxui::text(" ") | ftxui::inverted);
             }
         };
@@ -277,41 +253,32 @@ ftxui::Element EditorComponent::Render() {
         if (syntax_highlighting) {
             const std::vector<SyntaxHighlighter::Token> syntax_tokens =
                 SyntaxHighlighter::TokenizeLine(line_content, file_extension);
-            render_colored_segment(&syntax_tokens);
+            render_visible_text(&syntax_tokens);
         } else {
             // Standard raw rendering branch used when syntax highlighting is disabled.
-            render_colored_segment(nullptr);
+            render_visible_text(nullptr);
         }
+
+        line_parts.push_back(ftxui::filler());
+        line_parts.push_back(render_scrollbar_cell(viewport_y));
 
         return ftxui::hbox(std::move(line_parts));
     };
 
     // Render only the visible part of the buffer.
     for (size_t i = scroll_y_; i < last_visible_line; ++i) {
-        const std::string& line_content = text_lines_[i];
-        const auto segments = wrapped_segments(line_content);
-        for (size_t segment_index = 0; segment_index < segments.size(); ++segment_index) {
-            if (lines_elements.size() >= visible_height) {
-                break;
-            }
-            lines_elements.push_back(render_segment(
-                i,
-                segments[segment_index].first,
-                segments[segment_index].second,
-                segment_index == 0));
-        }
-        if (lines_elements.size() >= visible_height) {
-            break;
-        }
+        lines_elements.push_back(render_line(i, lines_elements.size()));
     }
 
     while (lines_elements.size() < visible_height) {
+        const size_t viewport_y = lines_elements.size();
         lines_elements.push_back(ftxui::hbox({
             show_line_numbers
                 ? ftxui::text(std::string(line_number_width, ' ') + " │ ") |
                     ftxui::color(theme.gutter)
                 : ftxui::text(""),
             ftxui::filler(),
+            render_scrollbar_cell(viewport_y),
         }));
     }
 
@@ -355,6 +322,7 @@ void EditorComponent::LoadFromFile(const std::string& path) {
     current_filepath_ = path;
     cursor_x_ = 0;
     cursor_y_ = 0;
+    scroll_x_ = 0;
     scroll_y_ = 0;
     undo_stack_.clear();
     redo_stack_.clear();
@@ -370,6 +338,7 @@ void EditorComponent::NewFile(const std::string& path) {
     current_filepath_ = path.empty() ? "untitled.txt" : path;
     cursor_x_ = 0;
     cursor_y_ = 0;
+    scroll_x_ = 0;
     scroll_y_ = 0;
     undo_stack_.clear();
     redo_stack_.clear();
@@ -879,18 +848,27 @@ size_t EditorComponent::VisibleHeight() const {
         return 1;
     }
 
-    int visible_y_max = editor_box_.y_max;
-    const ftxui::ScreenInteractive* screen = ftxui::ScreenInteractive::Active();
-    if (screen && screen->dimy() > 0 && bottom_overlay_rows_ > 0) {
-        const int reserved_rows = static_cast<int>(
-            std::min(bottom_overlay_rows_, static_cast<size_t>(screen->dimy())));
-        visible_y_max = std::min(visible_y_max, screen->dimy() - reserved_rows - 1);
-    }
-
-    if (visible_y_max < editor_box_.y_min) {
+    const size_t total_height =
+        static_cast<size_t>(editor_box_.y_max - editor_box_.y_min + 1);
+    if (bottom_overlay_rows_ >= total_height) {
         return 1;
     }
-    return static_cast<size_t>(visible_y_max - editor_box_.y_min + 1);
+
+    return total_height - bottom_overlay_rows_;
+}
+
+size_t EditorComponent::VisibleTextWidth() const {
+    static constexpr size_t kScrollbarColumns = 1;
+    const size_t total_width = editor_box_.x_max >= editor_box_.x_min
+        ? static_cast<size_t>(editor_box_.x_max - editor_box_.x_min + 1)
+        : 80;
+    const bool show_line_numbers = config_ && config_->show_line_numbers;
+    const size_t line_number_columns =
+        show_line_numbers ? LineNumberText(0, LineNumberWidth()).size() : 0;
+    if (line_number_columns + kScrollbarColumns >= total_width) {
+        return 1;
+    }
+    return total_width - line_number_columns - kScrollbarColumns;
 }
 
 size_t EditorComponent::LineNumberWidth() const {
@@ -906,20 +884,36 @@ std::string EditorComponent::LineNumberText(size_t line_index, size_t width) con
 }
 
 void EditorComponent::UpdateScroll() {
+    ClampCursorToBuffer();
     const size_t visible_height = VisibleHeight();
-    if (cursor_y_ < scroll_y_) {
-        scroll_y_ = cursor_y_;
-    } else if (cursor_y_ >= scroll_y_ + visible_height) {
+    if (cursor_y_ >= scroll_y_ + visible_height) {
         scroll_y_ = cursor_y_ - visible_height + 1;
     }
-
+    if (cursor_y_ < scroll_y_) {
+        scroll_y_ = cursor_y_;
+    }
     if (text_lines_.size() <= visible_height) {
         scroll_y_ = 0;
-        return;
+    } else {
+        const size_t max_scroll_y = text_lines_.size() - visible_height;
+        scroll_y_ = std::min(scroll_y_, max_scroll_y);
     }
 
-    const size_t max_scroll = text_lines_.size() - visible_height;
-    scroll_y_ = std::min(scroll_y_, max_scroll);
+    const size_t visible_width = VisibleTextWidth();
+    if (cursor_x_ >= scroll_x_ + visible_width) {
+        scroll_x_ = cursor_x_ - visible_width + 1;
+    }
+    if (cursor_x_ < scroll_x_) {
+        scroll_x_ = cursor_x_;
+    }
+
+    const size_t current_line_size = text_lines_[cursor_y_].size();
+    if (current_line_size < visible_width) {
+        scroll_x_ = 0;
+    } else {
+        const size_t max_scroll_x = current_line_size - visible_width + 1;
+        scroll_x_ = std::min(scroll_x_, max_scroll_x);
+    }
 }
 
 bool EditorComponent::IsWordCharacter(char character) {
