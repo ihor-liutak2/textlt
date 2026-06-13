@@ -17,8 +17,11 @@ enum State {
 
 enum class Language {
     Cpp,
+    Csharp,
     Css,
     Dockerfile,
+    Graphql,
+    Ini,
     Html,
     Java,
     Javascript,
@@ -27,6 +30,7 @@ enum class Language {
     Php,
     Plain,
     Python,
+    Ruby,
     Sql,
     Typescript,
     Tsx,
@@ -53,8 +57,20 @@ Language LanguageFromPath(const std::string& path) {
     if (filename == "docker-compose.yml" || filename == "docker-compose.yaml") {
         return Language::Yaml;
     }
+    if (filename == "Gemfile") {
+        return Language::Ruby;
+    }
+    if (extension == ".conf" || extension == ".ini") {
+        return Language::Ini;
+    }
+    if (extension == ".cs") {
+        return Language::Csharp;
+    }
     if (extension == ".css") {
         return Language::Css;
+    }
+    if (extension == ".gql" || extension == ".graphql") {
+        return Language::Graphql;
     }
     if (extension == ".html" || extension == ".htm") {
         return Language::Html;
@@ -76,6 +92,9 @@ Language LanguageFromPath(const std::string& path) {
     }
     if (extension == ".py") {
         return Language::Python;
+    }
+    if (extension == ".rb") {
+        return Language::Ruby;
     }
     if (extension == ".sql") {
         return Language::Sql;
@@ -495,6 +514,33 @@ const std::unordered_set<std::string>& JsonKeywords() {
     return keywords;
 }
 
+const std::unordered_set<std::string>& CsharpKeywords() {
+    static const std::unordered_set<std::string> keywords = {
+        "async",
+        "await",
+        "class",
+        "else",
+        "foreach",
+        "get",
+        "if",
+        "internal",
+        "namespace",
+        "new",
+        "private",
+        "protected",
+        "public",
+        "return",
+        "set",
+        "string",
+        "struct",
+        "using",
+        "var",
+        "void",
+        "int",
+    };
+    return keywords;
+}
+
 const std::unordered_set<std::string>& DockerfileKeywords() {
     static const std::unordered_set<std::string> keywords = {
         "ADD",
@@ -509,6 +555,44 @@ const std::unordered_set<std::string>& DockerfileKeywords() {
         "USER",
         "VOLUME",
         "WORKDIR",
+    };
+    return keywords;
+}
+
+const std::unordered_set<std::string>& GraphqlKeywords() {
+    static const std::unordered_set<std::string> keywords = {
+        "enum",
+        "fragment",
+        "input",
+        "interface",
+        "mutation",
+        "query",
+        "scalar",
+        "schema",
+        "subscription",
+        "type",
+    };
+    return keywords;
+}
+
+const std::unordered_set<std::string>& RubyKeywords() {
+    static const std::unordered_set<std::string> keywords = {
+        "class",
+        "def",
+        "else",
+        "elsif",
+        "end",
+        "false",
+        "if",
+        "include",
+        "module",
+        "nil",
+        "require",
+        "return",
+        "true",
+        "unless",
+        "until",
+        "while",
     };
     return keywords;
 }
@@ -559,6 +643,241 @@ void PushToken(std::vector<SyntaxHighlighter::Token>& tokens,
                size_t start,
                size_t end,
                SyntaxHighlighter::Style style);
+
+std::vector<SyntaxHighlighter::Token> TokenizeCsharp(const std::string& line) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    size_t index = 0;
+    while (index < line.size()) {
+        if (StartsWith(line, index, "//")) {
+            PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Comment);
+            break;
+        }
+
+        if (StartsWith(line, index, "/*")) {
+            const size_t end = FindCommentEnd(line, index + 2, "*/");
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::Comment);
+            index = end;
+            continue;
+        }
+
+        if (line[index] == '"' || line[index] == '\'') {
+            const size_t end = ParseQuotedStringEnd(line, index);
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+            index = end;
+            continue;
+        }
+
+        if (IsNumberStart(line, index)) {
+            const size_t start = index;
+            index = ParseNumberEnd(line, index);
+            PushToken(tokens, start, index, SyntaxHighlighter::Style::Number);
+            continue;
+        }
+
+        if (IsIdentifierStart(line[index])) {
+            const size_t start = index;
+            while (index < line.size() && IsIdentifierBody(line[index])) {
+                ++index;
+            }
+            const std::string word = line.substr(start, index - start);
+            const SyntaxHighlighter::Style style =
+                CsharpKeywords().find(word) != CsharpKeywords().end()
+                    ? SyntaxHighlighter::Style::Keyword
+                    : SyntaxHighlighter::Style::Normal;
+            PushToken(tokens, start, index, style);
+            continue;
+        }
+
+        PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+        ++index;
+    }
+
+    return tokens;
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizeGraphql(const std::string& line) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    size_t index = 0;
+    while (index < line.size()) {
+        if (line[index] == '#') {
+            PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Comment);
+            break;
+        }
+
+        if (line[index] == '"' || line[index] == '\'') {
+            const size_t end = ParseQuotedStringEnd(line, index);
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+            index = end;
+            continue;
+        }
+
+        if (line[index] == '$' && index + 1 < line.size() && IsIdentifierStart(line[index + 1])) {
+            const size_t start = index;
+            index += 2;
+            while (index < line.size() && IsIdentifierBody(line[index])) {
+                ++index;
+            }
+            PushToken(tokens, start, index, SyntaxHighlighter::Style::Type);
+            continue;
+        }
+
+        if (IsNumberStart(line, index)) {
+            const size_t start = index;
+            index = ParseNumberEnd(line, index);
+            PushToken(tokens, start, index, SyntaxHighlighter::Style::Number);
+            continue;
+        }
+
+        if (IsIdentifierStart(line[index])) {
+            const size_t start = index;
+            while (index < line.size() && IsIdentifierBody(line[index])) {
+                ++index;
+            }
+            const std::string word = line.substr(start, index - start);
+            SyntaxHighlighter::Style style = SyntaxHighlighter::Style::Normal;
+            if (GraphqlKeywords().find(word) != GraphqlKeywords().end()) {
+                style = SyntaxHighlighter::Style::Keyword;
+            } else {
+                const size_t lookahead = SkipWhitespace(line, index);
+                if (lookahead < line.size() && line[lookahead] == ':') {
+                    style = SyntaxHighlighter::Style::Type;
+                }
+            }
+            PushToken(tokens, start, index, style);
+            continue;
+        }
+
+        PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+        ++index;
+    }
+
+    return tokens;
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizeIni(const std::string& line) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    size_t index = SkipWhitespace(line, 0);
+    if (index > 0) {
+        PushToken(tokens, 0, index, SyntaxHighlighter::Style::Normal);
+    }
+
+    if (index < line.size() && (line[index] == ';' || line[index] == '#')) {
+        PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Comment);
+        return tokens;
+    }
+
+    if (index < line.size() && line[index] == '[') {
+        const size_t close = line.find(']', index + 1);
+        const size_t end = close == std::string::npos ? line.size() : close + 1;
+        PushToken(tokens, index, end, SyntaxHighlighter::Style::Keyword);
+        if (end < line.size()) {
+            PushToken(tokens, end, line.size(), SyntaxHighlighter::Style::Normal);
+        }
+        return tokens;
+    }
+
+    const size_t equals = line.find('=', index);
+    if (equals == std::string::npos) {
+        PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Normal);
+        return tokens;
+    }
+
+    size_t key_end = equals;
+    while (key_end > index && std::isspace(static_cast<unsigned char>(line[key_end - 1]))) {
+        --key_end;
+    }
+    PushToken(tokens, index, key_end, SyntaxHighlighter::Style::Keyword);
+    PushToken(tokens, key_end, equals + 1, SyntaxHighlighter::Style::Normal);
+
+    index = equals + 1;
+    while (index < line.size()) {
+        if (line[index] == ';' || line[index] == '#') {
+            PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Comment);
+            break;
+        }
+
+        if (line[index] == '"' || line[index] == '\'') {
+            const size_t end = ParseQuotedStringEnd(line, index);
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+            index = end;
+            continue;
+        }
+
+        if (IsNumberStart(line, index)) {
+            const size_t start = index;
+            index = ParseNumberEnd(line, index);
+            PushToken(tokens, start, index, SyntaxHighlighter::Style::Number);
+            continue;
+        }
+
+        PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+        ++index;
+    }
+
+    return tokens;
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizeRuby(const std::string& line) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    size_t index = 0;
+    while (index < line.size()) {
+        if (line[index] == '#') {
+            PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Comment);
+            break;
+        }
+
+        if (line[index] == '"' || line[index] == '\'') {
+            const size_t end = ParseQuotedStringEnd(line, index);
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+            index = end;
+            continue;
+        }
+
+        if (line[index] == ':' && index + 1 < line.size() && IsIdentifierStart(line[index + 1])) {
+            const size_t start = index;
+            index += 2;
+            while (index < line.size() && IsIdentifierBody(line[index])) {
+                ++index;
+            }
+            PushToken(tokens, start, index, SyntaxHighlighter::Style::Type);
+            continue;
+        }
+
+        if (IsNumberStart(line, index)) {
+            const size_t start = index;
+            index = ParseNumberEnd(line, index);
+            PushToken(tokens, start, index, SyntaxHighlighter::Style::Number);
+            continue;
+        }
+
+        if (IsIdentifierStart(line[index])) {
+            const size_t start = index;
+            while (index < line.size() && IsIdentifierBody(line[index])) {
+                ++index;
+            }
+            const std::string word = line.substr(start, index - start);
+            const SyntaxHighlighter::Style style =
+                RubyKeywords().find(word) != RubyKeywords().end()
+                    ? SyntaxHighlighter::Style::Keyword
+                    : SyntaxHighlighter::Style::Normal;
+            PushToken(tokens, start, index, style);
+            continue;
+        }
+
+        PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+        ++index;
+    }
+
+    return tokens;
+}
 
 bool IsYamlKeyBody(char character) {
     const unsigned char value = static_cast<unsigned char>(character);
@@ -1212,17 +1531,29 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
     const Language language = LanguageFromPath(file_path);
     std::vector<Token> tokens;
     tokens.reserve(line.size() / 4 + 1);
+    if (language == Language::Csharp) {
+        return TokenizeCsharp(line);
+    }
     if (language == Language::Dockerfile) {
         return TokenizeDockerfile(line);
     }
+    if (language == Language::Graphql) {
+        return TokenizeGraphql(line);
+    }
     if (language == Language::Html) {
         return TokenizeHtml(line);
+    }
+    if (language == Language::Ini) {
+        return TokenizeIni(line);
     }
     if (language == Language::Css) {
         return TokenizeCss(line);
     }
     if (language == Language::Python) {
         return TokenizePython(line);
+    }
+    if (language == Language::Ruby) {
+        return TokenizeRuby(line);
     }
     if (language == Language::Sql) {
         return TokenizeSql(line);

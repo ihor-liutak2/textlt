@@ -35,15 +35,19 @@ Options
 Syntax Highlighting
   Language        Supported Extensions / Filenames
   C++             .cpp, .hpp, .h, .cc, .cxx
+  C#              .cs
   JavaScript      .js, .mjs, .cjs
   TypeScript      .ts, .mts
   React JSX/TSX   .jsx, .tsx
+  GraphQL         .graphql, .gql
   PHP             .php
   Python          .py
+  Ruby            .rb, Gemfile
   Java            .java
   HTML            .html, .htm
   CSS             .css
   JSON            .json
+  INI             .ini, .conf
   YAML            .yaml, .yml
   Docker          Dockerfile, docker-compose.yml
   SQL             .sql
