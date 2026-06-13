@@ -297,6 +297,22 @@ void TextltApp::RunDropdownAction() {
 void TextltApp::HandleEditMenu(int item) {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
 
+    if (item == 0) { // Undo
+        FocusEditor();
+        editor_ptr->Undo();
+        active_action_ = "Undo";
+        CloseDropdown();
+        return;
+    }
+
+    if (item == 1) { // Redo
+        FocusEditor();
+        editor_ptr->Redo();
+        active_action_ = "Redo";
+        CloseDropdown();
+        return;
+    }
+
     if (item == 2) { // Cut
         FocusEditor();
         if (editor_ptr->HasSelection()) {
@@ -346,21 +362,8 @@ void TextltApp::HandleEditMenu(int item) {
 
         std::string clipboard_text = ReadSystemClipboard();
         if (!clipboard_text.empty()) {
-            // NEW: If user pastes text while having an active selection, 
-            // erase the highlighted block first (standard editor behavior)
-            if (editor_ptr->HasSelection()) {
-                editor_ptr->DeleteSelection();
-            }
-
             active_action_ = "Pasted text (" + std::to_string(clipboard_text.size()) + " chars)";
-            for (char c : clipboard_text) {
-                if (c == '\r') continue;
-                if (c == '\n') {
-                    editor_ptr->OnEvent(ftxui::Event::Return);
-                } else {
-                    editor_ptr->OnEvent(ftxui::Event::Character(std::string(1, c)));
-                }
-            }
+            editor_ptr->InsertText(clipboard_text);
         } else {
             active_action_ = "Clipboard empty.";
         }

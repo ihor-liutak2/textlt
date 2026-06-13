@@ -233,6 +233,9 @@ void EditorComponent::LoadFromFile(const std::string& path) {
     cursor_x_ = 0;
     cursor_y_ = 0;
     scroll_y_ = 0;
+    undo_stack_.clear();
+    redo_stack_.clear();
+    typing_group_active_ = false;
     ClearSelection();
 }
 
@@ -274,6 +277,16 @@ void EditorComponent::DeleteSelection() {
         return;
     }
 
+    EndTypingGroup();
+    SaveSnapshot();
+    DeleteSelectionWithoutSnapshot();
+}
+
+void EditorComponent::DeleteSelectionWithoutSnapshot() {
+    if (!HasSelection()) {
+        return;
+    }
+
     auto [start, end] = OrderedSelection(
         {selection_anchor_x_, selection_anchor_y_},
         {cursor_x_, cursor_y_},
@@ -308,6 +321,40 @@ void EditorComponent::ClearSelection() {
     selection_anchor_y_ = cursor_y_;
 }
 
+void EditorComponent::InsertText(const std::string& text) {
+    if (text.empty()) {
+        return;
+    }
+
+    EndTypingGroup();
+    SaveSnapshot();
+
+    if (HasSelection()) {
+        DeleteSelectionWithoutSnapshot();
+    }
+
+    for (char character : text) {
+        if (character == '\r') {
+            continue;
+        }
+
+        if (character == '\n') {
+            std::string next_line = text_lines_[cursor_y_].substr(cursor_x_);
+            text_lines_[cursor_y_].erase(cursor_x_);
+            text_lines_.insert(text_lines_.begin() + cursor_y_ + 1, std::move(next_line));
+            cursor_y_++;
+            cursor_x_ = 0;
+            continue;
+        }
+
+        text_lines_[cursor_y_].insert(cursor_x_, std::string(1, character));
+        cursor_x_++;
+    }
+
+    ClearSelection();
+    UpdateScroll();
+}
+
 bool EditorComponent::OnEvent(ftxui::Event event) {
     if (event.is_mouse()) {
         auto mouse = event.mouse();
@@ -332,10 +379,21 @@ bool EditorComponent::OnEvent(ftxui::Event event) {
     }
     // ----------------------------------------------
 
+    const std::string& input = event.input();
+    if (input == "\x1A" || input == "Ctrl+Z") {
+        Undo();
+        return true;
+    }
+    if (input == "\x19" || input == "Ctrl+Y") {
+        Redo();
+        return true;
+    }
+
     if (event.is_character()) {
         // Insert incoming characters at the current cursor position.
+        SaveSnapshotForTyping(event.input());
         if (HasSelection()) {
-            DeleteSelection();
+            DeleteSelectionWithoutSnapshot();
         }
         text_lines_[cursor_y_].insert(cursor_x_, event.input());
         cursor_x_ += event.input().size();
@@ -345,6 +403,7 @@ bool EditorComponent::OnEvent(ftxui::Event event) {
     }
 
     if (event == ftxui::Event::Backspace) {
+        EndTypingGroup();
         if (HasSelection()) {
             DeleteSelection();
             return true;
@@ -352,9 +411,11 @@ bool EditorComponent::OnEvent(ftxui::Event event) {
 
         // Delete the character before the cursor or join with the previous line.
         if (cursor_x_ > 0) {
+            SaveSnapshot();
             text_lines_[cursor_y_].erase(cursor_x_ - 1, 1);
             cursor_x_--;
         } else if (cursor_y_ > 0) {
+            SaveSnapshot();
             cursor_x_ = text_lines_[cursor_y_ - 1].size();
             text_lines_[cursor_y_ - 1] += text_lines_[cursor_y_];
             text_lines_.erase(text_lines_.begin() + cursor_y_);
@@ -366,14 +427,17 @@ bool EditorComponent::OnEvent(ftxui::Event event) {
     }
 
     if (event == ftxui::Event::Delete) {
+        EndTypingGroup();
         if (HasSelection()) {
             DeleteSelection();
             return true;
         }
 
         if (cursor_x_ < text_lines_[cursor_y_].size()) {
+            SaveSnapshot();
             text_lines_[cursor_y_].erase(cursor_x_, 1);
         } else if (cursor_y_ + 1 < text_lines_.size()) {
+            SaveSnapshot();
             text_lines_[cursor_y_] += text_lines_[cursor_y_ + 1];
             text_lines_.erase(text_lines_.begin() + static_cast<std::ptrdiff_t>(cursor_y_ + 1));
         }
@@ -383,8 +447,10 @@ bool EditorComponent::OnEvent(ftxui::Event event) {
     }
 
     if (event == ftxui::Event::Return) {
+        EndTypingGroup();
+        SaveSnapshot();
         if (HasSelection()) {
-            DeleteSelection();
+            DeleteSelectionWithoutSnapshot();
         }
 
         // Split the active line at the current cursor position.
@@ -401,6 +467,7 @@ bool EditorComponent::OnEvent(ftxui::Event event) {
     NavigationAction action = NavigationAction::Left;
     const bool extend_selection = IsShiftNavigationEvent(event, &action);
     if (extend_selection || IsNavigationEvent(event, &action)) {
+        EndTypingGroup();
         if (extend_selection) {
             BeginSelection();
         }
@@ -599,8 +666,93 @@ void EditorComponent::MoveCursorToNextWord() {
 
     ClampCursorToBuffer();
 }
-    
-    // ... твій існуючий код MoveCursorToNextWord() ...
+
+EditorComponent::EditorState EditorComponent::CurrentState() const {
+    return {
+        text_lines_,
+        static_cast<int>(cursor_x_),
+        static_cast<int>(cursor_y_),
+    };
+}
+
+void EditorComponent::ApplyState(const EditorState& state) {
+    text_lines_ = state.lines;
+    if (text_lines_.empty()) {
+        text_lines_.push_back("");
+    }
+
+    cursor_x_ = state.cursor_x < 0 ? 0 : static_cast<size_t>(state.cursor_x);
+    cursor_y_ = state.cursor_y < 0 ? 0 : static_cast<size_t>(state.cursor_y);
+    ClearSelection();
+    UpdateScroll();
+}
+
+void EditorComponent::SaveSnapshot() {
+    ClampCursorToBuffer();
+
+    EditorState state = CurrentState();
+    if (!undo_stack_.empty() &&
+        undo_stack_.back().lines == state.lines &&
+        undo_stack_.back().cursor_x == state.cursor_x &&
+        undo_stack_.back().cursor_y == state.cursor_y) {
+        redo_stack_.clear();
+        return;
+    }
+
+    undo_stack_.push_back(std::move(state));
+    if (undo_stack_.size() > kMaxHistory) {
+        undo_stack_.erase(undo_stack_.begin());
+    }
+    redo_stack_.clear();
+}
+
+void EditorComponent::SaveSnapshotForTyping(const std::string& input) {
+    const bool boundary =
+        input.size() == 1 &&
+        std::isspace(static_cast<unsigned char>(input.front()));
+
+    if (!typing_group_active_ || boundary || HasSelection()) {
+        SaveSnapshot();
+    }
+
+    typing_group_active_ = !boundary;
+}
+
+void EditorComponent::EndTypingGroup() {
+    typing_group_active_ = false;
+}
+
+void EditorComponent::Undo() {
+    EndTypingGroup();
+    if (undo_stack_.empty()) {
+        return;
+    }
+
+    redo_stack_.push_back(CurrentState());
+    if (redo_stack_.size() > kMaxHistory) {
+        redo_stack_.erase(redo_stack_.begin());
+    }
+
+    const EditorState state = std::move(undo_stack_.back());
+    undo_stack_.pop_back();
+    ApplyState(state);
+}
+
+void EditorComponent::Redo() {
+    EndTypingGroup();
+    if (redo_stack_.empty()) {
+        return;
+    }
+
+    undo_stack_.push_back(CurrentState());
+    if (undo_stack_.size() > kMaxHistory) {
+        undo_stack_.erase(undo_stack_.begin());
+    }
+
+    const EditorState state = std::move(redo_stack_.back());
+    redo_stack_.pop_back();
+    ApplyState(state);
+}
 
 std::string EditorComponent::GetCurrentLineText() const {
     if (cursor_y_ < text_lines_.size()) {
@@ -613,6 +765,8 @@ void EditorComponent::DeleteCurrentLine() {
     if (text_lines_.empty()) return;
 
     if (cursor_y_ < text_lines_.size()) {
+        EndTypingGroup();
+        SaveSnapshot();
         text_lines_.erase(text_lines_.begin() + cursor_y_);
         
         // Ensure the layout never drops to an absolute 0 rows state

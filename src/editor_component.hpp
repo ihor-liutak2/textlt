@@ -26,11 +26,22 @@ public:
     std::string GetSelectedText() const;
     void DeleteSelection();
     void ClearSelection();
+    void InsertText(const std::string& text);
+    void Undo();
+    void Redo();
     
     std::string GetCurrentLineText() const;
     void DeleteCurrentLine();
 
 private:
+    struct EditorState {
+        std::vector<std::string> lines;
+        int cursor_x = 0;
+        int cursor_y = 0;
+    };
+
+    static constexpr size_t kMaxHistory = 100;
+
     size_t VisibleHeight() const;
     size_t LineNumberWidth() const;
     std::string LineNumberText(size_t line_index, size_t width) const;
@@ -47,8 +58,16 @@ private:
     void MoveCursorDown();
     void MoveCursorToPreviousWord();
     void MoveCursorToNextWord();
+    EditorState CurrentState() const;
+    void ApplyState(const EditorState& state);
+    void SaveSnapshot();
+    void SaveSnapshotForTyping(const std::string& input);
+    void EndTypingGroup();
+    void DeleteSelectionWithoutSnapshot();
 
     std::vector<std::string> text_lines_;
+    std::vector<EditorState> undo_stack_;
+    std::vector<EditorState> redo_stack_;
     std::string current_filepath_ = "untitled.txt";
     EditorConfig* config_ = nullptr;
     const Theme* theme_ = nullptr;
@@ -58,6 +77,7 @@ private:
     size_t selection_anchor_x_ = 0;
     size_t selection_anchor_y_ = 0;
     bool has_selection_ = false;
+    bool typing_group_active_ = false;
     ftxui::Box editor_box_;
 };
 
