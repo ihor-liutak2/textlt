@@ -46,10 +46,13 @@ ftxui::Element TextltApp::Render() {
     }
 
     base_rows.push_back(separator());
+    const int cursor_row = editor->GetCursorRow() + 1;
+    const int cursor_col = editor->GetCursorCol() + 1;
     base_rows.push_back(
         text(" Active Action: " + active_action_ +
              " | File: " + editor->CurrentFilePath() +
              " | File Type: " + FileTypeLabel(editor->CurrentFilePath()) +
+             " | Ln " + std::to_string(cursor_row) + ", Col " + std::to_string(cursor_col) +
              " | Theme: " + current_theme_.name) |
             color(current_theme_.menu_foreground));
 

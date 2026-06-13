@@ -22,6 +22,8 @@ public:
     void LoadFromFile(const std::string& path);
     void NewFile(const std::string& path);
     const std::string& CurrentFilePath() const;
+    int GetCursorRow() const;
+    int GetCursorCol() const;
 
     bool HasSelection() const;
     std::string GetSelectedText() const;

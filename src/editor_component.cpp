@@ -376,6 +376,14 @@ const std::string& EditorComponent::CurrentFilePath() const {
     return current_filepath_;
 }
 
+int EditorComponent::GetCursorRow() const {
+    return static_cast<int>(cursor_y_);
+}
+
+int EditorComponent::GetCursorCol() const {
+    return static_cast<int>(cursor_x_);
+}
+
 bool EditorComponent::HasSelection() const {
     return has_selection_ &&
         (cursor_x_ != selection_anchor_x_ || cursor_y_ != selection_anchor_y_);
