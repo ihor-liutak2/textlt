@@ -23,6 +23,7 @@ add_executable(textlt
   src/app_view.cpp
   src/config_manager.cpp
   src/editor_component.cpp
+  src/editor_keyboard.cpp
   src/editor_mouse.cpp
   src/editor_viewport.cpp
   src/file_dialog.cpp
