@@ -506,6 +506,7 @@ void TextltApp::OpenExplorerFile(const std::filesystem::path& path) {
     std::string error;
     if (OpenFile(path.string(), error)) {
         FocusEditor();
+        screen_.PostEvent(ftxui::Event::Custom);
     }
 }
 

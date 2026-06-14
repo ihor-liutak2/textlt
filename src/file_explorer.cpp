@@ -55,7 +55,12 @@ bool FileExplorer::OnEvent(ftxui::Event event) {
             if (duration < 300 && clicked_entry == last_clicked_entry_) {
                 last_clicked_entry_ = -1;
                 last_click_time_ = {};
-                OpenDirectoryEntry(clicked_entry);
+                if (OpenDirectoryEntry(clicked_entry)) {
+                    return true;
+                }
+
+                // Double-clicking a regular file delegates to the central file-open callback.
+                OpenSelectedEntry();
                 return true;
             }
 
