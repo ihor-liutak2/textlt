@@ -40,7 +40,7 @@ ftxui::Element TextltApp::Render() {
     const auto editor = std::static_pointer_cast<EditorComponent>(text_editor_);
     size_t bottom_overlay_rows = 2; // Status separator + status bar.
     if (current_search_mode_ != SearchMode::None) {
-        bottom_overlay_rows += 4; // Find separator + bordered panel.
+        bottom_overlay_rows += 7; // Find separator plus the bordered multi-row search panel.
     }
     if (show_goto_line_bar_) {
         bottom_overlay_rows += 4; // Go-to-line separator + bordered panel.
@@ -164,36 +164,61 @@ ftxui::Element TextltApp::Render() {
 ftxui::Element TextltApp::RenderFindPanel() {
     using namespace ftxui;
 
-    Element controls = emptyElement();
-    std::string mode = " Find ";
+    Element input_column = emptyElement();
+    Element action_column = emptyElement();
+    std::string mode = "Find";
     if (current_search_mode_ == SearchMode::Replace) {
-        mode = " Replace ";
-        controls = hbox({
-            text(" Find: "),
-            replace_find_input_->Render() | size(WIDTH, GREATER_THAN, 20) | xflex,
-            text(" Replace: "),
-            replace_input_->Render() | size(WIDTH, GREATER_THAN, 20) | xflex,
-            separator(),
+        mode = "Replace";
+        input_column = vbox({
+            hbox({
+                text(" Find:    "),
+                replace_find_input_->Render() | size(WIDTH, GREATER_THAN, 34) | xflex,
+            }),
+            hbox({
+                text(" Replace: "),
+                replace_input_->Render() | size(WIDTH, GREATER_THAN, 34) | xflex,
+            }),
+        });
+        action_column = vbox({
             replace_next_button_->Render(),
             replace_all_button_->Render(),
         });
     } else {
-        controls = hbox({
-            text(" Find: "),
-            find_input_->Render() | size(WIDTH, GREATER_THAN, 28) | xflex,
-            separator(),
+        input_column = vbox({
+            hbox({
+                text(" Find:    "),
+                find_input_->Render() | size(WIDTH, GREATER_THAN, 42) | xflex,
+            }),
+        });
+        action_column = vbox({
             find_next_button_->Render(),
             find_previous_button_->Render(),
         });
     }
 
-    return hbox({
-        text(mode) | bold | color(current_theme_.menu_foreground),
+    // The search panel is split into three columns so text fields keep most
+    // horizontal space while actions and filters remain readable at small widths.
+    Element filter_column = vbox({
+        search_match_case_checkbox_->Render(),
+        search_whole_word_checkbox_->Render(),
+    });
+
+    return vbox({
+        hbox({
+            text(" " + mode + " ") | bold | color(current_theme_.menu_foreground),
+            separator(),
+            text(" " + FindMatchStatus() + " ") | color(current_theme_.menu_foreground),
+            filler(),
+            text(" Esc closes ") | dim | color(current_theme_.foreground),
+        }),
         separator(),
-        controls | xflex,
-        separator(),
-        text(" " + FindMatchStatus() + " ") | color(current_theme_.menu_foreground),
-        text(" Esc closes ") | dim | color(current_theme_.foreground),
+        hbox({
+            input_column | xflex,
+            separator(),
+            action_column | size(WIDTH, GREATER_THAN, 16),
+            separator(),
+            filter_column | size(WIDTH, GREATER_THAN, 18),
+        }),
     }) |
         border |
         bgcolor(current_theme_.menu_background) |
@@ -297,7 +322,6 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         current_search_mode_ == SearchMode::None &&
         !show_goto_line_bar_;
     const bool word_delete_shortcut =
-        input == "\x08" ||
         input == "\x17" ||
         input == "Ctrl+Backspace" ||
         input == "Ctrl+Delete" ||
@@ -325,7 +349,10 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         return true;
     }
 
-    if (can_open_find_panel && input == "Ctrl+H") {
+    // Ctrl+H is indistinguishable from Backspace in many terminals, so Replace
+    // uses Ctrl+R to avoid stealing destructive editing input.
+    if (can_open_find_panel &&
+        (event == ftxui::Event::Special("\x12") || input == "\x12" || input == "Ctrl+R")) {
         OpenFindPanel(true);
         return true;
     }

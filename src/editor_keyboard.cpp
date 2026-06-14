@@ -125,14 +125,15 @@ bool IsDuplicateLinesEvent(const ftxui::Event& event) {
 
 bool IsCtrlBackspaceEvent(const ftxui::Event& event) {
     const std::string& input = event.input();
+    // Do not treat raw Control-H (\x08) as Ctrl+Backspace. Many terminals emit
+    // it for Ctrl+H, and routing it here would turn the old Replace shortcut
+    // into destructive word deletion.
     return input == "Ctrl+Backspace" ||
-        input == "\x08" ||
         input == "\x1B[127;5u" ||
         input == "\x1B[8;5u" ||
         input == "\x1B[27;5;127~" ||
         input == "\x1B[27;5;8~" ||
         input == "\x17" ||
-        event == ftxui::Event::Special("\x08") ||
         event == ftxui::Event::Special("\x1B[127;5u") ||
         event == ftxui::Event::Special("\x1B[8;5u");
 }

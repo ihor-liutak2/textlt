@@ -93,6 +93,10 @@ EditorConfig ConfigManager::Load() const {
         content, "syntax_highlighting", config.syntax_highlighting);
     config.auto_pairing = ExtractBool(content, "auto_pairing", config.auto_pairing);
     config.auto_indent = ExtractBool(content, "auto_indent", config.auto_indent);
+    config.search_match_case = ExtractBool(
+        content, "search_match_case", config.search_match_case);
+    config.search_whole_word = ExtractBool(
+        content, "search_whole_word", config.search_whole_word);
     config.tab_size = ExtractInt(content, "tab_size", config.tab_size);
     if (config.tab_size != 2 && config.tab_size != 4) {
         config.tab_size = 4;
@@ -115,6 +119,8 @@ void ConfigManager::Save(const EditorConfig& config) const {
     file << "  \"syntax_highlighting\": " << (config.syntax_highlighting ? "true" : "false") << ",\n";
     file << "  \"auto_pairing\": " << (config.auto_pairing ? "true" : "false") << ",\n";
     file << "  \"auto_indent\": " << (config.auto_indent ? "true" : "false") << ",\n";
+    file << "  \"search_match_case\": " << (config.search_match_case ? "true" : "false") << ",\n";
+    file << "  \"search_whole_word\": " << (config.search_whole_word ? "true" : "false") << ",\n";
     file << "  \"tab_size\": " << config.tab_size << ",\n";
     file << "  \"active_theme_name\": \"" << config.active_theme_name << "\"\n";
     file << "}\n";

@@ -11,6 +11,8 @@ struct EditorConfig {
     bool syntax_highlighting = true;
     bool auto_pairing = true;
     bool auto_indent = true;
+    bool search_match_case = false;
+    bool search_whole_word = false;
     int tab_size = 4;
     std::string active_theme_name = "Blueprint";
 };

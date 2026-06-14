@@ -23,6 +23,7 @@ bool IsOpeningBracket(char character);
 bool IsClosingBracket(char character);
 bool IsBracketCharacter(char character);
 char MatchingBracketFor(char character);
+bool IsWordCharacter(char character);
 
 size_t FindWordDeleteStart(const std::string& line, size_t cursor_x);
 size_t FindWordDeleteEnd(const std::string& line, size_t cursor_x);

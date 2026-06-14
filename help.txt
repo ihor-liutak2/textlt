@@ -14,7 +14,7 @@ Navigation
 
 Search & Replace
   Ctrl+F        Open Find Panel
-  Ctrl+H        Open Replace Panel
+  Ctrl+R        Open Replace Panel
   F3            Find Next Match
   Shift+Enter   Find Previous Match
   Escape        Close Find/Replace Panel

@@ -48,8 +48,8 @@ TextltApp::TextltApp()
               " Toggle Case        Ctrl+T ",
               " Convert Indents: 4 -> 2 Spaces ",
               " Convert Indents: 2 -> 4 Spaces ",
-              " Find... ",
-              " Replace... ",
+              " Find...           Ctrl+F ",
+              " Replace...        Ctrl+R ",
           },
           {
               " Toggle Line Numbers ",
@@ -139,6 +139,44 @@ TextltApp::TextltApp()
     replace_next_button_ = ftxui::Button("Replace Next", [this] { ReplaceNext(); });
     replace_all_button_ = ftxui::Button("Replace All", [this] { ReplaceAll(); });
 
+    auto search_filter_transform = [this](const ftxui::EntryState& state) {
+        ftxui::Element item = ftxui::text(
+            std::string(state.state ? "[X] " : "[ ] ") + state.label);
+        if (state.active) {
+            item = item | ftxui::bold;
+        }
+        if (state.focused) {
+            item = item |
+                ftxui::bgcolor(current_theme_.menu_foreground) |
+                ftxui::color(current_theme_.menu_background);
+        } else {
+            item = item | ftxui::color(current_theme_.menu_foreground);
+        }
+        return item;
+    };
+
+    ftxui::CheckboxOption match_case_option = ftxui::CheckboxOption::Simple();
+    match_case_option.transform = search_filter_transform;
+    match_case_option.on_change = [this] {
+        std::static_pointer_cast<EditorComponent>(text_editor_)->ToggleSearchMatchCase();
+        SaveConfig();
+        RefreshFindMatches();
+        screen_.PostEvent(ftxui::Event::Custom);
+    };
+    search_match_case_checkbox_ = ftxui::Checkbox(
+        "Match Case", &editor_config_.search_match_case, match_case_option);
+
+    ftxui::CheckboxOption whole_word_option = ftxui::CheckboxOption::Simple();
+    whole_word_option.transform = search_filter_transform;
+    whole_word_option.on_change = [this] {
+        std::static_pointer_cast<EditorComponent>(text_editor_)->ToggleSearchWholeWord();
+        SaveConfig();
+        RefreshFindMatches();
+        screen_.PostEvent(ftxui::Event::Custom);
+    };
+    search_whole_word_checkbox_ = ftxui::Checkbox(
+        "Whole Word", &editor_config_.search_whole_word, whole_word_option);
+
     find_panel_find_container_ = ftxui::Container::Horizontal({
         find_input_,
         find_next_button_,
@@ -150,10 +188,18 @@ TextltApp::TextltApp()
         replace_next_button_,
         replace_all_button_,
     });
-    find_panel_container_ = ftxui::Container::Tab({
+    find_panel_fields_container_ = ftxui::Container::Tab({
         find_panel_find_container_,
         find_panel_replace_container_,
     }, &search_panel_tab_index_);
+    find_panel_filters_container_ = ftxui::Container::Horizontal({
+        search_match_case_checkbox_,
+        search_whole_word_checkbox_,
+    });
+    find_panel_container_ = ftxui::Container::Vertical({
+        find_panel_fields_container_,
+        find_panel_filters_container_,
+    });
 
     exit_save_button_ = ftxui::Button("Save", [this] { SaveAndExit(); });
     exit_discard_button_ = ftxui::Button("Don't Save", [this] { DiscardAndExit(); });

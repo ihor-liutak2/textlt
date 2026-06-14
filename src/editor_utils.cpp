@@ -55,6 +55,10 @@ char MatchingBracketFor(char character) {
     }
 }
 
+bool IsWordCharacter(char character) {
+    return std::isalnum(static_cast<unsigned char>(character)) || character == '_';
+}
+
 namespace {
 
 bool IsWhitespaceCharacter(char character) {
@@ -62,7 +66,7 @@ bool IsWhitespaceCharacter(char character) {
 }
 
 bool IsBoundaryWordCharacter(char character) {
-    return std::isalnum(static_cast<unsigned char>(character)) || character == '_';
+    return IsWordCharacter(character);
 }
 
 bool IsSameWordBoundaryClass(char left, char right) {

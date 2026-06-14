@@ -57,6 +57,10 @@ public:
     void JumpToPreviousMatch();
     void ExecuteReplaceNext(const std::string& query, const std::string& replacement);
     void ExecuteReplaceAll(const std::string& query, const std::string& replacement);
+    void ToggleSearchMatchCase();
+    void ToggleSearchWholeWord();
+    bool SearchMatchCase() const;
+    bool SearchWholeWord() const;
     size_t SearchMatchCount() const;
     size_t CurrentSearchMatchIndex() const;
     std::optional<std::pair<int, int>> FindMatchingBracket() const;
@@ -125,6 +129,8 @@ private:
     size_t selection_anchor_y_ = 0;
     bool has_selection_ = false;
     bool is_dirty_ = false;
+    bool search_match_case_ = false;
+    bool search_whole_word_ = false;
     bool mouse_selecting_ = false;
     size_t current_search_match_ = 0;
     size_t bottom_overlay_rows_ = 0;

@@ -6,6 +6,7 @@
 #include <fstream>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 #include "editor_utils.hpp"
@@ -65,6 +66,14 @@ bool EndsWithRubyDo(const std::string& trimmed_line) {
     return !std::isalnum(previous) && previous != '_';
 }
 
+std::string ToLowerCopy(std::string value) {
+    for (char& character : value) {
+        character = static_cast<char>(
+            std::tolower(static_cast<unsigned char>(character)));
+    }
+    return value;
+}
+
 
 } // namespace
 
@@ -73,6 +82,10 @@ EditorComponent::EditorComponent(EditorConfig* config, const Theme* theme)
       theme_(theme) {
     // Initialize with at least one empty line of text.
     text_lines_.push_back("");
+    if (config_) {
+        search_match_case_ = config_->search_match_case;
+        search_whole_word_ = config_->search_whole_word;
+    }
 }
 
 ftxui::Element EditorComponent::Render() {
@@ -632,12 +645,24 @@ void EditorComponent::HighlightMatches(const std::string& query) {
         return;
     }
 
+    const std::string needle = search_match_case_ ? query : ToLowerCopy(query);
     for (size_t y = 0; y < text_lines_.size(); ++y) {
         const std::string& line = text_lines_[y];
-        size_t position = line.find(query);
+        const std::string searchable_line =
+            search_match_case_ ? line : ToLowerCopy(line);
+        size_t position = searchable_line.find(needle);
         while (position != std::string::npos) {
-            search_matches_.push_back({position, y, query.size()});
-            position = line.find(query, position + query.size());
+            const bool has_word_before =
+                position > 0 && utils::IsWordCharacter(line[position - 1]);
+            const size_t after_match = position + query.size();
+            const bool has_word_after =
+                after_match < line.size() && utils::IsWordCharacter(line[after_match]);
+
+            if (!search_whole_word_ || (!has_word_before && !has_word_after)) {
+                search_matches_.push_back({position, y, query.size()});
+            }
+
+            position = searchable_line.find(needle, position + query.size());
         }
     }
 
@@ -710,18 +735,37 @@ void EditorComponent::ExecuteReplaceAll(
     }
 
     SaveSnapshot();
-    for (std::string& line : text_lines_) {
-        size_t position = line.find(query);
-        while (position != std::string::npos) {
-            line.replace(position, query.size(), replacement);
-            position = line.find(query, position + replacement.size());
-        }
+    for (size_t index = search_matches_.size(); index-- > 0;) {
+        const SearchMatch& match = search_matches_[index];
+        text_lines_[match.y].replace(match.x, match.length, replacement);
     }
 
     ClampCursorToBuffer();
     ClearSelection();
     HighlightMatches(query);
     UpdateScroll();
+}
+
+void EditorComponent::ToggleSearchMatchCase() {
+    search_match_case_ = !search_match_case_;
+    if (config_) {
+        config_->search_match_case = search_match_case_;
+    }
+}
+
+void EditorComponent::ToggleSearchWholeWord() {
+    search_whole_word_ = !search_whole_word_;
+    if (config_) {
+        config_->search_whole_word = search_whole_word_;
+    }
+}
+
+bool EditorComponent::SearchMatchCase() const {
+    return search_match_case_;
+}
+
+bool EditorComponent::SearchWholeWord() const {
+    return search_whole_word_;
 }
 
 size_t EditorComponent::SearchMatchCount() const {
@@ -864,7 +908,7 @@ std::string EditorComponent::LineNumberText(size_t line_index, size_t width) con
 }
 
 bool EditorComponent::IsWordCharacter(char character) {
-    return std::isalnum(static_cast<unsigned char>(character)) || character == '_';
+    return utils::IsWordCharacter(character);
 }
 
 bool EditorComponent::IsCharacterSelected(size_t x, size_t y) const {

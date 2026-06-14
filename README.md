@@ -25,7 +25,7 @@ Optimized to run perfectly in native Linux environments (**MX Linux**, **Ubuntu*
   - Single-click cursor repositioning and side-panel file manager navigation.
 - **Smart Code Commenting:** Context-aware line/block comment toggling via `Ctrl + /` that dynamically inserts language-specific prefixes (`//`, `#`, `--`) aligned cleanly before the first non-whitespace character.
 - **Native Viewport Scroller & Scrollbar:** Custom right-aligned vertical TUI Scrollbar indicating precise location markers. Viewport bounds are dynamically calculated, reserving space for status indicators and input panel obstructions.
-- **Split Find & Replace Panels:** Dedicated bottom overlay UI regions for real-time text matching (`Ctrl+F`) and variable replacement (`Ctrl+H`) with color-blended highlighting.
+- **Split Find & Replace Panels:** Dedicated bottom overlay UI regions for real-time text matching (`Ctrl+F`) and variable replacement (`Ctrl+R`) with color-blended highlighting.
 - **Modern Layout Foundations:** Soft Tabs framework supporting configurable space injections (`2` or `4`), dynamic line jumping (`Ctrl+G`), and transaction-safe atomic Undo/Redo historical snapshots.
 
 ---
@@ -77,7 +77,7 @@ cmake --build build --parallel $(nproc)
 | `Ctrl + S` | Save current document buffer to disk |
 | `Ctrl + /` | Toggle Smart Line/Block Comment (`//`, `#`, `--`) |
 | `Ctrl + F` | Open Split Find Panel |
-| `Ctrl + H` | Open Split Replace Panel |
+| `Ctrl + R` | Open Split Replace Panel |
 | `Ctrl + G` | Open Go-To-Line prompt box |
 | `Ctrl + Z` | Undo last atomic action |
 | `Ctrl + Y` | Redo last reverted historical state |

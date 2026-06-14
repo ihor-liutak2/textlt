@@ -134,7 +134,11 @@ private:
     ftxui::Component replace_all_button_;
     ftxui::Component find_panel_find_container_;
     ftxui::Component find_panel_replace_container_;
+    ftxui::Component find_panel_fields_container_;
+    ftxui::Component find_panel_filters_container_;
     ftxui::Component find_panel_container_;
+    ftxui::Component search_match_case_checkbox_;
+    ftxui::Component search_whole_word_checkbox_;
     ftxui::Component goto_line_input_component_;
     ftxui::Component exit_save_button_;
     ftxui::Component exit_discard_button_;
