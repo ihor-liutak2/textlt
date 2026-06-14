@@ -1,10 +1,7 @@
 #include "editor_component.hpp"
 
-#include <algorithm>
 #include <cstddef>
 #include <string>
-#include <utility>
-#include <vector>
 
 #include "ftxui/component/event.hpp"
 
@@ -21,36 +18,6 @@ enum class NavigationAction {
     WordLeft,
     WordRight,
 };
-
-struct Position {
-    size_t x = 0;
-    size_t y = 0;
-};
-
-bool PositionLess(const Position& left, const Position& right) {
-    return left.y < right.y || (left.y == right.y && left.x < right.x);
-}
-
-Position ClampedPosition(Position position, const std::vector<std::string>& lines) {
-    if (lines.empty()) {
-        return {};
-    }
-
-    position.y = std::min(position.y, lines.size() - 1);
-    position.x = std::min(position.x, lines[position.y].size());
-    return position;
-}
-
-std::pair<Position, Position> OrderedSelection(Position anchor,
-                                               Position cursor,
-                                               const std::vector<std::string>& lines) {
-    anchor = ClampedPosition(anchor, lines);
-    cursor = ClampedPosition(cursor, lines);
-    if (PositionLess(cursor, anchor)) {
-        std::swap(anchor, cursor);
-    }
-    return {anchor, cursor};
-}
 
 bool IsShiftNavigationEvent(const ftxui::Event& event, NavigationAction* action) {
     const std::string& input = event.input();

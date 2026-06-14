@@ -71,6 +71,7 @@ private:
         size_t length = 0;
     };
 
+    ftxui::Element RenderViewport();
     size_t VisibleHeight() const;
     size_t VisibleTextWidth() const;
     size_t LineNumberWidth() const;

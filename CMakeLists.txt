@@ -25,6 +25,7 @@ add_executable(textlt
   src/editor_component.cpp
   src/editor_keyboard.cpp
   src/editor_mouse.cpp
+  src/editor_utils.cpp
   src/editor_viewport.cpp
   src/file_dialog.cpp
   src/file_explorer.cpp

@@ -8,43 +8,12 @@
 #include <stdexcept>
 #include <utility>
 
-#include "ftxui/component/event.hpp"
-#include "syntax_highlighter.hpp"
+#include "editor_utils.hpp"
 #include "text_transformer.hpp"
 
 namespace textlt {
 
 namespace {
-
-struct Position {
-    size_t x = 0;
-    size_t y = 0;
-};
-
-bool PositionLess(const Position& left, const Position& right) {
-    return left.y < right.y || (left.y == right.y && left.x < right.x);
-}
-
-Position ClampedPosition(Position position, const std::vector<std::string>& lines) {
-    if (lines.empty()) {
-        return {};
-    }
-
-    position.y = std::min(position.y, lines.size() - 1);
-    position.x = std::min(position.x, lines[position.y].size());
-    return position;
-}
-
-std::pair<Position, Position> OrderedSelection(Position anchor,
-                                               Position cursor,
-                                               const std::vector<std::string>& lines) {
-    anchor = ClampedPosition(anchor, lines);
-    cursor = ClampedPosition(cursor, lines);
-    if (PositionLess(cursor, anchor)) {
-        std::swap(anchor, cursor);
-    }
-    return {anchor, cursor};
-}
 
 bool IsPairOpeningCharacter(char character) {
     return character == '{' || character == '[' || character == '(' ||
@@ -54,30 +23,6 @@ bool IsPairOpeningCharacter(char character) {
 bool IsPairClosingCharacter(char character) {
     return character == '}' || character == ']' || character == ')' ||
         character == '"' || character == '\'';
-}
-
-bool IsOpeningBracket(char character) {
-    return character == '(' || character == '[' || character == '{';
-}
-
-bool IsClosingBracket(char character) {
-    return character == ')' || character == ']' || character == '}';
-}
-
-bool IsBracketCharacter(char character) {
-    return IsOpeningBracket(character) || IsClosingBracket(character);
-}
-
-char MatchingBracketFor(char character) {
-    switch (character) {
-        case '(': return ')';
-        case '[': return ']';
-        case '{': return '}';
-        case ')': return '(';
-        case ']': return '[';
-        case '}': return '{';
-        default: return '\0';
-    }
 }
 
 char ClosingPairFor(char character) {
@@ -120,54 +65,6 @@ bool EndsWithRubyDo(const std::string& trimmed_line) {
     return !std::isalnum(previous) && previous != '_';
 }
 
-bool IsWhitespaceCharacter(char character) {
-    return std::isspace(static_cast<unsigned char>(character));
-}
-
-bool IsBoundaryWordCharacter(char character) {
-    return std::isalnum(static_cast<unsigned char>(character)) || character == '_';
-}
-
-bool IsSameWordBoundaryClass(char left, char right) {
-    return IsBoundaryWordCharacter(left) == IsBoundaryWordCharacter(right);
-}
-
-size_t FindWordDeleteStart(const std::string& line, size_t cursor_x) {
-    size_t index = std::min(cursor_x, line.size());
-    while (index > 0 && IsWhitespaceCharacter(line[index - 1])) {
-        --index;
-    }
-    if (index == 0) {
-        return 0;
-    }
-
-    const char boundary_character = line[index - 1];
-    while (index > 0 &&
-           !IsWhitespaceCharacter(line[index - 1]) &&
-           IsSameWordBoundaryClass(line[index - 1], boundary_character)) {
-        --index;
-    }
-    return index;
-}
-
-size_t FindWordDeleteEnd(const std::string& line, size_t cursor_x) {
-    size_t index = std::min(cursor_x, line.size());
-    while (index < line.size() && IsWhitespaceCharacter(line[index])) {
-        ++index;
-    }
-    if (index >= line.size()) {
-        return line.size();
-    }
-
-    const char boundary_character = line[index];
-    while (index < line.size() &&
-           !IsWhitespaceCharacter(line[index]) &&
-           IsSameWordBoundaryClass(line[index], boundary_character)) {
-        ++index;
-    }
-    return index;
-}
-
 
 } // namespace
 
@@ -179,173 +76,7 @@ EditorComponent::EditorComponent(EditorConfig* config, const Theme* theme)
 }
 
 ftxui::Element EditorComponent::Render() {
-    UpdateScroll();
-
-    ftxui::Elements lines_elements;
-    const size_t visible_height = VisibleHeight();
-    const size_t visible_width = VisibleTextWidth();
-    const size_t last_visible_line =
-        std::min(text_lines_.size(), scroll_y_ + visible_height);
-    const size_t line_number_width = LineNumberWidth();
-    const bool show_line_numbers = config_ && config_->show_line_numbers;
-    const bool syntax_highlighting = !config_ || config_->syntax_highlighting;
-    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    const std::string file_path = current_filepath_;
-    const size_t total_lines = text_lines_.size();
-    const bool needs_scrollbar = total_lines > visible_height;
-    const size_t slider_height = needs_scrollbar
-        ? std::max<size_t>(1, (visible_height * visible_height) / total_lines)
-        : visible_height;
-    const size_t available_track_space = visible_height > slider_height
-        ? visible_height - slider_height
-        : 0;
-    const size_t slider_top = needs_scrollbar
-        ? (scroll_y_ * available_track_space) / (total_lines - visible_height)
-        : 0;
-    const auto bracket_origin = FindBracketNearCursor();
-    const auto bracket_match = FindMatchingBracket();
-    auto is_bracket_highlight = [&](size_t x, size_t y) {
-        if (!bracket_origin || !bracket_match) {
-            return false;
-        }
-        return (bracket_origin->first == static_cast<int>(x) &&
-                bracket_origin->second == static_cast<int>(y)) ||
-            (bracket_match->first == static_cast<int>(x) &&
-             bracket_match->second == static_cast<int>(y));
-    };
-    SyntaxHighlighter::TokenizationContext syntax_context;
-    if (syntax_highlighting) {
-        for (size_t line_index = 0; line_index < scroll_y_; ++line_index) {
-            SyntaxHighlighter::TokenizeLine(text_lines_[line_index], file_path, &syntax_context);
-        }
-    }
-
-    auto render_scrollbar_cell = [&](size_t viewport_y) {
-        if (!needs_scrollbar) {
-            return ftxui::text(" ") | ftxui::bgcolor(theme.background);
-        }
-
-        if (viewport_y >= slider_top && viewport_y < slider_top + slider_height) {
-            return ftxui::text("█") | ftxui::color(theme.cursor);
-        }
-        return ftxui::text("│") | ftxui::color(theme.gutter) | ftxui::dim;
-    };
-
-    auto render_line = [&](size_t line_index, size_t viewport_y) {
-        const std::string& line_content = text_lines_[line_index];
-
-        ftxui::Element line_number = show_line_numbers
-            ? ftxui::text(LineNumberText(line_index, line_number_width)) |
-                ftxui::color(theme.gutter)
-            : ftxui::text("");
-
-        ftxui::Elements line_parts{line_number};
-        const bool is_cursor_line = line_index == cursor_y_;
-        const size_t cursor_x = is_cursor_line
-            ? std::min(cursor_x_, line_content.size())
-            : line_content.size();
-        const size_t render_start = scroll_x_;
-        const size_t render_end = scroll_x_ + visible_width;
-
-        auto render_visible_text = [&](const std::vector<SyntaxHighlighter::Token>* syntax_tokens) {
-            size_t syntax_token_index = 0;
-            if (syntax_tokens) {
-                while (syntax_token_index < syntax_tokens->size() &&
-                       (*syntax_tokens)[syntax_token_index].start +
-                           (*syntax_tokens)[syntax_token_index].length <= render_start) {
-                    ++syntax_token_index;
-                }
-            }
-
-            for (size_t x = render_start; x < render_end && x < line_content.size(); ++x) {
-                ftxui::Element character = ftxui::text(line_content.substr(x, 1));
-                ftxui::Color text_color = theme.editor_text;
-                if (syntax_tokens) {
-                    while (syntax_token_index + 1 < syntax_tokens->size() &&
-                           x >= (*syntax_tokens)[syntax_token_index].start +
-                               (*syntax_tokens)[syntax_token_index].length) {
-                        ++syntax_token_index;
-                    }
-                    if (syntax_token_index < syntax_tokens->size()) {
-                        const SyntaxHighlighter::Token& token = (*syntax_tokens)[syntax_token_index];
-                        if (x >= token.start && x < token.start + token.length) {
-                            text_color = SyntaxHighlighter::ColorForStyle(token.style, theme);
-                        }
-                    }
-                }
-
-                const SearchMatch* search_match = SearchMatchAt(x, line_index);
-                if (IsCharacterSelected(x, line_index)) {
-                    character = character |
-                        ftxui::bgcolor(theme.selection_bg) |
-                        ftxui::color(theme.selection_fg);
-                } else if (search_match) {
-                    const ftxui::Color match_bg =
-                        IsActiveSearchMatch(*search_match)
-                            ? theme.active_match_bg
-                            : theme.match_bg;
-                    character = character |
-                        ftxui::bgcolor(match_bg) |
-                        ftxui::color(theme.selection_fg);
-                } else {
-                    character = character | ftxui::color(text_color);
-                }
-
-                if (is_bracket_highlight(x, line_index)) {
-                    character = character |
-                        ftxui::bgcolor(theme.cursor) |
-                        ftxui::color(theme.background) |
-                        ftxui::bold |
-                        ftxui::underlined;
-                }
-
-                if (is_cursor_line && x == cursor_x) {
-                    character = character | ftxui::inverted;
-                }
-                line_parts.push_back(std::move(character));
-            }
-
-            if (is_cursor_line &&
-                cursor_x == line_content.size() &&
-                cursor_x >= render_start &&
-                cursor_x < render_end) {
-                line_parts.push_back(ftxui::text(" ") | ftxui::inverted);
-            }
-        };
-
-        if (syntax_highlighting) {
-            const std::vector<SyntaxHighlighter::Token> syntax_tokens =
-                SyntaxHighlighter::TokenizeLine(line_content, file_path, &syntax_context);
-            render_visible_text(&syntax_tokens);
-        } else {
-            // Standard raw rendering branch used when syntax highlighting is disabled.
-            render_visible_text(nullptr);
-        }
-
-        line_parts.push_back(ftxui::filler());
-        line_parts.push_back(render_scrollbar_cell(viewport_y));
-
-        return ftxui::hbox(std::move(line_parts));
-    };
-
-    // Render only the visible part of the buffer.
-    for (size_t i = scroll_y_; i < last_visible_line; ++i) {
-        lines_elements.push_back(render_line(i, lines_elements.size()));
-    }
-
-    while (lines_elements.size() < visible_height) {
-        const size_t viewport_y = lines_elements.size();
-        lines_elements.push_back(ftxui::hbox({
-            show_line_numbers
-                ? ftxui::text(std::string(line_number_width, ' ') + " │ ") |
-                    ftxui::color(theme.gutter)
-                : ftxui::text(""),
-            ftxui::filler(),
-            render_scrollbar_cell(viewport_y),
-        }));
-    }
-
-    return ftxui::vbox(std::move(lines_elements)) | ftxui::reflect(editor_box_);
+    return RenderViewport();
 }
 
 void EditorComponent::SaveToFile(const std::string& path) {
@@ -504,7 +235,7 @@ std::string EditorComponent::GetSelectedText() const {
         return "";
     }
 
-    auto [start, end] = OrderedSelection(
+    auto [start, end] = utils::OrderedSelection(
         {selection_anchor_x_, selection_anchor_y_},
         {cursor_x_, cursor_y_},
         text_lines_);
@@ -538,7 +269,7 @@ void EditorComponent::DeleteSelectionWithoutSnapshot() {
         return;
     }
 
-    auto [start, end] = OrderedSelection(
+    auto [start, end] = utils::OrderedSelection(
         {selection_anchor_x_, selection_anchor_y_},
         {cursor_x_, cursor_y_},
         text_lines_);
@@ -625,7 +356,7 @@ void EditorComponent::ToggleComment() {
     size_t start_row = cursor_y_;
     size_t end_row = cursor_y_;
     if (HasSelection()) {
-        auto [start, end] = OrderedSelection(
+        auto [start, end] = utils::OrderedSelection(
             {selection_anchor_x_, selection_anchor_y_},
             {cursor_x_, cursor_y_},
             text_lines_);
@@ -1014,13 +745,13 @@ std::optional<std::pair<int, int>> EditorComponent::FindBracketNearCursor() cons
     // Prefer the character to the left because the cursor commonly sits after
     // a just-typed bracket. The right-side check covers hovering before a pair.
     if (cursor_x_ > 0 && cursor_x_ - 1 < line.size() &&
-        IsBracketCharacter(line[cursor_x_ - 1])) {
+        utils::IsBracketCharacter(line[cursor_x_ - 1])) {
         return std::make_pair(
             static_cast<int>(cursor_x_ - 1),
             static_cast<int>(cursor_y_));
     }
 
-    if (cursor_x_ < line.size() && IsBracketCharacter(line[cursor_x_])) {
+    if (cursor_x_ < line.size() && utils::IsBracketCharacter(line[cursor_x_])) {
         return std::make_pair(
             static_cast<int>(cursor_x_),
             static_cast<int>(cursor_y_));
@@ -1044,7 +775,7 @@ std::optional<std::pair<int, int>> EditorComponent::FindMatchingBracket() const 
     }
 
     const char bracket = text_lines_[origin_y][origin_x];
-    const char match = MatchingBracketFor(bracket);
+    const char match = utils::MatchingBracketFor(bracket);
     if (match == '\0') {
         return std::nullopt;
     }
@@ -1052,7 +783,7 @@ std::optional<std::pair<int, int>> EditorComponent::FindMatchingBracket() const 
     size_t scanned_characters = 0;
     int balance = 0;
 
-    if (IsOpeningBracket(bracket)) {
+    if (utils::IsOpeningBracket(bracket)) {
         // Scan forward from the origin bracket, counting nested pairs of the
         // same type so the first balanced closing token is selected.
         for (size_t y = origin_y; y < text_lines_.size(); ++y) {
@@ -1077,7 +808,7 @@ std::optional<std::pair<int, int>> EditorComponent::FindMatchingBracket() const 
         return std::nullopt;
     }
 
-    if (!IsClosingBracket(bracket)) {
+    if (!utils::IsClosingBracket(bracket)) {
         return std::nullopt;
     }
 
@@ -1141,13 +872,13 @@ bool EditorComponent::IsCharacterSelected(size_t x, size_t y) const {
         return false;
     }
 
-    auto [start, end] = OrderedSelection(
+    auto [start, end] = utils::OrderedSelection(
         {selection_anchor_x_, selection_anchor_y_},
         {cursor_x_, cursor_y_},
         text_lines_);
-    const Position character_position{x, y};
-    return !PositionLess(character_position, start) &&
-        PositionLess(character_position, end);
+    const utils::Position character_position{x, y};
+    return !utils::PositionLess(character_position, start) &&
+        utils::PositionLess(character_position, end);
 }
 
 const EditorComponent::SearchMatch* EditorComponent::SearchMatchAt(size_t x, size_t y) const {
@@ -1298,7 +1029,7 @@ void EditorComponent::DeleteWordBackward() {
         return;
     }
 
-    const size_t target = FindWordDeleteStart(text_lines_[cursor_y_], cursor_x_);
+    const size_t target = utils::FindWordDeleteStart(text_lines_[cursor_y_], cursor_x_);
     if (target == cursor_x_) {
         return;
     }
@@ -1334,7 +1065,7 @@ void EditorComponent::DeleteWordForward() {
         return;
     }
 
-    const size_t target = FindWordDeleteEnd(text_lines_[cursor_y_], cursor_x_);
+    const size_t target = utils::FindWordDeleteEnd(text_lines_[cursor_y_], cursor_x_);
     if (target == cursor_x_) {
         return;
     }
@@ -1369,7 +1100,7 @@ bool EditorComponent::MoveLinesUp() {
         return true;
     }
 
-    auto [start, end] = OrderedSelection(
+    auto [start, end] = utils::OrderedSelection(
         {selection_anchor_x_, selection_anchor_y_},
         {cursor_x_, cursor_y_},
         text_lines_);
@@ -1421,7 +1152,7 @@ bool EditorComponent::MoveLinesDown() {
         return true;
     }
 
-    auto [start, end] = OrderedSelection(
+    auto [start, end] = utils::OrderedSelection(
         {selection_anchor_x_, selection_anchor_y_},
         {cursor_x_, cursor_y_},
         text_lines_);
@@ -1458,7 +1189,7 @@ bool EditorComponent::DuplicateLines() {
     size_t end_row = cursor_y_;
     const bool had_selection = HasSelection();
     if (had_selection) {
-        auto [start, end] = OrderedSelection(
+        auto [start, end] = utils::OrderedSelection(
             {selection_anchor_x_, selection_anchor_y_},
             {cursor_x_, cursor_y_},
             text_lines_);
