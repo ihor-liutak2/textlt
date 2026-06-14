@@ -23,9 +23,10 @@ TextltApp::TextltApp()
           return ConfirmFileDialog(mode, path, error);
       }),
       help_dialog_(&current_theme_),
-      theme_dialog_(&current_theme_, [this](const std::string& theme_name) {
-          SelectTheme(theme_name);
-      }),
+      theme_dialog_(
+          &current_theme_,
+          [this](const std::string& theme_name) { PreviewTheme(theme_name); },
+          [this](const std::string& theme_name) { SelectTheme(theme_name); }),
       menu_entries_({
           " File ",
           " Edit ",
@@ -503,11 +504,18 @@ bool TextltApp::ConfirmFileDialog(
     return false;
 }
 
+void TextltApp::PreviewTheme(const std::string& theme_name) {
+    current_theme_ = FindThemeByName(themes_, theme_name);
+    active_action_ = "Previewing theme " + current_theme_.name;
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
 void TextltApp::SelectTheme(const std::string& theme_name) {
     current_theme_ = FindThemeByName(themes_, theme_name);
     editor_config_.active_theme_name = current_theme_.name;
     active_action_ = "Theme changed to " + current_theme_.name;
     SaveConfig();
+    screen_.PostEvent(ftxui::Event::Custom);
     CloseThemeDialog();
 }
 

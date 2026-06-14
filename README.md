@@ -1,52 +1,122 @@
 # textlt 🚀
 
-`textlt` is a lightweight, blazing-fast, and highly customizable **Terminal User Interface (TUI)** text editor built from scratch in C++. Designed for modern developers who love the efficiency of the command line but prefer intuitive, modeless text editing over complex Vim/Emacs keybindings.
+`textlt` is a lightweight, blazing-fast, and highly customizable **Terminal User Interface (TUI)** text editor built from scratch in C++. Designed for modern developers who love the efficiency of the command line but prefer intuitive, modeless text editing over complex Vim/Emacs modal constraints.
 
-Optimized to run perfectly in native Linux distributions (Ubuntu, MX Linux, Debian) as well as **WSL (Windows Subsystem for Linux)** using Windows Terminal.
+Optimized to run perfectly in native Linux environments (**MX Linux**, **Ubuntu**, **Debian**) as well as **WSL (Windows Subsystem for Linux)**.
+
+---
+
+## 📸 Interface Preview
+
+![Main Editor Interface](assets/main_editor.png)
 
 ---
 
 ## ✨ Key Features
 
-- **Intuitive Modeless Editing:** No "command" or "insert" modes. Just open and start typing, exactly like modern GUI text editors.
-- **Robust Syntax Highlighting:** Powered by a high-performance single-pass State-Machine lexer supporting a vast polyglot ecosystem:
-  - `C++`, `JSON`, `HTML`, `CSS`, `JavaScript`, `TypeScript`, `PHP`, `Java`, `Python`.
-  - Full hybrid **React JSX & TSX** context switching with nested curly brace tracking.
-- **Smart Word Wrap:** A hybrid word-wrapping engine that breaks lines by words or falls back to character wrapping using a strict safe 10-character boundary threshold.
-- **Split Find & Replace:** Dedicated UI overlay panels for quick search (`Ctrl+F`) and text replacement (`Ctrl+H`) with color-blended matching overlays.
-- **Fast Navigation:** Instant line jump dialog (`Ctrl+G`) with edge-case buffer clamping.
-- **Modern Indentation Framework:** Full **Soft Tabs** support injecting configurable spaces (`2` or `4`) instead of literal tabs, complete with a **Convert Tabs to Spaces** (Untabify) utility.
-- **Real-time Status Bar:** Dynamic layout tracking theme configuration, active file extension mapping (e.g., `React TSX Source`), and precise cursor telemetry (`Ln X, Col Y`).
-- **Full Mouse Support:** Smooth scroll-wheel navigation, side-panel file manager selection, and click-to-focus window routing.
-- **Transaction-safe Undo/Redo:** Every keystroke, multi-line replacement, or global text normalization maps into single atomic snapshot steps.
-
-
-Installation & BuildClone the repository:Bashgit clone [https://github.com/yourusername/textlt.git](https://github.com/yourusername/textlt.git)
-cd textlt
-Configure and build the project:Bashcmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-UsageRun the editor directly from your terminal by passing a file path as an argument:Bash./build/textlt path/to/your/file.tsx
-⌨️ Shortcuts ReferenceShortcutActionCtrl + SSave current documentCtrl + ZUndo last actionCtrl + YRedo actionCtrl + FOpen Find panelCtrl + HOpen Replace panelCtrl + GOpen Go-To-Line promptTabInsert Soft Tab (Spaces)EscClose active dialogs / prompts📄 LicenseThis project is licensed under the MIT License - see the LICENSE file for details.
-
-
+- **Intuitive Modeless Editing:** No "command" or "insert" modes. Just open, click, and start typing, exactly like modern GUI text editors.
+- **Advanced Polyglot Syntax Highlighting:** Powered by an ultra-fast state-machine engine that pre-scans syntax layout matrices up to the active viewport boundaries:
+  - **Languages:** `C++`, `C`, `PHP` (with native WordPress multi-language support), `Python`, `Ruby` (inc. `Gemfile`), `Java`, `JavaScript`, `TypeScript`, `HTML`, `CSS`, `SQL`, `GraphQL`.
+  - **Configurations:** `YAML`, `JSON`, `Dockerfile`, `docker-compose.yml`, `.ini`, `.conf`, and `.env` profiles.
+- **Embedded Syntax Engine (Heredoc/Nowdoc):** Seamlessly shifts lexical token states inside PHP code streams when encountering `<<<HTML`, `<<<CSS`, or `<<<JS` blocks, matching enterprise IDE behavior.
+- **Full Interactive Mouse Integration:**
+  - Fluid drag-selection tracking mapped directly onto character coordinate structures.
+  - Smooth terminal scroll-wheel navigation.
+  - Single-click cursor repositioning and side-panel file manager navigation.
+- **Smart Code Commenting:** Context-aware line/block comment toggling via `Ctrl + /` that dynamically inserts language-specific prefixes (`//`, `#`, `--`) aligned cleanly before the first non-whitespace character.
+- **Native Viewport Scroller & Scrollbar:** Custom right-aligned vertical TUI Scrollbar indicating precise location markers. Viewport bounds are dynamically calculated, reserving space for status indicators and input panel obstructions.
+- **Split Find & Replace Panels:** Dedicated bottom overlay UI regions for real-time text matching (`Ctrl+F`) and variable replacement (`Ctrl+H`) with color-blended highlighting.
+- **Modern Layout Foundations:** Soft Tabs framework supporting configurable space injections (`2` or `4`), dynamic line jumping (`Ctrl+G`), and transaction-safe atomic Undo/Redo historical snapshots.
 
 ---
 
 ## 🛠️ Tech Stack
 
-- **Core Language:** C++17 (Modern object-oriented structure)
+- **Core Engine:** Modern C++17 (Object-Oriented, clean module subsystem split)
 - **UI Architecture:** [FTXUI](https://github.com/ArthurSonzogni/FTXUI) (Functional Terminal User Interface framework)
-- **Build System:** CMake
+- **Build Core:** CMake & Bash Deployment Automations
 
 ---
 
 ## 🚀 Getting Started
 
-### Prerequisites
+### 📦 Automated 1-Click Installation
+The repository includes an intelligent interactive deployment script that installs missing dependencies (`build-essential`, `cmake`), compiles the binary in `Release` mode, safely copies it into your user local binary path, and updates your environment path configurations.
 
-Ensure you have a C++17 compliant compiler and CMake installed.
-
-On **Ubuntu / Debian / MX Linux / WSL**:
+Simply clone and run the installer:
 ```bash
-sudo apt update
-sudo apt install build-essential cmake
+git clone [https://github.com/yourusername/textlt.git](https://github.com/yourusername/textlt.git)
+cd textlt
+chmod +x install.sh
+./install.sh
+
+```
+
+*Note: After the script finishes, reload your shell profile via `source ~/.bashrc` to activate the global `textlt` command.*
+
+### 🛠️ Manual Compilation
+
+If you prefer building manually, ensure you have a C++17 compliant compiler installed:
+
+```bash
+# Setup build workspace
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel $(nproc)
+
+# Execute local target
+./build/textlt path/to/your/file.cpp
+
+```
+
+---
+
+## ⌨️ Shortcuts Reference
+
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl + S` | Save current document buffer to disk |
+| `Ctrl + /` | Toggle Smart Line/Block Comment (`//`, `#`, `--`) |
+| `Ctrl + F` | Open Split Find Panel |
+| `Ctrl + H` | Open Split Replace Panel |
+| `Ctrl + G` | Open Go-To-Line prompt box |
+| `Ctrl + Z` | Undo last atomic action |
+| `Ctrl + Y` | Redo last reverted historical state |
+| `Tab` | Insert Configurable Soft Tab (Spaces) |
+| `F10` / `Mouse` | Activate global top bar dropdown menus |
+| `Shift + Click` | Extend/Anchor block text selection via mouse |
+| `Esc` | Close active dialogs / clear panel focus |
+
+---
+
+## 📊 Supported Ecosystem Matrix
+
+Open the interactive **Help** window inside the editor at any time to view the live language support grid:
+
+| Language / Context | File Extensions / Target Matchers | Comment Token |
+| --- | --- | --- |
+| **C++ / C** | `.cpp`, `.hpp`, `.h`, `.c`, `.cc`, `.cxx` | `//` |
+| **PHP** | `.php` *(Supports Nested HTML/CSS/JS Heredocs)* | `//` |
+| **JavaScript / TypeScript** | `.js`, `.mjs`, `.ts`, `.mts`, `.jsx`, `.tsx` | `//` |
+| **Python** | `.py` | `#` |
+| **Ruby** | `.rb`, `Gemfile` | `#` |
+| **Java** | `.java` | `//` |
+| **HTML / CSS** | `.html`, `.htm`, `.css` | `` / `/* */` |
+| **SQL** | `.sql` | `--` |
+| **GraphQL** | `.graphql`, `.gql` | `--` |
+| **YAML / Compose** | `.yaml`, `.yml`, `docker-compose.yml` | `#` |
+| **Docker Engine** | `Dockerfile`, `Dockerfile.*` | `#` |
+| **System Diagnostics** | `.ini`, `.conf`, `.json` | `;` / `#` / None |
+| **Environment Configs** | `.env`, `.env.local`, `.env.production` | `#` |
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](https://www.google.com/search?q=LICENSE) file for details.
+
+```
+
+---
+
+
+```

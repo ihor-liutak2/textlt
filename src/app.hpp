@@ -48,6 +48,7 @@ private:
     void OpenExplorerFile(const std::filesystem::path& path);
     void SaveCurrentFile();
     bool ConfirmFileDialog(FilePromptMode mode, const std::string& path, std::string& error);
+    void PreviewTheme(const std::string& theme_name);
     void SelectTheme(const std::string& theme_name);
     void SaveConfig();
     void UpdateOptionsMenuLabels();

@@ -8,8 +8,11 @@
 
 namespace textlt {
 
-ThemeDialog::ThemeDialog(const Theme* active_theme, SelectCallback on_select)
+ThemeDialog::ThemeDialog(const Theme* active_theme,
+                         ThemeCallback on_preview,
+                         ThemeCallback on_select)
     : active_theme_(active_theme),
+      on_preview_(std::move(on_preview)),
       on_select_(std::move(on_select)) {
     
     ftxui::MenuOption option = ftxui::MenuOption::Vertical();
@@ -20,8 +23,8 @@ ThemeDialog::ThemeDialog(const Theme* active_theme, SelectCallback on_select)
     // Dynamically apply the selected theme option in real-time as the index shifts
     option.on_change = [this] { 
         if (selected_theme_ >= 0 && selected_theme_ < static_cast<int>(theme_names_.size())) {
-            if (on_select_) {
-                on_select_(theme_names_[selected_theme_]);
+            if (on_preview_) {
+                on_preview_(theme_names_[selected_theme_]);
             }
         }
     };
