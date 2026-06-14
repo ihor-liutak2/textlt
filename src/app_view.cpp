@@ -103,6 +103,7 @@ ftxui::Element TextltApp::Render() {
         text(" File: " + display_name +
              " | File Type: " + FileTypeLabel(file_path) +
              " | Ln " + std::to_string(cursor_row) + ", Col " + std::to_string(cursor_col) +
+             " | " + editor->ActiveLineEndingLabel() +
              " | " + std::to_string(document_percent) + "%" +
              " | Theme: " + current_theme_.name) |
             color(current_theme_.menu_foreground));

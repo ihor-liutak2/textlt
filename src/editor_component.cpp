@@ -442,15 +442,17 @@ ftxui::Element EditorComponent::Render() {
 
 void EditorComponent::SaveToFile(const std::string& path) {
     const std::string save_path = path.empty() ? current_filepath_ : path;
-    std::ofstream file(save_path);
+    std::ofstream file(save_path, std::ios::binary);
     if (!file) {
         throw std::runtime_error("Unable to save file: " + save_path);
     }
 
+    const std::string line_ending =
+        active_line_ending_ == LineEnding::CRLF ? "\r\n" : "\n";
     for (size_t i = 0; i < text_lines_.size(); ++i) {
         file << text_lines_[i];
         if (i + 1 < text_lines_.size()) {
-            file << '\n';
+            file << line_ending;
         }
     }
 
@@ -459,14 +461,46 @@ void EditorComponent::SaveToFile(const std::string& path) {
 }
 
 void EditorComponent::LoadFromFile(const std::string& path) {
-    std::ifstream file(path);
+    std::ifstream file(path, std::ios::binary);
     if (!file) {
         throw std::runtime_error("Unable to open file: " + path);
     }
 
+    const std::string content{
+        std::istreambuf_iterator<char>(file),
+        std::istreambuf_iterator<char>()};
+
+    size_t lf_count = 0;
+    size_t crlf_count = 0;
+    for (size_t i = 0; i < content.size(); ++i) {
+        if (content[i] == '\n') {
+            ++lf_count;
+            if (i > 0 && content[i - 1] == '\r') {
+                ++crlf_count;
+            }
+        }
+    }
+    active_line_ending_ = (lf_count > 0 && crlf_count == lf_count)
+        ? LineEnding::CRLF
+        : LineEnding::LF;
+
     text_lines_.clear();
     std::string line;
-    while (std::getline(file, line)) {
+    for (char character : content) {
+        if (character == '\n') {
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
+            text_lines_.push_back(line);
+            line.clear();
+        } else {
+            line.push_back(character);
+        }
+    }
+    if (!content.empty() && content.back() != '\n') {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
         text_lines_.push_back(line);
     }
 
@@ -491,6 +525,7 @@ void EditorComponent::NewFile(const std::string& path) {
     text_lines_.clear();
     text_lines_.push_back("");
     current_filepath_ = path.empty() ? "Untitled" : path;
+    active_line_ending_ = LineEnding::LF;
     cursor_x_ = 0;
     cursor_y_ = 0;
     scroll_x_ = 0;
@@ -509,6 +544,14 @@ const std::string& EditorComponent::CurrentFilePath() const {
 
 bool EditorComponent::IsDirty() const {
     return is_dirty_;
+}
+
+EditorComponent::LineEnding EditorComponent::ActiveLineEnding() const {
+    return active_line_ending_;
+}
+
+std::string EditorComponent::ActiveLineEndingLabel() const {
+    return active_line_ending_ == LineEnding::CRLF ? "CRLF" : "LF";
 }
 
 int EditorComponent::GetCursorRow() const {

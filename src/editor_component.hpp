@@ -12,6 +12,11 @@ namespace textlt {
 
 class EditorComponent : public ftxui::ComponentBase {
 public:
+    enum class LineEnding {
+        LF,
+        CRLF,
+    };
+
     EditorComponent(EditorConfig* config, const Theme* theme);
 
     ftxui::Element Render() override;
@@ -23,6 +28,8 @@ public:
     void NewFile(const std::string& path);
     const std::string& CurrentFilePath() const;
     bool IsDirty() const;
+    LineEnding ActiveLineEnding() const;
+    std::string ActiveLineEndingLabel() const;
     int GetCursorRow() const;
     int GetCursorCol() const;
     size_t GetLineCount() const;
@@ -111,6 +118,7 @@ private:
     std::vector<EditorState> redo_stack_;
     std::vector<SearchMatch> search_matches_;
     std::string current_filepath_ = "Untitled";
+    LineEnding active_line_ending_ = LineEnding::LF;
     EditorConfig* config_ = nullptr;
     const Theme* theme_ = nullptr;
     size_t cursor_x_ = 0;
