@@ -1,6 +1,8 @@
 #pragma once
 
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "ftxui/component/component_base.hpp"
@@ -57,6 +59,7 @@ public:
     void ExecuteReplaceAll(const std::string& query, const std::string& replacement);
     size_t SearchMatchCount() const;
     size_t CurrentSearchMatchIndex() const;
+    std::optional<std::pair<int, int>> FindMatchingBracket() const;
     
     std::string GetCurrentLineText() const;
     void DeleteCurrentLine();
@@ -76,6 +79,7 @@ private:
     bool HandleMouseEvent(ftxui::Event event);
     static bool IsWordCharacter(char character);
     bool IsCharacterSelected(size_t x, size_t y) const;
+    std::optional<std::pair<int, int>> FindBracketNearCursor() const;
     const SearchMatch* SearchMatchAt(size_t x, size_t y) const;
     bool IsActiveSearchMatch(const SearchMatch& match) const;
     void BeginSelection();

@@ -4,6 +4,7 @@
 #include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 
@@ -53,6 +54,30 @@ bool IsPairOpeningCharacter(char character) {
 bool IsPairClosingCharacter(char character) {
     return character == '}' || character == ']' || character == ')' ||
         character == '"' || character == '\'';
+}
+
+bool IsOpeningBracket(char character) {
+    return character == '(' || character == '[' || character == '{';
+}
+
+bool IsClosingBracket(char character) {
+    return character == ')' || character == ']' || character == '}';
+}
+
+bool IsBracketCharacter(char character) {
+    return IsOpeningBracket(character) || IsClosingBracket(character);
+}
+
+char MatchingBracketFor(char character) {
+    switch (character) {
+        case '(': return ')';
+        case '[': return ']';
+        case '{': return '}';
+        case ')': return '(';
+        case ']': return '[';
+        case '}': return '{';
+        default: return '\0';
+    }
 }
 
 char ClosingPairFor(char character) {
@@ -177,6 +202,17 @@ ftxui::Element EditorComponent::Render() {
     const size_t slider_top = needs_scrollbar
         ? (scroll_y_ * available_track_space) / (total_lines - visible_height)
         : 0;
+    const auto bracket_origin = FindBracketNearCursor();
+    const auto bracket_match = FindMatchingBracket();
+    auto is_bracket_highlight = [&](size_t x, size_t y) {
+        if (!bracket_origin || !bracket_match) {
+            return false;
+        }
+        return (bracket_origin->first == static_cast<int>(x) &&
+                bracket_origin->second == static_cast<int>(y)) ||
+            (bracket_match->first == static_cast<int>(x) &&
+             bracket_match->second == static_cast<int>(y));
+    };
     SyntaxHighlighter::TokenizationContext syntax_context;
     if (syntax_highlighting) {
         for (size_t line_index = 0; line_index < scroll_y_; ++line_index) {
@@ -253,6 +289,14 @@ ftxui::Element EditorComponent::Render() {
                         ftxui::color(theme.selection_fg);
                 } else {
                     character = character | ftxui::color(text_color);
+                }
+
+                if (is_bracket_highlight(x, line_index)) {
+                    character = character |
+                        ftxui::bgcolor(theme.cursor) |
+                        ftxui::color(theme.background) |
+                        ftxui::bold |
+                        ftxui::underlined;
                 }
 
                 if (is_cursor_line && x == cursor_x) {
@@ -958,6 +1002,118 @@ size_t EditorComponent::CurrentSearchMatchIndex() const {
         return 0;
     }
     return current_search_match_ + 1;
+}
+
+std::optional<std::pair<int, int>> EditorComponent::FindBracketNearCursor() const {
+    if (text_lines_.empty() || cursor_y_ >= text_lines_.size()) {
+        return std::nullopt;
+    }
+
+    const std::string& line = text_lines_[cursor_y_];
+
+    // Prefer the character to the left because the cursor commonly sits after
+    // a just-typed bracket. The right-side check covers hovering before a pair.
+    if (cursor_x_ > 0 && cursor_x_ - 1 < line.size() &&
+        IsBracketCharacter(line[cursor_x_ - 1])) {
+        return std::make_pair(
+            static_cast<int>(cursor_x_ - 1),
+            static_cast<int>(cursor_y_));
+    }
+
+    if (cursor_x_ < line.size() && IsBracketCharacter(line[cursor_x_])) {
+        return std::make_pair(
+            static_cast<int>(cursor_x_),
+            static_cast<int>(cursor_y_));
+    }
+
+    return std::nullopt;
+}
+
+std::optional<std::pair<int, int>> EditorComponent::FindMatchingBracket() const {
+    static constexpr size_t kMaxBracketScanCharacters = 200000;
+
+    const auto origin = FindBracketNearCursor();
+    if (!origin) {
+        return std::nullopt;
+    }
+
+    const size_t origin_x = static_cast<size_t>(origin->first);
+    const size_t origin_y = static_cast<size_t>(origin->second);
+    if (origin_y >= text_lines_.size() || origin_x >= text_lines_[origin_y].size()) {
+        return std::nullopt;
+    }
+
+    const char bracket = text_lines_[origin_y][origin_x];
+    const char match = MatchingBracketFor(bracket);
+    if (match == '\0') {
+        return std::nullopt;
+    }
+
+    size_t scanned_characters = 0;
+    int balance = 0;
+
+    if (IsOpeningBracket(bracket)) {
+        // Scan forward from the origin bracket, counting nested pairs of the
+        // same type so the first balanced closing token is selected.
+        for (size_t y = origin_y; y < text_lines_.size(); ++y) {
+            const std::string& line = text_lines_[y];
+            const size_t start_x = y == origin_y ? origin_x : 0;
+            for (size_t x = start_x; x < line.size(); ++x) {
+                if (++scanned_characters > kMaxBracketScanCharacters) {
+                    return std::nullopt;
+                }
+
+                const char current = line[x];
+                if (current == bracket) {
+                    ++balance;
+                } else if (current == match) {
+                    --balance;
+                    if (balance == 0) {
+                        return std::make_pair(static_cast<int>(x), static_cast<int>(y));
+                    }
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
+    if (!IsClosingBracket(bracket)) {
+        return std::nullopt;
+    }
+
+    // Scan backward from the origin bracket using the same nesting counter in
+    // reverse. This avoids matching a closing token to an inner opening token.
+    for (size_t y = origin_y + 1; y > 0; --y) {
+        const size_t line_index = y - 1;
+        const std::string& line = text_lines_[line_index];
+        if (line.empty()) {
+            continue;
+        }
+
+        size_t x = line_index == origin_y ? origin_x : line.size() - 1;
+        while (true) {
+            if (++scanned_characters > kMaxBracketScanCharacters) {
+                return std::nullopt;
+            }
+
+            const char current = line[x];
+            if (current == bracket) {
+                ++balance;
+            } else if (current == match) {
+                --balance;
+                if (balance == 0) {
+                    return std::make_pair(static_cast<int>(x), static_cast<int>(line_index));
+                }
+            }
+
+            if (x == 0) {
+                break;
+            }
+            --x;
+        }
+    }
+
+    return std::nullopt;
 }
 
 bool EditorComponent::Focusable() const {
