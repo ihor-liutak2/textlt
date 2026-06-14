@@ -85,6 +85,8 @@ private:
     void MoveCursorDown();
     void MoveCursorToPreviousWord();
     void MoveCursorToNextWord();
+    void DeleteWordBackward();
+    void DeleteWordForward();
     EditorState CurrentState() const;
     void ApplyState(const EditorState& state);
     void SaveSnapshot();

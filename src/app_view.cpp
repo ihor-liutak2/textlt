@@ -204,12 +204,38 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     const bool can_open_find_panel =
         !file_dialog_.IsOpen() && !help_dialog_.IsOpen() && !theme_dialog_.IsOpen();
 
+    const bool editor_can_handle_word_delete =
+        focused_layer_ == 0 &&
+        active_dropdown_ < 0 &&
+        !explorer_has_focus_ &&
+        !file_dialog_.IsOpen() &&
+        !help_dialog_.IsOpen() &&
+        !theme_dialog_.IsOpen() &&
+        current_search_mode_ == SearchMode::None &&
+        !show_goto_line_bar_;
+    const bool word_delete_shortcut =
+        input == "\x08" ||
+        input == "\x17" ||
+        input == "Ctrl+Backspace" ||
+        input == "Ctrl+Delete" ||
+        input == "\x1B[127;5u" ||
+        input == "\x1B[8;5u" ||
+        input == "\x1B[27;5;127~" ||
+        input == "\x1B[27;5;8~" ||
+        input == "\x1B[3;5~" ||
+        input == "\x1B[3;5u";
+    if (editor_can_handle_word_delete && word_delete_shortcut) {
+        text_editor_->OnEvent(event);
+        screen_.PostEvent(ftxui::Event::Custom);
+        return true;
+    }
+
     if (can_open_find_panel && (input == "\x06" || input == "Ctrl+F")) {
         OpenFindPanel(false);
         return true;
     }
 
-    if (can_open_find_panel && (input == "\x08" || input == "Ctrl+H")) {
+    if (can_open_find_panel && input == "Ctrl+H") {
         OpenFindPanel(true);
         return true;
     }

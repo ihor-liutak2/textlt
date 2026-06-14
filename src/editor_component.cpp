@@ -181,6 +181,77 @@ bool EndsWithRubyDo(const std::string& trimmed_line) {
     return !std::isalnum(previous) && previous != '_';
 }
 
+bool IsWhitespaceCharacter(char character) {
+    return std::isspace(static_cast<unsigned char>(character));
+}
+
+bool IsBoundaryWordCharacter(char character) {
+    return std::isalnum(static_cast<unsigned char>(character)) || character == '_';
+}
+
+bool IsSameWordBoundaryClass(char left, char right) {
+    return IsBoundaryWordCharacter(left) == IsBoundaryWordCharacter(right);
+}
+
+size_t FindWordDeleteStart(const std::string& line, size_t cursor_x) {
+    size_t index = std::min(cursor_x, line.size());
+    while (index > 0 && IsWhitespaceCharacter(line[index - 1])) {
+        --index;
+    }
+    if (index == 0) {
+        return 0;
+    }
+
+    const char boundary_character = line[index - 1];
+    while (index > 0 &&
+           !IsWhitespaceCharacter(line[index - 1]) &&
+           IsSameWordBoundaryClass(line[index - 1], boundary_character)) {
+        --index;
+    }
+    return index;
+}
+
+size_t FindWordDeleteEnd(const std::string& line, size_t cursor_x) {
+    size_t index = std::min(cursor_x, line.size());
+    while (index < line.size() && IsWhitespaceCharacter(line[index])) {
+        ++index;
+    }
+    if (index >= line.size()) {
+        return line.size();
+    }
+
+    const char boundary_character = line[index];
+    while (index < line.size() &&
+           !IsWhitespaceCharacter(line[index]) &&
+           IsSameWordBoundaryClass(line[index], boundary_character)) {
+        ++index;
+    }
+    return index;
+}
+
+bool IsCtrlBackspaceEvent(const ftxui::Event& event) {
+    const std::string& input = event.input();
+    return input == "Ctrl+Backspace" ||
+        input == "\x08" ||
+        input == "\x1B[127;5u" ||
+        input == "\x1B[8;5u" ||
+        input == "\x1B[27;5;127~" ||
+        input == "\x1B[27;5;8~" ||
+        input == "\x17" ||
+        event == ftxui::Event::Special("\x08") ||
+        event == ftxui::Event::Special("\x1B[127;5u") ||
+        event == ftxui::Event::Special("\x1B[8;5u");
+}
+
+bool IsCtrlDeleteEvent(const ftxui::Event& event) {
+    const std::string& input = event.input();
+    return input == "Ctrl+Delete" ||
+        input == "\x1B[3;5~" ||
+        input == "\x1B[3;5u" ||
+        event == ftxui::Event::Special("\x1B[3;5~") ||
+        event == ftxui::Event::Special("\x1B[3;5u");
+}
+
 } // namespace
 
 EditorComponent::EditorComponent(EditorConfig* config, const Theme* theme)
@@ -976,6 +1047,16 @@ bool EditorComponent::OnEvent(ftxui::Event event) {
         return true;
     }
 
+    if (IsCtrlBackspaceEvent(event)) {
+        DeleteWordBackward();
+        return true;
+    }
+
+    if (IsCtrlDeleteEvent(event)) {
+        DeleteWordForward();
+        return true;
+    }
+
     if (event.is_character()) {
         if ((!config_ || config_->auto_pairing) && HandleAutoPairCharacter(event.input())) {
             return true;
@@ -1244,6 +1325,78 @@ void EditorComponent::MoveCursorToNextWord() {
     }
 
     ClampCursorToBuffer();
+}
+
+void EditorComponent::DeleteWordBackward() {
+    EndTypingGroup();
+    ClampCursorToBuffer();
+    if (HasSelection()) {
+        DeleteSelection();
+        return;
+    }
+
+    if (cursor_x_ == 0) {
+        if (cursor_y_ == 0) {
+            return;
+        }
+
+        SaveSnapshot();
+        cursor_x_ = text_lines_[cursor_y_ - 1].size();
+        text_lines_[cursor_y_ - 1] += text_lines_[cursor_y_];
+        text_lines_.erase(text_lines_.begin() + static_cast<std::ptrdiff_t>(cursor_y_));
+        cursor_y_--;
+        is_dirty_ = true;
+        ClearSelection();
+        UpdateScroll();
+        return;
+    }
+
+    const size_t target = FindWordDeleteStart(text_lines_[cursor_y_], cursor_x_);
+    if (target == cursor_x_) {
+        return;
+    }
+
+    SaveSnapshot();
+    text_lines_[cursor_y_].erase(target, cursor_x_ - target);
+    cursor_x_ = target;
+    is_dirty_ = true;
+    ClearSelection();
+    UpdateScroll();
+}
+
+void EditorComponent::DeleteWordForward() {
+    EndTypingGroup();
+    ClampCursorToBuffer();
+    if (HasSelection()) {
+        DeleteSelection();
+        return;
+    }
+
+    if (cursor_x_ >= text_lines_[cursor_y_].size()) {
+        if (cursor_y_ + 1 >= text_lines_.size()) {
+            return;
+        }
+
+        SaveSnapshot();
+        text_lines_[cursor_y_] += text_lines_[cursor_y_ + 1];
+        text_lines_.erase(
+            text_lines_.begin() + static_cast<std::ptrdiff_t>(cursor_y_ + 1));
+        is_dirty_ = true;
+        ClearSelection();
+        UpdateScroll();
+        return;
+    }
+
+    const size_t target = FindWordDeleteEnd(text_lines_[cursor_y_], cursor_x_);
+    if (target == cursor_x_) {
+        return;
+    }
+
+    SaveSnapshot();
+    text_lines_[cursor_y_].erase(cursor_x_, target - cursor_x_);
+    is_dirty_ = true;
+    ClearSelection();
+    UpdateScroll();
 }
 
 EditorComponent::EditorState EditorComponent::CurrentState() const {
