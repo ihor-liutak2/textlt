@@ -22,6 +22,8 @@ Search & Replace
 Editing
   Ctrl + /      Toggle Comment
   Ctrl + T      Toggle Case (Invert Uppercase/Lowercase for selection or current word)
+  Edit Menu     Convert Indents: 4 -> 2 Spaces
+  Edit Menu     Convert Indents: 2 -> 4 Spaces
 
 Menus
   Tab           Switch focus between File Explorer and Editor

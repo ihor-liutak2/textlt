@@ -843,6 +843,79 @@ void EditorComponent::ConvertTabsToSpaces() {
     UpdateScroll();
 }
 
+void EditorComponent::ConvertLeadingIndent(size_t from_width, size_t to_width) {
+    if (text_lines_.empty() || from_width == 0 || to_width == 0) {
+        return;
+    }
+
+    EndTypingGroup();
+    ClampCursorToBuffer();
+
+    size_t start_row = 0;
+    size_t end_row = text_lines_.size() - 1;
+    if (HasSelection()) {
+        auto [start, end] = OrderedSelection(
+            {selection_anchor_x_, selection_anchor_y_},
+            {cursor_x_, cursor_y_},
+            text_lines_);
+        start_row = start.y;
+        end_row = end.y;
+        if (end.x == 0 && end_row > start_row) {
+            --end_row;
+        }
+    }
+
+    bool changed = false;
+    size_t adjusted_cursor_x = cursor_x_;
+    for (size_t row = start_row; row <= end_row && row < text_lines_.size(); ++row) {
+        std::string& line = text_lines_[row];
+        size_t leading_spaces = 0;
+        while (leading_spaces < line.size() && line[leading_spaces] == ' ') {
+            ++leading_spaces;
+        }
+
+        const size_t converted_blocks = leading_spaces / from_width;
+        if (converted_blocks == 0) {
+            continue;
+        }
+
+        const size_t remainder = leading_spaces % from_width;
+        const size_t new_leading_spaces = converted_blocks * to_width + remainder;
+        if (new_leading_spaces == leading_spaces) {
+            continue;
+        }
+
+        if (!changed) {
+            SaveSnapshot();
+            changed = true;
+        }
+
+        line = std::string(new_leading_spaces, ' ') + line.substr(leading_spaces);
+        if (row == cursor_y_ && cursor_x_ <= leading_spaces) {
+            adjusted_cursor_x = std::min(cursor_x_, new_leading_spaces);
+        } else if (row == cursor_y_ && cursor_x_ > leading_spaces) {
+            adjusted_cursor_x = cursor_x_ + new_leading_spaces - leading_spaces;
+        }
+    }
+
+    if (!changed) {
+        return;
+    }
+
+    cursor_x_ = std::min(adjusted_cursor_x, text_lines_[cursor_y_].size());
+    is_dirty_ = true;
+    ClampCursorToBuffer();
+    UpdateScroll();
+}
+
+void EditorComponent::Convert4To2Spaces() {
+    ConvertLeadingIndent(4, 2);
+}
+
+void EditorComponent::Convert2To4Spaces() {
+    ConvertLeadingIndent(2, 4);
+}
+
 void EditorComponent::ToggleCase() {
     EndTypingGroup();
     ClampCursorToBuffer();

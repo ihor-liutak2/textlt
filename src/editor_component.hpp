@@ -34,6 +34,8 @@ public:
     void ClearSelection();
     void InsertText(const std::string& text);
     void ConvertTabsToSpaces();
+    void Convert4To2Spaces();
+    void Convert2To4Spaces();
     void ToggleComment();
     void ToggleCase();
     void Undo();
@@ -95,6 +97,7 @@ private:
     void DeleteSelectionWithoutSnapshot();
     bool HandleAutoPairCharacter(const std::string& input);
     bool HandleAutoIndentReturn();
+    void ConvertLeadingIndent(size_t from_width, size_t to_width);
     size_t FindMatchAtOrAfterCursor() const;
     void MoveCursorToSearchMatch(const SearchMatch& match);
     std::string GetCommentPrefix() const;

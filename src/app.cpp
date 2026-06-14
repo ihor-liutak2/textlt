@@ -44,6 +44,8 @@ TextltApp::TextltApp()
               " Paste ",
               " Toggle Comment   Ctrl+/ ",
               " Toggle Case        Ctrl+T ",
+              " Convert Indents: 4 -> 2 Spaces ",
+              " Convert Indents: 2 -> 4 Spaces ",
               " Find... ",
               " Replace... ",
           },
@@ -710,14 +712,32 @@ void TextltApp::HandleEditMenu(int item) {
         return;
     }
 
-    if (item == 7) { // Find...
+    if (item == 7) { // Convert Indents: 4 -> 2 Spaces
+        FocusEditor();
+        editor_ptr->Convert4To2Spaces();
+        active_action_ = "Converted leading indents from 4 to 2 spaces";
+        CloseDropdown();
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+
+    if (item == 8) { // Convert Indents: 2 -> 4 Spaces
+        FocusEditor();
+        editor_ptr->Convert2To4Spaces();
+        active_action_ = "Converted leading indents from 2 to 4 spaces";
+        CloseDropdown();
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+
+    if (item == 9) { // Find...
         CloseDropdown();
         OpenFindPanel(false);
         active_action_ = "Find";
         return;
     }
 
-    if (item == 8) { // Replace...
+    if (item == 10) { // Replace...
         CloseDropdown();
         OpenFindPanel(true);
         active_action_ = "Replace";
