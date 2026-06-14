@@ -131,6 +131,34 @@ bool IsNavigationEvent(const ftxui::Event& event, NavigationAction* action) {
     return false;
 }
 
+bool IsMoveLinesUpEvent(const ftxui::Event& event) {
+    const std::string& input = event.input();
+    return input == "Alt+Up" ||
+        input == "\x1B[1;3A" ||
+        input == "\x1B[1;9A" ||
+        input == "\x1B[27;3;65~" ||
+        input == "\x1B[65;3u";
+}
+
+bool IsMoveLinesDownEvent(const ftxui::Event& event) {
+    const std::string& input = event.input();
+    return input == "Alt+Down" ||
+        input == "\x1B[1;3B" ||
+        input == "\x1B[1;9B" ||
+        input == "\x1B[27;3;66~" ||
+        input == "\x1B[66;3u";
+}
+
+bool IsDuplicateLinesEvent(const ftxui::Event& event) {
+    const std::string& input = event.input();
+    return input == "Shift+Alt+Down" ||
+        input == "Alt+Shift+Down" ||
+        input == "\x1B[1;4B" ||
+        input == "\x1B[1;10B" ||
+        input == "\x1B[27;4;66~" ||
+        input == "\x1B[66;4u";
+}
+
 bool IsPairOpeningCharacter(char character) {
     return character == '{' || character == '[' || character == '(' ||
         character == '"' || character == '\'';
@@ -1117,6 +1145,16 @@ bool EditorComponent::OnEvent(ftxui::Event event) {
         return true;
     }
 
+    if (IsDuplicateLinesEvent(event)) {
+        return DuplicateLines();
+    }
+    if (IsMoveLinesUpEvent(event)) {
+        return MoveLinesUp();
+    }
+    if (IsMoveLinesDownEvent(event)) {
+        return MoveLinesDown();
+    }
+
     if (event == ftxui::Event::Tab) {
         const int configured_tab_size = config_ ? config_->tab_size : 4;
         const size_t tab_size = configured_tab_size == 2 ? 2 : 4;
@@ -1474,6 +1512,156 @@ void EditorComponent::DeleteWordForward() {
     is_dirty_ = true;
     ClearSelection();
     UpdateScroll();
+}
+
+bool EditorComponent::MoveLinesUp() {
+    EndTypingGroup();
+    ClampCursorToBuffer();
+
+    if (text_lines_.size() < 2) {
+        return false;
+    }
+
+    if (!HasSelection()) {
+        if (cursor_y_ == 0) {
+            return false;
+        }
+
+        SaveSnapshot();
+        std::swap(text_lines_[cursor_y_], text_lines_[cursor_y_ - 1]);
+        --cursor_y_;
+        cursor_x_ = std::min(cursor_x_, text_lines_[cursor_y_].size());
+        ClearSelection();
+        is_dirty_ = true;
+        UpdateScroll();
+        return true;
+    }
+
+    auto [start, end] = OrderedSelection(
+        {selection_anchor_x_, selection_anchor_y_},
+        {cursor_x_, cursor_y_},
+        text_lines_);
+    size_t start_row = start.y;
+    size_t end_row = end.y;
+    if (end.x == 0 && end_row > start_row) {
+        --end_row;
+    }
+    if (start_row == 0) {
+        return false;
+    }
+
+    SaveSnapshot();
+    std::rotate(
+        text_lines_.begin() + static_cast<std::ptrdiff_t>(start_row - 1),
+        text_lines_.begin() + static_cast<std::ptrdiff_t>(start_row),
+        text_lines_.begin() + static_cast<std::ptrdiff_t>(end_row + 1));
+    --cursor_y_;
+    --selection_anchor_y_;
+    ClampCursorToBuffer();
+    selection_anchor_y_ = std::min(selection_anchor_y_, text_lines_.size() - 1);
+    selection_anchor_x_ = std::min(selection_anchor_x_, text_lines_[selection_anchor_y_].size());
+    has_selection_ = true;
+    is_dirty_ = true;
+    UpdateScroll();
+    return true;
+}
+
+bool EditorComponent::MoveLinesDown() {
+    EndTypingGroup();
+    ClampCursorToBuffer();
+
+    if (text_lines_.size() < 2) {
+        return false;
+    }
+
+    if (!HasSelection()) {
+        if (cursor_y_ + 1 >= text_lines_.size()) {
+            return false;
+        }
+
+        SaveSnapshot();
+        std::swap(text_lines_[cursor_y_], text_lines_[cursor_y_ + 1]);
+        ++cursor_y_;
+        cursor_x_ = std::min(cursor_x_, text_lines_[cursor_y_].size());
+        ClearSelection();
+        is_dirty_ = true;
+        UpdateScroll();
+        return true;
+    }
+
+    auto [start, end] = OrderedSelection(
+        {selection_anchor_x_, selection_anchor_y_},
+        {cursor_x_, cursor_y_},
+        text_lines_);
+    size_t start_row = start.y;
+    size_t end_row = end.y;
+    if (end.x == 0 && end_row > start_row) {
+        --end_row;
+    }
+    if (end_row + 1 >= text_lines_.size()) {
+        return false;
+    }
+
+    SaveSnapshot();
+    std::rotate(
+        text_lines_.begin() + static_cast<std::ptrdiff_t>(start_row),
+        text_lines_.begin() + static_cast<std::ptrdiff_t>(end_row + 1),
+        text_lines_.begin() + static_cast<std::ptrdiff_t>(end_row + 2));
+    ++cursor_y_;
+    ++selection_anchor_y_;
+    ClampCursorToBuffer();
+    selection_anchor_y_ = std::min(selection_anchor_y_, text_lines_.size() - 1);
+    selection_anchor_x_ = std::min(selection_anchor_x_, text_lines_[selection_anchor_y_].size());
+    has_selection_ = true;
+    is_dirty_ = true;
+    UpdateScroll();
+    return true;
+}
+
+bool EditorComponent::DuplicateLines() {
+    EndTypingGroup();
+    ClampCursorToBuffer();
+
+    size_t start_row = cursor_y_;
+    size_t end_row = cursor_y_;
+    const bool had_selection = HasSelection();
+    if (had_selection) {
+        auto [start, end] = OrderedSelection(
+            {selection_anchor_x_, selection_anchor_y_},
+            {cursor_x_, cursor_y_},
+            text_lines_);
+        start_row = start.y;
+        end_row = end.y;
+        if (end.x == 0 && end_row > start_row) {
+            --end_row;
+        }
+    }
+
+    if (start_row >= text_lines_.size() || end_row >= text_lines_.size() || start_row > end_row) {
+        return false;
+    }
+
+    SaveSnapshot();
+    const auto first = text_lines_.begin() + static_cast<std::ptrdiff_t>(start_row);
+    const auto last = text_lines_.begin() + static_cast<std::ptrdiff_t>(end_row + 1);
+    std::vector<std::string> copied_lines(first, last);
+    text_lines_.insert(
+        text_lines_.begin() + static_cast<std::ptrdiff_t>(end_row + 1),
+        copied_lines.begin(),
+        copied_lines.end());
+
+    if (!had_selection) {
+        ++cursor_y_;
+        cursor_x_ = std::min(cursor_x_, text_lines_[cursor_y_].size());
+        ClearSelection();
+    } else {
+        // Keep the original selection stable while inserting the duplicated block below it.
+        has_selection_ = true;
+    }
+
+    is_dirty_ = true;
+    UpdateScroll();
+    return true;
 }
 
 EditorComponent::EditorState EditorComponent::CurrentState() const {

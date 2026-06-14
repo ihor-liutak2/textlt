@@ -90,6 +90,9 @@ private:
     void MoveCursorToNextWord();
     void DeleteWordBackward();
     void DeleteWordForward();
+    bool MoveLinesUp();
+    bool MoveLinesDown();
+    bool DuplicateLines();
     EditorState CurrentState() const;
     void ApplyState(const EditorState& state);
     void SaveSnapshot();

@@ -10,6 +10,30 @@
 
 namespace textlt {
 
+namespace {
+
+bool IsLineManipulationShortcut(const ftxui::Event& event) {
+    const std::string& input = event.input();
+    return input == "Alt+Up" ||
+        input == "Alt+Down" ||
+        input == "Shift+Alt+Down" ||
+        input == "Alt+Shift+Down" ||
+        input == "\x1B[1;3A" ||
+        input == "\x1B[1;9A" ||
+        input == "\x1B[27;3;65~" ||
+        input == "\x1B[65;3u" ||
+        input == "\x1B[1;3B" ||
+        input == "\x1B[1;9B" ||
+        input == "\x1B[27;3;66~" ||
+        input == "\x1B[66;3u" ||
+        input == "\x1B[1;4B" ||
+        input == "\x1B[1;10B" ||
+        input == "\x1B[27;4;66~" ||
+        input == "\x1B[66;4u";
+}
+
+} // namespace
+
 ftxui::Element TextltApp::Render() {
     using namespace ftxui;
 
@@ -252,7 +276,7 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         !file_dialog_.IsOpen() && !help_dialog_.IsOpen() && !theme_dialog_.IsOpen() &&
         !exit_confirmation_open_;
 
-    const bool editor_can_handle_word_delete =
+    const bool editor_can_handle_direct_shortcut =
         focused_layer_ == 0 &&
         active_dropdown_ < 0 &&
         !explorer_has_focus_ &&
@@ -272,7 +296,14 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         input == "\x1B[27;5;8~" ||
         input == "\x1B[3;5~" ||
         input == "\x1B[3;5u";
-    if (editor_can_handle_word_delete && word_delete_shortcut) {
+    if (editor_can_handle_direct_shortcut && IsLineManipulationShortcut(event)) {
+        if (text_editor_->OnEvent(event)) {
+            screen_.PostEvent(ftxui::Event::Custom);
+            return true;
+        }
+        return false;
+    }
+    if (editor_can_handle_direct_shortcut && word_delete_shortcut) {
         text_editor_->OnEvent(event);
         screen_.PostEvent(ftxui::Event::Custom);
         return true;
