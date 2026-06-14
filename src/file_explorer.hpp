@@ -9,6 +9,8 @@
 #include "ftxui/component/component.hpp"
 #include "ftxui/component/component_base.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "git_manager.hpp"
+#include "theme.hpp"
 
 namespace textlt {
 
@@ -16,7 +18,7 @@ class FileExplorer : public ftxui::ComponentBase {
 public:
     using FileOpenCallback = std::function<void(const std::filesystem::path&)>;
 
-    explicit FileExplorer(FileOpenCallback on_file_open);
+    FileExplorer(FileOpenCallback on_file_open, const Theme* theme, GitManager* git_manager);
 
     ftxui::Element Render() override;
     bool OnEvent(ftxui::Event event) override;
@@ -50,9 +52,12 @@ private:
     void OpenSelectedEntry();
     bool OpenDirectoryEntry(int entry_index);
     int EntryIndexAtMouse(const ftxui::Mouse& mouse) const;
+    char GitStatusForPath(const std::filesystem::path& path) const;
     void RebuildEntries();
 
     FileOpenCallback on_file_open_;
+    const Theme* theme_ = nullptr;
+    GitManager* git_manager_ = nullptr;
     std::filesystem::path current_directory_;
     std::vector<std::filesystem::path> entry_paths_;
     std::vector<std::string> entry_labels_;

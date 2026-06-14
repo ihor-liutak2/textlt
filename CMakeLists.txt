@@ -30,6 +30,7 @@ add_executable(textlt
   src/file_dialog.cpp
   src/file_explorer.cpp
   src/file_utils.cpp
+  src/git_manager.cpp
   src/help_dialog.cpp
   src/history_manager.cpp
   src/lexers/c_family_lexer.cpp

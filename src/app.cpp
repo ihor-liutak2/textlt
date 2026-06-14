@@ -15,7 +15,9 @@ TextltApp::TextltApp()
       screen_(ftxui::ScreenInteractive::Fullscreen()),
       text_editor_(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_)),
       file_explorer_(ftxui::Make<FileExplorer>(
-          [this](const std::filesystem::path& path) { OpenExplorerFile(path); })),
+          [this](const std::filesystem::path& path) { OpenExplorerFile(path); },
+          &current_theme_,
+          &git_manager_)),
       file_dialog_(&current_theme_, [this](
           FilePromptMode mode,
           const std::string& path,
@@ -524,6 +526,8 @@ std::string TextltApp::FileTypeLabel(const std::string& file_path) const {
 bool TextltApp::SaveFile(const std::string& path, std::string& error) {
     try {
         std::static_pointer_cast<EditorComponent>(text_editor_)->SaveToFile(path);
+        git_manager_.SetWorkingDirectory(std::filesystem::path(path).parent_path());
+        git_manager_.Invalidate();
         active_action_ = "Saved " + path;
         return true;
     } catch (const std::exception& exception) {
@@ -536,6 +540,7 @@ bool TextltApp::SaveFile(const std::string& path, std::string& error) {
 bool TextltApp::OpenFile(const std::string& path, std::string& error) {
     try {
         std::static_pointer_cast<EditorComponent>(text_editor_)->LoadFromFile(path);
+        git_manager_.SetWorkingDirectory(std::filesystem::path(path).parent_path());
         active_action_ = "Opened " + path;
         return true;
     } catch (const std::exception& exception) {

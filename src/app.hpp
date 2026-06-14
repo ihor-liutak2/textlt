@@ -12,6 +12,7 @@
 #include "editor_config.hpp"
 #include "file_dialog.hpp"
 #include "file_explorer.hpp"
+#include "git_manager.hpp"
 #include "help_dialog.hpp"
 #include "theme_dialog.hpp"
 
@@ -92,6 +93,7 @@ private:
     std::vector<Theme> themes_;
     Theme current_theme_;
     ftxui::ScreenInteractive screen_;
+    GitManager git_manager_;
     ftxui::Component text_editor_;
     ftxui::Component file_explorer_;
     FileDialog file_dialog_;

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <map>
 #include <system_error>
 #include <utility>
 
@@ -17,8 +18,13 @@ std::string DisplayName(const std::filesystem::path& path) {
 
 } // namespace
 
-FileExplorer::FileExplorer(FileOpenCallback on_file_open)
+FileExplorer::FileExplorer(
+    FileOpenCallback on_file_open,
+    const Theme* theme,
+    GitManager* git_manager)
     : on_file_open_(std::move(on_file_open)),
+      theme_(theme),
+      git_manager_(git_manager),
       current_directory_(std::filesystem::current_path()) {
     ftxui::MenuOption option = ftxui::MenuOption::Vertical();
     option.on_enter = [this] { OpenSelectedEntry(); };
@@ -30,11 +36,36 @@ FileExplorer::FileExplorer(FileOpenCallback on_file_open)
 ftxui::Element FileExplorer::Render() {
     using namespace ftxui;
 
+    if (git_manager_) {
+        git_manager_->SetWorkingDirectory(current_directory_);
+    }
+
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    Elements rows;
+    for (size_t index = 0; index < entry_labels_.size(); ++index) {
+        Element row = text(entry_labels_[index]);
+        if (index < entry_paths_.size()) {
+            const char status = GitStatusForPath(entry_paths_[index]);
+            if (status == 'M') {
+                row = row | color(theme.syntax_keyword);
+            } else if (status == '?' || status == 'A') {
+                row = row | color(theme.syntax_string);
+            }
+        }
+
+        if (static_cast<int>(index) == selected_entry_) {
+            row = row |
+                bgcolor(theme.menu_foreground) |
+                color(theme.menu_background);
+        }
+        rows.push_back(std::move(row));
+    }
+
     return vbox({
         text(" Files ") | bold,
         text(current_directory_.filename().string()) | dim,
         separator(),
-        menu_->Render() | frame | reflect(menu_box_) | yflex,
+        vbox(std::move(rows)) | frame | reflect(menu_box_) | yflex,
     }) |
         border;
 }
@@ -132,6 +163,42 @@ int FileExplorer::EntryIndexAtMouse(const ftxui::Mouse& mouse) const {
         return -1;
     }
     return entry_index;
+}
+
+char FileExplorer::GitStatusForPath(const std::filesystem::path& path) const {
+    if (!git_manager_) {
+        return '\0';
+    }
+
+    const std::filesystem::path repository_root = git_manager_->RepositoryRoot();
+    if (repository_root.empty()) {
+        return '\0';
+    }
+
+    std::error_code error;
+    const std::filesystem::path relative_path =
+        std::filesystem::relative(path, repository_root, error);
+    if (error || relative_path.empty()) {
+        return '\0';
+    }
+
+    std::string key = relative_path.generic_string();
+    const std::map<std::string, char> statuses = git_manager_->GetFileStatuses();
+    const auto direct_match = statuses.find(key);
+    if (direct_match != statuses.end()) {
+        return direct_match->second;
+    }
+
+    if (!key.empty() && key.back() != '/') {
+        key += "/";
+    }
+    for (const auto& [status_path, status] : statuses) {
+        if (status_path.rfind(key, 0) == 0) {
+            return status;
+        }
+    }
+
+    return '\0';
 }
 
 void FileExplorer::RebuildEntries() {

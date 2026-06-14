@@ -95,6 +95,15 @@ ftxui::Element TextltApp::Render() {
     const std::string file_path = editor->CurrentFilePath();
     const std::string filename =
         std::filesystem::path(file_path).filename().string();
+    const auto explorer = std::static_pointer_cast<FileExplorer>(file_explorer_);
+    const std::filesystem::path git_workspace = editor_config_.show_file_explorer
+        ? explorer->CurrentPath()
+        : std::filesystem::path(file_path).parent_path();
+    git_manager_.SetWorkingDirectory(
+        git_workspace.empty() ? std::filesystem::current_path() : git_workspace);
+    const std::string git_branch = git_manager_.GetCurrentBranch();
+    const std::string git_branch_badge =
+        git_branch.empty() ? "" : " | branch: " + git_branch;
     std::string display_name = filename.empty() ? file_path : filename;
     if (editor->IsDirty()) {
         display_name += " *";
@@ -104,6 +113,7 @@ ftxui::Element TextltApp::Render() {
              " | File Type: " + FileTypeLabel(file_path) +
              " | Ln " + std::to_string(cursor_row) + ", Col " + std::to_string(cursor_col) +
              " | " + editor->ActiveLineEndingLabel() +
+             git_branch_badge +
              " | " + std::to_string(document_percent) + "%" +
              " | Theme: " + current_theme_.name) |
             color(current_theme_.menu_foreground));
