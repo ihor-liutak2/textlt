@@ -29,6 +29,7 @@ add_executable(textlt
   src/file_explorer.cpp
   src/file_utils.cpp
   src/help_dialog.cpp
+  src/history_manager.cpp
   src/lexers/c_family_lexer.cpp
   src/lexers/config_script_lexer.cpp
   src/lexers/database_lexer.cpp
@@ -36,6 +37,7 @@ add_executable(textlt
   src/main.cpp
   src/syntax_highlighter.cpp
   src/terminal_flow_control_guard.cpp
+  src/text_transformer.cpp
   src/theme_dialog.cpp
   src/theme.cpp
 )

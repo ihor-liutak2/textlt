@@ -6,6 +6,7 @@
 #include "ftxui/component/component_base.hpp"
 #include "ftxui/dom/elements.hpp"
 #include "editor_config.hpp"
+#include "history_manager.hpp"
 #include "theme.hpp"
 
 namespace textlt {
@@ -61,19 +62,11 @@ public:
     void DeleteCurrentLine();
 
 private:
-    struct EditorState {
-        std::vector<std::string> lines;
-        int cursor_x = 0;
-        int cursor_y = 0;
-    };
-
     struct SearchMatch {
         size_t x = 0;
         size_t y = 0;
         size_t length = 0;
     };
-
-    static constexpr size_t kMaxHistory = 100;
 
     size_t VisibleHeight() const;
     size_t VisibleTextWidth() const;
@@ -100,23 +93,21 @@ private:
     bool MoveLinesUp();
     bool MoveLinesDown();
     bool DuplicateLines();
-    EditorState CurrentState() const;
-    void ApplyState(const EditorState& state);
+    HistoryManager::State CurrentState() const;
+    void ApplyState(const HistoryManager::State& state);
     void SaveSnapshot();
     void SaveSnapshotForTyping(const std::string& input);
     void EndTypingGroup();
     void DeleteSelectionWithoutSnapshot();
     bool HandleAutoPairCharacter(const std::string& input);
     bool HandleAutoIndentReturn();
-    void ConvertLeadingIndent(size_t from_width, size_t to_width);
     size_t FindMatchAtOrAfterCursor() const;
     void MoveCursorToSearchMatch(const SearchMatch& match);
     std::string GetCommentPrefix() const;
 
     std::vector<std::string> text_lines_;
-    std::vector<EditorState> undo_stack_;
-    std::vector<EditorState> redo_stack_;
     std::vector<SearchMatch> search_matches_;
+    HistoryManager history_manager_;
     std::string current_filepath_ = "Untitled";
     LineEnding active_line_ending_ = LineEnding::LF;
     EditorConfig* config_ = nullptr;
@@ -128,7 +119,6 @@ private:
     size_t selection_anchor_x_ = 0;
     size_t selection_anchor_y_ = 0;
     bool has_selection_ = false;
-    bool typing_group_active_ = false;
     bool is_dirty_ = false;
     bool mouse_selecting_ = false;
     size_t current_search_match_ = 0;

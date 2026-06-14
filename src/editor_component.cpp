@@ -9,6 +9,7 @@
 
 #include "ftxui/component/event.hpp"
 #include "syntax_highlighter.hpp"
+#include "text_transformer.hpp"
 
 namespace textlt {
 
@@ -513,9 +514,7 @@ void EditorComponent::LoadFromFile(const std::string& path) {
     cursor_y_ = 0;
     scroll_x_ = 0;
     scroll_y_ = 0;
-    undo_stack_.clear();
-    redo_stack_.clear();
-    typing_group_active_ = false;
+    history_manager_.Clear();
     is_dirty_ = false;
     ClearSearchHighlights();
     ClearSelection();
@@ -530,9 +529,7 @@ void EditorComponent::NewFile(const std::string& path) {
     cursor_y_ = 0;
     scroll_x_ = 0;
     scroll_y_ = 0;
-    undo_stack_.clear();
-    redo_stack_.clear();
-    typing_group_active_ = false;
+    history_manager_.Clear();
     is_dirty_ = false;
     ClearSearchHighlights();
     ClearSelection();
@@ -921,138 +918,70 @@ void EditorComponent::ConvertTabsToSpaces() {
     UpdateScroll();
 }
 
-void EditorComponent::ConvertLeadingIndent(size_t from_width, size_t to_width) {
-    if (text_lines_.empty() || from_width == 0 || to_width == 0) {
-        return;
-    }
-
+void EditorComponent::Convert4To2Spaces() {
     EndTypingGroup();
     ClampCursorToBuffer();
-
-    size_t start_row = 0;
-    size_t end_row = text_lines_.size() - 1;
-    if (HasSelection()) {
-        auto [start, end] = OrderedSelection(
-            {selection_anchor_x_, selection_anchor_y_},
-            {cursor_x_, cursor_y_},
-            text_lines_);
-        start_row = start.y;
-        end_row = end.y;
-        if (end.x == 0 && end_row > start_row) {
-            --end_row;
-        }
-    }
-
-    bool changed = false;
-    size_t adjusted_cursor_x = cursor_x_;
-    for (size_t row = start_row; row <= end_row && row < text_lines_.size(); ++row) {
-        std::string& line = text_lines_[row];
-        size_t leading_spaces = 0;
-        while (leading_spaces < line.size() && line[leading_spaces] == ' ') {
-            ++leading_spaces;
-        }
-
-        const size_t converted_blocks = leading_spaces / from_width;
-        if (converted_blocks == 0) {
-            continue;
-        }
-
-        const size_t remainder = leading_spaces % from_width;
-        const size_t new_leading_spaces = converted_blocks * to_width + remainder;
-        if (new_leading_spaces == leading_spaces) {
-            continue;
-        }
-
-        if (!changed) {
-            SaveSnapshot();
-            changed = true;
-        }
-
-        line = std::string(new_leading_spaces, ' ') + line.substr(leading_spaces);
-        if (row == cursor_y_ && cursor_x_ <= leading_spaces) {
-            adjusted_cursor_x = std::min(cursor_x_, new_leading_spaces);
-        } else if (row == cursor_y_ && cursor_x_ > leading_spaces) {
-            adjusted_cursor_x = cursor_x_ + new_leading_spaces - leading_spaces;
-        }
-    }
-
-    if (!changed) {
+    const HistoryManager::State before = CurrentState();
+    transform::TransformResult result = transform::Convert4To2Spaces(
+        text_lines_,
+        {cursor_x_, cursor_y_},
+        {HasSelection(), selection_anchor_x_, selection_anchor_y_});
+    if (!result.changed) {
         return;
     }
 
-    cursor_x_ = std::min(adjusted_cursor_x, text_lines_[cursor_y_].size());
+    history_manager_.PushSnapshot(before);
+    cursor_x_ = result.cursor.x;
+    cursor_y_ = result.cursor.y;
+    selection_anchor_x_ = result.selection.anchor_x;
+    selection_anchor_y_ = result.selection.anchor_y;
+    has_selection_ = result.selection.active;
     is_dirty_ = true;
     ClampCursorToBuffer();
     UpdateScroll();
 }
 
-void EditorComponent::Convert4To2Spaces() {
-    ConvertLeadingIndent(4, 2);
-}
-
 void EditorComponent::Convert2To4Spaces() {
-    ConvertLeadingIndent(2, 4);
+    EndTypingGroup();
+    ClampCursorToBuffer();
+    const HistoryManager::State before = CurrentState();
+    transform::TransformResult result = transform::Convert2To4Spaces(
+        text_lines_,
+        {cursor_x_, cursor_y_},
+        {HasSelection(), selection_anchor_x_, selection_anchor_y_});
+    if (!result.changed) {
+        return;
+    }
+
+    history_manager_.PushSnapshot(before);
+    cursor_x_ = result.cursor.x;
+    cursor_y_ = result.cursor.y;
+    selection_anchor_x_ = result.selection.anchor_x;
+    selection_anchor_y_ = result.selection.anchor_y;
+    has_selection_ = result.selection.active;
+    is_dirty_ = true;
+    ClampCursorToBuffer();
+    UpdateScroll();
 }
 
 void EditorComponent::ToggleCase() {
     EndTypingGroup();
     ClampCursorToBuffer();
-
-    auto toggle_character = [](char& character) {
-        const unsigned char value = static_cast<unsigned char>(character);
-        if (std::islower(value)) {
-            character = static_cast<char>(std::toupper(value));
-        } else if (std::isupper(value)) {
-            character = static_cast<char>(std::tolower(value));
-        }
-    };
-
-    if (HasSelection()) {
-        SaveSnapshot();
-        auto [start, end] = OrderedSelection(
-            {selection_anchor_x_, selection_anchor_y_},
-            {cursor_x_, cursor_y_},
-            text_lines_);
-
-        for (size_t y = start.y; y <= end.y; ++y) {
-            const size_t x_start = y == start.y ? start.x : 0;
-            const size_t x_end = y == end.y ? end.x : text_lines_[y].size();
-            for (size_t x = x_start; x < x_end && x < text_lines_[y].size(); ++x) {
-                toggle_character(text_lines_[y][x]);
-            }
-        }
-
-        is_dirty_ = true;
-        UpdateScroll();
+    const HistoryManager::State before = CurrentState();
+    transform::TransformResult result = transform::ToggleCase(
+        text_lines_,
+        {cursor_x_, cursor_y_},
+        {HasSelection(), selection_anchor_x_, selection_anchor_y_});
+    if (!result.changed) {
         return;
     }
 
-    std::string& line = text_lines_[cursor_y_];
-    if (line.empty()) {
-        return;
-    }
-
-    size_t target = cursor_x_;
-    if (target >= line.size() || !IsWordCharacter(line[target])) {
-        if (target == 0 || !IsWordCharacter(line[target - 1])) {
-            return;
-        }
-        --target;
-    }
-
-    size_t start = target;
-    while (start > 0 && IsWordCharacter(line[start - 1])) {
-        --start;
-    }
-    size_t end = target;
-    while (end < line.size() && IsWordCharacter(line[end])) {
-        ++end;
-    }
-
-    SaveSnapshot();
-    for (size_t x = start; x < end; ++x) {
-        toggle_character(line[x]);
-    }
+    history_manager_.PushSnapshot(before);
+    cursor_x_ = result.cursor.x;
+    cursor_y_ = result.cursor.y;
+    selection_anchor_x_ = result.selection.anchor_x;
+    selection_anchor_y_ = result.selection.anchor_y;
+    has_selection_ = result.selection.active;
     is_dirty_ = true;
     UpdateScroll();
 }
@@ -1710,7 +1639,7 @@ bool EditorComponent::DuplicateLines() {
     return true;
 }
 
-EditorComponent::EditorState EditorComponent::CurrentState() const {
+HistoryManager::State EditorComponent::CurrentState() const {
     return {
         text_lines_,
         static_cast<int>(cursor_x_),
@@ -1718,7 +1647,7 @@ EditorComponent::EditorState EditorComponent::CurrentState() const {
     };
 }
 
-void EditorComponent::ApplyState(const EditorState& state) {
+void EditorComponent::ApplyState(const HistoryManager::State& state) {
     text_lines_ = state.lines;
     if (text_lines_.empty()) {
         text_lines_.push_back("");
@@ -1732,69 +1661,30 @@ void EditorComponent::ApplyState(const EditorState& state) {
 
 void EditorComponent::SaveSnapshot() {
     ClampCursorToBuffer();
-
-    EditorState state = CurrentState();
-    if (!undo_stack_.empty() &&
-        undo_stack_.back().lines == state.lines &&
-        undo_stack_.back().cursor_x == state.cursor_x &&
-        undo_stack_.back().cursor_y == state.cursor_y) {
-        redo_stack_.clear();
-        return;
-    }
-
-    undo_stack_.push_back(std::move(state));
-    if (undo_stack_.size() > kMaxHistory) {
-        undo_stack_.erase(undo_stack_.begin());
-    }
-    redo_stack_.clear();
+    history_manager_.PushSnapshot(CurrentState());
 }
 
 void EditorComponent::SaveSnapshotForTyping(const std::string& input) {
-    const bool boundary =
-        input.size() == 1 &&
-        std::isspace(static_cast<unsigned char>(input.front()));
-
-    if (!typing_group_active_ || boundary || HasSelection()) {
-        SaveSnapshot();
-    }
-
-    typing_group_active_ = !boundary;
+    ClampCursorToBuffer();
+    history_manager_.PushSnapshotForTyping(input, CurrentState(), HasSelection());
 }
 
 void EditorComponent::EndTypingGroup() {
-    typing_group_active_ = false;
+    history_manager_.EndTypingGroup();
 }
 
 void EditorComponent::Undo() {
-    EndTypingGroup();
-    if (undo_stack_.empty()) {
-        return;
+    HistoryManager::State state;
+    if (history_manager_.Undo(CurrentState(), &state)) {
+        ApplyState(state);
     }
-
-    redo_stack_.push_back(CurrentState());
-    if (redo_stack_.size() > kMaxHistory) {
-        redo_stack_.erase(redo_stack_.begin());
-    }
-
-    const EditorState state = std::move(undo_stack_.back());
-    undo_stack_.pop_back();
-    ApplyState(state);
 }
 
 void EditorComponent::Redo() {
-    EndTypingGroup();
-    if (redo_stack_.empty()) {
-        return;
+    HistoryManager::State state;
+    if (history_manager_.Redo(CurrentState(), &state)) {
+        ApplyState(state);
     }
-
-    undo_stack_.push_back(CurrentState());
-    if (undo_stack_.size() > kMaxHistory) {
-        undo_stack_.erase(undo_stack_.begin());
-    }
-
-    const EditorState state = std::move(redo_stack_.back());
-    redo_stack_.pop_back();
-    ApplyState(state);
 }
 
 std::string EditorComponent::GetCurrentLineText() const {
