@@ -29,6 +29,10 @@ add_executable(textlt
   src/file_explorer.cpp
   src/file_utils.cpp
   src/help_dialog.cpp
+  src/lexers/c_family_lexer.cpp
+  src/lexers/config_script_lexer.cpp
+  src/lexers/database_lexer.cpp
+  src/lexers/web_lexer.cpp
   src/main.cpp
   src/syntax_highlighter.cpp
   src/terminal_flow_control_guard.cpp
