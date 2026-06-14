@@ -22,6 +22,7 @@ public:
     void LoadFromFile(const std::string& path);
     void NewFile(const std::string& path);
     const std::string& CurrentFilePath() const;
+    bool IsDirty() const;
     int GetCursorRow() const;
     int GetCursorCol() const;
     size_t GetLineCount() const;

@@ -153,6 +153,15 @@ TextltApp::TextltApp()
         find_panel_replace_container_,
     }, &search_panel_tab_index_);
 
+    exit_save_button_ = ftxui::Button("Save", [this] { SaveAndExit(); });
+    exit_discard_button_ = ftxui::Button("Don't Save", [this] { DiscardAndExit(); });
+    exit_cancel_button_ = ftxui::Button("Cancel", [this] { CloseExitConfirmationDialog(); });
+    exit_confirmation_container_ = ftxui::Container::Horizontal({
+        exit_save_button_,
+        exit_discard_button_,
+        exit_cancel_button_,
+    });
+
     root_container_ = ftxui::Container::Tab({
         main_container_,
         dropdown_menu_,
@@ -161,6 +170,7 @@ TextltApp::TextltApp()
         theme_dialog_.View(),
         find_panel_container_,
         goto_line_input_component_,
+        exit_confirmation_container_,
     }, &focused_layer_);
 
     renderer_ = ftxui::Renderer(root_container_, [this] { return Render(); });
@@ -197,6 +207,7 @@ void TextltApp::OpenDropdown() {
 
 void TextltApp::CloseFileDialog() {
     file_dialog_.Close();
+    exit_after_save_as_ = false;
     focused_layer_ = 0;
     FocusEditor();
 }
@@ -265,6 +276,55 @@ void TextltApp::CloseThemeDialog() {
     theme_dialog_.Close();
     focused_layer_ = 0;
     FocusEditor();
+}
+
+void TextltApp::ShowExitConfirmationDialog() {
+    active_dropdown_ = -1;
+    exit_confirmation_open_ = true;
+    focused_layer_ = 7;
+    exit_save_button_->TakeFocus();
+    active_action_ = "Unsaved changes";
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::CloseExitConfirmationDialog() {
+    exit_confirmation_open_ = false;
+    exit_after_save_as_ = false;
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::RequestExit() {
+    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    if (editor_ptr->IsDirty()) {
+        ShowExitConfirmationDialog();
+        return;
+    }
+    screen_.Exit();
+}
+
+void TextltApp::SaveAndExit() {
+    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    const std::string current_path = editor_ptr->CurrentFilePath();
+    if (current_path.empty() || current_path == "Untitled" || current_path == "untitled.txt") {
+        exit_confirmation_open_ = false;
+        exit_after_save_as_ = true;
+        OpenFileDialog(FilePromptMode::SaveAs);
+        return;
+    }
+
+    std::string error;
+    if (SaveFile(current_path, error)) {
+        screen_.Exit();
+        return;
+    }
+
+    active_action_ = error.empty() ? "Save failed" : error;
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::DiscardAndExit() {
+    screen_.Exit();
 }
 
 void TextltApp::ActivateTopMenu() {
@@ -526,14 +586,21 @@ bool TextltApp::ConfirmFileDialog(
     FilePromptMode mode,
     const std::string& path,
     std::string& error) {
+    bool success = false;
     if (mode == FilePromptMode::Open) {
-        return OpenFile(path, error);
+        success = OpenFile(path, error);
+    } else if (mode == FilePromptMode::SaveAs) {
+        success = SaveFile(path, error);
+    } else {
+        error = "No file action selected.";
+        return false;
     }
-    if (mode == FilePromptMode::SaveAs) {
-        return SaveFile(path, error);
+
+    if (success && mode == FilePromptMode::SaveAs && exit_after_save_as_) {
+        exit_after_save_as_ = false;
+        screen_.Exit();
     }
-    error = "No file action selected.";
-    return false;
+    return success;
 }
 
 void TextltApp::PreviewTheme(const std::string& theme_name) {
@@ -597,7 +664,7 @@ void TextltApp::RunDropdownAction() {
                 OpenHelpDialog();
             }
             return;
-        case 4: if (selected_dropdown_item_ == 0) screen_.Exit(); return;
+        case 4: if (selected_dropdown_item_ == 0) RequestExit(); return;
         default: CloseDropdown();                            return;
     }
 }
@@ -615,7 +682,7 @@ void TextltApp::RunDropdownAction() {
     if (item == 1) { OpenFileDialog(FilePromptMode::Open); return; }
     if (item == 2) { SaveCurrentFile(); return; }
     if (item == 3) { OpenFileDialog(FilePromptMode::SaveAs); return; }
-    if (item == 4) { screen_.Exit(); return; }
+    if (item == 4) { RequestExit(); return; }
     CloseDropdown();
 }
 

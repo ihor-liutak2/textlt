@@ -71,8 +71,12 @@ ftxui::Element TextltApp::Render() {
     const std::string file_path = editor->CurrentFilePath();
     const std::string filename =
         std::filesystem::path(file_path).filename().string();
+    std::string display_name = filename.empty() ? file_path : filename;
+    if (editor->IsDirty()) {
+        display_name += " *";
+    }
     base_rows.push_back(
-        text(" File: " + (filename.empty() ? file_path : filename) +
+        text(" File: " + display_name +
              " | File Type: " + FileTypeLabel(file_path) +
              " | Ln " + std::to_string(cursor_row) + ", Col " + std::to_string(cursor_col) +
              " | " + std::to_string(document_percent) + "%" +
@@ -84,7 +88,8 @@ ftxui::Element TextltApp::Render() {
         color(current_theme_.foreground);
 
     if (active_dropdown_ < 0 && !file_dialog_.IsOpen() &&
-        !help_dialog_.IsOpen() && !theme_dialog_.IsOpen()) {
+        !help_dialog_.IsOpen() && !theme_dialog_.IsOpen() &&
+        !exit_confirmation_open_) {
         return base_layout;
     }
 
@@ -113,6 +118,9 @@ ftxui::Element TextltApp::Render() {
     }
     if (theme_dialog_.IsOpen()) {
         layers.push_back(theme_dialog_.View()->Render() | clear_under | center);
+    }
+    if (exit_confirmation_open_) {
+        layers.push_back(RenderExitConfirmationDialog() | clear_under | center);
     }
 
     return dbox(std::move(layers));
@@ -171,9 +179,48 @@ ftxui::Element TextltApp::RenderGoToLinePanel() {
         color(current_theme_.menu_foreground);
 }
 
+ftxui::Element TextltApp::RenderExitConfirmationDialog() {
+    using namespace ftxui;
+
+    const auto editor = std::static_pointer_cast<EditorComponent>(text_editor_);
+    const std::string file_path = editor->CurrentFilePath();
+    const std::string filename = std::filesystem::path(file_path).filename().string();
+    const std::string display_name = filename.empty() ? file_path : filename;
+
+    return vbox({
+        text(" Unsaved Changes ") | bold | color(current_theme_.modal_accent) | center,
+        separator() | color(current_theme_.modal_border),
+        text("Save changes to " + display_name + " before closing?") |
+            color(current_theme_.modal_text_color) |
+            center,
+        separator() | color(current_theme_.modal_border),
+        hbox({
+            filler(),
+            exit_save_button_->Render(),
+            text(" "),
+            exit_discard_button_->Render(),
+            text(" "),
+            exit_cancel_button_->Render(),
+            filler(),
+        }),
+    }) |
+        border |
+        bgcolor(current_theme_.modal_background) |
+        color(current_theme_.modal_text_color) |
+        size(WIDTH, GREATER_THAN, 52);
+}
+
 bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     const std::string& input = event.input();
     const bool has_input = !input.empty();
+
+    if (exit_confirmation_open_) {
+        if (event == ftxui::Event::Escape) {
+            CloseExitConfirmationDialog();
+            return true;
+        }
+        return false;
+    }
 
     if (show_goto_line_bar_) {
         if (event == ftxui::Event::Escape) {
@@ -202,7 +249,8 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     }
 
     const bool can_open_find_panel =
-        !file_dialog_.IsOpen() && !help_dialog_.IsOpen() && !theme_dialog_.IsOpen();
+        !file_dialog_.IsOpen() && !help_dialog_.IsOpen() && !theme_dialog_.IsOpen() &&
+        !exit_confirmation_open_;
 
     const bool editor_can_handle_word_delete =
         focused_layer_ == 0 &&
@@ -280,7 +328,7 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     }
     
     if (event.input() == "\x11") {
-        screen_.Exit();
+        RequestExit();
         return true;
     }
     // Continue with the remaining global shortcut handlers.

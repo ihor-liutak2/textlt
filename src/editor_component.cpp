@@ -479,6 +479,10 @@ const std::string& EditorComponent::CurrentFilePath() const {
     return current_filepath_;
 }
 
+bool EditorComponent::IsDirty() const {
+    return is_dirty_;
+}
+
 int EditorComponent::GetCursorRow() const {
     return static_cast<int>(cursor_y_);
 }

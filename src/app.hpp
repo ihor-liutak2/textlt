@@ -39,6 +39,11 @@ private:
     void CloseHelpDialog();
     void OpenThemeDialog();
     void CloseThemeDialog();
+    void ShowExitConfirmationDialog();
+    void CloseExitConfirmationDialog();
+    void RequestExit();
+    void SaveAndExit();
+    void DiscardAndExit();
     void ActivateTopMenu();
     void SwitchEditorFocus();
     void FocusEditor();
@@ -57,6 +62,7 @@ private:
     ftxui::Element Render();
     ftxui::Element RenderFindPanel();
     ftxui::Element RenderGoToLinePanel();
+    ftxui::Element RenderExitConfirmationDialog();
     bool HandleGlobalEvent(ftxui::Event event);
     int DropdownX() const;
     void OpenFindPanel(bool replace_mode);
@@ -107,6 +113,8 @@ private:
     int search_panel_tab_index_ = 0;
     bool explorer_has_focus_ = false;
     bool show_goto_line_bar_ = false;
+    bool exit_confirmation_open_ = false;
+    bool exit_after_save_as_ = false;
     SearchMode current_search_mode_ = SearchMode::None;
     ftxui::Box top_menu_box_;
 
@@ -126,6 +134,10 @@ private:
     ftxui::Component find_panel_replace_container_;
     ftxui::Component find_panel_container_;
     ftxui::Component goto_line_input_component_;
+    ftxui::Component exit_save_button_;
+    ftxui::Component exit_discard_button_;
+    ftxui::Component exit_cancel_button_;
+    ftxui::Component exit_confirmation_container_;
     ftxui::Component renderer_;
     ftxui::Component global_shortcuts_;
 };
