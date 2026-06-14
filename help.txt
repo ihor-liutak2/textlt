@@ -46,6 +46,7 @@ Syntax Highlighting
   C#              .cs
   Go              .go
   Rust            .rs
+  Bash Scripting  .sh, .bash, .bashrc
   JavaScript      .js, .mjs, .cjs
   TypeScript      .ts, .mts
   React JSX/TSX   .jsx, .tsx

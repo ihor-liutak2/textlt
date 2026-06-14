@@ -462,6 +462,12 @@ std::string TextltApp::FindMatchStatus() const {
 
 std::string TextltApp::FileTypeLabel(const std::string& file_path) const {
     const std::string extension = std::filesystem::path(file_path).extension().string();
+    const std::string filename = std::filesystem::path(file_path).filename().string();
+    if (extension == ".sh" || extension == ".bash" || extension == ".zsh" ||
+        extension == ".bashrc" || extension == ".profile" ||
+        filename == ".bashrc" || filename == ".profile") {
+        return "Bash Script";
+    }
     if (extension == ".cpp" || extension == ".hpp" ||
         extension == ".cc" || extension == ".h") {
         return "C++ Source";
@@ -497,7 +503,6 @@ std::string TextltApp::FileTypeLabel(const std::string& file_path) const {
         return "React TSX Source";
     }
     if (extension == ".php") {
-        const std::string filename = std::filesystem::path(file_path).filename().string();
         if (filename.size() >= 10 &&
             filename.compare(filename.size() - 10, 10, ".blade.php") == 0) {
             return "Laravel Blade Template";

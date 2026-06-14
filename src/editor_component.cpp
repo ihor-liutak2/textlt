@@ -695,11 +695,14 @@ std::string EditorComponent::GetCommentPrefix() const {
     }
 
     if (filename.rfind("Dockerfile", 0) == 0 ||
+        filename == ".bashrc" || filename == ".profile" ||
         filename == ".env" || filename == ".env.local" ||
         filename == ".env.development" || filename == ".env.production" ||
         (filename.size() >= 4 && filename.compare(filename.size() - 4, 4, ".env") == 0) ||
         extension == ".conf" || extension == ".ini" || extension == ".py" ||
-        extension == ".rb" || extension == ".yaml" || extension == ".yml") {
+        extension == ".rb" || extension == ".yaml" || extension == ".yml" ||
+        extension == ".sh" || extension == ".bash" || extension == ".zsh" ||
+        extension == ".bashrc" || extension == ".profile") {
         return "#";
     }
 
