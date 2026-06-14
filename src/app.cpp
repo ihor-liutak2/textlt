@@ -43,6 +43,7 @@ TextltApp::TextltApp()
               " Copy ",
               " Paste ",
               " Toggle Comment   Ctrl+/ ",
+              " Toggle Case        Ctrl+T ",
               " Find... ",
               " Replace... ",
           },
@@ -679,14 +680,23 @@ void TextltApp::HandleEditMenu(int item) {
         return;
     }
 
-    if (item == 6) { // Find...
+    if (item == 6) { // Toggle Case
+        FocusEditor();
+        editor_ptr->ToggleCase();
+        active_action_ = "Toggle Case";
+        CloseDropdown();
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+
+    if (item == 7) { // Find...
         CloseDropdown();
         OpenFindPanel(false);
         active_action_ = "Find";
         return;
     }
 
-    if (item == 7) { // Replace...
+    if (item == 8) { // Replace...
         CloseDropdown();
         OpenFindPanel(true);
         active_action_ = "Replace";

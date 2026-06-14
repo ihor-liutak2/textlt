@@ -15,10 +15,13 @@ Navigation
 Search & Replace
   Ctrl+F        Open Find Panel
   Ctrl+H        Open Replace Panel
-  Ctrl+T        Toggle case for selection or current word
   F3            Find Next Match
   Shift+Enter   Find Previous Match
   Escape        Close Find/Replace Panel
+
+Editing
+  Ctrl + /      Toggle Comment
+  Ctrl + T      Toggle Case (Invert Uppercase/Lowercase for selection or current word)
 
 Menus
   Tab           Switch focus between File Explorer and Editor
