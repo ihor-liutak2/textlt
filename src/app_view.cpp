@@ -40,7 +40,7 @@ ftxui::Element TextltApp::Render() {
           });
 
     Elements base_rows = {
-        text(" textlt v0.1.0 - Native Non-Modal Text Editor") |
+        text(" textlt v1.0.0 - Native Non-Modal Text Editor") |
             bold |
             color(current_theme_.menu_foreground),
         separator(),
@@ -257,7 +257,7 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         screen_.Exit();
         return true;
     }
-    // ... далі весь твій код без змін ...
+    // Continue with the remaining global shortcut handlers.
 
     if (event == ftxui::Event::Escape && help_dialog_.IsOpen()) {
         CloseHelpDialog();

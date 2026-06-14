@@ -15,6 +15,9 @@ public:
 
     ftxui::Component View() const;
     void Open(const std::string& path);
+    void OpenContent(const std::string& title,
+                     const std::vector<std::string>& lines,
+                     bool center_content = false);
     void Close();
     bool IsOpen() const;
     bool OnEvent(ftxui::Event event);
@@ -27,8 +30,10 @@ private:
 
     bool open_ = false;
     const Theme* theme_ = nullptr;
+    std::string title_ = "Help";
     std::vector<std::string> lines_;
     size_t help_scroll_y_ = 0;
+    bool center_content_ = false;
     ftxui::Component renderer_;
 };
 

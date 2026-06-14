@@ -26,8 +26,20 @@ ftxui::Component HelpDialog::View() const {
 
 void HelpDialog::Open(const std::string& path) {
     open_ = true;
+    title_ = "Help";
     lines_ = LoadTextFileLines(path);
     help_scroll_y_ = 0;
+    center_content_ = false;
+}
+
+void HelpDialog::OpenContent(const std::string& title,
+                             const std::vector<std::string>& lines,
+                             bool center_content) {
+    open_ = true;
+    title_ = title;
+    lines_ = lines;
+    help_scroll_y_ = 0;
+    center_content_ = center_content;
 }
 
 void HelpDialog::Close() {
@@ -90,24 +102,32 @@ ftxui::Element HelpDialog::Render() {
     const size_t visible_lines = VisibleLineCount();
     const size_t end = std::min(lines_.size(), help_scroll_y_ + visible_lines);
     for (size_t index = help_scroll_y_; index < end; ++index) {
-        help_content.push_back(text(lines_[index]) | color(theme.modal_text_color));
+        Element line = text(lines_[index]) | color(theme.modal_text_color);
+        if (center_content_) {
+            line = line | center;
+        }
+        help_content.push_back(line);
     }
     while (help_content.size() < visible_lines) {
         help_content.push_back(text(""));
     }
 
-    return vbox({
-        text("Help") | bold | color(theme.modal_accent),
-        separator() | color(theme.modal_border),
+    Elements dialog_rows;
+    if (!title_.empty()) {
+        dialog_rows.push_back(text(title_) | bold | color(theme.modal_accent) | center);
+        dialog_rows.push_back(separator() | color(theme.modal_border));
+    }
+    dialog_rows.push_back(
         vbox(std::move(help_content)) |
-            bgcolor(theme.modal_input_bg) |
-            color(theme.modal_text_color) |
-            frame |
-            color(theme.modal_border) |
-            size(HEIGHT, EQUAL, static_cast<int>(visible_lines + 2)),
-        separator() | color(theme.modal_border),
-        text("Press Escape to close.") | dim | color(theme.modal_text_color),
-    }) |
+        bgcolor(theme.modal_input_bg) |
+        color(theme.modal_text_color) |
+        frame |
+        color(theme.modal_border) |
+        size(HEIGHT, EQUAL, static_cast<int>(visible_lines + 2)));
+    dialog_rows.push_back(separator() | color(theme.modal_border));
+    dialog_rows.push_back(text("Press Escape to close.") | dim | color(theme.modal_text_color));
+
+    return vbox(std::move(dialog_rows)) |
         bgcolor(theme.modal_background) |
         color(theme.modal_text_color) |
         border |

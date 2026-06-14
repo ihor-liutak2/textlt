@@ -221,6 +221,25 @@ void TextltApp::OpenFileDialog(FilePromptMode mode) {
     file_dialog_.Open(mode, default_path);
 }
 
+void TextltApp::OpenAboutDialog() {
+    active_dropdown_ = -1;
+    help_dialog_.OpenContent("", {
+        "--------------------------------------------------",
+        "textlt — Modern TUI Text Editor",
+        "Version: 1.0.0 (Stable Release)",
+        "",
+        "Author: Ihor Liutak (ihorlt)",
+        "Contact: ihorlt@gmail.com",
+        "Origin: Ukraine 🇺🇦",
+        "",
+        "Built with: C++17 & FTXUI Framework",
+        "License: MIT License (c) 2026",
+        "--------------------------------------------------",
+    }, true);
+    active_action_ = "Opened About";
+    focused_layer_ = 3;
+}
+
 void TextltApp::OpenHelpDialog() {
     active_dropdown_ = -1;
     help_dialog_.Open("help.txt");
@@ -247,10 +266,6 @@ void TextltApp::CloseThemeDialog() {
 }
 
 void TextltApp::ActivateTopMenu() {
-    if (selected_menu_item_ == 3) {
-        OpenHelpDialog();
-        return;
-    }
     OpenDropdown();
 }
 
@@ -572,7 +587,13 @@ void TextltApp::RunDropdownAction() {
         case 0: HandleFileMenu(selected_dropdown_item_);     return;
         case 1: HandleEditMenu(selected_dropdown_item_);     return;
         case 2: HandleOptionsMenu(selected_dropdown_item_);  return;
-        case 3: OpenHelpDialog();                            return;
+        case 3:
+            if (selected_dropdown_item_ == 0) {
+                OpenAboutDialog();
+            } else {
+                OpenHelpDialog();
+            }
+            return;
         case 4: if (selected_dropdown_item_ == 0) screen_.Exit(); return;
         default: CloseDropdown();                            return;
     }

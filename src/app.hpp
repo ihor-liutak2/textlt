@@ -34,6 +34,7 @@ private:
     void OpenDropdown();
     void CloseFileDialog();
     void OpenFileDialog(FilePromptMode mode);
+    void OpenAboutDialog();
     void OpenHelpDialog();
     void CloseHelpDialog();
     void OpenThemeDialog();
