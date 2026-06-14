@@ -3,6 +3,8 @@
   "show_file_explorer": true,
   "smart_word_wrap": false,
   "syntax_highlighting": true,
+  "auto_pairing": true,
+  "auto_indent": true,
   "tab_size": 2,
   "active_theme_name": "Pantone Deep Sea Teal"
 }

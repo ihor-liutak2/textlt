@@ -15,6 +15,7 @@ Navigation
 Search & Replace
   Ctrl+F        Open Find Panel
   Ctrl+H        Open Replace Panel
+  Ctrl+T        Toggle case for selection or current word
   F3            Find Next Match
   Shift+Enter   Find Previous Match
   Escape        Close Find/Replace Panel
@@ -30,6 +31,8 @@ Menus
 Options
   Toggle Line Numbers changes the editor gutter immediately.
   Toggle File Explorer shows or hides the sidebar.
+  Auto Pairing inserts matching brackets and quotes while typing.
+  Smart Auto-Indent carries indentation onto new lines.
   Theme opens the dynamic theme selector.
 
 Syntax Highlighting

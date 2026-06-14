@@ -131,6 +131,56 @@ bool IsNavigationEvent(const ftxui::Event& event, NavigationAction* action) {
     return false;
 }
 
+bool IsPairOpeningCharacter(char character) {
+    return character == '{' || character == '[' || character == '(' ||
+        character == '"' || character == '\'';
+}
+
+bool IsPairClosingCharacter(char character) {
+    return character == '}' || character == ']' || character == ')' ||
+        character == '"' || character == '\'';
+}
+
+char ClosingPairFor(char character) {
+    switch (character) {
+        case '{': return '}';
+        case '[': return ']';
+        case '(': return ')';
+        case '"': return '"';
+        case '\'': return '\'';
+        default: return '\0';
+    }
+}
+
+std::string LeadingIndent(const std::string& line) {
+    size_t end = 0;
+    while (end < line.size() && (line[end] == ' ' || line[end] == '\t')) {
+        ++end;
+    }
+    return line.substr(0, end);
+}
+
+std::string TrimRightWhitespace(std::string value) {
+    while (!value.empty() &&
+           std::isspace(static_cast<unsigned char>(value.back()))) {
+        value.pop_back();
+    }
+    return value;
+}
+
+bool EndsWithRubyDo(const std::string& trimmed_line) {
+    if (trimmed_line.size() < 2 ||
+        trimmed_line.compare(trimmed_line.size() - 2, 2, "do") != 0) {
+        return false;
+    }
+    if (trimmed_line.size() == 2) {
+        return true;
+    }
+    const unsigned char previous =
+        static_cast<unsigned char>(trimmed_line[trimmed_line.size() - 3]);
+    return !std::isalnum(previous) && previous != '_';
+}
+
 } // namespace
 
 EditorComponent::EditorComponent(EditorConfig* config, const Theme* theme)
@@ -592,8 +642,87 @@ void EditorComponent::InsertText(const std::string& text) {
         cursor_x_++;
     }
 
+    is_dirty_ = true;
     ClearSelection();
     UpdateScroll();
+}
+
+bool EditorComponent::HandleAutoPairCharacter(const std::string& input) {
+    if (input.size() != 1) {
+        return false;
+    }
+
+    const char character = input.front();
+    if (IsPairClosingCharacter(character) &&
+        cursor_x_ < text_lines_[cursor_y_].size() &&
+        text_lines_[cursor_y_][cursor_x_] == character) {
+        EndTypingGroup();
+        cursor_x_++;
+        ClearSelection();
+        UpdateScroll();
+        return true;
+    }
+
+    if (!IsPairOpeningCharacter(character)) {
+        return false;
+    }
+
+    const char closing = ClosingPairFor(character);
+    if (closing == '\0') {
+        return false;
+    }
+
+    EndTypingGroup();
+    SaveSnapshot();
+
+    if (HasSelection()) {
+        const std::string selected = GetSelectedText();
+        DeleteSelectionWithoutSnapshot();
+        text_lines_[cursor_y_].insert(cursor_x_, std::string(1, character) + selected + closing);
+        cursor_x_ += selected.size() + 2;
+    } else {
+        text_lines_[cursor_y_].insert(cursor_x_, std::string(1, character) + closing);
+        cursor_x_++;
+    }
+
+    is_dirty_ = true;
+    ClearSelection();
+    UpdateScroll();
+    return true;
+}
+
+bool EditorComponent::HandleAutoIndentReturn() {
+    EndTypingGroup();
+    SaveSnapshot();
+    if (HasSelection()) {
+        DeleteSelectionWithoutSnapshot();
+    }
+
+    const std::string line_before_cursor = text_lines_[cursor_y_].substr(0, cursor_x_);
+    std::string indent;
+    if (!config_ || config_->auto_indent) {
+        const int configured_tab_size = config_ ? config_->tab_size : 4;
+        const size_t tab_size = configured_tab_size == 2 ? 2 : 4;
+        indent = LeadingIndent(line_before_cursor);
+        const std::string trimmed_before_cursor = TrimRightWhitespace(line_before_cursor);
+
+        if (!trimmed_before_cursor.empty() &&
+            (trimmed_before_cursor.back() == '{' ||
+             trimmed_before_cursor.back() == ':' ||
+             EndsWithRubyDo(trimmed_before_cursor))) {
+            indent += std::string(tab_size, ' ');
+        }
+    }
+
+    std::string next_line = text_lines_[cursor_y_].substr(cursor_x_);
+    text_lines_[cursor_y_].erase(cursor_x_);
+    text_lines_.insert(text_lines_.begin() + cursor_y_ + 1, indent + next_line);
+    cursor_y_++;
+    cursor_x_ = indent.size();
+    is_dirty_ = true;
+    ClearSelection();
+    UpdateScroll();
+    return true;
 }
 
 void EditorComponent::ConvertTabsToSpaces() {
@@ -639,6 +768,69 @@ void EditorComponent::ConvertTabsToSpaces() {
 
     cursor_x_ = std::min(adjusted_cursor_x, text_lines_[cursor_y_].size());
     ClearSelection();
+    is_dirty_ = true;
+    UpdateScroll();
+}
+
+void EditorComponent::ToggleCase() {
+    EndTypingGroup();
+    ClampCursorToBuffer();
+
+    auto toggle_character = [](char& character) {
+        const unsigned char value = static_cast<unsigned char>(character);
+        if (std::islower(value)) {
+            character = static_cast<char>(std::toupper(value));
+        } else if (std::isupper(value)) {
+            character = static_cast<char>(std::tolower(value));
+        }
+    };
+
+    if (HasSelection()) {
+        SaveSnapshot();
+        auto [start, end] = OrderedSelection(
+            {selection_anchor_x_, selection_anchor_y_},
+            {cursor_x_, cursor_y_},
+            text_lines_);
+
+        for (size_t y = start.y; y <= end.y; ++y) {
+            const size_t x_start = y == start.y ? start.x : 0;
+            const size_t x_end = y == end.y ? end.x : text_lines_[y].size();
+            for (size_t x = x_start; x < x_end && x < text_lines_[y].size(); ++x) {
+                toggle_character(text_lines_[y][x]);
+            }
+        }
+
+        is_dirty_ = true;
+        UpdateScroll();
+        return;
+    }
+
+    std::string& line = text_lines_[cursor_y_];
+    if (line.empty()) {
+        return;
+    }
+
+    size_t target = cursor_x_;
+    if (target >= line.size() || !IsWordCharacter(line[target])) {
+        if (target == 0 || !IsWordCharacter(line[target - 1])) {
+            return;
+        }
+        --target;
+    }
+
+    size_t start = target;
+    while (start > 0 && IsWordCharacter(line[start - 1])) {
+        --start;
+    }
+    size_t end = target;
+    while (end < line.size() && IsWordCharacter(line[end])) {
+        ++end;
+    }
+
+    SaveSnapshot();
+    for (size_t x = start; x < end; ++x) {
+        toggle_character(line[x]);
+    }
     is_dirty_ = true;
     UpdateScroll();
 }
@@ -772,6 +964,10 @@ bool EditorComponent::OnEvent(ftxui::Event event) {
         ToggleComment();
         return true;
     }
+    if (input == "\x14" || input == "Ctrl+T") {
+        ToggleCase();
+        return true;
+    }
 
     if (event == ftxui::Event::Tab) {
         const int configured_tab_size = config_ ? config_->tab_size : 4;
@@ -781,6 +977,10 @@ bool EditorComponent::OnEvent(ftxui::Event event) {
     }
 
     if (event.is_character()) {
+        if ((!config_ || config_->auto_pairing) && HandleAutoPairCharacter(event.input())) {
+            return true;
+        }
+
         // Insert incoming characters at the current cursor position.
         SaveSnapshotForTyping(event.input());
         if (HasSelection()) {
@@ -788,6 +988,7 @@ bool EditorComponent::OnEvent(ftxui::Event event) {
         }
         text_lines_[cursor_y_].insert(cursor_x_, event.input());
         cursor_x_ += event.input().size();
+        is_dirty_ = true;
         ClearSelection();
         UpdateScroll();
         return true;
@@ -838,21 +1039,7 @@ bool EditorComponent::OnEvent(ftxui::Event event) {
     }
 
     if (event == ftxui::Event::Return) {
-        EndTypingGroup();
-        SaveSnapshot();
-        if (HasSelection()) {
-            DeleteSelectionWithoutSnapshot();
-        }
-
-        // Split the active line at the current cursor position.
-        std::string next_line = text_lines_[cursor_y_].substr(cursor_x_);
-        text_lines_[cursor_y_].erase(cursor_x_);
-        text_lines_.insert(text_lines_.begin() + cursor_y_ + 1, std::move(next_line));
-        cursor_y_++;
-        cursor_x_ = 0;
-        ClearSelection();
-        UpdateScroll();
-        return true;
+        return HandleAutoIndentReturn();
     }
 
     NavigationAction action = NavigationAction::Left;

@@ -51,6 +51,8 @@ TextltApp::TextltApp()
               " Toggle File Explorer ",
               " Smart Word Wrap [ ] ",
               " Syntax Highlighting [X] ",
+              " Auto Pairing [X] ",
+              " Smart Auto-Indent [X] ",
               " Tab Size: 4 spaces ",
               " Convert Tabs to Spaces ",
               " Theme... ",
@@ -535,7 +537,7 @@ void TextltApp::SaveConfig() {
 }
 
 void TextltApp::UpdateOptionsMenuLabels() {
-    if (dropdown_entries_.size() <= 2 || dropdown_entries_[2].size() <= 5) {
+    if (dropdown_entries_.size() <= 2 || dropdown_entries_[2].size() <= 6) {
         return;
     }
 
@@ -545,7 +547,13 @@ void TextltApp::UpdateOptionsMenuLabels() {
     dropdown_entries_[2][3] = editor_config_.syntax_highlighting
         ? " Syntax Highlighting [X] "
         : " Syntax Highlighting [ ] ";
-    dropdown_entries_[2][4] =
+    dropdown_entries_[2][4] = editor_config_.auto_pairing
+        ? " Auto Pairing [X] "
+        : " Auto Pairing [ ] ";
+    dropdown_entries_[2][5] = editor_config_.auto_indent
+        ? " Smart Auto-Indent [X] "
+        : " Smart Auto-Indent [ ] ";
+    dropdown_entries_[2][6] =
         " Tab Size: " + std::to_string(editor_config_.tab_size) + " spaces ";
 
     if (active_dropdown_ == 2) {
@@ -710,17 +718,29 @@ void TextltApp::HandleOptionsMenu(int item) {
         SaveConfig();
         screen_.PostEvent(ftxui::Event::Custom);
     } else if (item == 4) {
+        editor_config_.auto_pairing = !editor_config_.auto_pairing;
+        active_action_ = editor_config_.auto_pairing ? "Auto Pairing enabled" : "Auto Pairing disabled";
+        UpdateOptionsMenuLabels();
+        SaveConfig();
+        screen_.PostEvent(ftxui::Event::Custom);
+    } else if (item == 5) {
+        editor_config_.auto_indent = !editor_config_.auto_indent;
+        active_action_ = editor_config_.auto_indent ? "Smart Auto-Indent enabled" : "Smart Auto-Indent disabled";
+        UpdateOptionsMenuLabels();
+        SaveConfig();
+        screen_.PostEvent(ftxui::Event::Custom);
+    } else if (item == 6) {
         editor_config_.tab_size = editor_config_.tab_size == 2 ? 4 : 2;
         active_action_ = "Tab size set to " + std::to_string(editor_config_.tab_size) + " spaces";
         UpdateOptionsMenuLabels();
         SaveConfig();
         screen_.PostEvent(ftxui::Event::Custom);
-    } else if (item == 5) {
+    } else if (item == 7) {
         auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
         editor_ptr->ConvertTabsToSpaces();
         active_action_ = "Converted tabs to spaces";
         screen_.PostEvent(ftxui::Event::Custom);
-    } else if (item == 6) {
+    } else if (item == 8) {
         OpenThemeDialog();
         return;
     }

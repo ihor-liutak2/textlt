@@ -35,6 +35,7 @@ public:
     void InsertText(const std::string& text);
     void ConvertTabsToSpaces();
     void ToggleComment();
+    void ToggleCase();
     void Undo();
     void Redo();
     void HighlightMatches(const std::string& query);
@@ -90,6 +91,8 @@ private:
     void SaveSnapshotForTyping(const std::string& input);
     void EndTypingGroup();
     void DeleteSelectionWithoutSnapshot();
+    bool HandleAutoPairCharacter(const std::string& input);
+    bool HandleAutoIndentReturn();
     size_t FindMatchAtOrAfterCursor() const;
     void MoveCursorToSearchMatch(const SearchMatch& match);
     std::string GetCommentPrefix() const;

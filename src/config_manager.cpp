@@ -91,6 +91,8 @@ EditorConfig ConfigManager::Load() const {
     config.smart_word_wrap = ExtractBool(content, "smart_word_wrap", config.smart_word_wrap);
     config.syntax_highlighting = ExtractBool(
         content, "syntax_highlighting", config.syntax_highlighting);
+    config.auto_pairing = ExtractBool(content, "auto_pairing", config.auto_pairing);
+    config.auto_indent = ExtractBool(content, "auto_indent", config.auto_indent);
     config.tab_size = ExtractInt(content, "tab_size", config.tab_size);
     if (config.tab_size != 2 && config.tab_size != 4) {
         config.tab_size = 4;
@@ -111,6 +113,8 @@ void ConfigManager::Save(const EditorConfig& config) const {
     file << "  \"show_file_explorer\": " << (config.show_file_explorer ? "true" : "false") << ",\n";
     file << "  \"smart_word_wrap\": " << (config.smart_word_wrap ? "true" : "false") << ",\n";
     file << "  \"syntax_highlighting\": " << (config.syntax_highlighting ? "true" : "false") << ",\n";
+    file << "  \"auto_pairing\": " << (config.auto_pairing ? "true" : "false") << ",\n";
+    file << "  \"auto_indent\": " << (config.auto_indent ? "true" : "false") << ",\n";
     file << "  \"tab_size\": " << config.tab_size << ",\n";
     file << "  \"active_theme_name\": \"" << config.active_theme_name << "\"\n";
     file << "}\n";
