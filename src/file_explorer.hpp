@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <chrono>
 #include <string>
 #include <vector>
 
@@ -47,6 +48,8 @@ public:
 
 private:
     void OpenSelectedEntry();
+    bool OpenDirectoryEntry(int entry_index);
+    int EntryIndexAtMouse(const ftxui::Mouse& mouse) const;
     void RebuildEntries();
 
     FileOpenCallback on_file_open_;
@@ -54,6 +57,9 @@ private:
     std::vector<std::filesystem::path> entry_paths_;
     std::vector<std::string> entry_labels_;
     int selected_entry_ = 0;
+    int last_clicked_entry_ = -1;
+    std::chrono::steady_clock::time_point last_click_time_{};
+    ftxui::Box menu_box_;
     ftxui::Component menu_;
 };
 

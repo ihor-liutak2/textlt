@@ -1,5 +1,7 @@
 #include "file_dialog.hpp"
 
+#include <filesystem>
+#include <system_error>
 #include <utility>
 
 #include "ftxui/component/component_options.hpp"
@@ -7,6 +9,36 @@
 #include "file_utils.hpp"
 
 namespace textlt {
+namespace {
+
+bool HasTrailingSeparator(const std::string& path) {
+    return !path.empty() && (path.back() == '/' || path.back() == '\\');
+}
+
+std::string SaveAsDisplayPath(const std::string& current_path) {
+    if (current_path.empty() ||
+        current_path == "Untitled" ||
+        current_path == "untitled.txt") {
+        return "";
+    }
+
+    std::error_code error;
+    const std::filesystem::path path(current_path);
+    std::filesystem::path display_path = path.is_absolute()
+        ? path
+        : std::filesystem::absolute(path, error);
+    if (error) {
+        display_path = path;
+    }
+
+    std::string result = display_path.lexically_normal().string();
+    if (HasTrailingSeparator(current_path) && !HasTrailingSeparator(result)) {
+        result += std::filesystem::path::preferred_separator;
+    }
+    return result;
+}
+
+} // namespace
 
 FileDialog::FileDialog(const Theme* theme, ConfirmCallback on_confirm)
     : on_confirm_(std::move(on_confirm)),
@@ -42,7 +74,7 @@ void FileDialog::Open(FilePromptMode mode, const std::string& current_path) {
         path_.clear();
     } else {
         title_ = "Save File";
-        path_ = current_path == "untitled.txt" ? std::string() : current_path;
+        path_ = SaveAsDisplayPath(current_path);
     }
     
     // Configure standard layout options for the input field component

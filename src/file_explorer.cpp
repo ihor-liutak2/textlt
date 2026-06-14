@@ -1,6 +1,7 @@
 #include "file_explorer.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <system_error>
 #include <utility>
 
@@ -33,12 +34,37 @@ ftxui::Element FileExplorer::Render() {
         text(" Files ") | bold,
         text(current_directory_.filename().string()) | dim,
         separator(),
-        menu_->Render() | frame | yflex,
+        menu_->Render() | frame | reflect(menu_box_) | yflex,
     }) |
         border;
 }
 
 bool FileExplorer::OnEvent(ftxui::Event event) {
+    if (event.is_mouse() &&
+        event.mouse().button == ftxui::Mouse::Left &&
+        event.mouse().motion == ftxui::Mouse::Pressed) {
+        const int clicked_entry = EntryIndexAtMouse(event.mouse());
+        if (clicked_entry >= 0) {
+            const auto now = std::chrono::steady_clock::now();
+            const auto duration =
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    now - last_click_time_).count();
+
+            selected_entry_ = clicked_entry;
+            FocusMenu();
+            if (duration < 300 && clicked_entry == last_clicked_entry_) {
+                last_clicked_entry_ = -1;
+                last_click_time_ = {};
+                OpenDirectoryEntry(clicked_entry);
+                return true;
+            }
+
+            last_clicked_entry_ = clicked_entry;
+            last_click_time_ = now;
+            return true;
+        }
+    }
+
     return ComponentBase::OnEvent(event);
 }
 
@@ -63,17 +89,44 @@ void FileExplorer::OpenSelectedEntry() {
     const std::filesystem::path selected_path = entry_paths_[selected_entry_];
     std::error_code error;
     if (std::filesystem::is_directory(selected_path, error)) {
-        current_directory_ = std::filesystem::canonical(selected_path, error);
-        if (error) {
-            current_directory_ = selected_path;
-        }
-        RebuildEntries();
+        OpenDirectoryEntry(selected_entry_);
         return;
     }
 
     if (std::filesystem::is_regular_file(selected_path, error) && on_file_open_) {
         on_file_open_(selected_path);
     }
+}
+
+bool FileExplorer::OpenDirectoryEntry(int entry_index) {
+    if (entry_index < 0 || entry_index >= static_cast<int>(entry_paths_.size())) {
+        return false;
+    }
+
+    const std::filesystem::path selected_path = entry_paths_[entry_index];
+    std::error_code error;
+    if (!std::filesystem::is_directory(selected_path, error)) {
+        return false;
+    }
+
+    current_directory_ = std::filesystem::canonical(selected_path, error);
+    if (error) {
+        current_directory_ = selected_path;
+    }
+    RebuildEntries();
+    return true;
+}
+
+int FileExplorer::EntryIndexAtMouse(const ftxui::Mouse& mouse) const {
+    if (!menu_box_.Contain(mouse.x, mouse.y)) {
+        return -1;
+    }
+
+    const int entry_index = mouse.y - menu_box_.y_min;
+    if (entry_index < 0 || entry_index >= static_cast<int>(entry_paths_.size())) {
+        return -1;
+    }
+    return entry_index;
 }
 
 void FileExplorer::RebuildEntries() {

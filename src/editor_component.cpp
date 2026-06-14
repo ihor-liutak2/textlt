@@ -341,7 +341,7 @@ void EditorComponent::LoadFromFile(const std::string& path) {
 void EditorComponent::NewFile(const std::string& path) {
     text_lines_.clear();
     text_lines_.push_back("");
-    current_filepath_ = path.empty() ? "untitled.txt" : path;
+    current_filepath_ = path.empty() ? "Untitled" : path;
     cursor_x_ = 0;
     cursor_y_ = 0;
     scroll_x_ = 0;

@@ -98,7 +98,7 @@ private:
     std::vector<EditorState> undo_stack_;
     std::vector<EditorState> redo_stack_;
     std::vector<SearchMatch> search_matches_;
-    std::string current_filepath_ = "untitled.txt";
+    std::string current_filepath_ = "Untitled";
     EditorConfig* config_ = nullptr;
     const Theme* theme_ = nullptr;
     size_t cursor_x_ = 0;

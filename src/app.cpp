@@ -203,7 +203,7 @@ void TextltApp::OpenFileDialog(FilePromptMode mode) {
     std::string default_path = std::static_pointer_cast<EditorComponent>(text_editor_)->CurrentFilePath();
     
     // If the active file has no path or is an untitled draft, sync with the File Explorer selection
-    if (default_path.empty() || default_path == "untitled.txt") {
+    if (default_path.empty() || default_path == "Untitled" || default_path == "untitled.txt") {
         auto explorer_ptr = std::static_pointer_cast<FileExplorer>(file_explorer_);
         
         // Dynamic path acquisition directly from the highlighted file tree node element
@@ -492,7 +492,7 @@ void TextltApp::OpenExplorerFile(const std::filesystem::path& path) {
 void TextltApp::SaveCurrentFile() {
     const std::string& current_path =
         std::static_pointer_cast<EditorComponent>(text_editor_)->CurrentFilePath();
-    if (current_path.empty() || current_path == "untitled.txt") {
+    if (current_path.empty() || current_path == "Untitled" || current_path == "untitled.txt") {
         OpenFileDialog(FilePromptMode::SaveAs);
         return;
     }
@@ -570,6 +570,15 @@ void TextltApp::RunDropdownAction() {
 }
     
     void TextltApp::HandleFileMenu(int item) {
+    if (item == 0) {
+        CloseDropdown();
+        auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+        editor_ptr->NewFile("");
+        active_action_ = "New file";
+        FocusEditor();
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
     if (item == 1) { OpenFileDialog(FilePromptMode::Open); return; }
     if (item == 2) { SaveCurrentFile(); return; }
     if (item == 3) { OpenFileDialog(FilePromptMode::SaveAs); return; }
