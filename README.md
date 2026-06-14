@@ -95,7 +95,10 @@ Open the interactive **Help** window inside the editor at any time to view the l
 | Language / Context | File Extensions / Target Matchers | Comment Token |
 | --- | --- | --- |
 | **C++ / C** | `.cpp`, `.hpp`, `.h`, `.c`, `.cc`, `.cxx` | `//` |
+| **Go** | `.go` | `//` |
+| **Rust** | `.rs` | `//` |
 | **PHP** | `.php` *(Supports Nested HTML/CSS/JS Heredocs)* | `//` |
+| **Laravel Blade** | `.blade.php` *(HTML fallback plus Blade directives and PHP echo expressions)* | `{{-- --}}` / PHP |
 | **JavaScript / TypeScript** | `.js`, `.mjs`, `.ts`, `.mts`, `.jsx`, `.tsx` | `//` |
 | **Python** | `.py` | `#` |
 | **Ruby** | `.rb`, `Gemfile` | `#` |

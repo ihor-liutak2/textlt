@@ -16,6 +16,7 @@ enum State {
 };
 
 enum class Language {
+    Blade,
     Cpp,
     Csharp,
     Css,
@@ -28,10 +29,12 @@ enum class Language {
     Javascript,
     Jsx,
     Json,
+    Go,
     Php,
     Plain,
     Python,
     Ruby,
+    Rust,
     Sql,
     Typescript,
     Tsx,
@@ -61,6 +64,10 @@ Language LanguageFromPath(const std::string& path) {
     if (filename == "Gemfile") {
         return Language::Ruby;
     }
+    if (filename.size() >= 10 &&
+        filename.compare(filename.size() - 10, 10, ".blade.php") == 0) {
+        return Language::Blade;
+    }
     if (filename == ".env" || filename == ".env.local" ||
         filename == ".env.development" || filename == ".env.production" ||
         (filename.size() >= 4 &&
@@ -78,6 +85,9 @@ Language LanguageFromPath(const std::string& path) {
     }
     if (extension == ".gql" || extension == ".graphql") {
         return Language::Graphql;
+    }
+    if (extension == ".go") {
+        return Language::Go;
     }
     if (extension == ".html" || extension == ".htm") {
         return Language::Html;
@@ -102,6 +112,9 @@ Language LanguageFromPath(const std::string& path) {
     }
     if (extension == ".rb") {
         return Language::Ruby;
+    }
+    if (extension == ".rs") {
+        return Language::Rust;
     }
     if (extension == ".sql") {
         return Language::Sql;
@@ -251,6 +264,12 @@ size_t ParseQuotedStringEnd(const std::string& line, size_t index) {
         ++index;
     }
     return index;
+}
+
+size_t ParseRawStringEnd(const std::string& line, size_t index) {
+    const char quote = line[index];
+    const size_t close = line.find(quote, index + 1);
+    return close == std::string::npos ? line.size() : close + 1;
 }
 
 size_t SkipWhitespace(const std::string& line, size_t index) {
@@ -454,6 +473,33 @@ const std::unordered_set<std::string>& JavaTypes() {
     return types;
 }
 
+const std::unordered_set<std::string>& GoKeywords() {
+    static const std::unordered_set<std::string> keywords = {
+        "package",
+        "import",
+        "func",
+        "return",
+        "var",
+        "type",
+        "struct",
+        "interface",
+        "chan",
+        "go",
+        "select",
+        "defer",
+        "if",
+        "else",
+        "for",
+        "range",
+        "switch",
+        "case",
+        "default",
+        "map",
+        "const",
+    };
+    return keywords;
+}
+
 const std::unordered_set<std::string>& PhpKeywords() {
     static const std::unordered_set<std::string> keywords = {
         "function",
@@ -478,6 +524,90 @@ const std::unordered_set<std::string>& PhpKeywords() {
         "array",
     };
     return keywords;
+}
+
+const std::unordered_set<std::string>& RustKeywords() {
+    static const std::unordered_set<std::string> keywords = {
+        "fn",
+        "let",
+        "mut",
+        "match",
+        "impl",
+        "trait",
+        "struct",
+        "enum",
+        "pub",
+        "use",
+        "mod",
+        "crate",
+        "return",
+        "if",
+        "else",
+        "loop",
+        "while",
+        "for",
+        "in",
+        "move",
+        "async",
+        "await",
+        "type",
+    };
+    return keywords;
+}
+
+const std::unordered_set<std::string>& RustTypes() {
+    static const std::unordered_set<std::string> types = {
+        "bool",
+        "char",
+        "str",
+        "String",
+        "usize",
+        "isize",
+        "u8",
+        "u16",
+        "u32",
+        "u64",
+        "u128",
+        "i8",
+        "i16",
+        "i32",
+        "i64",
+        "i128",
+        "f32",
+        "f64",
+        "Self",
+    };
+    return types;
+}
+
+const std::unordered_set<std::string>& BladeDirectives() {
+    static const std::unordered_set<std::string> directives = {
+        "if",
+        "else",
+        "elseif",
+        "endif",
+        "foreach",
+        "endforeach",
+        "forelse",
+        "empty",
+        "endforelse",
+        "for",
+        "endfor",
+        "while",
+        "endwhile",
+        "extends",
+        "section",
+        "endsection",
+        "yield",
+        "include",
+        "auth",
+        "endauth",
+        "guest",
+        "endguest",
+        "vite",
+        "livewire",
+    };
+    return directives;
 }
 
 const std::unordered_set<std::string>& PythonKeywords() {
@@ -1167,6 +1297,136 @@ std::vector<SyntaxHighlighter::Token> TokenizeSql(const std::string& line) {
     return tokens;
 }
 
+std::vector<SyntaxHighlighter::Token> TokenizeGo(const std::string& line) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    size_t index = 0;
+    while (index < line.size()) {
+        if (StartsWith(line, index, "//")) {
+            PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Comment);
+            break;
+        }
+
+        if (StartsWith(line, index, "/*")) {
+            const size_t end = FindCommentEnd(line, index + 2, "*/");
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::Comment);
+            index = end;
+            continue;
+        }
+
+        if (line[index] == '"' || line[index] == '\'' || line[index] == '`') {
+            const size_t end = line[index] == '`'
+                ? ParseRawStringEnd(line, index)
+                : ParseQuotedStringEnd(line, index);
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+            index = end;
+            continue;
+        }
+
+        if (IsNumberStart(line, index)) {
+            const size_t start = index;
+            index = ParseNumberEnd(line, index);
+            PushToken(tokens, start, index, SyntaxHighlighter::Style::Number);
+            continue;
+        }
+
+        if (IsIdentifierStart(line[index])) {
+            const size_t start = index;
+            while (index < line.size() && IsIdentifierBody(line[index])) {
+                ++index;
+            }
+            const std::string word = line.substr(start, index - start);
+            const SyntaxHighlighter::Style style =
+                GoKeywords().find(word) != GoKeywords().end()
+                    ? SyntaxHighlighter::Style::Keyword
+                    : SyntaxHighlighter::Style::Normal;
+            PushToken(tokens, start, index, style);
+            continue;
+        }
+
+        PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+        ++index;
+    }
+
+    return tokens;
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizeRust(const std::string& line) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    size_t index = 0;
+    while (index < line.size()) {
+        if (StartsWith(line, index, "//")) {
+            PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Comment);
+            break;
+        }
+
+        if (StartsWith(line, index, "/*")) {
+            const size_t end = FindCommentEnd(line, index + 2, "*/");
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::Comment);
+            index = end;
+            continue;
+        }
+
+        if (line[index] == '"' || line[index] == '\'') {
+            if (line[index] == '\'' && index + 1 < line.size() &&
+                IsIdentifierStart(line[index + 1])) {
+                size_t lifetime_end = index + 2;
+                while (lifetime_end < line.size() && IsIdentifierBody(line[lifetime_end])) {
+                    ++lifetime_end;
+                }
+                if (lifetime_end >= line.size() || line[lifetime_end] != '\'') {
+                    PushToken(tokens, index, lifetime_end, SyntaxHighlighter::Style::Type);
+                    index = lifetime_end;
+                    continue;
+                }
+            }
+
+            const size_t end = ParseQuotedStringEnd(line, index);
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+            index = end;
+            continue;
+        }
+
+        if (IsNumberStart(line, index)) {
+            const size_t start = index;
+            index = ParseNumberEnd(line, index);
+            PushToken(tokens, start, index, SyntaxHighlighter::Style::Number);
+            continue;
+        }
+
+        if (IsIdentifierStart(line[index])) {
+            const size_t start = index;
+            while (index < line.size() && IsIdentifierBody(line[index])) {
+                ++index;
+            }
+
+            if (index < line.size() && line[index] == '!') {
+                PushToken(tokens, start, index + 1, SyntaxHighlighter::Style::Keyword);
+                ++index;
+                continue;
+            }
+
+            const std::string word = line.substr(start, index - start);
+            SyntaxHighlighter::Style style = SyntaxHighlighter::Style::Normal;
+            if (RustKeywords().find(word) != RustKeywords().end()) {
+                style = SyntaxHighlighter::Style::Keyword;
+            } else if (RustTypes().find(word) != RustTypes().end()) {
+                style = SyntaxHighlighter::Style::Type;
+            }
+            PushToken(tokens, start, index, style);
+            continue;
+        }
+
+        PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+        ++index;
+    }
+
+    return tokens;
+}
+
 void PushToken(std::vector<SyntaxHighlighter::Token>& tokens,
                size_t start,
                size_t end,
@@ -1181,6 +1441,14 @@ void PushToken(std::vector<SyntaxHighlighter::Token>& tokens,
         return;
     }
     tokens.push_back({start, end - start, style});
+}
+
+void PushShiftedTokens(std::vector<SyntaxHighlighter::Token>& tokens,
+                       const std::vector<SyntaxHighlighter::Token>& source,
+                       size_t offset) {
+    for (const SyntaxHighlighter::Token& token : source) {
+        PushToken(tokens, offset + token.start, offset + token.start + token.length, token.style);
+    }
 }
 
 bool IsHtmlNameStart(char character) {
@@ -1268,6 +1536,147 @@ std::vector<SyntaxHighlighter::Token> TokenizeHtml(const std::string& line) {
             PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
             ++index;
         }
+    }
+
+    return tokens;
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizePhpExpression(const std::string& expression) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(expression.size() / 4 + 1);
+
+    size_t index = 0;
+    while (index < expression.size()) {
+        if (StartsWith(expression, index, "//")) {
+            PushToken(tokens, index, expression.size(), SyntaxHighlighter::Style::Comment);
+            break;
+        }
+
+        if (StartsWith(expression, index, "/*")) {
+            const size_t end = FindCommentEnd(expression, index + 2, "*/");
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::Comment);
+            index = end;
+            continue;
+        }
+
+        if (expression[index] == '#') {
+            PushToken(tokens, index, expression.size(), SyntaxHighlighter::Style::Comment);
+            break;
+        }
+
+        if (expression[index] == '"' || expression[index] == '\'' || expression[index] == '`') {
+            const size_t end = ParseQuotedStringEnd(expression, index);
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+            index = end;
+            continue;
+        }
+
+        if (expression[index] == '$' && index + 1 < expression.size() &&
+            IsIdentifierStart(expression[index + 1])) {
+            const size_t start = index;
+            index += 2;
+            while (index < expression.size() && IsIdentifierBody(expression[index])) {
+                ++index;
+            }
+            PushToken(tokens, start, index, SyntaxHighlighter::Style::Type);
+            continue;
+        }
+
+        if (IsNumberStart(expression, index)) {
+            const size_t start = index;
+            index = ParseNumberEnd(expression, index);
+            PushToken(tokens, start, index, SyntaxHighlighter::Style::Number);
+            continue;
+        }
+
+        if (IsIdentifierStart(expression[index])) {
+            const size_t start = index;
+            while (index < expression.size() && IsIdentifierBody(expression[index])) {
+                ++index;
+            }
+            const std::string word = expression.substr(start, index - start);
+            const SyntaxHighlighter::Style style =
+                PhpKeywords().find(word) != PhpKeywords().end()
+                    ? SyntaxHighlighter::Style::Keyword
+                    : SyntaxHighlighter::Style::Normal;
+            PushToken(tokens, start, index, style);
+            continue;
+        }
+
+        PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+        ++index;
+    }
+
+    return tokens;
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizeBlade(const std::string& line) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    size_t ambient_start = 0;
+    size_t index = 0;
+    while (index < line.size()) {
+        const bool escaped_echo = StartsWith(line, index, "{{");
+        const bool unescaped_echo = StartsWith(line, index, "{!!");
+        if (escaped_echo || unescaped_echo) {
+            if (ambient_start < index) {
+                PushShiftedTokens(
+                    tokens,
+                    TokenizeHtml(line.substr(ambient_start, index - ambient_start)),
+                    ambient_start);
+            }
+
+            const std::string close_marker = escaped_echo ? "}}" : "!!}";
+            const size_t open_end = index + (escaped_echo ? 2 : 3);
+            const size_t close = line.find(close_marker, open_end);
+            const size_t close_start = close == std::string::npos ? line.size() : close;
+            const size_t close_end =
+                close == std::string::npos ? line.size() : close + close_marker.size();
+
+            PushToken(tokens, index, open_end, SyntaxHighlighter::Style::Normal);
+            PushShiftedTokens(
+                tokens,
+                TokenizePhpExpression(line.substr(open_end, close_start - open_end)),
+                open_end);
+            if (close_start < close_end) {
+                PushToken(tokens, close_start, close_end, SyntaxHighlighter::Style::Normal);
+            }
+
+            index = close_end;
+            ambient_start = index;
+            continue;
+        }
+
+        if (line[index] == '@' && index + 1 < line.size() && IsIdentifierStart(line[index + 1])) {
+            size_t directive_end = index + 2;
+            while (directive_end < line.size() && IsIdentifierBody(line[directive_end])) {
+                ++directive_end;
+            }
+
+            const std::string directive = line.substr(index + 1, directive_end - index - 1);
+            if (BladeDirectives().find(directive) != BladeDirectives().end()) {
+                if (ambient_start < index) {
+                    PushShiftedTokens(
+                        tokens,
+                        TokenizeHtml(line.substr(ambient_start, index - ambient_start)),
+                        ambient_start);
+                }
+                PushToken(tokens, index, directive_end, SyntaxHighlighter::Style::Keyword);
+                index = directive_end;
+                ambient_start = index;
+                continue;
+            }
+        }
+
+        ++index;
+    }
+
+    if (ambient_start < line.size()) {
+        PushShiftedTokens(
+            tokens,
+            TokenizeHtml(line.substr(ambient_start)),
+            ambient_start);
     }
 
     return tokens;
@@ -1718,6 +2127,9 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
         }
     }
 
+    if (language == Language::Blade) {
+        return TokenizeBlade(line);
+    }
     if (language == Language::Csharp) {
         return TokenizeCsharp(line);
     }
@@ -1729,6 +2141,9 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
     }
     if (language == Language::Graphql) {
         return TokenizeGraphql(line);
+    }
+    if (language == Language::Go) {
+        return TokenizeGo(line);
     }
     if (language == Language::Html) {
         return TokenizeHtml(line);
@@ -1744,6 +2159,9 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
     }
     if (language == Language::Ruby) {
         return TokenizeRuby(line);
+    }
+    if (language == Language::Rust) {
+        return TokenizeRust(line);
     }
     if (language == Language::Sql) {
         return TokenizeSql(line);

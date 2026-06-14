@@ -401,6 +401,9 @@ std::string TextltApp::FileTypeLabel(const std::string& file_path) const {
     if (extension == ".css") {
         return "CSS Stylesheet";
     }
+    if (extension == ".go") {
+        return "Go Source";
+    }
     if (extension == ".js") {
         return "JavaScript Source";
     }
@@ -414,7 +417,15 @@ std::string TextltApp::FileTypeLabel(const std::string& file_path) const {
         return "React TSX Source";
     }
     if (extension == ".php") {
+        const std::string filename = std::filesystem::path(file_path).filename().string();
+        if (filename.size() >= 10 &&
+            filename.compare(filename.size() - 10, 10, ".blade.php") == 0) {
+            return "Laravel Blade Template";
+        }
         return "PHP Script";
+    }
+    if (extension == ".rs") {
+        return "Rust Source";
     }
     if (extension == ".java") {
         return "Java Source";

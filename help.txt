@@ -36,10 +36,13 @@ Syntax Highlighting
   Language        Supported Extensions / Filenames
   C / C++         .c, .cpp, .hpp, .h
   C#              .cs
+  Go              .go
+  Rust            .rs
   JavaScript      .js, .mjs, .cjs
   TypeScript      .ts, .mts
   React JSX/TSX   .jsx, .tsx
   GraphQL         .graphql, .gql
+  Laravel Blade   .blade.php
   PHP             .php (with HTML/CSS/JS Heredoc)
   Python          .py
   Ruby            .rb, Gemfile
