@@ -6,6 +6,11 @@
 #include "ftxui/component/mouse.hpp"
 
 namespace textlt {
+namespace {
+
+constexpr int kScrollbarColumns = 2;
+
+} // namespace
 
 bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
     auto mouse = event.mouse();
@@ -21,8 +26,12 @@ bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
         mouse.x >= editor_box_.x_min && mouse.x <= editor_box_.x_max &&
         mouse.y >= viewport_y_min && mouse.y <= viewport_y_max;
     const bool needs_scrollbar = text_lines_.size() > visible_height;
+    const int scrollbar_x_min = editor_box_.x_max - kScrollbarColumns + 1;
     const bool on_scrollbar_column =
-        needs_scrollbar && inside_visible_viewport && mouse.x == editor_box_.x_max;
+        needs_scrollbar &&
+        inside_visible_viewport &&
+        mouse.x >= scrollbar_x_min &&
+        mouse.x <= editor_box_.x_max;
 
     auto max_scroll_y = [&]() {
         return text_lines_.size() > visible_height
@@ -149,6 +158,7 @@ bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
         if (on_scrollbar_column) {
             is_dragging_scrollbar_ = true;
             mouse_selecting_ = false;
+            has_selection_ = false;
             jump_to_scrollbar_y(mouse.y);
             drag_start_y_ = mouse.y;
             drag_start_scroll_y_ = scroll_y_;

@@ -11,6 +11,8 @@
 namespace textlt {
 namespace {
 
+constexpr size_t kScrollbarColumns = 2;
+
 struct WrapSegment {
     size_t start = 0;
     size_t end = 0;
@@ -126,15 +128,16 @@ ftxui::Element EditorComponent::RenderViewport() {
 
     auto render_scrollbar_cell = [&](size_t viewport_y) {
         if (!needs_scrollbar) {
-            return ftxui::text(" ") | ftxui::bgcolor(theme.background);
+            return ftxui::text(std::string(kScrollbarColumns, ' ')) |
+                ftxui::bgcolor(theme.background);
         }
 
         if (viewport_y >= slider_top && viewport_y < slider_top + slider_height) {
-            return ftxui::text("█") |
-                ftxui::color(theme.selection_fg) |
-                ftxui::bgcolor(theme.selection_bg);
+            return ftxui::text(std::string(kScrollbarColumns, ' ')) |
+                ftxui::bgcolor(theme.modal_selected_item_bg) |
+                ftxui::color(theme.modal_selected_item_fg);
         }
-        return ftxui::text("│") | ftxui::color(theme.gutter) | ftxui::dim;
+        return ftxui::text("│ ") | ftxui::color(theme.gutter) | ftxui::dim;
     };
 
     auto render_line_segment = [&](
@@ -292,7 +295,6 @@ size_t EditorComponent::VisibleHeight() const {
 }
 
 size_t EditorComponent::VisibleTextWidth() const {
-    static constexpr size_t kScrollbarColumns = 1;
     const size_t total_width = editor_box_.x_max >= editor_box_.x_min
         ? static_cast<size_t>(editor_box_.x_max - editor_box_.x_min + 1)
         : 80;
