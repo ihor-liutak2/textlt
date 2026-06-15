@@ -1,10 +1,17 @@
 #pragma once
 
+#include <cstddef>
 #include <filesystem>
 #include <string>
 #include <vector>
 
 namespace textlt {
+
+struct FavoriteEntry {
+    std::string path;
+    size_t row = 0;
+    size_t column = 0;
+};
 
 struct EditorConfig {
     bool show_line_numbers = true;
@@ -17,11 +24,13 @@ struct EditorConfig {
     bool search_whole_word = false;
     int tab_size = 4;
     std::string active_theme_name = "Blueprint";
-    std::vector<std::string> favorites_;
+    std::vector<FavoriteEntry> favorites_;
 
     bool AddFavorite(const std::string& path);
     bool RemoveFavorite(const std::string& path);
     bool IsFavorite(const std::string& path) const;
+    const FavoriteEntry* FindFavorite(const std::string& path) const;
+    bool UpdateFavoriteCursor(const std::string& path, size_t row, size_t column);
     bool SetActiveThemeName(const std::string& name);
 
     void SetConfigPath(std::filesystem::path path);

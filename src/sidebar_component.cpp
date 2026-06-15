@@ -447,8 +447,8 @@ void SidebarPanel::RebuildFavoriteEntries() {
     }
 
     std::vector<std::string> unique_favorites;
-    for (const std::string& favorite : config_->favorites_) {
-        const std::string normalized_path = EditorConfig::NormalizeFavoritePath(favorite);
+    for (const FavoriteEntry& favorite : config_->favorites_) {
+        const std::string normalized_path = EditorConfig::NormalizeFavoritePath(favorite.path);
         if (!normalized_path.empty() &&
             std::find(unique_favorites.begin(), unique_favorites.end(), normalized_path) ==
                 unique_favorites.end()) {

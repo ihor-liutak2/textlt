@@ -238,6 +238,18 @@ void EditorComponent::JumpToLine(int line_number) {
     UpdateScroll();
 }
 
+void EditorComponent::SetCursorPosition(size_t row, size_t column) {
+    if (text_lines_.empty()) {
+        text_lines_.push_back("");
+    }
+
+    EndTypingGroup();
+    cursor_y_ = std::min(row, text_lines_.size() - 1);
+    cursor_x_ = std::min(column, text_lines_[cursor_y_].size());
+    ClearSelection();
+    UpdateScroll();
+}
+
 bool EditorComponent::HasSelection() const {
     return has_selection_ &&
         (cursor_x_ != selection_anchor_x_ || cursor_y_ != selection_anchor_y_);

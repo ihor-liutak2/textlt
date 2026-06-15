@@ -38,6 +38,7 @@ public:
     size_t GetLineCount() const;
     void SetBottomOverlayRows(size_t rows);
     void JumpToLine(int line_number);
+    void SetCursorPosition(size_t row, size_t column);
 
     bool HasSelection() const;
     std::string GetSelectedText() const;

@@ -1,5 +1,6 @@
 #include "app.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -379,6 +380,7 @@ void TextltApp::RequestExit() {
         ShowExitConfirmationDialog();
         return;
     }
+    PersistActiveFavoriteCursor();
     screen_.Exit();
 }
 
@@ -394,6 +396,7 @@ void TextltApp::SaveAndExit() {
 
     std::string error;
     if (SaveFile(current_path, error)) {
+        PersistActiveFavoriteCursor();
         screen_.Exit();
         return;
     }
@@ -403,6 +406,7 @@ void TextltApp::SaveAndExit() {
 }
 
 void TextltApp::DiscardAndExit() {
+    PersistActiveFavoriteCursor();
     screen_.Exit();
 }
 
@@ -616,7 +620,10 @@ bool TextltApp::SaveFile(const std::string& path, std::string& error) {
 
 bool TextltApp::OpenFile(const std::string& path, std::string& error) {
     try {
-        std::static_pointer_cast<EditorComponent>(text_editor_)->LoadFromFile(path);
+        PersistActiveFavoriteCursor();
+        auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+        editor_ptr->LoadFromFile(path);
+        RestoreFavoriteCursor(path);
         git_manager_.SetWorkingDirectory(std::filesystem::path(path).parent_path());
         active_action_ = "Opened " + path;
         return true;
@@ -685,6 +692,7 @@ bool TextltApp::ConfirmFileDialog(
 
     if (success && mode == FilePromptMode::SaveAs && exit_after_save_as_) {
         exit_after_save_as_ = false;
+        PersistActiveFavoriteCursor();
         screen_.Exit();
     }
     return success;
@@ -714,6 +722,29 @@ std::string TextltApp::ActiveDocumentFavoritePath() const {
     return EditorConfig::NormalizeFavoritePath(editor_ptr->CurrentFilePath());
 }
 
+void TextltApp::PersistActiveFavoriteCursor() {
+    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    const std::string favorite_path =
+        EditorConfig::NormalizeFavoritePath(editor_ptr->CurrentFilePath());
+    if (favorite_path.empty() || !editor_config_.IsFavorite(favorite_path)) {
+        return;
+    }
+
+    const size_t row = static_cast<size_t>(std::max(0, editor_ptr->GetCursorRow()));
+    const size_t column = static_cast<size_t>(std::max(0, editor_ptr->GetCursorCol()));
+    editor_config_.UpdateFavoriteCursor(favorite_path, row, column);
+}
+
+void TextltApp::RestoreFavoriteCursor(const std::string& path) {
+    const FavoriteEntry* favorite = editor_config_.FindFavorite(path);
+    if (!favorite) {
+        return;
+    }
+
+    std::static_pointer_cast<EditorComponent>(text_editor_)
+        ->SetCursorPosition(favorite->row, favorite->column);
+}
+
 void TextltApp::ToggleActiveFavorite() {
     const std::string favorite_path = ActiveDocumentFavoritePath();
     if (favorite_path.empty()) {
@@ -735,6 +766,7 @@ void TextltApp::ToggleActiveFavorite() {
             return;
         }
         editor_config_.AddFavorite(favorite_path);
+        PersistActiveFavoriteCursor();
         active_action_ = "Added favorite " + favorite_path;
     }
 
@@ -810,6 +842,7 @@ void TextltApp::RunDropdownAction() {
     if (item == 0) {
         CloseDropdown();
         auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+        PersistActiveFavoriteCursor();
         editor_ptr->NewFile("");
         active_action_ = "New file";
         FocusEditor();

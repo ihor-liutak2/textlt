@@ -74,6 +74,35 @@ std::string ExtractString(const std::string& content, const std::string& key, st
     return content.substr(first_quote + 1, second_quote - first_quote - 1);
 }
 
+std::string JsonUnescape(const std::string& value) {
+    std::string unescaped;
+    unescaped.reserve(value.size());
+    bool escaping = false;
+    for (char character : value) {
+        if (escaping) {
+            switch (character) {
+                case 'n': unescaped.push_back('\n'); break;
+                case 'r': unescaped.push_back('\r'); break;
+                case 't': unescaped.push_back('\t'); break;
+                case 'b': unescaped.push_back('\b'); break;
+                case 'f': unescaped.push_back('\f'); break;
+                default: unescaped.push_back(character); break;
+            }
+            escaping = false;
+            continue;
+        }
+        if (character == '\\') {
+            escaping = true;
+            continue;
+        }
+        unescaped.push_back(character);
+    }
+    if (escaping) {
+        unescaped.push_back('\\');
+    }
+    return unescaped;
+}
+
 std::vector<std::string> ExtractStringArray(const std::string& content, const std::string& key) {
     std::vector<std::string> values;
     const std::string token = "\"" + key + "\"";
@@ -132,6 +161,78 @@ std::vector<std::string> ExtractStringArray(const std::string& content, const st
     return values;
 }
 
+std::vector<FavoriteEntry> ExtractFavoriteEntries(const std::string& content,
+                                                  const std::string& key) {
+    std::vector<FavoriteEntry> favorites;
+    const std::string token = "\"" + key + "\"";
+    size_t key_pos = content.find(token);
+    if (key_pos == std::string::npos) {
+        return favorites;
+    }
+
+    size_t colon = content.find(':', key_pos + token.size());
+    size_t array_start = content.find('[', colon);
+    size_t array_end = content.find(']', array_start);
+    if (colon == std::string::npos ||
+        array_start == std::string::npos ||
+        array_end == std::string::npos) {
+        return favorites;
+    }
+
+    bool in_string = false;
+    bool escaping = false;
+    int object_depth = 0;
+    size_t object_start = std::string::npos;
+    for (size_t index = array_start + 1; index < array_end; ++index) {
+        const char character = content[index];
+        if (in_string) {
+            if (escaping) {
+                escaping = false;
+            } else if (character == '\\') {
+                escaping = true;
+            } else if (character == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+
+        if (character == '"') {
+            in_string = true;
+            continue;
+        }
+        if (character == '{') {
+            if (object_depth == 0) {
+                object_start = index;
+            }
+            ++object_depth;
+            continue;
+        }
+        if (character != '}' || object_depth == 0) {
+            continue;
+        }
+
+        --object_depth;
+        if (object_depth != 0 || object_start == std::string::npos) {
+            continue;
+        }
+
+        const std::string object = content.substr(object_start, index - object_start + 1);
+        const std::string path = EditorConfig::NormalizeFavoritePath(
+            JsonUnescape(ExtractString(object, "path", "")));
+        if (path.empty()) {
+            continue;
+        }
+        FavoriteEntry favorite;
+        favorite.path = path;
+        favorite.row = static_cast<size_t>(std::max(0, ExtractInt(object, "row", 0)));
+        favorite.column = static_cast<size_t>(std::max(0, ExtractInt(object, "column", 0)));
+        favorites.push_back(std::move(favorite));
+        object_start = std::string::npos;
+    }
+
+    return favorites;
+}
+
 std::filesystem::path ResolveConfigPath(const std::filesystem::path& requested_path) {
     const bool use_default_path =
         requested_path.empty() ||
@@ -184,16 +285,26 @@ EditorConfig ConfigManager::Load() const {
     config.active_theme_name = ExtractString(
         content, "active_theme_name", config.active_theme_name);
 
-    std::vector<std::string> favorites = ExtractStringArray(content, "favorites_");
-    if (favorites.empty()) {
-        favorites = ExtractStringArray(content, "favorites");
+    std::vector<FavoriteEntry> favorite_entries = ExtractFavoriteEntries(content, "favorites_");
+    if (favorite_entries.empty()) {
+        favorite_entries = ExtractFavoriteEntries(content, "favorites");
     }
-    for (const std::string& path : favorites) {
-        const std::string normalized_path = EditorConfig::NormalizeFavoritePath(path);
-        if (!normalized_path.empty() &&
-            std::find(config.favorites_.begin(), config.favorites_.end(), normalized_path) ==
-                config.favorites_.end()) {
-            config.favorites_.push_back(normalized_path);
+    if (favorite_entries.empty()) {
+        std::vector<std::string> favorites = ExtractStringArray(content, "favorites_");
+        if (favorites.empty()) {
+            favorites = ExtractStringArray(content, "favorites");
+        }
+        for (const std::string& path : favorites) {
+            const std::string normalized_path = EditorConfig::NormalizeFavoritePath(path);
+            if (!normalized_path.empty() && config.FindFavorite(normalized_path) == nullptr) {
+                config.favorites_.push_back({normalized_path, 0, 0});
+            }
+        }
+    } else {
+        for (const FavoriteEntry& favorite : favorite_entries) {
+            if (config.FindFavorite(favorite.path) == nullptr) {
+                config.favorites_.push_back(favorite);
+            }
         }
     }
     return config;

@@ -64,7 +64,12 @@ bool WriteConfigAtomically(const std::filesystem::path& path, const EditorConfig
         file << "  \"active_theme_name\": \"" << JsonEscape(config.active_theme_name) << "\",\n";
         file << "  \"favorites_\": [\n";
         for (size_t index = 0; index < config.favorites_.size(); ++index) {
-            file << "    \"" << JsonEscape(config.favorites_[index]) << "\"";
+            const FavoriteEntry& favorite = config.favorites_[index];
+            file << "    {\n";
+            file << "      \"path\": \"" << JsonEscape(favorite.path) << "\",\n";
+            file << "      \"row\": " << favorite.row << ",\n";
+            file << "      \"column\": " << favorite.column << "\n";
+            file << "    }";
             if (index + 1 < config.favorites_.size()) {
                 file << ",";
             }
@@ -95,7 +100,7 @@ bool EditorConfig::AddFavorite(const std::string& path) {
         return false;
     }
 
-    favorites_.push_back(normalized_path);
+    favorites_.push_back({normalized_path, 0, 0});
     Persist();
     return true;
 }
@@ -108,7 +113,12 @@ bool EditorConfig::RemoveFavorite(const std::string& path) {
 
     const size_t old_size = favorites_.size();
     favorites_.erase(
-        std::remove(favorites_.begin(), favorites_.end(), normalized_path),
+        std::remove_if(
+            favorites_.begin(),
+            favorites_.end(),
+            [&](const FavoriteEntry& favorite) {
+                return favorite.path == normalized_path;
+            }),
         favorites_.end());
     if (favorites_.size() == old_size) {
         return false;
@@ -123,7 +133,43 @@ bool EditorConfig::IsFavorite(const std::string& path) const {
     if (normalized_path.empty()) {
         return false;
     }
-    return std::find(favorites_.begin(), favorites_.end(), normalized_path) != favorites_.end();
+    return FindFavorite(normalized_path) != nullptr;
+}
+
+const FavoriteEntry* EditorConfig::FindFavorite(const std::string& path) const {
+    const std::string normalized_path = NormalizeFavoritePath(path);
+    if (normalized_path.empty()) {
+        return nullptr;
+    }
+
+    auto iter = std::find_if(
+        favorites_.begin(),
+        favorites_.end(),
+        [&](const FavoriteEntry& favorite) {
+            return favorite.path == normalized_path;
+        });
+    return iter == favorites_.end() ? nullptr : &*iter;
+}
+
+bool EditorConfig::UpdateFavoriteCursor(const std::string& path, size_t row, size_t column) {
+    const std::string normalized_path = NormalizeFavoritePath(path);
+    if (normalized_path.empty()) {
+        return false;
+    }
+
+    auto iter = std::find_if(
+        favorites_.begin(),
+        favorites_.end(),
+        [&](const FavoriteEntry& favorite) {
+            return favorite.path == normalized_path;
+        });
+    if (iter == favorites_.end()) {
+        return false;
+    }
+
+    iter->row = row;
+    iter->column = column;
+    return Persist();
 }
 
 bool EditorConfig::SetActiveThemeName(const std::string& name) {

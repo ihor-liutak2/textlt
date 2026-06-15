@@ -55,6 +55,8 @@ private:
     void OpenSidebarFile(const std::filesystem::path& path);
     void SaveCurrentFile();
     bool ConfirmFileDialog(FilePromptMode mode, const std::string& path, std::string& error);
+    void PersistActiveFavoriteCursor();
+    void RestoreFavoriteCursor(const std::string& path);
     void PreviewTheme(const std::string& theme_name);
     void SelectTheme(const std::string& theme_name);
     void SaveConfig();
