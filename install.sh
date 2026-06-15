@@ -127,6 +127,10 @@ deploy_binary() {
   cp "$BUILD_DIR/$APP_NAME" "$INSTALL_PATH"
   chmod +x "$INSTALL_PATH"
   log_success "Installed executable at $INSTALL_PATH."
+
+  log_info "Deploying editor themes to local config directory."
+  mkdir -p "$HOME/.config/textlt/themes"
+  cp -r themes/* "$HOME/.config/textlt/themes/" 2>/dev/null || log_warn "No local themes folder found to copy."
 }
 
 ensure_local_bin_on_path() {

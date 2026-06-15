@@ -10,7 +10,7 @@ namespace textlt {
 TextltApp::TextltApp()
     : config_manager_("config.json"),
       editor_config_(config_manager_.Load()),
-      themes_(LoadThemesFromDirectory("themes")),
+      themes_(LoadThemesFromConfiguredLocations()),
       current_theme_(FindThemeByName(themes_, editor_config_.active_theme_name)),
       screen_(ftxui::ScreenInteractive::Fullscreen()),
       text_editor_(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_)),
@@ -668,7 +668,7 @@ void TextltApp::PreviewTheme(const std::string& theme_name) {
 
 void TextltApp::SelectTheme(const std::string& theme_name) {
     current_theme_ = FindThemeByName(themes_, theme_name);
-    editor_config_.active_theme_name = current_theme_.name;
+    editor_config_.active_theme_name = theme_name;
     active_action_ = "Theme changed to " + current_theme_.name;
     SaveConfig();
     screen_.PostEvent(ftxui::Event::Custom);

@@ -1,6 +1,7 @@
 #include "theme.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstdint>
 #include <fstream>
 #include <iterator>
@@ -223,24 +224,69 @@ namespace textlt {
             return theme;
         }
 
+        std::filesystem::path UserThemeDirectory() {
+            const char* home = std::getenv("HOME");
+            if (!home || std::string(home).empty()) {
+                return {};
+            }
+            return std::filesystem::path(home) / ".config" / "textlt" / "themes";
+        }
+
+        std::filesystem::path ExecutableThemeDirectory() {
+            std::error_code error;
+            const std::filesystem::path executable_path =
+                std::filesystem::read_symlink("/proc/self/exe", error);
+            if (error || executable_path.empty()) {
+                return {};
+            }
+            return executable_path.parent_path() / "themes";
+        }
+
+        std::vector<Theme> LoadAvailableThemesFromDirectory(
+            const std::filesystem::path& directory) {
+            std::vector<Theme> themes;
+            if (directory.empty()) {
+                return themes;
+            }
+
+            std::error_code error;
+            if (!std::filesystem::exists(directory, error) ||
+                !std::filesystem::is_directory(directory, error)) {
+                return themes;
+            }
+
+            for (const auto& entry : std::filesystem::directory_iterator(directory, error)) {
+                if (entry.is_regular_file(error) && entry.path().extension() == ".json") {
+                    themes.push_back(LoadThemeFile(entry.path()));
+                }
+            }
+            std::sort(themes.begin(), themes.end(), [](const Theme& left, const Theme& right) {
+                return left.name < right.name;
+            });
+            return themes;
+        }
+
     } // namespace
 
     std::vector<Theme> LoadThemesFromDirectory(const std::filesystem::path& directory) {
-        std::vector<Theme> themes;
-        std::error_code error;
-        if (!std::filesystem::exists(directory, error)) {
-            return {FallbackTheme()};
-        }
+        std::vector<Theme> themes = LoadAvailableThemesFromDirectory(directory);
+        return themes.empty() ? std::vector<Theme>{FallbackTheme()} : themes;
+    }
 
-        for (const auto& entry : std::filesystem::directory_iterator(directory, error)) {
-            if (entry.is_regular_file(error) && entry.path().extension() == ".json") {
-                themes.push_back(LoadThemeFile(entry.path()));
+    std::vector<Theme> LoadThemesFromConfiguredLocations() {
+        const std::vector<std::filesystem::path> theme_directories = {
+            UserThemeDirectory(),
+            ExecutableThemeDirectory(),
+            std::filesystem::path("themes"),
+        };
+
+        for (const std::filesystem::path& directory : theme_directories) {
+            std::vector<Theme> themes = LoadAvailableThemesFromDirectory(directory);
+            if (!themes.empty()) {
+                return themes;
             }
         }
-        std::sort(themes.begin(), themes.end(), [](const Theme& left, const Theme& right) {
-            return left.name < right.name;
-        });
-        return themes.empty() ? std::vector<Theme>{FallbackTheme()} : themes;
+        return {FallbackTheme()};
     }
 
     Theme FallbackTheme() {
