@@ -214,6 +214,21 @@ size_t EditorComponent::GetLineCount() const {
     return text_lines_.size();
 }
 
+std::string EditorComponent::TextFromCursor() const {
+    if (text_lines_.empty()) {
+        return "";
+    }
+
+    const size_t row = std::min(cursor_y_, text_lines_.size() - 1);
+    const size_t column = std::min(cursor_x_, text_lines_[row].size());
+    std::string text = text_lines_[row].substr(column);
+    for (size_t line_index = row + 1; line_index < text_lines_.size(); ++line_index) {
+        text.push_back('\n');
+        text += text_lines_[line_index];
+    }
+    return text;
+}
+
 void EditorComponent::SetBottomOverlayRows(size_t rows) {
     bottom_overlay_rows_ = rows;
 }

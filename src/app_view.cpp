@@ -364,6 +364,15 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         return true;
     }
 
+    if (editor_can_handle_direct_shortcut &&
+        (event == ftxui::Event::Special("\x0A") ||
+         input == "\x0A" ||
+         event == ftxui::Event::Special("Ctrl+J") ||
+         input == "Ctrl+J")) {
+        QueueCloudTtsDebugFromCursor();
+        return true;
+    }
+
     if (event == ftxui::Event::Special("\x03") ||
         (has_input && input[0] == '\x03') ||
         event == ftxui::Event::Special("Ctrl+Shift+C") ||

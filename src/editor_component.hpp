@@ -36,6 +36,7 @@ public:
     int GetCursorRow() const;
     int GetCursorCol() const;
     size_t GetLineCount() const;
+    std::string TextFromCursor() const;
     void SetBottomOverlayRows(size_t rows);
     void JumpToLine(int line_number);
     void SetCursorPosition(size_t row, size_t column);

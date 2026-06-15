@@ -21,6 +21,7 @@ FetchContent_MakeAvailable(ftxui)
 add_executable(textlt
   src/app.cpp
   src/app_view.cpp
+  src/cloud_tts_pipeline.cpp
   src/config_manager.cpp
   src/editor_config.cpp
   src/editor_component.cpp

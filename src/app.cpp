@@ -745,6 +745,18 @@ void TextltApp::RestoreFavoriteCursor(const std::string& path) {
         ->SetCursorPosition(favorite->row, favorite->column);
 }
 
+void TextltApp::QueueCloudTtsDebugFromCursor() {
+    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    cloud_tts_pipeline_.Submit(
+        editor_ptr->TextFromCursor(),
+        {
+            static_cast<size_t>(std::max(0, editor_ptr->GetCursorRow())),
+            static_cast<size_t>(std::max(0, editor_ptr->GetCursorCol())),
+        });
+    active_action_ = "Queued Cloud TTS debug pipeline";
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
 void TextltApp::ToggleActiveFavorite() {
     const std::string favorite_path = ActiveDocumentFavoritePath();
     if (favorite_path.empty()) {

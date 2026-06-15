@@ -7,6 +7,7 @@
 #include "ftxui/component/component.hpp"
 #include "ftxui/component/screen_interactive.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "cloud_tts_pipeline.hpp"
 #include "config_manager.hpp"
 #include "editor_component.hpp"
 #include "editor_config.hpp"
@@ -57,6 +58,7 @@ private:
     bool ConfirmFileDialog(FilePromptMode mode, const std::string& path, std::string& error);
     void PersistActiveFavoriteCursor();
     void RestoreFavoriteCursor(const std::string& path);
+    void QueueCloudTtsDebugFromCursor();
     void PreviewTheme(const std::string& theme_name);
     void SelectTheme(const std::string& theme_name);
     void SaveConfig();
@@ -104,6 +106,7 @@ private:
     FileDialog file_dialog_;
     HelpDialog help_dialog_;
     ThemeDialog theme_dialog_;
+    CloudTtsPipeline cloud_tts_pipeline_;
 
     std::vector<std::string> menu_entries_;
     std::vector<std::vector<std::string>> dropdown_entries_;

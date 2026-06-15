@@ -33,6 +33,9 @@ Selection & Clipboard
   Ctrl+V        Paste clipboard text into the editor
   Ctrl+Shift+V  Paste clipboard text when the terminal reserves Ctrl+V
 
+Cloud TTS
+  Ctrl+J        Read Text from Cursor (TTS Stage 1)
+
 Menus
   Tab           Switch focus between File Explorer and Editor
   F1            Open this help window
