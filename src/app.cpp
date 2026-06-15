@@ -37,6 +37,47 @@ bool WriteTextToPipe(const std::string& command, const std::string& text) {
     return written == text.size() && close_status == 0;
 }
 
+bool ExistingFile(const std::filesystem::path& path) {
+    std::error_code error;
+    return !path.empty() &&
+        std::filesystem::exists(path, error) &&
+        std::filesystem::is_regular_file(path, error);
+}
+
+std::filesystem::path UserHelpFilePath() {
+    const char* home = std::getenv("HOME");
+    if (!home || std::string(home).empty()) {
+        return {};
+    }
+    return std::filesystem::path(home) / ".config" / "textlt" / "help.txt";
+}
+
+std::filesystem::path ResolveHelpFilePath() {
+    const std::filesystem::path user_help = UserHelpFilePath();
+    if (ExistingFile(user_help)) {
+        return user_help;
+    }
+
+    std::error_code error;
+    const std::filesystem::path executable_path =
+        std::filesystem::read_symlink("/proc/self/exe", error);
+    if (!error && !executable_path.empty()) {
+        const std::filesystem::path executable_directory = executable_path.parent_path();
+        const std::filesystem::path executable_help = executable_directory / "help.txt";
+        if (ExistingFile(executable_help)) {
+            return executable_help;
+        }
+
+        const std::filesystem::path shared_help =
+            executable_directory.parent_path() / "share" / "textlt" / "help.txt";
+        if (ExistingFile(shared_help)) {
+            return shared_help;
+        }
+    }
+
+    return "help.txt";
+}
+
 } // namespace
 
 TextltApp::TextltApp()
@@ -336,7 +377,7 @@ void TextltApp::OpenAboutDialog() {
 
 void TextltApp::OpenHelpDialog() {
     active_dropdown_ = -1;
-    help_dialog_.Open("help.txt");
+    help_dialog_.Open(ResolveHelpFilePath().string());
     active_action_ = "Opened Help";
     focused_layer_ = 3;
 }

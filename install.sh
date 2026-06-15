@@ -175,6 +175,10 @@ deploy_binary() {
   log_info "Deploying editor themes to local config directory."
   mkdir -p "$THEME_CONFIG_DIR"
   cp -r themes/* "$THEME_CONFIG_DIR/" 2>/dev/null || log_warn "No local themes folder found to copy."
+
+  log_info "Deploying help file to local config directory."
+  mkdir -p "$CONFIG_DIR"
+  cp help.txt "$CONFIG_DIR/help.txt" 2>/dev/null || log_warn "No local help.txt found to copy."
   restore_target_ownership "$CONFIG_DIR"
 }
 

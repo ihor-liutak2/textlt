@@ -134,28 +134,33 @@ ftxui::Element HelpDialog::Render() {
             clear_under;
     }
 
-    Elements dialog_rows;
-    if (!title_.empty()) {
-        dialog_rows.push_back(text(title_) | bold | color(theme.modal_accent) | center);
-        dialog_rows.push_back(separator() | color(theme.modal_border));
-    }
-    dialog_rows.push_back(
+    Element help_viewport =
         vbox(std::move(help_content)) |
         bgcolor(theme.modal_input_bg) |
         color(theme.modal_text_color) |
         frame |
-        color(theme.modal_border) |
         size(WIDTH, EQUAL, 68) |
-        size(HEIGHT, EQUAL, static_cast<int>(visible_lines + 2)));
-    dialog_rows.push_back(separator() | color(theme.modal_border));
-    dialog_rows.push_back(text("Press Escape to close.") | dim | color(theme.modal_text_color));
+        size(HEIGHT, EQUAL, static_cast<int>(visible_lines));
 
-    return vbox(std::move(dialog_rows)) |
+    Element footer =
+        text("Press Escape to close.") |
+        dim |
+        color(theme.modal_text_color);
+
+    Element dialog_body = vbox({
+        help_viewport,
+        separator() | color(theme.modal_border),
+        footer,
+    }) | size(WIDTH, EQUAL, 68);
+
+    return window(
+        text(title_.empty() ? "Help" : title_) | bold | color(theme.modal_accent),
+        dialog_body) |
         bgcolor(theme.modal_background) |
         color(theme.modal_text_color) |
-        border |
         color(theme.modal_border) |
         size(WIDTH, EQUAL, 72) |
+        size(HEIGHT, EQUAL, static_cast<int>(visible_lines + 4)) |
         clear_under;
 }
 
