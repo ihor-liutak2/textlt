@@ -9,16 +9,30 @@
 #include "ftxui/component/component.hpp"
 #include "ftxui/component/component_base.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "editor_config.hpp"
 #include "git_manager.hpp"
 #include "theme.hpp"
 
 namespace textlt {
 
 class FileExplorer : public ftxui::ComponentBase {
+private:
+    enum class EntryKind {
+        Directory,
+        File,
+        FavoriteToggle,
+        FavoriteFile,
+        Placeholder,
+    };
+
 public:
     using FileOpenCallback = std::function<void(const std::filesystem::path&)>;
 
-    FileExplorer(FileOpenCallback on_file_open, const Theme* theme, GitManager* git_manager);
+    FileExplorer(
+        FileOpenCallback on_file_open,
+        const Theme* theme,
+        GitManager* git_manager,
+        EditorConfig* config);
 
     ftxui::Element Render() override;
     bool OnEvent(ftxui::Event event) override;
@@ -41,7 +55,8 @@ public:
     std::filesystem::path GetSelectedDirectoryPath() const {
         if (selected_entry_ >= 0 && selected_entry_ < static_cast<int>(entry_paths_.size())) {
             const auto& target_path = entry_paths_[selected_entry_];
-            if (std::filesystem::is_directory(target_path)) {
+            if (entry_kinds_[selected_entry_] == EntryKind::Directory &&
+                std::filesystem::is_directory(target_path)) {
                 return target_path;
             }
         }
@@ -54,15 +69,19 @@ private:
     int EntryIndexAtMouse(const ftxui::Mouse& mouse) const;
     char GitStatusForPath(const std::filesystem::path& path) const;
     void RebuildEntries();
+    void AddEntry(std::filesystem::path path, std::string label, EntryKind kind);
 
     FileOpenCallback on_file_open_;
     const Theme* theme_ = nullptr;
     GitManager* git_manager_ = nullptr;
+    EditorConfig* config_ = nullptr;
     std::filesystem::path current_directory_;
     std::vector<std::filesystem::path> entry_paths_;
     std::vector<std::string> entry_labels_;
+    std::vector<EntryKind> entry_kinds_;
     int selected_entry_ = 0;
     int last_clicked_entry_ = -1;
+    bool favorites_expanded_ = false;
     std::chrono::steady_clock::time_point last_click_time_{};
     ftxui::Box menu_box_;
     ftxui::Component menu_;

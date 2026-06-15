@@ -1,5 +1,7 @@
 #include "config_manager.hpp"
 
+#include <algorithm>
+#include <cstdlib>
 #include <fstream>
 #include <iterator>
 #include <string>
@@ -72,13 +74,91 @@ std::string ExtractString(const std::string& content, const std::string& key, st
     return content.substr(first_quote + 1, second_quote - first_quote - 1);
 }
 
+std::vector<std::string> ExtractStringArray(const std::string& content, const std::string& key) {
+    std::vector<std::string> values;
+    const std::string token = "\"" + key + "\"";
+    size_t key_pos = content.find(token);
+    if (key_pos == std::string::npos) {
+        return values;
+    }
+
+    size_t colon = content.find(':', key_pos + token.size());
+    size_t array_start = content.find('[', colon);
+    size_t array_end = content.find(']', array_start);
+    if (colon == std::string::npos ||
+        array_start == std::string::npos ||
+        array_end == std::string::npos) {
+        return values;
+    }
+
+    bool in_string = false;
+    bool escaping = false;
+    std::string value;
+    for (size_t index = array_start + 1; index < array_end; ++index) {
+        const char character = content[index];
+        if (!in_string) {
+            if (character == '"') {
+                in_string = true;
+                value.clear();
+            }
+            continue;
+        }
+
+        if (escaping) {
+            switch (character) {
+                case 'n': value.push_back('\n'); break;
+                case 'r': value.push_back('\r'); break;
+                case 't': value.push_back('\t'); break;
+                case 'b': value.push_back('\b'); break;
+                case 'f': value.push_back('\f'); break;
+                default: value.push_back(character); break;
+            }
+            escaping = false;
+            continue;
+        }
+
+        if (character == '\\') {
+            escaping = true;
+            continue;
+        }
+        if (character == '"') {
+            in_string = false;
+            values.push_back(value);
+            continue;
+        }
+        value.push_back(character);
+    }
+
+    return values;
+}
+
+std::filesystem::path ResolveConfigPath(const std::filesystem::path& requested_path) {
+    const bool use_default_path =
+        requested_path.empty() ||
+        (requested_path.filename() == "config.json" && !requested_path.has_parent_path());
+    if (!use_default_path) {
+        return requested_path;
+    }
+
+    const std::filesystem::path fallback_path = EditorConfig::FallbackConfigPath();
+    const std::filesystem::path primary_path = EditorConfig::DefaultConfigPath();
+    if (std::filesystem::exists(primary_path)) {
+        return primary_path;
+    }
+    if (!fallback_path.empty() && std::filesystem::exists(fallback_path)) {
+        return fallback_path;
+    }
+    return primary_path;
+}
+
 } // namespace
 
 ConfigManager::ConfigManager(std::filesystem::path path)
-    : path_(std::move(path)) {}
+    : path_(ResolveConfigPath(path)) {}
 
 EditorConfig ConfigManager::Load() const {
     EditorConfig config;
+    config.SetConfigPath(path_);
     std::ifstream file(path_);
     if (!file) {
         return config;
@@ -103,27 +183,26 @@ EditorConfig ConfigManager::Load() const {
     }
     config.active_theme_name = ExtractString(
         content, "active_theme_name", config.active_theme_name);
+
+    std::vector<std::string> favorites = ExtractStringArray(content, "favorites_");
+    if (favorites.empty()) {
+        favorites = ExtractStringArray(content, "favorites");
+    }
+    for (const std::string& path : favorites) {
+        const std::string normalized_path = EditorConfig::NormalizeFavoritePath(path);
+        if (!normalized_path.empty() &&
+            std::find(config.favorites_.begin(), config.favorites_.end(), normalized_path) ==
+                config.favorites_.end()) {
+            config.favorites_.push_back(normalized_path);
+        }
+    }
     return config;
 }
 
 void ConfigManager::Save(const EditorConfig& config) const {
-    std::ofstream file(path_);
-    if (!file) {
-        return;
-    }
-
-    file << "{\n";
-    file << "  \"show_line_numbers\": " << (config.show_line_numbers ? "true" : "false") << ",\n";
-    file << "  \"show_file_explorer\": " << (config.show_file_explorer ? "true" : "false") << ",\n";
-    file << "  \"smart_word_wrap\": " << (config.smart_word_wrap ? "true" : "false") << ",\n";
-    file << "  \"syntax_highlighting\": " << (config.syntax_highlighting ? "true" : "false") << ",\n";
-    file << "  \"auto_pairing\": " << (config.auto_pairing ? "true" : "false") << ",\n";
-    file << "  \"auto_indent\": " << (config.auto_indent ? "true" : "false") << ",\n";
-    file << "  \"search_match_case\": " << (config.search_match_case ? "true" : "false") << ",\n";
-    file << "  \"search_whole_word\": " << (config.search_whole_word ? "true" : "false") << ",\n";
-    file << "  \"tab_size\": " << config.tab_size << ",\n";
-    file << "  \"active_theme_name\": \"" << config.active_theme_name << "\"\n";
-    file << "}\n";
+    EditorConfig writable_config = config;
+    writable_config.SetConfigPath(path_);
+    writable_config.Persist();
 }
 
 } // namespace textlt

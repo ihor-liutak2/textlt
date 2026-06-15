@@ -1,4 +1,4 @@
-# textlt 🚀
+# textlt
 
 `textlt` is a lightweight, blazing-fast, and highly customizable **Terminal User Interface (TUI)** text editor built from scratch in C++. Designed for modern developers who love the efficiency of the command line but prefer intuitive, modeless text editing over complex Vim/Emacs modal constraints.
 
@@ -6,13 +6,13 @@ Optimized to run perfectly in native Linux environments (**MX Linux**, **Ubuntu*
 
 ---
 
-## 📸 Interface Preview
+## Interface Preview
 
 ![Main Editor Interface](assets/main_editor.png)
 
 ---
 
-## ✨ Key Features
+## Key Features
 
 - **Intuitive Modeless Editing:** No "command" or "insert" modes. Just open, click, and start typing, exactly like modern GUI text editors.
 - **Advanced Polyglot Syntax Highlighting:** Powered by an ultra-fast state-machine engine that pre-scans syntax layout matrices up to the active viewport boundaries:
@@ -30,7 +30,7 @@ Optimized to run perfectly in native Linux environments (**MX Linux**, **Ubuntu*
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Core Engine:** Modern C++17 (Object-Oriented, clean module subsystem split)
 - **UI Architecture:** [FTXUI](https://github.com/ArthurSonzogni/FTXUI) (Functional Terminal User Interface framework)
@@ -38,9 +38,9 @@ Optimized to run perfectly in native Linux environments (**MX Linux**, **Ubuntu*
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
-### 📦 Automated 1-Click Installation
+### Automated 1-Click Installation
 The repository includes an intelligent interactive deployment script that installs missing dependencies (`build-essential`, `cmake`), compiles the binary in `Release` mode, safely copies it into your user local binary path, and updates your environment path configurations.
 
 Simply clone and run the installer:
@@ -54,7 +54,7 @@ chmod +x install.sh
 
 *Note: After the script finishes, reload your shell profile via `source ~/.bashrc` to activate the global `textlt` command.*
 
-### 🛠️ Manual Compilation
+###  Manual Compilation
 
 If you prefer building manually, ensure you have a C++17 compliant compiler installed:
 
@@ -70,7 +70,7 @@ cmake --build build --parallel $(nproc)
 
 ---
 
-## ⌨️ Shortcuts Reference
+## Shortcuts Reference
 
 | Shortcut | Action |
 | --- | --- |
@@ -88,7 +88,7 @@ cmake --build build --parallel $(nproc)
 
 ---
 
-## 📊 Supported Ecosystem Matrix
+## Supported Ecosystem Matrix
 
 Open the interactive **Help** window inside the editor at any time to view the live language support grid:
 
@@ -113,7 +113,7 @@ Open the interactive **Help** window inside the editor at any time to view the l
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](https://www.google.com/search?q=LICENSE) file for details.
 

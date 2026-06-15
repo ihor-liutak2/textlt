@@ -17,7 +17,8 @@ TextltApp::TextltApp()
       file_explorer_(ftxui::Make<FileExplorer>(
           [this](const std::filesystem::path& path) { OpenExplorerFile(path); },
           &current_theme_,
-          &git_manager_)),
+          &git_manager_,
+          &editor_config_)),
       file_dialog_(&current_theme_, [this](
           FilePromptMode mode,
           const std::string& path,
@@ -37,7 +38,7 @@ TextltApp::TextltApp()
           " Exit ",
       }),
       dropdown_entries_({
-          {" New ", " Open ", " Save ", " Save As ", " Exit "},
+          {" New ", " Open ", " Save ", " Save As ", " [ ] Add to Favorites ", " Exit "},
           {
               " Undo ",
               " Redo ",
@@ -67,6 +68,7 @@ TextltApp::TextltApp()
       }),
       current_dropdown_entries_(dropdown_entries_[0]) {
     editor_config_.active_theme_name = current_theme_.name;
+    UpdateFileMenuLabels();
     UpdateOptionsMenuLabels();
 
     ftxui::MenuOption top_menu_option = ftxui::MenuOption::Toggle();
@@ -248,6 +250,7 @@ void TextltApp::OpenDropdown() {
     // FIXED: Added missing trailing underscore
     active_dropdown_ = selected_menu_item_;
     selected_dropdown_item_ = 0;
+    UpdateFileMenuLabels();
     current_dropdown_entries_ = dropdown_entries_[active_dropdown_];
     focused_layer_ = 1;
     dropdown_menu_->TakeFocus();
@@ -678,6 +681,56 @@ void TextltApp::SaveConfig() {
     config_manager_.Save(editor_config_);
 }
 
+std::string TextltApp::ActiveDocumentFavoritePath() const {
+    const auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    return EditorConfig::NormalizeFavoritePath(editor_ptr->CurrentFilePath());
+}
+
+void TextltApp::ToggleActiveFavorite() {
+    const std::string favorite_path = ActiveDocumentFavoritePath();
+    if (favorite_path.empty()) {
+        active_action_ = "Save the file before adding it to favorites";
+        CloseDropdown();
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+
+    if (editor_config_.IsFavorite(favorite_path)) {
+        editor_config_.RemoveFavorite(favorite_path);
+        active_action_ = "Removed favorite " + favorite_path;
+    } else {
+        std::error_code error;
+        if (!std::filesystem::is_regular_file(favorite_path, error)) {
+            active_action_ = "Save the file before adding it to favorites";
+            CloseDropdown();
+            screen_.PostEvent(ftxui::Event::Custom);
+            return;
+        }
+        editor_config_.AddFavorite(favorite_path);
+        active_action_ = "Added favorite " + favorite_path;
+    }
+
+    UpdateFileMenuLabels();
+    std::static_pointer_cast<FileExplorer>(file_explorer_)->Refresh();
+    CloseDropdown();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::UpdateFileMenuLabels() {
+    if (dropdown_entries_.empty() || dropdown_entries_[0].size() <= 4) {
+        return;
+    }
+
+    const std::string favorite_path = ActiveDocumentFavoritePath();
+    dropdown_entries_[0][4] = editor_config_.IsFavorite(favorite_path)
+        ? " [X] Add to Favorites "
+        : " [ ] Add to Favorites ";
+
+    if (active_dropdown_ == 0) {
+        current_dropdown_entries_ = dropdown_entries_[0];
+    }
+}
+
 void TextltApp::UpdateOptionsMenuLabels() {
     if (dropdown_entries_.size() <= 2 || dropdown_entries_[2].size() <= 6) {
         return;
@@ -738,7 +791,8 @@ void TextltApp::RunDropdownAction() {
     if (item == 1) { OpenFileDialog(FilePromptMode::Open); return; }
     if (item == 2) { SaveCurrentFile(); return; }
     if (item == 3) { OpenFileDialog(FilePromptMode::SaveAs); return; }
-    if (item == 4) { RequestExit(); return; }
+    if (item == 4) { ToggleActiveFavorite(); return; }
+    if (item == 5) { RequestExit(); return; }
     CloseDropdown();
 }
 

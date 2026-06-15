@@ -58,6 +58,9 @@ private:
     void PreviewTheme(const std::string& theme_name);
     void SelectTheme(const std::string& theme_name);
     void SaveConfig();
+    std::string ActiveDocumentFavoritePath() const;
+    void ToggleActiveFavorite();
+    void UpdateFileMenuLabels();
     void UpdateOptionsMenuLabels();
     void RunDropdownAction();
     ftxui::Element Render();

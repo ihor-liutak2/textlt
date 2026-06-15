@@ -38,6 +38,7 @@ ftxui::Element TextltApp::Render() {
     using namespace ftxui;
 
     const auto editor = std::static_pointer_cast<EditorComponent>(text_editor_);
+    UpdateFileMenuLabels();
     size_t bottom_overlay_rows = 2; // Status separator + status bar.
     if (current_search_mode_ != SearchMode::None) {
         bottom_overlay_rows += 7; // Find separator plus the bordered multi-row search panel.

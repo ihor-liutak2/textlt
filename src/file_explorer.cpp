@@ -21,10 +21,12 @@ std::string DisplayName(const std::filesystem::path& path) {
 FileExplorer::FileExplorer(
     FileOpenCallback on_file_open,
     const Theme* theme,
-    GitManager* git_manager)
+    GitManager* git_manager,
+    EditorConfig* config)
     : on_file_open_(std::move(on_file_open)),
       theme_(theme),
       git_manager_(git_manager),
+      config_(config),
       current_directory_(std::filesystem::current_path()) {
     ftxui::MenuOption option = ftxui::MenuOption::Vertical();
     option.on_enter = [this] { OpenSelectedEntry(); };
@@ -44,13 +46,18 @@ ftxui::Element FileExplorer::Render() {
     Elements rows;
     for (size_t index = 0; index < entry_labels_.size(); ++index) {
         Element row = text(entry_labels_[index]);
-        if (index < entry_paths_.size()) {
+        if (index < entry_paths_.size() && index < entry_kinds_.size() &&
+            (entry_kinds_[index] == EntryKind::Directory ||
+             entry_kinds_[index] == EntryKind::File)) {
             const char status = GitStatusForPath(entry_paths_[index]);
             if (status == 'M') {
                 row = row | color(theme.syntax_keyword);
             } else if (status == '?' || status == 'A') {
                 row = row | color(theme.syntax_string);
             }
+        }
+        if (index < entry_kinds_.size() && entry_kinds_[index] == EntryKind::FavoriteToggle) {
+            row = row | bold | color(theme.modal_accent);
         }
 
         if (static_cast<int>(index) == selected_entry_) {
@@ -62,8 +69,7 @@ ftxui::Element FileExplorer::Render() {
     }
 
     return vbox({
-        text(" Files ") | bold,
-        text(current_directory_.filename().string()) | dim,
+        text("Files") | bold,
         separator(),
         vbox(std::move(rows)) | frame | reflect(menu_box_) | yflex,
     }) |
@@ -83,6 +89,15 @@ bool FileExplorer::OnEvent(ftxui::Event event) {
 
             selected_entry_ = clicked_entry;
             FocusMenu();
+            if (clicked_entry < static_cast<int>(entry_kinds_.size()) &&
+                (entry_kinds_[clicked_entry] == EntryKind::FavoriteToggle ||
+                 entry_kinds_[clicked_entry] == EntryKind::FavoriteFile)) {
+                OpenSelectedEntry();
+                last_clicked_entry_ = -1;
+                last_click_time_ = {};
+                return true;
+            }
+
             if (duration < 300 && clicked_entry == last_clicked_entry_) {
                 last_clicked_entry_ = -1;
                 last_click_time_ = {};
@@ -122,20 +137,50 @@ void FileExplorer::OpenSelectedEntry() {
         return;
     }
 
+    if (selected_entry_ >= static_cast<int>(entry_kinds_.size())) {
+        return;
+    }
+
+    const EntryKind selected_kind = entry_kinds_[selected_entry_];
+    if (selected_kind == EntryKind::FavoriteToggle) {
+        favorites_expanded_ = !favorites_expanded_;
+        RebuildEntries();
+        return;
+    }
+
     const std::filesystem::path selected_path = entry_paths_[selected_entry_];
+    if (selected_kind == EntryKind::FavoriteFile) {
+        std::error_code error;
+        if (std::filesystem::is_regular_file(selected_path, error) && on_file_open_) {
+            on_file_open_(selected_path);
+            return;
+        }
+        if (config_) {
+            config_->RemoveFavorite(selected_path.string());
+        }
+        RebuildEntries();
+        return;
+    }
+
     std::error_code error;
-    if (std::filesystem::is_directory(selected_path, error)) {
+    if (selected_kind == EntryKind::Directory &&
+        std::filesystem::is_directory(selected_path, error)) {
         OpenDirectoryEntry(selected_entry_);
         return;
     }
 
-    if (std::filesystem::is_regular_file(selected_path, error) && on_file_open_) {
+    if (selected_kind == EntryKind::File &&
+        std::filesystem::is_regular_file(selected_path, error) && on_file_open_) {
         on_file_open_(selected_path);
     }
 }
 
 bool FileExplorer::OpenDirectoryEntry(int entry_index) {
     if (entry_index < 0 || entry_index >= static_cast<int>(entry_paths_.size())) {
+        return false;
+    }
+    if (entry_index >= static_cast<int>(entry_kinds_.size()) ||
+        entry_kinds_[entry_index] != EntryKind::Directory) {
         return false;
     }
 
@@ -159,7 +204,7 @@ int FileExplorer::EntryIndexAtMouse(const ftxui::Mouse& mouse) const {
     }
 
     const int entry_index = mouse.y - menu_box_.y_min;
-    if (entry_index < 0 || entry_index >= static_cast<int>(entry_paths_.size())) {
+    if (entry_index < 0 || entry_index >= static_cast<int>(entry_labels_.size())) {
         return -1;
     }
     return entry_index;
@@ -204,12 +249,28 @@ char FileExplorer::GitStatusForPath(const std::filesystem::path& path) const {
 void FileExplorer::RebuildEntries() {
     entry_paths_.clear();
     entry_labels_.clear();
+    entry_kinds_.clear();
+
+    if (config_ && !config_->favorites_.empty()) {
+        AddEntry({}, favorites_expanded_ ? " [Favorites]" : " [Favorites]", EntryKind::FavoriteToggle);
+        if (favorites_expanded_) {
+            std::vector<std::string> unique_favorites;
+            for (const std::string& favorite : config_->favorites_) {
+                const std::string normalized_path = EditorConfig::NormalizeFavoritePath(favorite);
+                if (!normalized_path.empty() &&
+                    std::find(unique_favorites.begin(), unique_favorites.end(), normalized_path) ==
+                        unique_favorites.end()) {
+                    unique_favorites.push_back(normalized_path);
+                    AddEntry(normalized_path, "  " + normalized_path, EntryKind::FavoriteFile);
+                }
+            }
+        }
+    }
 
     std::error_code error;
     const std::filesystem::path parent = current_directory_.parent_path();
     if (!parent.empty() && parent != current_directory_) {
-        entry_paths_.push_back(parent);
-        entry_labels_.push_back(" ../");
+        AddEntry(parent, " ../", EntryKind::Directory);
     }
 
     std::vector<std::filesystem::directory_entry> directories;
@@ -229,18 +290,22 @@ void FileExplorer::RebuildEntries() {
     std::sort(files.begin(), files.end(), by_name);
 
     for (const auto& directory : directories) {
-        entry_paths_.push_back(directory.path());
-        entry_labels_.push_back(" [" + DisplayName(directory.path()) + "]");
+        AddEntry(directory.path(), " [" + DisplayName(directory.path()) + "]", EntryKind::Directory);
     }
     for (const auto& file : files) {
-        entry_paths_.push_back(file.path());
-        entry_labels_.push_back(" " + DisplayName(file.path()));
+        AddEntry(file.path(), " " + DisplayName(file.path()), EntryKind::File);
     }
 
     if (entry_labels_.empty()) {
-        entry_labels_.push_back(" <empty>");
+        AddEntry({}, " <empty>", EntryKind::Placeholder);
     }
     selected_entry_ = std::min(selected_entry_, static_cast<int>(entry_labels_.size()) - 1);
+}
+
+void FileExplorer::AddEntry(std::filesystem::path path, std::string label, EntryKind kind) {
+    entry_paths_.push_back(std::move(path));
+    entry_labels_.push_back(std::move(label));
+    entry_kinds_.push_back(kind);
 }
 
 } // namespace textlt
