@@ -41,6 +41,7 @@ ftxui::Element SidebarPanel::Render() {
     if (git_manager_) {
         git_manager_->SetWorkingDirectory(current_path_);
     }
+    ClampScrollOffset();
 
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     Element project_tab =
@@ -68,7 +69,10 @@ ftxui::Element SidebarPanel::Render() {
     }
 
     Elements rows;
-    for (size_t index = 0; index < entry_labels_.size(); ++index) {
+    const size_t visible_entry_count = VisibleEntryCount();
+    const size_t end_index =
+        std::min(entry_labels_.size(), list_scroll_offset_ + visible_entry_count);
+    for (size_t index = list_scroll_offset_; index < end_index; ++index) {
         Element row = text(entry_labels_[index]);
         if (!show_favorites_mode_ &&
             index < entry_paths_.size() &&
@@ -90,6 +94,9 @@ ftxui::Element SidebarPanel::Render() {
         }
         rows.push_back(std::move(row));
     }
+    while (rows.size() < visible_entry_count) {
+        rows.push_back(text(""));
+    }
 
     return vbox({
         hbox({
@@ -98,12 +105,40 @@ ftxui::Element SidebarPanel::Render() {
             favorites_tab,
         }),
         separator(),
-        vbox(std::move(rows)) | frame | reflect(menu_box_) | yflex,
+        vbox(std::move(rows)) | reflect(menu_box_) | frame | yflex,
     }) |
-        border;
+        border |
+        reflect(panel_box_);
 }
 
 bool SidebarPanel::OnEvent(ftxui::Event event) {
+    if (event == ftxui::Event::ArrowDown) {
+        if (selected_entry_ + 1 < static_cast<int>(entry_labels_.size())) {
+            ++selected_entry_;
+            EnsureSelectedEntryVisible();
+        }
+        FocusMenu();
+        return true;
+    }
+
+    if (event == ftxui::Event::ArrowUp) {
+        if (selected_entry_ > 0) {
+            --selected_entry_;
+            EnsureSelectedEntryVisible();
+        }
+        FocusMenu();
+        return true;
+    }
+
+    if (event.is_mouse() &&
+        (event.mouse().button == ftxui::Mouse::WheelDown ||
+         event.mouse().button == ftxui::Mouse::WheelUp) &&
+        panel_box_.Contain(event.mouse().x, event.mouse().y)) {
+        ScrollEntries(event.mouse().button == ftxui::Mouse::WheelDown ? 3 : -3);
+        FocusMenu();
+        return true;
+    }
+
     if (event.is_mouse() &&
         event.mouse().button == ftxui::Mouse::Left &&
         event.mouse().motion == ftxui::Mouse::Pressed &&
@@ -131,6 +166,7 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
                     now - last_click_time_).count();
 
             selected_entry_ = clicked_entry;
+            EnsureSelectedEntryVisible();
             FocusMenu();
             if (show_favorites_mode_) {
                 OpenSelectedEntry();
@@ -178,6 +214,7 @@ void SidebarPanel::SetFavoritesMode(bool enabled) {
 
     show_favorites_mode_ = enabled;
     selected_entry_ = 0;
+    list_scroll_offset_ = 0;
     last_clicked_entry_ = -1;
     last_click_time_ = {};
     RebuildEntries();
@@ -237,6 +274,7 @@ bool SidebarPanel::OpenDirectoryEntry(int entry_index) {
         current_path_ = selected_path;
     }
     RebuildEntries();
+    list_scroll_offset_ = 0;
     return true;
 }
 
@@ -245,11 +283,77 @@ int SidebarPanel::EntryIndexAtMouse(const ftxui::Mouse& mouse) const {
         return -1;
     }
 
-    const int entry_index = mouse.y - menu_box_.y_min;
+    const int entry_index =
+        static_cast<int>(list_scroll_offset_) + mouse.y - menu_box_.y_min;
     if (entry_index < 0 || entry_index >= static_cast<int>(entry_labels_.size())) {
         return -1;
     }
     return entry_index;
+}
+
+size_t SidebarPanel::VisibleEntryCount() const {
+    if (menu_box_.y_max >= menu_box_.y_min) {
+        return std::max<size_t>(
+            1,
+            static_cast<size_t>(menu_box_.y_max - menu_box_.y_min + 1));
+    }
+    return std::max<size_t>(1, std::min<size_t>(entry_labels_.size(), 12));
+}
+
+size_t SidebarPanel::MaxScrollOffset() const {
+    const size_t visible_count = VisibleEntryCount();
+    return entry_labels_.size() > visible_count
+        ? entry_labels_.size() - visible_count
+        : 0;
+}
+
+void SidebarPanel::ClampScrollOffset() {
+    list_scroll_offset_ = std::min(list_scroll_offset_, MaxScrollOffset());
+}
+
+void SidebarPanel::EnsureSelectedEntryVisible() {
+    if (entry_labels_.empty()) {
+        selected_entry_ = 0;
+        list_scroll_offset_ = 0;
+        return;
+    }
+
+    selected_entry_ = std::clamp(
+        selected_entry_,
+        0,
+        static_cast<int>(entry_labels_.size()) - 1);
+
+    const size_t visible_count = VisibleEntryCount();
+    const size_t selected = static_cast<size_t>(selected_entry_);
+    if (selected < list_scroll_offset_) {
+        list_scroll_offset_ = selected;
+    } else if (selected >= list_scroll_offset_ + visible_count) {
+        list_scroll_offset_ = selected - visible_count + 1;
+    }
+    ClampScrollOffset();
+}
+
+void SidebarPanel::ClampSelectedEntryToVisible() {
+    if (entry_labels_.empty()) {
+        selected_entry_ = 0;
+        return;
+    }
+
+    const size_t visible_count = VisibleEntryCount();
+    const size_t max_visible_index =
+        std::min(entry_labels_.size() - 1, list_scroll_offset_ + visible_count - 1);
+    selected_entry_ = std::clamp(
+        selected_entry_,
+        static_cast<int>(list_scroll_offset_),
+        static_cast<int>(max_visible_index));
+}
+
+void SidebarPanel::ScrollEntries(int delta) {
+    const long long target_offset =
+        static_cast<long long>(list_scroll_offset_) + static_cast<long long>(delta);
+    list_scroll_offset_ = static_cast<size_t>(
+        std::clamp<long long>(target_offset, 0, static_cast<long long>(MaxScrollOffset())));
+    ClampSelectedEntryToVisible();
 }
 
 char SidebarPanel::GitStatusForPath(const std::filesystem::path& path) const {
@@ -303,6 +407,7 @@ void SidebarPanel::RebuildEntries() {
         AddEntry({}, show_favorites_mode_ ? " No favorites" : " <empty>", EntryKind::Placeholder);
     }
     selected_entry_ = std::min(selected_entry_, static_cast<int>(entry_labels_.size()) - 1);
+    EnsureSelectedEntryVisible();
 }
 
 void SidebarPanel::RebuildProjectEntries() {

@@ -61,6 +61,12 @@ private:
     bool OpenDirectoryEntry(int entry_index);
     int EntryIndexAtMouse(const ftxui::Mouse& mouse) const;
     char GitStatusForPath(const std::filesystem::path& path) const;
+    size_t VisibleEntryCount() const;
+    size_t MaxScrollOffset() const;
+    void ClampScrollOffset();
+    void EnsureSelectedEntryVisible();
+    void ClampSelectedEntryToVisible();
+    void ScrollEntries(int delta);
     void RebuildEntries();
     void RebuildProjectEntries();
     void RebuildFavoriteEntries();
@@ -75,11 +81,13 @@ private:
     std::vector<std::string> entry_labels_;
     std::vector<EntryKind> entry_kinds_;
     int selected_entry_ = 0;
+    size_t list_scroll_offset_ = 0;
     int last_clicked_entry_ = -1;
     bool show_favorites_mode_ = false;
     std::chrono::steady_clock::time_point last_click_time_{};
     ftxui::Box project_tab_box_;
     ftxui::Box favorites_tab_box_;
+    ftxui::Box panel_box_;
     ftxui::Box menu_box_;
     ftxui::Component menu_;
 };
