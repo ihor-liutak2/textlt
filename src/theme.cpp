@@ -5,7 +5,7 @@
 #include <fstream>
 #include <iterator>
 #include <map>
-#include <cstdio> // Для sscanf
+#include <cstdio> // Used by sscanf for hexadecimal RGB parsing.
 
 namespace textlt {
     namespace {
@@ -135,7 +135,7 @@ namespace textlt {
         }
 
         ftxui::Color ColorFromName(const std::string& name, ftxui::Color fallback) {
-            // 1. Перевірка на HEX-формат (наприклад, #0F2042)
+            // First, accept hexadecimal colors such as #0F2042.
             Rgb rgb;
             if (TryParseRgb(name, &rgb) && name.size() == 7 && name[0] == '#') {
                 return ftxui::Color::RGB(static_cast<uint8_t>(rgb.red),
@@ -143,7 +143,7 @@ namespace textlt {
                                          static_cast<uint8_t>(rgb.blue));
             }
 
-            // 2. Стандартні назви кольорів термінала
+            // Then fall back to standard terminal color names.
             auto iter = NamedColors().find(name);
             return iter == NamedColors().end() ? fallback : iter->second.color;
         }
@@ -251,7 +251,20 @@ namespace textlt {
         auto iter = std::find_if(themes.begin(), themes.end(), [&](const Theme& theme) {
             return theme.name == name;
         });
-        return iter == themes.end() ? FallbackTheme() : *iter;
+        if (iter != themes.end()) {
+            return *iter;
+        }
+
+        // Missing saved theme names fall back to the canonical light theme
+        // before using the built-in default theme.
+        auto github_light = std::find_if(themes.begin(), themes.end(), [](const Theme& theme) {
+            return theme.name == "GitHub Light";
+        });
+        if (github_light != themes.end()) {
+            return *github_light;
+        }
+
+        return FallbackTheme();
     }
 
 } // namespace textlt
