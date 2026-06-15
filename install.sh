@@ -120,6 +120,10 @@ configure_and_build() {
 deploy_binary() {
   log_info "Installing $APP_NAME to $INSTALL_PATH."
   mkdir -p "$INSTALL_DIR"
+  if [[ -f "$INSTALL_PATH" ]]; then
+    log_info "Found previous installation at $INSTALL_PATH. Removing it for a clean upgrade."
+    rm -f "$INSTALL_PATH"
+  fi
   cp "$BUILD_DIR/$APP_NAME" "$INSTALL_PATH"
   chmod +x "$INSTALL_PATH"
   log_success "Installed executable at $INSTALL_PATH."
