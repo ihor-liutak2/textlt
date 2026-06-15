@@ -46,23 +46,24 @@ ftxui::Element SidebarPanel::Render() {
     Element project_tab =
         text("[ Project ]") |
         color(theme.foreground) |
+        dim |
         reflect(project_tab_box_);
     Element favorites_tab =
         text("[ Favorites ]") |
         color(theme.foreground) |
+        dim |
         reflect(favorites_tab_box_);
 
-    // Active tabs use the theme selection colors so the label stays readable
-    // across light and dark themes without relying on inverted menu colors.
+    // Active tabs mirror the modal menu selection palette.
     if (!show_favorites_mode_) {
         project_tab = project_tab |
-            bgcolor(theme.selection_bg) |
-            color(theme.selection_fg) |
+            bgcolor(theme.modal_selected_item_bg) |
+            color(theme.modal_selected_item_fg) |
             bold;
     } else {
         favorites_tab = favorites_tab |
-            bgcolor(theme.selection_bg) |
-            color(theme.selection_fg) |
+            bgcolor(theme.modal_selected_item_bg) |
+            color(theme.modal_selected_item_fg) |
             bold;
     }
 
@@ -84,8 +85,8 @@ ftxui::Element SidebarPanel::Render() {
 
         if (static_cast<int>(index) == selected_entry_) {
             row = row |
-                bgcolor(theme.menu_foreground) |
-                color(theme.menu_background);
+                bgcolor(theme.modal_selected_item_bg) |
+                color(theme.modal_selected_item_fg);
         }
         rows.push_back(std::move(row));
     }
