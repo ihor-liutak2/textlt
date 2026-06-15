@@ -218,7 +218,10 @@ ftxui::Element EditorComponent::RenderViewport() {
             }
 
             if (is_cursor_line && x == cursor_x) {
-                character = character | ftxui::inverted;
+                character = ftxui::text(line_content.substr(x, 1)) |
+                    ftxui::bgcolor(theme.selection_bg) |
+                    ftxui::color(theme.selection_fg) |
+                    ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 1);
             }
             line_parts.push_back(std::move(character));
         }
@@ -228,7 +231,11 @@ ftxui::Element EditorComponent::RenderViewport() {
             cursor_x >= render_start &&
             cursor_x <= render_end &&
             segment.end == line_content.size()) {
-            line_parts.push_back(ftxui::text(" ") | ftxui::inverted);
+            line_parts.push_back(
+                ftxui::text(" ") |
+                ftxui::bgcolor(theme.selection_bg) |
+                ftxui::color(theme.selection_fg) |
+                ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 1));
         }
 
         line_parts.push_back(ftxui::filler());
