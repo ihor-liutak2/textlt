@@ -4,9 +4,43 @@ set -Eeuo pipefail
 
 readonly APP_NAME="textlt"
 readonly BUILD_DIR="build"
-readonly INSTALL_DIR="$HOME/.local/bin"
+resolve_target_user() {
+  if [[ "$(id -u)" == "0" && -n "${SUDO_USER:-}" && "${SUDO_USER:-}" != "root" ]]; then
+    printf '%s\n' "$SUDO_USER"
+    return
+  fi
+
+  id -un
+}
+
+resolve_target_home() {
+  local user="$1"
+  local home_path=""
+
+  if command -v getent >/dev/null 2>&1; then
+    home_path="$(getent passwd "$user" | cut -d: -f6 || true)"
+  fi
+  if [[ -z "$home_path" && "$user" == "$(id -un)" && -n "${HOME:-}" ]]; then
+    home_path="$HOME"
+  fi
+  if [[ -z "$home_path" ]]; then
+    home_path="$(eval "printf '%s' ~$user")"
+  fi
+
+  if [[ -z "$home_path" || "$home_path" == "~$user" ]]; then
+    printf '[ERROR] Could not resolve home directory for user %s.\n' "$user" >&2
+    exit 1
+  fi
+  printf '%s\n' "$home_path"
+}
+
+readonly TARGET_USER="$(resolve_target_user)"
+readonly TARGET_HOME="$(resolve_target_home "$TARGET_USER")"
+readonly INSTALL_DIR="$TARGET_HOME/.local/bin"
 readonly INSTALL_PATH="$INSTALL_DIR/$APP_NAME"
-readonly BASHRC="$HOME/.bashrc"
+readonly CONFIG_DIR="$TARGET_HOME/.config/textlt"
+readonly THEME_CONFIG_DIR="$CONFIG_DIR/themes"
+readonly BASHRC="$TARGET_HOME/.bashrc"
 
 if [[ -t 1 ]]; then
   readonly C_RESET=$'\033[0m'
@@ -41,6 +75,15 @@ log_error() {
 die() {
   log_error "$*"
   exit 1
+}
+
+restore_target_ownership() {
+  local path="$1"
+
+  if [[ "$(id -u)" != "0" || "$TARGET_USER" == "root" ]]; then
+    return
+  fi
+  chown -R "$TARGET_USER:" "$path"
 }
 
 confirm() {
@@ -126,11 +169,13 @@ deploy_binary() {
   fi
   cp "$BUILD_DIR/$APP_NAME" "$INSTALL_PATH"
   chmod +x "$INSTALL_PATH"
+  restore_target_ownership "$INSTALL_DIR"
   log_success "Installed executable at $INSTALL_PATH."
 
   log_info "Deploying editor themes to local config directory."
-  mkdir -p "$HOME/.config/textlt/themes"
-  cp -r themes/* "$HOME/.config/textlt/themes/" 2>/dev/null || log_warn "No local themes folder found to copy."
+  mkdir -p "$THEME_CONFIG_DIR"
+  cp -r themes/* "$THEME_CONFIG_DIR/" 2>/dev/null || log_warn "No local themes folder found to copy."
+  restore_target_ownership "$CONFIG_DIR"
 }
 
 ensure_local_bin_on_path() {
@@ -151,6 +196,7 @@ ensure_local_bin_on_path() {
     printf '\n# Added by textlt installer\n'
     printf 'export PATH="$HOME/.local/bin:$PATH"\n'
   } >> "$BASHRC"
+  restore_target_ownership "$BASHRC"
 
   log_success "PATH update appended to $BASHRC."
   log_info "Run this now to use textlt immediately: source ~/.bashrc"
@@ -168,6 +214,7 @@ ensure_truecolor_in_shell_profile() {
     printf '\n# Added by textlt installer for advanced theme rendering\n'
     printf 'export COLORTERM="truecolor"\n'
   } >> "$BASHRC"
+  restore_target_ownership "$BASHRC"
 
   log_success "COLORTERM=TrueColor configuration appended to $BASHRC."
 }

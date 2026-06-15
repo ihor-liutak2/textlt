@@ -232,14 +232,20 @@ namespace textlt {
             return std::filesystem::path(home) / ".config" / "textlt" / "themes";
         }
 
-        std::filesystem::path ExecutableThemeDirectory() {
+        std::vector<std::filesystem::path> ExecutableThemeDirectories() {
             std::error_code error;
             const std::filesystem::path executable_path =
                 std::filesystem::read_symlink("/proc/self/exe", error);
             if (error || executable_path.empty()) {
                 return {};
             }
-            return executable_path.parent_path() / "themes";
+
+            const std::filesystem::path executable_directory = executable_path.parent_path();
+            return {
+                executable_directory / "themes",
+                executable_directory.parent_path() / "themes",
+                executable_directory.parent_path() / "share" / "textlt" / "themes",
+            };
         }
 
         std::vector<Theme> LoadAvailableThemesFromDirectory(
@@ -274,11 +280,13 @@ namespace textlt {
     }
 
     std::vector<Theme> LoadThemesFromConfiguredLocations() {
-        const std::vector<std::filesystem::path> theme_directories = {
-            UserThemeDirectory(),
-            ExecutableThemeDirectory(),
-            std::filesystem::path("themes"),
-        };
+        std::vector<std::filesystem::path> theme_directories = {UserThemeDirectory()};
+        const std::vector<std::filesystem::path> executable_theme_directories =
+            ExecutableThemeDirectories();
+        theme_directories.insert(theme_directories.end(),
+                                 executable_theme_directories.begin(),
+                                 executable_theme_directories.end());
+        theme_directories.push_back("themes");
 
         for (const std::filesystem::path& directory : theme_directories) {
             std::vector<Theme> themes = LoadAvailableThemesFromDirectory(directory);
