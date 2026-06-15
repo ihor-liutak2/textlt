@@ -9,8 +9,14 @@ Navigation
   Arrow Keys    Move the cursor
   Home          Move to the start of the current line
   End           Move to the end of the current line
+  Page Up       Move one page up
+  Page Down     Move one page down
   Ctrl+Left     Jump to the previous word
   Ctrl+Right    Jump to the next word
+  Ctrl+Up       Jump to the previous paragraph
+  Ctrl+Down     Jump to the next paragraph
+  Shift+Ctrl+Up Select to the previous paragraph
+  Shift+Ctrl+Down Select to the next paragraph
 
 Search & Replace
   Ctrl+F        Open Find Panel
@@ -22,12 +28,15 @@ Search & Replace
 Editing
   Ctrl + /      Toggle Comment
   Ctrl + T      Toggle Case (Invert Uppercase/Lowercase for selection or current word)
+  Alt+Backspace  Delete the previous word
+  Ctrl+Delete   Delete the next word
   Edit Menu     Convert Indents: 4 -> 2 Spaces
   Edit Menu     Convert Indents: 2 -> 4 Spaces
 
 Selection & Clipboard
   Shift+Arrows  Extend the active text selection
   Mouse Drag    Select text inside the editor viewport
+  Ctrl+A        Select all text in the current buffer
   Ctrl+C        Copy the active selection, or current line when nothing is selected
   Ctrl+X        Cut the active selection, or current line when nothing is selected
   Ctrl+V        Paste clipboard text into the editor

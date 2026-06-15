@@ -32,6 +32,44 @@ bool IsLineManipulationShortcut(const ftxui::Event& event) {
         input == "\x1B[66;4u";
 }
 
+bool IsWordDeleteBackwardShortcut(const ftxui::Event& event) {
+    const std::string& input = event.input();
+    return input == "\x17" ||
+        input == "Alt+Backspace" ||
+        input == "Ctrl+Backspace" ||
+        input == "\x1B[127;5u" ||
+        input == "\x1B[8;5u" ||
+        input == "\x1B[127;5~" ||
+        input == "\x1B[8;5~" ||
+        input == "\x1B[27;5;127~" ||
+        input == "\x1B[27;5;8~" ||
+        input == "\x1B\x7F" ||
+        input == "\x1B\x08" ||
+        event == ftxui::Event::Special("Alt+Backspace") ||
+        event == ftxui::Event::Special("Ctrl+Backspace") ||
+        event == ftxui::Event::Special("\x17") ||
+        event == ftxui::Event::Special("\x1B[127;5u") ||
+        event == ftxui::Event::Special("\x1B[8;5u") ||
+        event == ftxui::Event::Special("\x1B[127;5~") ||
+        event == ftxui::Event::Special("\x1B[8;5~") ||
+        event == ftxui::Event::Special("\x1B[27;5;127~") ||
+        event == ftxui::Event::Special("\x1B[27;5;8~") ||
+        event == ftxui::Event::Special("\x1B\x7F") ||
+        event == ftxui::Event::Special("\x1B\x08");
+}
+
+bool IsWordDeleteForwardShortcut(const ftxui::Event& event) {
+    const std::string& input = event.input();
+    return input == "Ctrl+Delete" ||
+        input == "\x1B[3;5~" ||
+        input == "\x1B[3;5u" ||
+        input == "\x1B[27;5;3~" ||
+        event == ftxui::Event::Special("Ctrl+Delete") ||
+        event == ftxui::Event::Special("\x1B[3;5~") ||
+        event == ftxui::Event::Special("\x1B[3;5u") ||
+        event == ftxui::Event::Special("\x1B[27;5;3~");
+}
+
 } // namespace
 
 ftxui::Element TextltApp::Render() {
@@ -322,16 +360,6 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         !theme_dialog_.IsOpen() &&
         current_search_mode_ == SearchMode::None &&
         !show_goto_line_bar_;
-    const bool word_delete_shortcut =
-        input == "\x17" ||
-        input == "Ctrl+Backspace" ||
-        input == "Ctrl+Delete" ||
-        input == "\x1B[127;5u" ||
-        input == "\x1B[8;5u" ||
-        input == "\x1B[27;5;127~" ||
-        input == "\x1B[27;5;8~" ||
-        input == "\x1B[3;5~" ||
-        input == "\x1B[3;5u";
     if (editor_can_handle_direct_shortcut && IsLineManipulationShortcut(event)) {
         if (text_editor_->OnEvent(event)) {
             screen_.PostEvent(ftxui::Event::Custom);
@@ -339,8 +367,16 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         }
         return false;
     }
-    if (editor_can_handle_direct_shortcut && word_delete_shortcut) {
-        text_editor_->OnEvent(event);
+
+    if (editor_can_handle_direct_shortcut && IsWordDeleteBackwardShortcut(event)) {
+        auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+        editor_ptr->DeleteWordBackward();
+        screen_.PostEvent(ftxui::Event::Custom);
+        return true;
+    }
+    if (editor_can_handle_direct_shortcut && IsWordDeleteForwardShortcut(event)) {
+        auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+        editor_ptr->DeleteWordForward();
         screen_.PostEvent(ftxui::Event::Custom);
         return true;
     }
@@ -365,6 +401,18 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     }
 
     if (editor_can_handle_direct_shortcut &&
+        (event == ftxui::Event::Special("\x01") ||
+         input == "\x01" ||
+         event == ftxui::Event::Special("Ctrl+A") ||
+         input == "Ctrl+A")) {
+        auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+        editor_ptr->SelectAll();
+        active_action_ = "Selected all text";
+        screen_.PostEvent(ftxui::Event::Custom);
+        return true;
+    }
+
+    if (editor_can_handle_direct_shortcut &&
         (event == ftxui::Event::Special("\x0A") ||
          input == "\x0A" ||
          event == ftxui::Event::Special("Ctrl+J") ||
@@ -379,7 +427,7 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         input == "Ctrl+Shift+C") {
         selected_menu_item_ = 1;
         active_dropdown_ = 1;
-        selected_dropdown_item_ = 3;
+        selected_dropdown_item_ = 4;
         RunDropdownAction();
         screen_.PostEvent(ftxui::Event::Custom);
         return true;
@@ -391,7 +439,7 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         input == "Ctrl+Shift+X") {
         selected_menu_item_ = 1;
         active_dropdown_ = 1;
-        selected_dropdown_item_ = 2;
+        selected_dropdown_item_ = 3;
         RunDropdownAction();
         screen_.PostEvent(ftxui::Event::Custom);
         return true;
@@ -403,7 +451,7 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         event == ftxui::Event::Special("Ctrl+Shift+V") ||
         input == "Ctrl+Shift+V") {
         active_dropdown_ = 1;
-        selected_dropdown_item_ = 4; // Index for "Paste"
+        selected_dropdown_item_ = 5; // Index for "Paste"
         RunDropdownAction();
         return true;
     }

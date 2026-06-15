@@ -42,6 +42,7 @@ public:
     void SetCursorPosition(size_t row, size_t column);
 
     bool HasSelection() const;
+    void SelectAll();
     std::string GetSelectedText() const;
     void DeleteSelection();
     void ClearSelection();
@@ -51,6 +52,8 @@ public:
     void Convert2To4Spaces();
     void ToggleComment();
     void ToggleCase();
+    void DeleteWordBackward();
+    void DeleteWordForward();
     void Undo();
     void Redo();
     void HighlightMatches(const std::string& query);
@@ -97,10 +100,12 @@ private:
     void MoveCursorRight();
     void MoveCursorUp();
     void MoveCursorDown();
+    void MoveCursorPageUp();
+    void MoveCursorPageDown();
+    void MoveCursorToPreviousParagraph();
+    void MoveCursorToNextParagraph();
     void MoveCursorToPreviousWord();
     void MoveCursorToNextWord();
-    void DeleteWordBackward();
-    void DeleteWordForward();
     bool MoveLinesUp();
     bool MoveLinesDown();
     bool DuplicateLines();

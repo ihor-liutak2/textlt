@@ -15,6 +15,7 @@ public:
 private:
     termios original_settings_ {};
     bool configured_ = false;
+    bool keyboard_reporting_enabled_ = false;
 };
 
 } // namespace textlt

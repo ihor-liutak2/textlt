@@ -26,6 +26,12 @@ bool IsPairClosingCharacter(char character) {
         character == '"' || character == '\'';
 }
 
+bool IsBlankLine(const std::string& line) {
+    return std::all_of(line.begin(), line.end(), [](unsigned char character) {
+        return std::isspace(character);
+    });
+}
+
 char ClosingPairFor(char character) {
     switch (character) {
         case '{': return '}';
@@ -268,6 +274,20 @@ void EditorComponent::SetCursorPosition(size_t row, size_t column) {
 bool EditorComponent::HasSelection() const {
     return has_selection_ &&
         (cursor_x_ != selection_anchor_x_ || cursor_y_ != selection_anchor_y_);
+}
+
+void EditorComponent::SelectAll() {
+    if (text_lines_.empty()) {
+        text_lines_.push_back("");
+    }
+
+    EndTypingGroup();
+    selection_anchor_x_ = 0;
+    selection_anchor_y_ = 0;
+    cursor_y_ = text_lines_.size() - 1;
+    cursor_x_ = text_lines_[cursor_y_].size();
+    has_selection_ = true;
+    UpdateScroll();
 }
 
 std::string EditorComponent::GetSelectedText() const {
@@ -1033,6 +1053,78 @@ void EditorComponent::MoveCursorDown() {
         cursor_y_++;
     }
     cursor_x_ = std::min(cursor_x_, text_lines_[cursor_y_].size());
+}
+
+void EditorComponent::MoveCursorPageUp() {
+    ClampCursorToBuffer();
+    const size_t page_step = std::max<size_t>(1, VisibleHeight() - 1);
+    cursor_y_ = cursor_y_ > page_step ? cursor_y_ - page_step : 0;
+    cursor_x_ = std::min(cursor_x_, text_lines_[cursor_y_].size());
+}
+
+void EditorComponent::MoveCursorPageDown() {
+    ClampCursorToBuffer();
+    const size_t page_step = std::max<size_t>(1, VisibleHeight() - 1);
+    cursor_y_ = std::min(cursor_y_ + page_step, text_lines_.size() - 1);
+    cursor_x_ = std::min(cursor_x_, text_lines_[cursor_y_].size());
+}
+
+void EditorComponent::MoveCursorToPreviousParagraph() {
+    ClampCursorToBuffer();
+
+    if (cursor_y_ == 0) {
+        cursor_x_ = 0;
+        return;
+    }
+
+    if (!IsBlankLine(text_lines_[cursor_y_])) {
+        size_t paragraph_start = cursor_y_;
+        while (paragraph_start > 0 && !IsBlankLine(text_lines_[paragraph_start - 1])) {
+            --paragraph_start;
+        }
+        if (cursor_y_ != paragraph_start || cursor_x_ != 0) {
+            cursor_y_ = paragraph_start;
+            cursor_x_ = 0;
+            return;
+        }
+    }
+
+    size_t target = cursor_y_;
+    if (target > 0) {
+        --target;
+    }
+    while (target > 0 && IsBlankLine(text_lines_[target])) {
+        --target;
+    }
+    while (target > 0 && !IsBlankLine(text_lines_[target - 1])) {
+        --target;
+    }
+
+    cursor_y_ = target;
+    cursor_x_ = 0;
+}
+
+void EditorComponent::MoveCursorToNextParagraph() {
+    ClampCursorToBuffer();
+
+    size_t target = cursor_y_;
+    if (!IsBlankLine(text_lines_[target])) {
+        while (target + 1 < text_lines_.size() && !IsBlankLine(text_lines_[target + 1])) {
+            ++target;
+        }
+    }
+    while (target + 1 < text_lines_.size() && IsBlankLine(text_lines_[target + 1])) {
+        ++target;
+    }
+
+    if (target + 1 < text_lines_.size()) {
+        cursor_y_ = target + 1;
+        cursor_x_ = 0;
+        return;
+    }
+
+    cursor_y_ = text_lines_.size() - 1;
+    cursor_x_ = text_lines_[cursor_y_].size();
 }
 
 void EditorComponent::MoveCursorToPreviousWord() {

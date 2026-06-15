@@ -74,6 +74,7 @@ TextltApp::TextltApp()
           {
               " Undo              (Ctrl+Z) ",
               " Redo              (Ctrl+Y) ",
+              " Select All        (Ctrl+A) ",
               " Cut               (Ctrl+X) ",
               " Copy              (Ctrl+C) ",
               " Paste             (Ctrl+V) ",
@@ -888,7 +889,16 @@ void TextltApp::HandleEditMenu(int item) {
         return;
     }
 
-    if (item == 2) { // Cut
+    if (item == 2) { // Select All
+        FocusEditor();
+        editor_ptr->SelectAll();
+        active_action_ = "Selected all text";
+        CloseDropdown();
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+
+    if (item == 3) { // Cut
         FocusEditor();
         if (editor_ptr->HasSelection()) {
             // Priority 1: Cut only the user's active Shift-selection
@@ -911,7 +921,7 @@ void TextltApp::HandleEditMenu(int item) {
         return;
     }
     
-    if (item == 3) { // Copy
+    if (item == 4) { // Copy
         if (editor_ptr->HasSelection()) {
             // Priority 1: Copy only the active Shift-selection
             std::string selected_text = editor_ptr->GetSelectedText();
@@ -931,7 +941,7 @@ void TextltApp::HandleEditMenu(int item) {
         return;
     }
     
-    if (item == 4) { // Paste stream
+    if (item == 5) { // Paste stream
         CloseDropdown();
         FocusEditor();
 
@@ -945,7 +955,7 @@ void TextltApp::HandleEditMenu(int item) {
         return;
     }
 
-    if (item == 5) { // Toggle Comment
+    if (item == 6) { // Toggle Comment
         FocusEditor();
         editor_ptr->ToggleComment();
         active_action_ = "Toggle Comment";
@@ -954,7 +964,7 @@ void TextltApp::HandleEditMenu(int item) {
         return;
     }
 
-    if (item == 6) { // Toggle Case
+    if (item == 7) { // Toggle Case
         FocusEditor();
         editor_ptr->ToggleCase();
         active_action_ = "Toggle Case";
@@ -963,7 +973,7 @@ void TextltApp::HandleEditMenu(int item) {
         return;
     }
 
-    if (item == 7) { // Convert Indents: 4 -> 2 Spaces
+    if (item == 8) { // Convert Indents: 4 -> 2 Spaces
         FocusEditor();
         editor_ptr->Convert4To2Spaces();
         active_action_ = "Converted leading indents from 4 to 2 spaces";
@@ -972,7 +982,7 @@ void TextltApp::HandleEditMenu(int item) {
         return;
     }
 
-    if (item == 8) { // Convert Indents: 2 -> 4 Spaces
+    if (item == 9) { // Convert Indents: 2 -> 4 Spaces
         FocusEditor();
         editor_ptr->Convert2To4Spaces();
         active_action_ = "Converted leading indents from 2 to 4 spaces";
@@ -981,14 +991,14 @@ void TextltApp::HandleEditMenu(int item) {
         return;
     }
 
-    if (item == 9) { // Find...
+    if (item == 10) { // Find...
         CloseDropdown();
         OpenFindPanel(false);
         active_action_ = "Find";
         return;
     }
 
-    if (item == 10) { // Replace...
+    if (item == 11) { // Replace...
         CloseDropdown();
         OpenFindPanel(true);
         active_action_ = "Replace";

@@ -15,6 +15,10 @@ enum class NavigationAction {
     Down,
     Home,
     End,
+    PageUp,
+    PageDown,
+    ParagraphUp,
+    ParagraphDown,
     WordLeft,
     WordRight,
 };
@@ -38,6 +42,24 @@ bool IsShiftNavigationEvent(const ftxui::Event& event, NavigationAction* action)
         *action = NavigationAction::WordRight;
         return true;
     }
+    if (input == "Shift+Ctrl+Up" ||
+        input == "Ctrl+Shift+Up" ||
+        input == "\x1B[1;6A" ||
+        input == "\x1B[1;10A" ||
+        input == "\x1B[27;6;65~" ||
+        input == "\x1B[65;6u") {
+        *action = NavigationAction::ParagraphUp;
+        return true;
+    }
+    if (input == "Shift+Ctrl+Down" ||
+        input == "Ctrl+Shift+Down" ||
+        input == "\x1B[1;6B" ||
+        input == "\x1B[1;10B" ||
+        input == "\x1B[27;6;66~" ||
+        input == "\x1B[66;6u") {
+        *action = NavigationAction::ParagraphDown;
+        return true;
+    }
     if (input == "\x1B[1;2A") {
         *action = NavigationAction::Up;
         return true;
@@ -50,7 +72,15 @@ bool IsShiftNavigationEvent(const ftxui::Event& event, NavigationAction* action)
         *action = NavigationAction::Home;
         return true;
     }
+    if (input == "\x1B[1;2~" || input == "\x1B[2H") {
+        *action = NavigationAction::Home;
+        return true;
+    }
     if (input == "\x1B[1;2F" || input == "\x1B[8;2~") {
+        *action = NavigationAction::End;
+        return true;
+    }
+    if (input == "\x1B[4;2~" || input == "\x1B[2F") {
         *action = NavigationAction::End;
         return true;
     }
@@ -83,12 +113,44 @@ bool IsNavigationEvent(const ftxui::Event& event, NavigationAction* action) {
         *action = NavigationAction::End;
         return true;
     }
+    if (event == ftxui::Event::PageUp) {
+        *action = NavigationAction::PageUp;
+        return true;
+    }
+    if (event == ftxui::Event::PageDown) {
+        *action = NavigationAction::PageDown;
+        return true;
+    }
+    if (event.input() == "\x1B[5~") {
+        *action = NavigationAction::PageUp;
+        return true;
+    }
+    if (event.input() == "\x1B[6~") {
+        *action = NavigationAction::PageDown;
+        return true;
+    }
     if (event == ftxui::Event::ArrowLeftCtrl) {
         *action = NavigationAction::WordLeft;
         return true;
     }
     if (event == ftxui::Event::ArrowRightCtrl) {
         *action = NavigationAction::WordRight;
+        return true;
+    }
+    if (event == ftxui::Event::ArrowUpCtrl ||
+        event.input() == "Ctrl+Up" ||
+        event.input() == "\x1B[1;5A" ||
+        event.input() == "\x1B[27;5;65~" ||
+        event.input() == "\x1B[65;5u") {
+        *action = NavigationAction::ParagraphUp;
+        return true;
+    }
+    if (event == ftxui::Event::ArrowDownCtrl ||
+        event.input() == "Ctrl+Down" ||
+        event.input() == "\x1B[1;5B" ||
+        event.input() == "\x1B[27;5;66~" ||
+        event.input() == "\x1B[66;5u") {
+        *action = NavigationAction::ParagraphDown;
         return true;
     }
 
@@ -123,19 +185,33 @@ bool IsDuplicateLinesEvent(const ftxui::Event& event) {
         input == "\x1B[66;4u";
 }
 
-bool IsCtrlBackspaceEvent(const ftxui::Event& event) {
+bool IsWordDeleteBackwardEvent(const ftxui::Event& event) {
     const std::string& input = event.input();
     // Do not treat raw Control-H (\x08) as Ctrl+Backspace. Many terminals emit
     // it for Ctrl+H, and routing it here would turn the old Replace shortcut
     // into destructive word deletion.
-    return input == "Ctrl+Backspace" ||
+    return input == "Alt+Backspace" ||
+        input == "Ctrl+Backspace" ||
         input == "\x1B[127;5u" ||
         input == "\x1B[8;5u" ||
+        input == "\x1B[127;5~" ||
+        input == "\x1B[8;5~" ||
         input == "\x1B[27;5;127~" ||
         input == "\x1B[27;5;8~" ||
+        input == "\x1B\x7F" ||
+        input == "\x1B\x08" ||
         input == "\x17" ||
+        event == ftxui::Event::Special("Alt+Backspace") ||
+        event == ftxui::Event::Special("Ctrl+Backspace") ||
         event == ftxui::Event::Special("\x1B[127;5u") ||
-        event == ftxui::Event::Special("\x1B[8;5u");
+        event == ftxui::Event::Special("\x1B[8;5u") ||
+        event == ftxui::Event::Special("\x1B[127;5~") ||
+        event == ftxui::Event::Special("\x1B[8;5~") ||
+        event == ftxui::Event::Special("\x1B[27;5;127~") ||
+        event == ftxui::Event::Special("\x1B[27;5;8~") ||
+        event == ftxui::Event::Special("\x1B\x7F") ||
+        event == ftxui::Event::Special("\x1B\x08") ||
+        event == ftxui::Event::Special("\x17");
 }
 
 bool IsCtrlDeleteEvent(const ftxui::Event& event) {
@@ -143,8 +219,11 @@ bool IsCtrlDeleteEvent(const ftxui::Event& event) {
     return input == "Ctrl+Delete" ||
         input == "\x1B[3;5~" ||
         input == "\x1B[3;5u" ||
+        input == "\x1B[27;5;3~" ||
+        event == ftxui::Event::Special("Ctrl+Delete") ||
         event == ftxui::Event::Special("\x1B[3;5~") ||
-        event == ftxui::Event::Special("\x1B[3;5u");
+        event == ftxui::Event::Special("\x1B[3;5u") ||
+        event == ftxui::Event::Special("\x1B[27;5;3~");
 }
 
 
@@ -190,7 +269,7 @@ bool EditorComponent::OnEvent(ftxui::Event event) {
         return true;
     }
 
-    if (IsCtrlBackspaceEvent(event)) {
+    if (IsWordDeleteBackwardEvent(event)) {
         DeleteWordBackward();
         return true;
     }
@@ -292,6 +371,18 @@ bool EditorComponent::OnEvent(ftxui::Event event) {
                 break;
             case NavigationAction::End:
                 MoveCursorEnd();
+                break;
+            case NavigationAction::PageUp:
+                MoveCursorPageUp();
+                break;
+            case NavigationAction::PageDown:
+                MoveCursorPageDown();
+                break;
+            case NavigationAction::ParagraphUp:
+                MoveCursorToPreviousParagraph();
+                break;
+            case NavigationAction::ParagraphDown:
+                MoveCursorToNextParagraph();
                 break;
             case NavigationAction::WordLeft:
                 MoveCursorToPreviousWord();
