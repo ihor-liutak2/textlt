@@ -152,6 +152,22 @@ ensure_local_bin_on_path() {
   log_info "Run this now to use textlt immediately: source ~/.bashrc"
 }
 
+ensure_truecolor_in_shell_profile() {
+  touch "$BASHRC"
+  if grep -Fq 'export COLORTERM="truecolor"' "$BASHRC"; then
+    log_success "COLORTERM variable is already configured in $BASHRC."
+    return
+  fi
+
+  log_info "Adding global 24-bit TrueColor flag to $BASHRC."
+  {
+    printf '\n# Added by textlt installer for advanced theme rendering\n'
+    printf 'export COLORTERM="truecolor"\n'
+  } >> "$BASHRC"
+
+  log_success "COLORTERM=TrueColor configuration appended to $BASHRC."
+}
+
 main() {
   log_info "Starting textlt installer."
   require_project_root
@@ -159,6 +175,7 @@ main() {
   configure_and_build
   deploy_binary
   ensure_local_bin_on_path
+  ensure_truecolor_in_shell_profile
   log_success "Installation complete. Run: textlt"
 }
 
