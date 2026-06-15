@@ -94,7 +94,11 @@ ftxui::Element EditorComponent::RenderViewport() {
     const size_t total_lines = text_lines_.size();
     const bool needs_scrollbar = total_lines > visible_height;
     const size_t slider_height = needs_scrollbar
-        ? std::max<size_t>(1, (visible_height * visible_height) / total_lines)
+        ? std::min(
+              visible_height,
+              std::max<size_t>(
+                  visible_height >= 2 ? 2 : 1,
+                  (visible_height * visible_height) / total_lines))
         : visible_height;
     const size_t available_track_space = visible_height > slider_height
         ? visible_height - slider_height
@@ -126,7 +130,9 @@ ftxui::Element EditorComponent::RenderViewport() {
         }
 
         if (viewport_y >= slider_top && viewport_y < slider_top + slider_height) {
-            return ftxui::text("█") | ftxui::color(theme.cursor);
+            return ftxui::text("█") |
+                ftxui::color(theme.selection_fg) |
+                ftxui::bgcolor(theme.selection_bg);
         }
         return ftxui::text("│") | ftxui::color(theme.gutter) | ftxui::dim;
     };

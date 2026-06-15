@@ -132,8 +132,11 @@ private:
     bool search_match_case_ = false;
     bool search_whole_word_ = false;
     bool mouse_selecting_ = false;
+    bool is_dragging_scrollbar_ = false;
     size_t current_search_match_ = 0;
     size_t bottom_overlay_rows_ = 0;
+    size_t drag_start_scroll_y_ = 0;
+    int drag_start_y_ = 0;
     ftxui::Box editor_box_;
 };
 
