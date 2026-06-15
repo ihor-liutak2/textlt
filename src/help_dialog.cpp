@@ -81,6 +81,9 @@ bool HelpDialog::OnEvent(ftxui::Event event) {
 }
 
 size_t HelpDialog::VisibleLineCount() const {
+    if (center_content_) {
+        return std::max<size_t>(1, std::min<size_t>(lines_.size(), 8));
+    }
     return kHelpVisibleRows;
 }
 
@@ -108,8 +111,27 @@ ftxui::Element HelpDialog::Render() {
         }
         help_content.push_back(line);
     }
-    while (help_content.size() < visible_lines) {
+    while (!center_content_ && help_content.size() < visible_lines) {
         help_content.push_back(text(""));
+    }
+
+    if (center_content_) {
+        Element about_content =
+            vbox(std::move(help_content)) |
+            bgcolor(theme.modal_background) |
+            color(theme.modal_text_color) |
+            size(WIDTH, EQUAL, 56);
+
+        // About is a compact informational window, so it avoids the scrollable
+        // help viewport padding that would otherwise add dead vertical space.
+        return window(
+            text(title_.empty() ? "About" : title_) | bold | color(theme.modal_accent),
+            about_content) |
+            bgcolor(theme.modal_background) |
+            color(theme.modal_text_color) |
+            size(WIDTH, EQUAL, 60) |
+            size(HEIGHT, LESS_THAN, 14) |
+            clear_under;
     }
 
     Elements dialog_rows;
@@ -123,6 +145,7 @@ ftxui::Element HelpDialog::Render() {
         color(theme.modal_text_color) |
         frame |
         color(theme.modal_border) |
+        size(WIDTH, EQUAL, 68) |
         size(HEIGHT, EQUAL, static_cast<int>(visible_lines + 2)));
     dialog_rows.push_back(separator() | color(theme.modal_border));
     dialog_rows.push_back(text("Press Escape to close.") | dim | color(theme.modal_text_color));
@@ -132,7 +155,8 @@ ftxui::Element HelpDialog::Render() {
         color(theme.modal_text_color) |
         border |
         color(theme.modal_border) |
-        size(WIDTH, GREATER_THAN, 56);
+        size(WIDTH, EQUAL, 72) |
+        clear_under;
 }
 
 } // namespace textlt

@@ -287,8 +287,7 @@ void TextltApp::OpenFileDialog(FilePromptMode mode) {
 
 void TextltApp::OpenAboutDialog() {
     active_dropdown_ = -1;
-    help_dialog_.OpenContent("", {
-        "--------------------------------------------------",
+    help_dialog_.OpenContent("About", {
         "textlt — Modern TUI Text Editor",
         "Version: 1.0.0 (Stable Release)",
         "",
@@ -298,7 +297,6 @@ void TextltApp::OpenAboutDialog() {
         "",
         "Built with: C++17 & FTXUI Framework",
         "License: MIT License (c) 2026",
-        "--------------------------------------------------",
     }, true);
     active_action_ = "Opened About";
     focused_layer_ = 3;

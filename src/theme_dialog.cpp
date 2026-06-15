@@ -97,28 +97,33 @@ ftxui::Element ThemeDialog::Render() {
     using namespace ftxui;
     const Theme& theme = active_theme_ ? *active_theme_ : FallbackTheme();
 
-    return vbox({
-        // Title block with minor inner spacing
-        text(" Select Theme ") | bold | color(theme.modal_accent),
-        separator() | color(theme.modal_border),
-        
-        // Isolated list view container to prevent text color bleed-through
+    Element content = vbox({
+        // Isolated list view container to prevent text color bleed-through.
         vbox({
             menu_->Render()
-        }) | bgcolor(theme.modal_input_bg) 
-           | color(theme.modal_input_fg) 
-           | frame,
-           
+        }) |
+            bgcolor(theme.modal_input_bg) |
+            color(theme.modal_input_fg) |
+            frame |
+            size(WIDTH, EQUAL, 42) |
+            size(HEIGHT, LESS_THAN, 14),
+
         separator() | color(theme.modal_border),
         
         // Footer hint text block
         text(" Enter applies, Escape cancels. ") | dim | color(theme.modal_text_color),
     }) |
         bgcolor(theme.modal_background) |
+        color(theme.modal_text_color);
+
+    // Keep modal paint bounded to the window instead of the full overlay layer.
+    return window(
+        text(" Select Theme ") | bold | color(theme.modal_accent),
+        content) |
+        bgcolor(theme.modal_background) |
         color(theme.modal_text_color) |
-        border |
-        color(theme.modal_border) | // Colors the outer border exclusively
-        size(WIDTH, GREATER_THAN, 46);
+        size(WIDTH, EQUAL, 46) |
+        clear_under;
 }
 
 } // namespace textlt
