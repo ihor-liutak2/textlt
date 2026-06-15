@@ -29,7 +29,6 @@ add_executable(textlt
   src/editor_utils.cpp
   src/editor_viewport.cpp
   src/file_dialog.cpp
-  src/file_explorer.cpp
   src/file_utils.cpp
   src/git_manager.cpp
   src/help_dialog.cpp
@@ -39,6 +38,7 @@ add_executable(textlt
   src/lexers/database_lexer.cpp
   src/lexers/web_lexer.cpp
   src/main.cpp
+  src/sidebar_component.cpp
   src/syntax_highlighter.cpp
   src/terminal_flow_control_guard.cpp
   src/text_transformer.cpp

@@ -1,8 +1,8 @@
 #pragma once
 
+#include <chrono>
 #include <filesystem>
 #include <functional>
-#include <chrono>
 #include <string>
 #include <vector>
 
@@ -15,12 +15,11 @@
 
 namespace textlt {
 
-class FileExplorer : public ftxui::ComponentBase {
+class SidebarPanel : public ftxui::ComponentBase {
 private:
     enum class EntryKind {
         Directory,
         File,
-        FavoriteToggle,
         FavoriteFile,
         Placeholder,
     };
@@ -28,7 +27,7 @@ private:
 public:
     using FileOpenCallback = std::function<void(const std::filesystem::path&)>;
 
-    FileExplorer(
+    SidebarPanel(
         FileOpenCallback on_file_open,
         const Theme* theme,
         GitManager* git_manager,
@@ -40,49 +39,47 @@ public:
     void FocusMenu();
     void Refresh();
 
-    // NEW ARCHITECTURAL GETTERS: Expose tree status properties safely to external consumers
-    
-    /**
-     * @brief Retrieves the active parent directory root currently being browsed.
-     */
-    std::filesystem::path CurrentPath() const { return current_directory_; }
+    std::filesystem::path CurrentPath() const { return current_path_; }
 
-    /**
-     * @brief Dynamically resolves the filesystem path matching the row highlighted by the user.
-     * If the selection points to a directory, it returns that directory path; 
-     * otherwise, it falls back to the current active directory.
-     */
     std::filesystem::path GetSelectedDirectoryPath() const {
-        if (selected_entry_ >= 0 && selected_entry_ < static_cast<int>(entry_paths_.size())) {
+        if (!show_favorites_mode_ &&
+            selected_entry_ >= 0 &&
+            selected_entry_ < static_cast<int>(entry_paths_.size()) &&
+            selected_entry_ < static_cast<int>(entry_kinds_.size())) {
             const auto& target_path = entry_paths_[selected_entry_];
             if (entry_kinds_[selected_entry_] == EntryKind::Directory &&
                 std::filesystem::is_directory(target_path)) {
                 return target_path;
             }
         }
-        return current_directory_;
+        return current_path_;
     }
 
 private:
+    void SetFavoritesMode(bool enabled);
     void OpenSelectedEntry();
     bool OpenDirectoryEntry(int entry_index);
     int EntryIndexAtMouse(const ftxui::Mouse& mouse) const;
     char GitStatusForPath(const std::filesystem::path& path) const;
     void RebuildEntries();
+    void RebuildProjectEntries();
+    void RebuildFavoriteEntries();
     void AddEntry(std::filesystem::path path, std::string label, EntryKind kind);
 
     FileOpenCallback on_file_open_;
     const Theme* theme_ = nullptr;
     GitManager* git_manager_ = nullptr;
     EditorConfig* config_ = nullptr;
-    std::filesystem::path current_directory_;
+    std::filesystem::path current_path_;
     std::vector<std::filesystem::path> entry_paths_;
     std::vector<std::string> entry_labels_;
     std::vector<EntryKind> entry_kinds_;
     int selected_entry_ = 0;
     int last_clicked_entry_ = -1;
-    bool favorites_expanded_ = false;
+    bool show_favorites_mode_ = false;
     std::chrono::steady_clock::time_point last_click_time_{};
+    ftxui::Box project_tab_box_;
+    ftxui::Box favorites_tab_box_;
     ftxui::Box menu_box_;
     ftxui::Component menu_;
 };

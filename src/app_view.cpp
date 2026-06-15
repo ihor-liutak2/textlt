@@ -56,7 +56,7 @@ ftxui::Element TextltApp::Render() {
         
     Element workspace = editor_config_.show_file_explorer
         ? hbox({
-              file_explorer_->Render() | size(WIDTH, EQUAL, 28),
+              sidebar_panel_->Render() | size(WIDTH, EQUAL, 28),
               separator(),
               text_editor_->Render() | xflex,
           })
@@ -96,9 +96,9 @@ ftxui::Element TextltApp::Render() {
     const std::string file_path = editor->CurrentFilePath();
     const std::string filename =
         std::filesystem::path(file_path).filename().string();
-    const auto explorer = std::static_pointer_cast<FileExplorer>(file_explorer_);
+    const auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
     const std::filesystem::path git_workspace = editor_config_.show_file_explorer
-        ? explorer->CurrentPath()
+        ? sidebar->CurrentPath()
         : std::filesystem::path(file_path).parent_path();
     git_manager_.SetWorkingDirectory(
         git_workspace.empty() ? std::filesystem::current_path() : git_workspace);
@@ -316,7 +316,7 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     const bool editor_can_handle_direct_shortcut =
         focused_layer_ == 0 &&
         active_dropdown_ < 0 &&
-        !explorer_has_focus_ &&
+        !sidebar_has_focus_ &&
         !file_dialog_.IsOpen() &&
         !help_dialog_.IsOpen() &&
         !theme_dialog_.IsOpen() &&

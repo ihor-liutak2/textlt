@@ -14,8 +14,8 @@ TextltApp::TextltApp()
       current_theme_(FindThemeByName(themes_, editor_config_.active_theme_name)),
       screen_(ftxui::ScreenInteractive::Fullscreen()),
       text_editor_(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_)),
-      file_explorer_(ftxui::Make<FileExplorer>(
-          [this](const std::filesystem::path& path) { OpenExplorerFile(path); },
+      sidebar_panel_(ftxui::Make<SidebarPanel>(
+          [this](const std::filesystem::path& path) { OpenSidebarFile(path); },
           &current_theme_,
           &git_manager_,
           &editor_config_)),
@@ -95,7 +95,7 @@ TextltApp::TextltApp()
         &current_dropdown_entries_, &selected_dropdown_item_, dropdown_option);
 
     auto body_content = ftxui::Container::Horizontal({
-        file_explorer_,
+        sidebar_panel_,
         text_editor_,
     });
     body_container_ = ftxui::CatchEvent(body_content, [this](ftxui::Event event) {
@@ -105,7 +105,7 @@ TextltApp::TextltApp()
             !file_dialog_.IsOpen() &&
             !help_dialog_.IsOpen() &&
             !theme_dialog_.IsOpen() &&
-            !explorer_has_focus_) {
+            !sidebar_has_focus_) {
             text_editor_->OnEvent(event);
             return true;
         }
@@ -269,12 +269,12 @@ void TextltApp::OpenFileDialog(FilePromptMode mode) {
     
     std::string default_path = std::static_pointer_cast<EditorComponent>(text_editor_)->CurrentFilePath();
     
-    // If the active file has no path or is an untitled draft, sync with the File Explorer selection
+    // If the active file has no path or is an untitled draft, sync with the sidebar selection.
     if (default_path.empty() || default_path == "Untitled" || default_path == "untitled.txt") {
-        auto explorer_ptr = std::static_pointer_cast<FileExplorer>(file_explorer_);
+        auto sidebar_ptr = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
         
-        // Dynamic path acquisition directly from the highlighted file tree node element
-        default_path = explorer_ptr->GetSelectedDirectoryPath().string();
+        // Dynamic path acquisition directly from the highlighted tree node.
+        default_path = sidebar_ptr->GetSelectedDirectoryPath().string();
         
         // Append trailing slash so the path is prepared for filename entry instantly
         if (!default_path.empty() && default_path.back() != '/') {
@@ -387,23 +387,23 @@ void TextltApp::SwitchEditorFocus() {
         FocusEditor();
         return;
     }
-    if (explorer_has_focus_) {
+    if (sidebar_has_focus_) {
         FocusEditor();
     } else {
-        FocusExplorer();
+        FocusSidebar();
     }
 }
 
 void TextltApp::FocusEditor() {
-    explorer_has_focus_ = false;
+    sidebar_has_focus_ = false;
     focused_layer_ = 0;
     text_editor_->TakeFocus();
 }
 
-void TextltApp::FocusExplorer() {
-    explorer_has_focus_ = true;
+void TextltApp::FocusSidebar() {
+    sidebar_has_focus_ = true;
     focused_layer_ = 0;
-    std::static_pointer_cast<FileExplorer>(file_explorer_)->FocusMenu();
+    std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->FocusMenu();
 }
 
 void TextltApp::OpenFindPanel(bool replace_mode) {
@@ -621,7 +621,7 @@ void TextltApp::InitializeWithFiles(const std::vector<std::string>& files_to_ope
     FocusEditor();
 }
 
-void TextltApp::OpenExplorerFile(const std::filesystem::path& path) {
+void TextltApp::OpenSidebarFile(const std::filesystem::path& path) {
     std::string error;
     if (OpenFile(path.string(), error)) {
         FocusEditor();
@@ -711,7 +711,7 @@ void TextltApp::ToggleActiveFavorite() {
     }
 
     UpdateFileMenuLabels();
-    std::static_pointer_cast<FileExplorer>(file_explorer_)->Refresh();
+    std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->Refresh();
     CloseDropdown();
     screen_.PostEvent(ftxui::Event::Custom);
 }

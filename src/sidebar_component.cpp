@@ -1,4 +1,4 @@
-#include "file_explorer.hpp"
+#include "sidebar_component.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -18,7 +18,7 @@ std::string DisplayName(const std::filesystem::path& path) {
 
 } // namespace
 
-FileExplorer::FileExplorer(
+SidebarPanel::SidebarPanel(
     FileOpenCallback on_file_open,
     const Theme* theme,
     GitManager* git_manager,
@@ -27,7 +27,7 @@ FileExplorer::FileExplorer(
       theme_(theme),
       git_manager_(git_manager),
       config_(config),
-      current_directory_(std::filesystem::current_path()) {
+      current_path_(std::filesystem::current_path()) {
     ftxui::MenuOption option = ftxui::MenuOption::Vertical();
     option.on_enter = [this] { OpenSelectedEntry(); };
     menu_ = ftxui::Menu(&entry_labels_, &selected_entry_, option);
@@ -35,18 +35,43 @@ FileExplorer::FileExplorer(
     RebuildEntries();
 }
 
-ftxui::Element FileExplorer::Render() {
+ftxui::Element SidebarPanel::Render() {
     using namespace ftxui;
 
     if (git_manager_) {
-        git_manager_->SetWorkingDirectory(current_directory_);
+        git_manager_->SetWorkingDirectory(current_path_);
     }
 
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    Element project_tab =
+        text("[ Project ]") |
+        color(theme.foreground) |
+        reflect(project_tab_box_);
+    Element favorites_tab =
+        text("[ Favorites ]") |
+        color(theme.foreground) |
+        reflect(favorites_tab_box_);
+
+    // Active tabs use the theme selection colors so the label stays readable
+    // across light and dark themes without relying on inverted menu colors.
+    if (!show_favorites_mode_) {
+        project_tab = project_tab |
+            bgcolor(theme.selection_bg) |
+            color(theme.selection_fg) |
+            bold;
+    } else {
+        favorites_tab = favorites_tab |
+            bgcolor(theme.selection_bg) |
+            color(theme.selection_fg) |
+            bold;
+    }
+
     Elements rows;
     for (size_t index = 0; index < entry_labels_.size(); ++index) {
         Element row = text(entry_labels_[index]);
-        if (index < entry_paths_.size() && index < entry_kinds_.size() &&
+        if (!show_favorites_mode_ &&
+            index < entry_paths_.size() &&
+            index < entry_kinds_.size() &&
             (entry_kinds_[index] == EntryKind::Directory ||
              entry_kinds_[index] == EntryKind::File)) {
             const char status = GitStatusForPath(entry_paths_[index]);
@@ -55,9 +80,6 @@ ftxui::Element FileExplorer::Render() {
             } else if (status == '?' || status == 'A') {
                 row = row | color(theme.syntax_string);
             }
-        }
-        if (index < entry_kinds_.size() && entry_kinds_[index] == EntryKind::FavoriteToggle) {
-            row = row | bold | color(theme.modal_accent);
         }
 
         if (static_cast<int>(index) == selected_entry_) {
@@ -69,14 +91,34 @@ ftxui::Element FileExplorer::Render() {
     }
 
     return vbox({
-        text("Files") | bold,
+        hbox({
+            project_tab,
+            text(" "),
+            favorites_tab,
+        }),
         separator(),
         vbox(std::move(rows)) | frame | reflect(menu_box_) | yflex,
     }) |
         border;
 }
 
-bool FileExplorer::OnEvent(ftxui::Event event) {
+bool SidebarPanel::OnEvent(ftxui::Event event) {
+    if (event.is_mouse() &&
+        event.mouse().button == ftxui::Mouse::Left &&
+        event.mouse().motion == ftxui::Mouse::Pressed &&
+        project_tab_box_.Contain(event.mouse().x, event.mouse().y)) {
+        SetFavoritesMode(false);
+        return true;
+    }
+
+    if (event.is_mouse() &&
+        event.mouse().button == ftxui::Mouse::Left &&
+        event.mouse().motion == ftxui::Mouse::Pressed &&
+        favorites_tab_box_.Contain(event.mouse().x, event.mouse().y)) {
+        SetFavoritesMode(true);
+        return true;
+    }
+
     if (event.is_mouse() &&
         event.mouse().button == ftxui::Mouse::Left &&
         event.mouse().motion == ftxui::Mouse::Pressed) {
@@ -89,9 +131,7 @@ bool FileExplorer::OnEvent(ftxui::Event event) {
 
             selected_entry_ = clicked_entry;
             FocusMenu();
-            if (clicked_entry < static_cast<int>(entry_kinds_.size()) &&
-                (entry_kinds_[clicked_entry] == EntryKind::FavoriteToggle ||
-                 entry_kinds_[clicked_entry] == EntryKind::FavoriteFile)) {
+            if (show_favorites_mode_) {
                 OpenSelectedEntry();
                 last_clicked_entry_ = -1;
                 last_click_time_ = {};
@@ -105,7 +145,6 @@ bool FileExplorer::OnEvent(ftxui::Event event) {
                     return true;
                 }
 
-                // Double-clicking a regular file delegates to the central file-open callback.
                 OpenSelectedEntry();
                 return true;
             }
@@ -119,38 +158,41 @@ bool FileExplorer::OnEvent(ftxui::Event event) {
     return ComponentBase::OnEvent(event);
 }
 
-bool FileExplorer::Focusable() const {
+bool SidebarPanel::Focusable() const {
     return true;
 }
 
-void FileExplorer::FocusMenu() {
+void SidebarPanel::FocusMenu() {
     menu_->TakeFocus();
 }
 
-void FileExplorer::Refresh() {
+void SidebarPanel::Refresh() {
     RebuildEntries();
 }
 
-void FileExplorer::OpenSelectedEntry() {
+void SidebarPanel::SetFavoritesMode(bool enabled) {
+    if (show_favorites_mode_ == enabled) {
+        return;
+    }
+
+    show_favorites_mode_ = enabled;
+    selected_entry_ = 0;
+    last_clicked_entry_ = -1;
+    last_click_time_ = {};
+    RebuildEntries();
+}
+
+void SidebarPanel::OpenSelectedEntry() {
     if (selected_entry_ < 0 ||
-        selected_entry_ >= static_cast<int>(entry_paths_.size())) {
-        return;
-    }
-
-    if (selected_entry_ >= static_cast<int>(entry_kinds_.size())) {
-        return;
-    }
-
-    const EntryKind selected_kind = entry_kinds_[selected_entry_];
-    if (selected_kind == EntryKind::FavoriteToggle) {
-        favorites_expanded_ = !favorites_expanded_;
-        RebuildEntries();
+        selected_entry_ >= static_cast<int>(entry_paths_.size()) ||
+        selected_entry_ >= static_cast<int>(entry_kinds_.size())) {
         return;
     }
 
     const std::filesystem::path selected_path = entry_paths_[selected_entry_];
+    const EntryKind selected_kind = entry_kinds_[selected_entry_];
+    std::error_code error;
     if (selected_kind == EntryKind::FavoriteFile) {
-        std::error_code error;
         if (std::filesystem::is_regular_file(selected_path, error) && on_file_open_) {
             on_file_open_(selected_path);
             return;
@@ -158,11 +200,10 @@ void FileExplorer::OpenSelectedEntry() {
         if (config_) {
             config_->RemoveFavorite(selected_path.string());
         }
-        RebuildEntries();
+        Refresh();
         return;
     }
 
-    std::error_code error;
     if (selected_kind == EntryKind::Directory &&
         std::filesystem::is_directory(selected_path, error)) {
         OpenDirectoryEntry(selected_entry_);
@@ -175,11 +216,11 @@ void FileExplorer::OpenSelectedEntry() {
     }
 }
 
-bool FileExplorer::OpenDirectoryEntry(int entry_index) {
-    if (entry_index < 0 || entry_index >= static_cast<int>(entry_paths_.size())) {
-        return false;
-    }
-    if (entry_index >= static_cast<int>(entry_kinds_.size()) ||
+bool SidebarPanel::OpenDirectoryEntry(int entry_index) {
+    if (show_favorites_mode_ ||
+        entry_index < 0 ||
+        entry_index >= static_cast<int>(entry_paths_.size()) ||
+        entry_index >= static_cast<int>(entry_kinds_.size()) ||
         entry_kinds_[entry_index] != EntryKind::Directory) {
         return false;
     }
@@ -190,15 +231,15 @@ bool FileExplorer::OpenDirectoryEntry(int entry_index) {
         return false;
     }
 
-    current_directory_ = std::filesystem::canonical(selected_path, error);
+    current_path_ = std::filesystem::canonical(selected_path, error);
     if (error) {
-        current_directory_ = selected_path;
+        current_path_ = selected_path;
     }
     RebuildEntries();
     return true;
 }
 
-int FileExplorer::EntryIndexAtMouse(const ftxui::Mouse& mouse) const {
+int SidebarPanel::EntryIndexAtMouse(const ftxui::Mouse& mouse) const {
     if (!menu_box_.Contain(mouse.x, mouse.y)) {
         return -1;
     }
@@ -210,7 +251,7 @@ int FileExplorer::EntryIndexAtMouse(const ftxui::Mouse& mouse) const {
     return entry_index;
 }
 
-char FileExplorer::GitStatusForPath(const std::filesystem::path& path) const {
+char SidebarPanel::GitStatusForPath(const std::filesystem::path& path) const {
     if (!git_manager_) {
         return '\0';
     }
@@ -246,36 +287,33 @@ char FileExplorer::GitStatusForPath(const std::filesystem::path& path) const {
     return '\0';
 }
 
-void FileExplorer::RebuildEntries() {
+void SidebarPanel::RebuildEntries() {
     entry_paths_.clear();
     entry_labels_.clear();
     entry_kinds_.clear();
 
-    if (config_ && !config_->favorites_.empty()) {
-        AddEntry({}, favorites_expanded_ ? " [Favorites]" : " [Favorites]", EntryKind::FavoriteToggle);
-        if (favorites_expanded_) {
-            std::vector<std::string> unique_favorites;
-            for (const std::string& favorite : config_->favorites_) {
-                const std::string normalized_path = EditorConfig::NormalizeFavoritePath(favorite);
-                if (!normalized_path.empty() &&
-                    std::find(unique_favorites.begin(), unique_favorites.end(), normalized_path) ==
-                        unique_favorites.end()) {
-                    unique_favorites.push_back(normalized_path);
-                    AddEntry(normalized_path, "  " + normalized_path, EntryKind::FavoriteFile);
-                }
-            }
-        }
+    if (show_favorites_mode_) {
+        RebuildFavoriteEntries();
+    } else {
+        RebuildProjectEntries();
     }
 
+    if (entry_labels_.empty()) {
+        AddEntry({}, show_favorites_mode_ ? " No favorites" : " <empty>", EntryKind::Placeholder);
+    }
+    selected_entry_ = std::min(selected_entry_, static_cast<int>(entry_labels_.size()) - 1);
+}
+
+void SidebarPanel::RebuildProjectEntries() {
     std::error_code error;
-    const std::filesystem::path parent = current_directory_.parent_path();
-    if (!parent.empty() && parent != current_directory_) {
+    const std::filesystem::path parent = current_path_.parent_path();
+    if (!parent.empty() && parent != current_path_) {
         AddEntry(parent, " ../", EntryKind::Directory);
     }
 
     std::vector<std::filesystem::directory_entry> directories;
     std::vector<std::filesystem::directory_entry> files;
-    for (const auto& entry : std::filesystem::directory_iterator(current_directory_, error)) {
+    for (const auto& entry : std::filesystem::directory_iterator(current_path_, error)) {
         if (entry.is_directory(error)) {
             directories.push_back(entry);
         } else if (entry.is_regular_file(error)) {
@@ -295,14 +333,31 @@ void FileExplorer::RebuildEntries() {
     for (const auto& file : files) {
         AddEntry(file.path(), " " + DisplayName(file.path()), EntryKind::File);
     }
-
-    if (entry_labels_.empty()) {
-        AddEntry({}, " <empty>", EntryKind::Placeholder);
-    }
-    selected_entry_ = std::min(selected_entry_, static_cast<int>(entry_labels_.size()) - 1);
 }
 
-void FileExplorer::AddEntry(std::filesystem::path path, std::string label, EntryKind kind) {
+void SidebarPanel::RebuildFavoriteEntries() {
+    if (!config_) {
+        return;
+    }
+
+    std::vector<std::string> unique_favorites;
+    for (const std::string& favorite : config_->favorites_) {
+        const std::string normalized_path = EditorConfig::NormalizeFavoritePath(favorite);
+        if (!normalized_path.empty() &&
+            std::find(unique_favorites.begin(), unique_favorites.end(), normalized_path) ==
+                unique_favorites.end()) {
+            unique_favorites.push_back(normalized_path);
+            const std::string filename =
+                std::filesystem::path(normalized_path).filename().string();
+            AddEntry(
+                normalized_path,
+                " " + (filename.empty() ? normalized_path : filename),
+                EntryKind::FavoriteFile);
+        }
+    }
+}
+
+void SidebarPanel::AddEntry(std::filesystem::path path, std::string label, EntryKind kind) {
     entry_paths_.push_back(std::move(path));
     entry_labels_.push_back(std::move(label));
     entry_kinds_.push_back(kind);

@@ -11,9 +11,9 @@
 #include "editor_component.hpp"
 #include "editor_config.hpp"
 #include "file_dialog.hpp"
-#include "file_explorer.hpp"
 #include "git_manager.hpp"
 #include "help_dialog.hpp"
+#include "sidebar_component.hpp"
 #include "theme_dialog.hpp"
 
 namespace textlt {
@@ -48,11 +48,11 @@ private:
     void ActivateTopMenu();
     void SwitchEditorFocus();
     void FocusEditor();
-    void FocusExplorer();
+    void FocusSidebar();
     bool SaveFile(const std::string& path, std::string& error);
     bool OpenFile(const std::string& path, std::string& error);
     void InitializeWithFiles(const std::vector<std::string>& files_to_open);
-    void OpenExplorerFile(const std::filesystem::path& path);
+    void OpenSidebarFile(const std::filesystem::path& path);
     void SaveCurrentFile();
     bool ConfirmFileDialog(FilePromptMode mode, const std::string& path, std::string& error);
     void PreviewTheme(const std::string& theme_name);
@@ -98,7 +98,7 @@ private:
     ftxui::ScreenInteractive screen_;
     GitManager git_manager_;
     ftxui::Component text_editor_;
-    ftxui::Component file_explorer_;
+    ftxui::Component sidebar_panel_;
     FileDialog file_dialog_;
     HelpDialog help_dialog_;
     ThemeDialog theme_dialog_;
@@ -116,7 +116,7 @@ private:
     int focused_layer_ = 0;
     int selected_dropdown_item_ = 0;
     int search_panel_tab_index_ = 0;
-    bool explorer_has_focus_ = false;
+    bool sidebar_has_focus_ = false;
     bool show_goto_line_bar_ = false;
     bool exit_confirmation_open_ = false;
     bool exit_after_save_as_ = false;
