@@ -54,7 +54,7 @@ namespace textlt {
         bool TryParseRgb(const std::string& name, Rgb* rgb) {
             if (name.size() == 7 && name[0] == '#') {
                 unsigned int red = 0, green = 0, blue = 0;
-                if (std::sscanf(name.c_str(), "#%02x%02x%02x", &red, &green, &blue) == 3) {
+                if (std::sscanf(name.c_str(), "#%2x%2x%2x", &red, &green, &blue) == 3) {
                     *rgb = {red, green, blue};
                     return true;
                 }
