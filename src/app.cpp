@@ -67,7 +67,6 @@ TextltApp::TextltApp()
           {" Exit "},
       }),
       current_dropdown_entries_(dropdown_entries_[0]) {
-    editor_config_.active_theme_name = current_theme_.name;
     UpdateFileMenuLabels();
     UpdateOptionsMenuLabels();
 
@@ -662,15 +661,15 @@ bool TextltApp::ConfirmFileDialog(
 
 void TextltApp::PreviewTheme(const std::string& theme_name) {
     current_theme_ = FindThemeByName(themes_, theme_name);
+    editor_config_.SetActiveThemeName(current_theme_.name);
     active_action_ = "Previewing theme " + current_theme_.name;
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
 void TextltApp::SelectTheme(const std::string& theme_name) {
     current_theme_ = FindThemeByName(themes_, theme_name);
-    editor_config_.active_theme_name = theme_name;
+    editor_config_.SetActiveThemeName(current_theme_.name);
     active_action_ = "Theme changed to " + current_theme_.name;
-    SaveConfig();
     screen_.PostEvent(ftxui::Event::Custom);
     CloseThemeDialog();
 }

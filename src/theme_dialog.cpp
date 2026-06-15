@@ -111,7 +111,7 @@ ftxui::Element ThemeDialog::Render() {
         separator() | color(theme.modal_border),
         
         // Footer hint text block
-        text(" Enter applies, Escape cancels. ") | dim | color(theme.modal_text_color),
+        text(" Selection saves immediately. Escape closes. ") | dim | color(theme.modal_text_color),
     }) |
         bgcolor(theme.modal_background) |
         color(theme.modal_text_color);

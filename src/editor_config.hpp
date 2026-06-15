@@ -22,6 +22,7 @@ struct EditorConfig {
     bool AddFavorite(const std::string& path);
     bool RemoveFavorite(const std::string& path);
     bool IsFavorite(const std::string& path) const;
+    bool SetActiveThemeName(const std::string& name);
 
     void SetConfigPath(std::filesystem::path path);
     bool Persist() const;

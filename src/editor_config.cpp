@@ -126,6 +126,15 @@ bool EditorConfig::IsFavorite(const std::string& path) const {
     return std::find(favorites_.begin(), favorites_.end(), normalized_path) != favorites_.end();
 }
 
+bool EditorConfig::SetActiveThemeName(const std::string& name) {
+    if (name.empty()) {
+        return false;
+    }
+
+    active_theme_name = name;
+    return Persist();
+}
+
 void EditorConfig::SetConfigPath(std::filesystem::path path) {
     config_path_ = std::move(path);
 }
