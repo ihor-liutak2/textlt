@@ -388,9 +388,11 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         return true;
     }
     
-    // 3. Optional: Intercept pure Ctrl+Shift+V only if your Konsole bypasses it.
-    // Otherwise, Konsole will just stream characters automatically into EditorComponent::OnEvent
-    if (event == ftxui::Event::Special("Ctrl+Shift+V") || event.input() == "Ctrl+Shift+V") {
+    // Keep Ctrl+Shift+V for terminal configurations that reserve Ctrl+V.
+    if (input == "\x16" ||
+        input == "Ctrl+V" ||
+        event == ftxui::Event::Special("Ctrl+Shift+V") ||
+        input == "Ctrl+Shift+V") {
         active_dropdown_ = 1;
         selected_dropdown_item_ = 4; // Index for "Paste"
         RunDropdownAction();

@@ -25,6 +25,14 @@ Editing
   Edit Menu     Convert Indents: 4 -> 2 Spaces
   Edit Menu     Convert Indents: 2 -> 4 Spaces
 
+Selection & Clipboard
+  Shift+Arrows  Extend the active text selection
+  Mouse Drag    Select text inside the editor viewport
+  Ctrl+C        Copy the active selection, or current line when nothing is selected
+  Ctrl+X        Cut the active selection, or current line when nothing is selected
+  Ctrl+V        Paste clipboard text into the editor
+  Ctrl+Shift+V  Paste clipboard text when the terminal reserves Ctrl+V
+
 Menus
   Tab           Switch focus between File Explorer and Editor
   F1            Open this help window

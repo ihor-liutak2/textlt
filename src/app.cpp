@@ -1,11 +1,42 @@
 #include "app.hpp"
 
+#include <cstdio>
+#include <cstdlib>
+#include <filesystem>
 #include <stdexcept>
 
 #include "ftxui/component/component_options.hpp"
 #include "theme.hpp"
 
 namespace textlt {
+namespace {
+
+bool CommandAvailable(const std::string& command) {
+    const std::string check_command = "command -v " + command + " >/dev/null 2>&1";
+    return std::system(check_command.c_str()) == 0;
+}
+
+bool IsWslEnvironment() {
+    std::error_code error;
+    if (std::filesystem::exists("/proc/sys/fs/binfmt_misc/WSLInterop", error)) {
+        return true;
+    }
+    return CommandAvailable("clip.exe");
+}
+
+bool WriteTextToPipe(const std::string& command, const std::string& text) {
+    FILE* pipe = popen(command.c_str(), "w");
+    if (!pipe) {
+        return false;
+    }
+
+    const size_t written = std::fwrite(text.data(), 1, text.size(), pipe);
+    std::fflush(pipe);
+    const int close_status = pclose(pipe);
+    return written == text.size() && close_status == 0;
+}
+
+} // namespace
 
 TextltApp::TextltApp()
     : config_manager_("config.json"),
@@ -40,17 +71,17 @@ TextltApp::TextltApp()
       dropdown_entries_({
           {" New ", " Open ", " Save ", " Save As ", " [ ] Add to Favorites ", " Exit "},
           {
-              " Undo ",
-              " Redo ",
-              " Cut ",
-              " Copy ",
-              " Paste ",
-              " Toggle Comment   Ctrl+/ ",
-              " Toggle Case        Ctrl+T ",
+              " Undo              (Ctrl+Z) ",
+              " Redo              (Ctrl+Y) ",
+              " Cut               (Ctrl+X) ",
+              " Copy              (Ctrl+C) ",
+              " Paste             (Ctrl+V) ",
+              " Toggle Comment    (Ctrl+/) ",
+              " Toggle Case       (Ctrl+T) ",
               " Convert Indents: 4 -> 2 Spaces ",
               " Convert Indents: 2 -> 4 Spaces ",
-              " Find...           Ctrl+F ",
-              " Replace...        Ctrl+R ",
+              " Find...           (Ctrl+F) ",
+              " Replace...        (Ctrl+R) ",
           },
           {
               " Toggle Line Numbers ",
@@ -1013,12 +1044,14 @@ void TextltApp::HandleOptionsMenu(int item) {
 
 void TextltApp::WriteSystemClipboard(const std::string& text) {
     if (text.empty()) return;
-    FILE* pipe = popen("xclip -selection clipboard -i 2>/dev/null", "w");
-    if (pipe) {
-        std::fputs(text.c_str(), pipe);
-        std::fflush(pipe);
-        pclose(pipe);
+
+    if (IsWslEnvironment() &&
+        CommandAvailable("clip.exe") &&
+        WriteTextToPipe("clip.exe 2>/dev/null", text)) {
+        return;
     }
+
+    WriteTextToPipe("xclip -selection clipboard -i 2>/dev/null", text);
 }
 
 } // namespace textlt
