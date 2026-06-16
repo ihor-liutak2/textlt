@@ -85,10 +85,12 @@ CloudTtsPipeline::~CloudTtsPipeline() {
     JoinWorker();
 }
 
-void CloudTtsPipeline::Submit(std::string text, SourcePosition start_position) {
+void CloudTtsPipeline::Submit(std::string entire_document_text, size_t current_cursor_line) {
     JoinWorker();
-    worker_ = std::thread([text = std::move(text), start_position] {
-        WriteDiagnostics(BuildDiagnostics(text, start_position));
+    worker_ = std::thread([text = std::move(entire_document_text), current_cursor_line] {
+        // BuildDiagnostics still expects SourcePosition, so we construct one from the line number.
+        SourcePosition start_pos = {current_cursor_line, 0};
+        WriteDiagnostics(BuildDiagnostics(text, start_pos));
     });
 }
 

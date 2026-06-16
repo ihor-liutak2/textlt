@@ -381,6 +381,14 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         return true;
     }
 
+    // Handle Enter key for new line insertion in the editor
+    if (editor_can_handle_direct_shortcut && event == ftxui::Event::Return) {
+        auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+        editor_ptr->HandleAutoIndentReturn();
+        screen_.PostEvent(ftxui::Event::Custom);
+        return true;
+    }
+
     if (can_open_find_panel && (input == "\x06" || input == "Ctrl+F")) {
         OpenFindPanel(false);
         return true;

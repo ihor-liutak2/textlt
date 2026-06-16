@@ -29,6 +29,7 @@ public:
     void SaveToFile(const std::string& path);
     void LoadFromFile(const std::string& path);
     void NewFile(const std::string& path);
+    std::string GetAllText() const;
     const std::string& CurrentFilePath() const;
     bool IsDirty() const;
     LineEnding ActiveLineEnding() const;
@@ -72,6 +73,7 @@ public:
     
     std::string GetCurrentLineText() const;
     void DeleteCurrentLine();
+    bool HandleAutoIndentReturn(); // Moved from private
 
 private:
     struct SearchMatch {
@@ -116,7 +118,6 @@ private:
     void EndTypingGroup();
     void DeleteSelectionWithoutSnapshot();
     bool HandleAutoPairCharacter(const std::string& input);
-    bool HandleAutoIndentReturn();
     size_t FindMatchAtOrAfterCursor() const;
     void MoveCursorToSearchMatch(const SearchMatch& match);
     std::string GetCommentPrefix() const;

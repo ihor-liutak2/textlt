@@ -790,11 +790,8 @@ void TextltApp::RestoreFavoriteCursor(const std::string& path) {
 void TextltApp::QueueCloudTtsDebugFromCursor() {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
     cloud_tts_pipeline_.Submit(
-        editor_ptr->TextFromCursor(),
-        {
-            static_cast<size_t>(std::max(0, editor_ptr->GetCursorRow())),
-            static_cast<size_t>(std::max(0, editor_ptr->GetCursorCol())),
-        });
+        editor_ptr->GetAllText(), // Entire document text
+        static_cast<size_t>(std::max(0, editor_ptr->GetCursorRow()))); // Current cursor line number
     active_action_ = "Queued Cloud TTS debug pipeline";
     screen_.PostEvent(ftxui::Event::Custom);
 }

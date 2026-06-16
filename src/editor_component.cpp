@@ -235,6 +235,26 @@ std::string EditorComponent::TextFromCursor() const {
     return text;
 }
 
+std::string EditorComponent::GetAllText() const {
+    if (text_lines_.empty()) {
+        return "";
+    }
+
+    std::string full_text;
+    full_text.reserve(text_lines_.size() * 80); // Estimate capacity for efficiency
+
+    const std::string line_ending =
+        active_line_ending_ == LineEnding::CRLF ? "\r\n" : "\n";
+
+    for (size_t i = 0; i < text_lines_.size(); ++i) {
+        full_text += text_lines_[i];
+        if (i + 1 < text_lines_.size()) {
+            full_text += line_ending;
+        }
+    }
+    return full_text;
+}
+
 void EditorComponent::SetBottomOverlayRows(size_t rows) {
     bottom_overlay_rows_ = rows;
 }

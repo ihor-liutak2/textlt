@@ -32,7 +32,7 @@ public:
     CloudTtsPipeline(const CloudTtsPipeline&) = delete;
     CloudTtsPipeline& operator=(const CloudTtsPipeline&) = delete;
 
-    void Submit(std::string text, SourcePosition start_position);
+    void Submit(std::string entire_document_text, size_t current_cursor_line);
 
 private:
     static std::vector<ChunkDiagnostic> BuildDiagnostics(
