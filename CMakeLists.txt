@@ -25,7 +25,8 @@ add_executable(textlt
   src/config_manager.cpp
   src/editor_config.cpp
   src/editor_component.cpp
-  src/editor_keyboard.cpp
+  src/editor_events.cpp
+  src/editor_input_controller.cpp
   src/editor_mouse.cpp
   src/editor_utils.cpp
   src/editor_viewport.cpp
@@ -39,12 +40,25 @@ add_executable(textlt
   src/lexers/database_lexer.cpp
   src/lexers/web_lexer.cpp
   src/main.cpp
+  src/menu_bar.cpp
+  src/modal_window.cpp
   src/sidebar_component.cpp
   src/syntax_highlighter.cpp
   src/terminal_flow_control_guard.cpp
   src/text_transformer.cpp
   src/theme_dialog.cpp
   src/theme.cpp
+  src/document.hpp
+  src/document.cpp
+  src/document_content.cpp
+  src/document_cursor.cpp
+  src/document_editing.cpp
+  src/document_history.cpp
+  src/document_selection.cpp
+  src/document_transform.cpp
+  src/file_manager.cpp
+  src/history_manager.cpp
 )
 
+target_include_directories(textlt PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(textlt PRIVATE ftxui::screen ftxui::dom ftxui::component)

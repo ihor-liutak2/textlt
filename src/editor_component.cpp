@@ -14,1481 +14,910 @@
 
 namespace textlt {
 
-namespace {
+    namespace {
 
-bool IsPairOpeningCharacter(char character) {
-    return character == '{' || character == '[' || character == '(' ||
-        character == '"' || character == '\'';
-}
+        // Checks if the character is an opening bracket or quote
+        bool IsPairOpeningCharacter(char character) {
+            return character == '{' || character == '[' || character == '(' ||
+            character == '"' || character == '\'';
+        }
 
-bool IsPairClosingCharacter(char character) {
-    return character == '}' || character == ']' || character == ')' ||
-        character == '"' || character == '\'';
-}
+        // Checks if the character is a closing bracket or quote
+        bool IsPairClosingCharacter(char character) {
+            return character == '}' || character == ']' || character == ')' ||
+            character == '"' || character == '\'';
+        }
 
-bool IsBlankLine(const std::string& line) {
-    return std::all_of(line.begin(), line.end(), [](unsigned char character) {
-        return std::isspace(character);
-    });
-}
+        // Returns true if the string contains only whitespace characters
+        bool IsBlankLine(const std::string& line) {
+            return std::all_of(line.begin(), line.end(), [](unsigned char character) {
+                return std::isspace(character);
+            });
+        }
 
-char ClosingPairFor(char character) {
-    switch (character) {
-        case '{': return '}';
-        case '[': return ']';
-        case '(': return ')';
-        case '"': return '"';
-        case '\'': return '\'';
-        default: return '\0';
+        // Returns the corresponding closing character for a given opening character
+        char ClosingPairFor(char character) {
+            switch (character) {
+                case '{': return '}';
+                case '[': return ']';
+                case '(': return ')';
+                case '"': return '"';
+                case '\'': return '\'';
+                default: return '\0';
+            }
+        }
+
+        // Returns the leading whitespace (indentation) of a line
+        std::string LeadingIndent(const std::string& line) {
+            size_t end = 0;
+            while (end < line.size() && (line[end] == ' ' || line[end] == '\t')) {
+                ++end;
+            }
+            return line.substr(0, end);
+        }
+
+        // Returns a copy of the string with trailing whitespace removed
+        std::string TrimRightWhitespace(std::string value) {
+            while (!value.empty() &&
+                std::isspace(static_cast<unsigned char>(value.back()))) {
+                value.pop_back();
+                }
+                return value;
+        }
+
+        // Checks if a trimmed line ends with the Ruby 'do' block keyword
+        bool EndsWithRubyDo(const std::string& trimmed_line) {
+            if (trimmed_line.size() < 2 ||
+                trimmed_line.compare(trimmed_line.size() - 2, 2, "do") != 0) {
+                return false;
+                }
+                if (trimmed_line.size() == 2) {
+                    return true;
+                }
+                const unsigned char previous =
+                static_cast<unsigned char>(trimmed_line[trimmed_line.size() - 3]);
+            return !std::isalnum(previous) && previous != '_';
+        }
+
+        // Returns a lowercase copy of the provided string
+        std::string ToLowerCopy(std::string value) {
+            for (char& character : value) {
+                character = static_cast<char>(
+                    std::tolower(static_cast<unsigned char>(character)));
+            }
+            return value;
+        }
+
+    } // namespace
+    
+    /**
+     * @brief Sets the active document for the editor.
+     * * Switches the editor context to a new document, synchronizes UI state,
+     * and ensures cursor position is clamped to the new content boundaries.
+     */
+    void EditorComponent::SetDocument(std::shared_ptr<Document> doc) {
+        // Check if the provided document is valid to prevent null pointer dereference
+        if (!doc) {
+            return;
+        }
+
+        // Update the local document reference
+        doc_ = doc;
+
+        // Ensure cursor is within buffer limits to prevent out-of-bounds access
+        ClampCursorToBuffer();
+
+        // Refresh the viewport and scroll position to match the new document content
+        UpdateScroll();
+
+        // Clear previous search highlights and selections to avoid stale UI states
+        ClearSearchHighlights();
+        ClearSelection();
     }
-}
 
-std::string LeadingIndent(const std::string& line) {
-    size_t end = 0;
-    while (end < line.size() && (line[end] == ' ' || line[end] == '\t')) {
-        ++end;
-    }
-    return line.substr(0, end);
-}
+    std::shared_ptr<Document> EditorComponent::GetDocument() const { return doc_; }
 
-std::string TrimRightWhitespace(std::string value) {
-    while (!value.empty() &&
-           std::isspace(static_cast<unsigned char>(value.back()))) {
-        value.pop_back();
-    }
-    return value;
-}
-
-bool EndsWithRubyDo(const std::string& trimmed_line) {
-    if (trimmed_line.size() < 2 ||
-        trimmed_line.compare(trimmed_line.size() - 2, 2, "do") != 0) {
-        return false;
-    }
-    if (trimmed_line.size() == 2) {
-        return true;
-    }
-    const unsigned char previous =
-        static_cast<unsigned char>(trimmed_line[trimmed_line.size() - 3]);
-    return !std::isalnum(previous) && previous != '_';
-}
-
-std::string ToLowerCopy(std::string value) {
-    for (char& character : value) {
-        character = static_cast<char>(
-            std::tolower(static_cast<unsigned char>(character)));
-    }
-    return value;
-}
-
-
-} // namespace
-
-EditorComponent::EditorComponent(EditorConfig* config, const Theme* theme)
+    EditorComponent::EditorComponent(EditorConfig* config, const Theme* theme)
     : config_(config),
-      theme_(theme) {
-    // Initialize with at least one empty line of text.
-    text_lines_.push_back("");
-    if (config_) {
-        search_match_case_ = config_->search_match_case;
-        search_whole_word_ = config_->search_whole_word;
-    }
-}
+    theme_(theme),
+    doc_(std::make_shared<Document>()) { // Initialize default document
 
-ftxui::Element EditorComponent::Render() {
-    return RenderViewport();
-}
-
-void EditorComponent::SaveToFile(const std::string& path) {
-    const std::string save_path = path.empty() ? current_filepath_ : path;
-    std::ofstream file(save_path, std::ios::binary);
-    if (!file) {
-        throw std::runtime_error("Unable to save file: " + save_path);
-    }
-
-    const std::string line_ending =
-        active_line_ending_ == LineEnding::CRLF ? "\r\n" : "\n";
-    for (size_t i = 0; i < text_lines_.size(); ++i) {
-        file << text_lines_[i];
-        if (i + 1 < text_lines_.size()) {
-            file << line_ending;
+        if (config_) {
+            search_match_case_ = config_->search_match_case;
+            search_whole_word_ = config_->search_whole_word;
         }
     }
 
-    current_filepath_ = save_path;
-    is_dirty_ = false;
-}
-
-void EditorComponent::LoadFromFile(const std::string& path) {
-    std::ifstream file(path, std::ios::binary);
-    if (!file) {
-        throw std::runtime_error("Unable to open file: " + path);
+    ftxui::Element EditorComponent::Render() {
+        return RenderViewport();
     }
 
-    const std::string content{
-        std::istreambuf_iterator<char>(file),
-        std::istreambuf_iterator<char>()};
+    void EditorComponent::SaveToFile(const std::string& path) {
+        if (!doc_) return;
 
-    size_t lf_count = 0;
-    size_t crlf_count = 0;
-    for (size_t i = 0; i < content.size(); ++i) {
-        if (content[i] == '\n') {
-            ++lf_count;
-            if (i > 0 && content[i - 1] == '\r') {
-                ++crlf_count;
-            }
+        const std::string save_path = path.empty() ? doc_->path.string() : path;
+        std::ofstream file(save_path, std::ios::binary);
+        if (!file) {
+            throw std::runtime_error("Unable to save file: " + save_path);
+        }
+
+        file << doc_->ToContent();
+
+        doc_->SetPath(save_path);
+        doc_->is_dirty = false;
+    }
+
+    void EditorComponent::LoadFromFile(const std::string& path) {
+        std::ifstream file(path, std::ios::binary);
+        if (!file) {
+            throw std::runtime_error("Unable to open file: " + path);
+        }
+
+        const std::string content{
+            std::istreambuf_iterator<char>(file),
+            std::istreambuf_iterator<char>()};
+
+        if (!doc_) doc_ = std::make_shared<Document>();
+        doc_->LoadContent(content, path);
+        scroll_x_ = 0;
+        scroll_y_ = 0;
+        ClearSearchHighlights();
+        ClearSelection();
+    }
+
+    void EditorComponent::NewFile(const std::string& path) {
+        if (!doc_) doc_ = std::make_shared<Document>();
+
+        doc_->Reset();
+        doc_->SetPath(path.empty() ? "Untitled" : path);
+
+        scroll_x_ = 0;
+        scroll_y_ = 0;
+        ClearSearchHighlights();
+        ClearSelection();
+    }
+
+    std::string EditorComponent::CurrentFilePath() const {
+        return doc_ ? doc_->CurrentFilePath() : "Untitled";
+    }
+
+    bool EditorComponent::IsDirty() const {
+        return doc_ ? doc_->is_dirty : false;
+    }
+
+    LineEnding EditorComponent::ActiveLineEnding() const {
+        return doc_ ? doc_->line_ending : LineEnding::LF;
+    }
+
+    std::string EditorComponent::ActiveLineEndingLabel() const {
+        return doc_ ? doc_->LineEndingLabel() : "LF";
+    }
+
+    size_t EditorComponent::GetCursorRow() const {
+        return doc_ ? doc_->cursor_row : 0;
+    }
+
+    size_t EditorComponent::GetCursorCol() const {
+        return doc_ ? doc_->cursor_col : 0;
+    }
+
+    size_t EditorComponent::GetLineCount() const {
+        return doc_ ? doc_->LineCount() : 0;
+    }
+
+    std::string EditorComponent::TextFromCursor() const {
+        return doc_ ? doc_->TextFromCursor() : "";
+    }
+
+    std::string EditorComponent::GetAllText() const {
+        return doc_ ? doc_->ToContent() : "";
+    }
+
+    void EditorComponent::SetBottomOverlayRows(size_t rows) {
+        bottom_overlay_rows_ = rows;
+    }
+
+    void EditorComponent::JumpToLine(size_t line_number) {
+        if (!doc_) return;
+
+        EndTypingGroup();
+        doc_->JumpToLine(line_number);
+        ClearSelection();
+        UpdateScroll();
+    }
+
+    void EditorComponent::SetCursorPosition(size_t row, size_t column) {
+        if (!doc_) return;
+
+        EndTypingGroup();
+        doc_->SetCursorPosition(row, column);
+        ClearSelection();
+        UpdateScroll();
+    }
+
+    bool EditorComponent::HasSelection() const {
+        return doc_ && doc_->HasSelection();
+    }
+
+    void EditorComponent::SelectAll() {
+        if (!doc_) return;
+        EndTypingGroup();
+        doc_->SelectAll();
+        UpdateScroll();
+    }
+
+    std::string EditorComponent::GetSelectedText() const {
+        return doc_ ? doc_->GetSelectedText() : "";
+    }
+
+    void EditorComponent::DeleteSelection() {
+        if (doc_ && doc_->DeleteSelection()) {
+            UpdateScroll();
         }
     }
-    active_line_ending_ = (lf_count > 0 && crlf_count == lf_count)
-        ? LineEnding::CRLF
-        : LineEnding::LF;
 
-    text_lines_.clear();
-    std::string line;
-    for (char character : content) {
-        if (character == '\n') {
-            if (!line.empty() && line.back() == '\r') {
-                line.pop_back();
-            }
-            text_lines_.push_back(line);
-            line.clear();
-        } else {
-            line.push_back(character);
+    void EditorComponent::DeleteSelectionWithoutSnapshot() {
+        if (doc_ && doc_->DeleteSelectionWithoutSnapshot()) {
+            UpdateScroll();
         }
     }
-    if (!content.empty() && content.back() != '\n') {
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
+
+    size_t EditorComponent::FindMatchAtOrAfterCursor() const {
+        if (search_matches_.empty() || !doc_) {
+            return 0;
         }
-        text_lines_.push_back(line);
-    }
 
-    if (text_lines_.empty()) {
-        text_lines_.push_back("");
-    }
-
-    current_filepath_ = path;
-    cursor_x_ = 0;
-    cursor_y_ = 0;
-    scroll_x_ = 0;
-    scroll_y_ = 0;
-    history_manager_.Clear();
-    is_dirty_ = false;
-    ClearSearchHighlights();
-    ClearSelection();
-}
-
-void EditorComponent::NewFile(const std::string& path) {
-    text_lines_.clear();
-    text_lines_.push_back("");
-    current_filepath_ = path.empty() ? "Untitled" : path;
-    active_line_ending_ = LineEnding::LF;
-    cursor_x_ = 0;
-    cursor_y_ = 0;
-    scroll_x_ = 0;
-    scroll_y_ = 0;
-    history_manager_.Clear();
-    is_dirty_ = false;
-    ClearSearchHighlights();
-    ClearSelection();
-}
-
-const std::string& EditorComponent::CurrentFilePath() const {
-    return current_filepath_;
-}
-
-bool EditorComponent::IsDirty() const {
-    return is_dirty_;
-}
-
-EditorComponent::LineEnding EditorComponent::ActiveLineEnding() const {
-    return active_line_ending_;
-}
-
-std::string EditorComponent::ActiveLineEndingLabel() const {
-    return active_line_ending_ == LineEnding::CRLF ? "CRLF" : "LF";
-}
-
-int EditorComponent::GetCursorRow() const {
-    return static_cast<int>(cursor_y_);
-}
-
-int EditorComponent::GetCursorCol() const {
-    return static_cast<int>(cursor_x_);
-}
-
-size_t EditorComponent::GetLineCount() const {
-    return text_lines_.size();
-}
-
-std::string EditorComponent::TextFromCursor() const {
-    if (text_lines_.empty()) {
-        return "";
-    }
-
-    const size_t row = std::min(cursor_y_, text_lines_.size() - 1);
-    const size_t column = std::min(cursor_x_, text_lines_[row].size());
-    std::string text = text_lines_[row].substr(column);
-    for (size_t line_index = row + 1; line_index < text_lines_.size(); ++line_index) {
-        text.push_back('\n');
-        text += text_lines_[line_index];
-    }
-    return text;
-}
-
-std::string EditorComponent::GetAllText() const {
-    if (text_lines_.empty()) {
-        return "";
-    }
-
-    std::string full_text;
-    full_text.reserve(text_lines_.size() * 80); // Estimate capacity for efficiency
-
-    const std::string line_ending =
-        active_line_ending_ == LineEnding::CRLF ? "\r\n" : "\n";
-
-    for (size_t i = 0; i < text_lines_.size(); ++i) {
-        full_text += text_lines_[i];
-        if (i + 1 < text_lines_.size()) {
-            full_text += line_ending;
+        for (size_t i = 0; i < search_matches_.size(); ++i) {
+            const SearchMatch& match = search_matches_[i];
+            if (match.y > doc_->cursor_row ||
+                (match.y == doc_->cursor_row && match.x + match.length > doc_->cursor_col)) {
+                return i;
+                }
         }
-    }
-    return full_text;
-}
 
-void EditorComponent::SetBottomOverlayRows(size_t rows) {
-    bottom_overlay_rows_ = rows;
-}
-
-void EditorComponent::JumpToLine(int line_number) {
-    if (text_lines_.empty()) {
-        text_lines_.push_back("");
-    }
-
-    if (line_number < 1) {
-        line_number = 1;
-    }
-    const int max_line = static_cast<int>(text_lines_.size());
-    if (line_number > max_line) {
-        line_number = max_line;
-    }
-
-    EndTypingGroup();
-    cursor_y_ = static_cast<size_t>(line_number - 1);
-    cursor_x_ = 0;
-    ClearSelection();
-    UpdateScroll();
-}
-
-void EditorComponent::SetCursorPosition(size_t row, size_t column) {
-    if (text_lines_.empty()) {
-        text_lines_.push_back("");
-    }
-
-    EndTypingGroup();
-    cursor_y_ = std::min(row, text_lines_.size() - 1);
-    cursor_x_ = std::min(column, text_lines_[cursor_y_].size());
-    ClearSelection();
-    UpdateScroll();
-}
-
-bool EditorComponent::HasSelection() const {
-    return has_selection_ &&
-        (cursor_x_ != selection_anchor_x_ || cursor_y_ != selection_anchor_y_);
-}
-
-void EditorComponent::SelectAll() {
-    if (text_lines_.empty()) {
-        text_lines_.push_back("");
-    }
-
-    EndTypingGroup();
-    selection_anchor_x_ = 0;
-    selection_anchor_y_ = 0;
-    cursor_y_ = text_lines_.size() - 1;
-    cursor_x_ = text_lines_[cursor_y_].size();
-    has_selection_ = true;
-    UpdateScroll();
-}
-
-std::string EditorComponent::GetSelectedText() const {
-    if (!HasSelection()) {
-        return "";
-    }
-
-    auto [start, end] = utils::OrderedSelection(
-        {selection_anchor_x_, selection_anchor_y_},
-        {cursor_x_, cursor_y_},
-        text_lines_);
-
-    if (start.y == end.y) {
-        return text_lines_[start.y].substr(start.x, end.x - start.x);
-    }
-
-    std::string selected = text_lines_[start.y].substr(start.x);
-    selected.push_back('\n');
-    for (size_t y = start.y + 1; y < end.y; ++y) {
-        selected += text_lines_[y];
-        selected.push_back('\n');
-    }
-    selected += text_lines_[end.y].substr(0, end.x);
-    return selected;
-}
-
-void EditorComponent::DeleteSelection() {
-    if (!HasSelection()) {
-        return;
-    }
-
-    EndTypingGroup();
-    SaveSnapshot();
-    DeleteSelectionWithoutSnapshot();
-}
-
-void EditorComponent::DeleteSelectionWithoutSnapshot() {
-    if (!HasSelection()) {
-        return;
-    }
-
-    auto [start, end] = utils::OrderedSelection(
-        {selection_anchor_x_, selection_anchor_y_},
-        {cursor_x_, cursor_y_},
-        text_lines_);
-
-    if (start.y == end.y) {
-        text_lines_[start.y].erase(start.x, end.x - start.x);
-    } else {
-        text_lines_[start.y] =
-            text_lines_[start.y].substr(0, start.x) +
-            text_lines_[end.y].substr(end.x);
-        text_lines_.erase(
-            text_lines_.begin() + static_cast<std::ptrdiff_t>(start.y + 1),
-            text_lines_.begin() + static_cast<std::ptrdiff_t>(end.y + 1));
-    }
-
-    if (text_lines_.empty()) {
-        text_lines_.push_back("");
-    }
-
-    cursor_x_ = start.x;
-    cursor_y_ = start.y;
-    ClampCursorToBuffer();
-    ClearSelection();
-    UpdateScroll();
-}
-
-size_t EditorComponent::FindMatchAtOrAfterCursor() const {
-    if (search_matches_.empty()) {
         return 0;
     }
 
-    for (size_t i = 0; i < search_matches_.size(); ++i) {
-        const SearchMatch& match = search_matches_[i];
-        if (match.y > cursor_y_ ||
-            (match.y == cursor_y_ && match.x + match.length > cursor_x_)) {
-            return i;
+    void EditorComponent::MoveCursorToSearchMatch(const SearchMatch& match) {
+        if (!doc_) return;
+        doc_->cursor_row = match.y;
+        doc_->cursor_col = match.x;
+        ClearSelection();
+        UpdateScroll();
+    }
+
+    std::string EditorComponent::GetCommentPrefix() const {
+        return doc_ ? doc_->CommentPrefix() : "//";
+    }
+
+    void EditorComponent::ToggleComment() {
+        if (!doc_ || doc_->lines.empty()) {
+            return;
         }
-    }
 
-    return 0;
-}
+        EndTypingGroup();
+        ClampCursorToBuffer();
+        SaveSnapshot();
 
-void EditorComponent::MoveCursorToSearchMatch(const SearchMatch& match) {
-    cursor_y_ = match.y;
-    cursor_x_ = match.x;
-    ClearSelection();
-    UpdateScroll();
-}
-
-std::string EditorComponent::GetCommentPrefix() const {
-    const std::string filename =
-        std::filesystem::path(current_filepath_).filename().string();
-    const std::string extension =
-        std::filesystem::path(current_filepath_).extension().string();
-
-    if (extension == ".sql" || extension == ".graphql" || extension == ".gql") {
-        return "--";
-    }
-
-    if (filename.rfind("Dockerfile", 0) == 0 ||
-        filename == ".bashrc" || filename == ".profile" ||
-        filename == ".env" || filename == ".env.local" ||
-        filename == ".env.development" || filename == ".env.production" ||
-        (filename.size() >= 4 && filename.compare(filename.size() - 4, 4, ".env") == 0) ||
-        extension == ".conf" || extension == ".ini" || extension == ".py" ||
-        extension == ".rb" || extension == ".yaml" || extension == ".yml" ||
-        extension == ".sh" || extension == ".bash" || extension == ".zsh" ||
-        extension == ".bashrc" || extension == ".profile") {
-        return "#";
-    }
-
-    return "//";
-}
-
-void EditorComponent::ToggleComment() {
-    if (text_lines_.empty()) {
-        text_lines_.push_back("");
-    }
-
-    EndTypingGroup();
-    ClampCursorToBuffer();
-    SaveSnapshot();
-
-    size_t start_row = cursor_y_;
-    size_t end_row = cursor_y_;
-    if (HasSelection()) {
-        auto [start, end] = utils::OrderedSelection(
-            {selection_anchor_x_, selection_anchor_y_},
-            {cursor_x_, cursor_y_},
-            text_lines_);
-        start_row = start.y;
-        end_row = end.y;
-        if (end.x == 0 && end_row > start_row) {
-            --end_row;
+        size_t start_row = doc_->cursor_row;
+        size_t end_row = doc_->cursor_row;
+        if (HasSelection()) {
+            auto [start, end] = utils::OrderedSelection(
+                {doc_->selection.anchor_x, doc_->selection.anchor_y},
+                {doc_->cursor_col, doc_->cursor_row},
+                doc_->lines);
+            start_row = start.y;
+            end_row = end.y;
+            if (end.x == 0 && end_row > start_row) {
+                --end_row;
+            }
         }
-    }
 
-    const std::string prefix = GetCommentPrefix();
-    for (size_t row = start_row; row <= end_row; ++row) {
-        std::string& line = text_lines_[row];
-        const size_t first_text = line.find_first_not_of(" \t");
-        const size_t insert_position =
+        const std::string prefix = GetCommentPrefix();
+        for (size_t row = start_row; row <= end_row; ++row) {
+            std::string& line = doc_->lines[row];
+            const size_t first_text = line.find_first_not_of(" \t");
+            const size_t insert_position =
             first_text == std::string::npos ? line.size() : first_text;
 
-        if (line.compare(insert_position, prefix.size(), prefix) == 0) {
-            line.erase(insert_position, prefix.size());
-            if (insert_position < line.size() && line[insert_position] == ' ') {
-                line.erase(insert_position, 1);
+            if (line.compare(insert_position, prefix.size(), prefix) == 0) {
+                line.erase(insert_position, prefix.size());
+                if (insert_position < line.size() && line[insert_position] == ' ') {
+                    line.erase(insert_position, 1);
+                }
+            } else {
+                line.insert(insert_position, prefix + " ");
             }
-        } else {
-            line.insert(insert_position, prefix + " ");
-        }
-    }
-
-    is_dirty_ = true;
-    ClampCursorToBuffer();
-    UpdateScroll();
-}
-
-void EditorComponent::ClearSelection() {
-    ClampCursorToBuffer();
-    has_selection_ = false;
-    selection_anchor_x_ = cursor_x_;
-    selection_anchor_y_ = cursor_y_;
-}
-
-void EditorComponent::InsertText(const std::string& text) {
-    if (text.empty()) {
-        return;
-    }
-
-    EndTypingGroup();
-    SaveSnapshot();
-
-    if (HasSelection()) {
-        DeleteSelectionWithoutSnapshot();
-    }
-
-    for (char character : text) {
-        if (character == '\r') {
-            continue;
         }
 
-        if (character == '\n') {
-            std::string next_line = text_lines_[cursor_y_].substr(cursor_x_);
-            text_lines_[cursor_y_].erase(cursor_x_);
-            text_lines_.insert(text_lines_.begin() + cursor_y_ + 1, std::move(next_line));
-            cursor_y_++;
-            cursor_x_ = 0;
-            continue;
+        doc_->is_dirty = true;
+        ClampCursorToBuffer();
+        UpdateScroll();
+    }
+
+    void EditorComponent::ClearSelection() {
+        if (doc_) doc_->ClearSelection();
+    }
+
+    void EditorComponent::InsertText(const std::string& text) {
+        if (text.empty() || !doc_) {
+            return;
         }
 
-        text_lines_[cursor_y_].insert(cursor_x_, std::string(1, character));
-        cursor_x_++;
-    }
-
-    is_dirty_ = true;
-    ClearSelection();
-    UpdateScroll();
-}
-
-bool EditorComponent::HandleAutoPairCharacter(const std::string& input) {
-    if (input.size() != 1) {
-        return false;
-    }
-
-    const char character = input.front();
-    if (IsPairClosingCharacter(character) &&
-        cursor_x_ < text_lines_[cursor_y_].size() &&
-        text_lines_[cursor_y_][cursor_x_] == character) {
         EndTypingGroup();
-        cursor_x_++;
+        if (doc_->InsertText(text)) {
+            ClearSelection();
+            UpdateScroll();
+        }
+    }
+
+    bool EditorComponent::HandleAutoPairCharacter(const std::string& input) {
+        if (input.size() != 1 || !doc_) {
+            return false;
+        }
+
+        const char character = input.front();
+        if (IsPairClosingCharacter(character) &&
+            doc_->cursor_col < doc_->lines[doc_->cursor_row].size() &&
+            doc_->lines[doc_->cursor_row][doc_->cursor_col] == character) {
+            EndTypingGroup();
+        doc_->cursor_col++;
+        ClearSelection();
+        UpdateScroll();
+        return true;
+            }
+
+            if (!IsPairOpeningCharacter(character)) {
+                return false;
+            }
+
+            const char closing = ClosingPairFor(character);
+            if (closing == '\0') {
+                return false;
+            }
+
+            EndTypingGroup();
+            SaveSnapshot();
+
+            if (HasSelection()) {
+                const std::string selected = GetSelectedText();
+                DeleteSelectionWithoutSnapshot();
+                doc_->lines[doc_->cursor_row].insert(doc_->cursor_col, std::string(1, character) + selected + closing);
+                doc_->cursor_col += selected.size() + 2;
+            } else {
+                doc_->lines[doc_->cursor_row].insert(doc_->cursor_col, std::string(1, character) + closing);
+                doc_->cursor_col++;
+            }
+
+            doc_->is_dirty = true;
+            ClearSelection();
+            UpdateScroll();
+            return true;
+    }
+
+    bool EditorComponent::HandleAutoIndentReturn() {
+        EndTypingGroup();
+        SaveSnapshot();
+        if (HasSelection()) {
+            DeleteSelectionWithoutSnapshot();
+        }
+
+        if (!doc_) return false;
+
+        const std::string line_before_cursor = doc_->lines[doc_->cursor_row].substr(0, doc_->cursor_col);
+        std::string indent;
+        if (!config_ || config_->auto_indent) {
+            const int configured_tab_size = config_ ? config_->tab_size : 4;
+            const size_t tab_size = configured_tab_size == 2 ? 2 : 4;
+            indent = LeadingIndent(line_before_cursor);
+            const std::string trimmed_before_cursor = TrimRightWhitespace(line_before_cursor);
+
+            if (!trimmed_before_cursor.empty() &&
+                (trimmed_before_cursor.back() == '{' ||
+                trimmed_before_cursor.back() == ':' ||
+                EndsWithRubyDo(trimmed_before_cursor))) {
+                indent += std::string(tab_size, ' ');
+                }
+        }
+
+        std::string next_line = doc_->lines[doc_->cursor_row].substr(doc_->cursor_col);
+        doc_->lines[doc_->cursor_row].erase(doc_->cursor_col);
+        doc_->lines.insert(doc_->lines.begin() + doc_->cursor_row + 1, indent + next_line);
+        doc_->cursor_row++;
+        doc_->cursor_col = indent.size();
+        doc_->is_dirty = true;
         ClearSelection();
         UpdateScroll();
         return true;
     }
 
-    if (!IsPairOpeningCharacter(character)) {
-        return false;
-    }
-
-    const char closing = ClosingPairFor(character);
-    if (closing == '\0') {
-        return false;
-    }
-
-    EndTypingGroup();
-    SaveSnapshot();
-
-    if (HasSelection()) {
-        const std::string selected = GetSelectedText();
-        DeleteSelectionWithoutSnapshot();
-        text_lines_[cursor_y_].insert(cursor_x_, std::string(1, character) + selected + closing);
-        cursor_x_ += selected.size() + 2;
-    } else {
-        text_lines_[cursor_y_].insert(cursor_x_, std::string(1, character) + closing);
-        cursor_x_++;
-    }
-
-    is_dirty_ = true;
-    ClearSelection();
-    UpdateScroll();
-    return true;
-}
-
-bool EditorComponent::HandleAutoIndentReturn() {
-    EndTypingGroup();
-    SaveSnapshot();
-    if (HasSelection()) {
-        DeleteSelectionWithoutSnapshot();
-    }
-
-    const std::string line_before_cursor = text_lines_[cursor_y_].substr(0, cursor_x_);
-    std::string indent;
-    if (!config_ || config_->auto_indent) {
+    void EditorComponent::ConvertTabsToSpaces() {
+        if (!doc_) return;
         const int configured_tab_size = config_ ? config_->tab_size : 4;
         const size_t tab_size = configured_tab_size == 2 ? 2 : 4;
-        indent = LeadingIndent(line_before_cursor);
-        const std::string trimmed_before_cursor = TrimRightWhitespace(line_before_cursor);
 
-        if (!trimmed_before_cursor.empty() &&
-            (trimmed_before_cursor.back() == '{' ||
-             trimmed_before_cursor.back() == ':' ||
-             EndsWithRubyDo(trimmed_before_cursor))) {
-            indent += std::string(tab_size, ' ');
+        EndTypingGroup();
+        ClampCursorToBuffer();
+        if (doc_->ConvertTabsToSpaces(tab_size)) {
+            ClearSelection();
+            UpdateScroll();
         }
     }
 
-    std::string next_line = text_lines_[cursor_y_].substr(cursor_x_);
-    text_lines_[cursor_y_].erase(cursor_x_);
-    text_lines_.insert(text_lines_.begin() + cursor_y_ + 1, indent + next_line);
-    cursor_y_++;
-    cursor_x_ = indent.size();
-    is_dirty_ = true;
-    ClearSelection();
-    UpdateScroll();
-    return true;
-}
-
-void EditorComponent::ConvertTabsToSpaces() {
-    const int configured_tab_size = config_ ? config_->tab_size : 4;
-    const size_t tab_size = configured_tab_size == 2 ? 2 : 4;
-
-    bool has_tabs = false;
-    for (const std::string& line : text_lines_) {
-        if (line.find('\t') != std::string::npos) {
-            has_tabs = true;
-            break;
-        }
-    }
-    if (!has_tabs) {
-        return;
-    }
-
-    EndTypingGroup();
-    ClampCursorToBuffer();
-    SaveSnapshot();
-
-    size_t adjusted_cursor_x = cursor_x_;
-    const std::string spaces(tab_size, ' ');
-    for (size_t y = 0; y < text_lines_.size(); ++y) {
-        std::string& line = text_lines_[y];
-        if (y == cursor_y_) {
-            size_t tabs_before_cursor = 0;
-            const size_t cursor_limit = std::min(cursor_x_, line.size());
-            for (size_t x = 0; x < cursor_limit; ++x) {
-                if (line[x] == '\t') {
-                    ++tabs_before_cursor;
-                }
-            }
-            adjusted_cursor_x = cursor_x_ + tabs_before_cursor * (tab_size - 1);
-        }
-
-        size_t tab_position = line.find('\t');
-        while (tab_position != std::string::npos) {
-            line.replace(tab_position, 1, spaces);
-            tab_position = line.find('\t', tab_position + tab_size);
+    void EditorComponent::Convert4To2Spaces() {
+        if (!doc_) return;
+        EndTypingGroup();
+        ClampCursorToBuffer();
+        if (doc_->Convert4To2Spaces()) {
+            UpdateScroll();
         }
     }
 
-    cursor_x_ = std::min(adjusted_cursor_x, text_lines_[cursor_y_].size());
-    ClearSelection();
-    is_dirty_ = true;
-    UpdateScroll();
-}
-
-void EditorComponent::Convert4To2Spaces() {
-    EndTypingGroup();
-    ClampCursorToBuffer();
-    const HistoryManager::State before = CurrentState();
-    transform::TransformResult result = transform::Convert4To2Spaces(
-        text_lines_,
-        {cursor_x_, cursor_y_},
-        {HasSelection(), selection_anchor_x_, selection_anchor_y_});
-    if (!result.changed) {
-        return;
+    void EditorComponent::Convert2To4Spaces() {
+        if (!doc_) return;
+        EndTypingGroup();
+        ClampCursorToBuffer();
+        if (doc_->Convert2To4Spaces()) {
+            UpdateScroll();
+        }
     }
 
-    history_manager_.PushSnapshot(before);
-    cursor_x_ = result.cursor.x;
-    cursor_y_ = result.cursor.y;
-    selection_anchor_x_ = result.selection.anchor_x;
-    selection_anchor_y_ = result.selection.anchor_y;
-    has_selection_ = result.selection.active;
-    is_dirty_ = true;
-    ClampCursorToBuffer();
-    UpdateScroll();
-}
-
-void EditorComponent::Convert2To4Spaces() {
-    EndTypingGroup();
-    ClampCursorToBuffer();
-    const HistoryManager::State before = CurrentState();
-    transform::TransformResult result = transform::Convert2To4Spaces(
-        text_lines_,
-        {cursor_x_, cursor_y_},
-        {HasSelection(), selection_anchor_x_, selection_anchor_y_});
-    if (!result.changed) {
-        return;
+    void EditorComponent::ToggleCase() {
+        if (!doc_) return;
+        EndTypingGroup();
+        ClampCursorToBuffer();
+        if (doc_->ToggleCase()) {
+            UpdateScroll();
+        }
     }
 
-    history_manager_.PushSnapshot(before);
-    cursor_x_ = result.cursor.x;
-    cursor_y_ = result.cursor.y;
-    selection_anchor_x_ = result.selection.anchor_x;
-    selection_anchor_y_ = result.selection.anchor_y;
-    has_selection_ = result.selection.active;
-    is_dirty_ = true;
-    ClampCursorToBuffer();
-    UpdateScroll();
-}
+    void EditorComponent::HighlightMatches(const std::string& query) {
+        search_matches_.clear();
+        current_search_match_ = 0;
 
-void EditorComponent::ToggleCase() {
-    EndTypingGroup();
-    ClampCursorToBuffer();
-    const HistoryManager::State before = CurrentState();
-    transform::TransformResult result = transform::ToggleCase(
-        text_lines_,
-        {cursor_x_, cursor_y_},
-        {HasSelection(), selection_anchor_x_, selection_anchor_y_});
-    if (!result.changed) {
-        return;
-    }
+        if (query.empty() || !doc_) {
+            return;
+        }
 
-    history_manager_.PushSnapshot(before);
-    cursor_x_ = result.cursor.x;
-    cursor_y_ = result.cursor.y;
-    selection_anchor_x_ = result.selection.anchor_x;
-    selection_anchor_y_ = result.selection.anchor_y;
-    has_selection_ = result.selection.active;
-    is_dirty_ = true;
-    UpdateScroll();
-}
-
-void EditorComponent::HighlightMatches(const std::string& query) {
-    search_matches_.clear();
-    current_search_match_ = 0;
-
-    if (query.empty()) {
-        return;
-    }
-
-    const std::string needle = search_match_case_ ? query : ToLowerCopy(query);
-    for (size_t y = 0; y < text_lines_.size(); ++y) {
-        const std::string& line = text_lines_[y];
-        const std::string searchable_line =
+        const std::string needle = search_match_case_ ? query : ToLowerCopy(query);
+        for (size_t y = 0; y < doc_->lines.size(); ++y) {
+            const std::string& line = doc_->lines[y];
+            const std::string searchable_line =
             search_match_case_ ? line : ToLowerCopy(line);
-        size_t position = searchable_line.find(needle);
-        while (position != std::string::npos) {
-            const bool has_word_before =
+            size_t position = searchable_line.find(needle);
+
+            while (position != std::string::npos) {
+                const bool has_word_before =
                 position > 0 && utils::IsWordCharacter(line[position - 1]);
-            const size_t after_match = position + query.size();
-            const bool has_word_after =
+                const size_t after_match = position + query.size();
+                const bool has_word_after =
                 after_match < line.size() && utils::IsWordCharacter(line[after_match]);
 
-            if (!search_whole_word_ || (!has_word_before && !has_word_after)) {
-                search_matches_.push_back({position, y, query.size()});
-            }
-
-            position = searchable_line.find(needle, position + query.size());
-        }
-    }
-
-    if (!search_matches_.empty()) {
-        current_search_match_ = FindMatchAtOrAfterCursor();
-    }
-}
-
-void EditorComponent::ClearSearchHighlights() {
-    search_matches_.clear();
-    current_search_match_ = 0;
-}
-
-void EditorComponent::JumpToNextMatch() {
-    if (search_matches_.empty()) {
-        return;
-    }
-
-    current_search_match_ = 0;
-    for (size_t i = 0; i < search_matches_.size(); ++i) {
-        const SearchMatch& match = search_matches_[i];
-        if (match.y > cursor_y_ || (match.y == cursor_y_ && match.x > cursor_x_)) {
-            current_search_match_ = i;
-            break;
-        }
-    }
-    MoveCursorToSearchMatch(search_matches_[current_search_match_]);
-}
-
-void EditorComponent::JumpToPreviousMatch() {
-    if (search_matches_.empty()) {
-        return;
-    }
-
-    current_search_match_ = search_matches_.size() - 1;
-    for (size_t i = search_matches_.size(); i-- > 0;) {
-        const SearchMatch& match = search_matches_[i];
-        if (match.y < cursor_y_ || (match.y == cursor_y_ && match.x < cursor_x_)) {
-            current_search_match_ = i;
-            break;
-        }
-    }
-    MoveCursorToSearchMatch(search_matches_[current_search_match_]);
-}
-
-void EditorComponent::ExecuteReplaceNext(
-    const std::string& query,
-    const std::string& replacement) {
-    HighlightMatches(query);
-    if (search_matches_.empty()) {
-        return;
-    }
-
-    const SearchMatch match = search_matches_[current_search_match_];
-    SaveSnapshot();
-    text_lines_[match.y].replace(match.x, match.length, replacement);
-    cursor_y_ = match.y;
-    cursor_x_ = match.x + replacement.size();
-    ClearSelection();
-    HighlightMatches(query);
-    UpdateScroll();
-}
-
-void EditorComponent::ExecuteReplaceAll(
-    const std::string& query,
-    const std::string& replacement) {
-    HighlightMatches(query);
-    if (search_matches_.empty()) {
-        return;
-    }
-
-    SaveSnapshot();
-    for (size_t index = search_matches_.size(); index-- > 0;) {
-        const SearchMatch& match = search_matches_[index];
-        text_lines_[match.y].replace(match.x, match.length, replacement);
-    }
-
-    ClampCursorToBuffer();
-    ClearSelection();
-    HighlightMatches(query);
-    UpdateScroll();
-}
-
-void EditorComponent::ToggleSearchMatchCase() {
-    search_match_case_ = !search_match_case_;
-    if (config_) {
-        config_->search_match_case = search_match_case_;
-    }
-}
-
-void EditorComponent::ToggleSearchWholeWord() {
-    search_whole_word_ = !search_whole_word_;
-    if (config_) {
-        config_->search_whole_word = search_whole_word_;
-    }
-}
-
-bool EditorComponent::SearchMatchCase() const {
-    return search_match_case_;
-}
-
-bool EditorComponent::SearchWholeWord() const {
-    return search_whole_word_;
-}
-
-size_t EditorComponent::SearchMatchCount() const {
-    return search_matches_.size();
-}
-
-size_t EditorComponent::CurrentSearchMatchIndex() const {
-    if (search_matches_.empty()) {
-        return 0;
-    }
-    return current_search_match_ + 1;
-}
-
-std::optional<std::pair<int, int>> EditorComponent::FindBracketNearCursor() const {
-    if (text_lines_.empty() || cursor_y_ >= text_lines_.size()) {
-        return std::nullopt;
-    }
-
-    const std::string& line = text_lines_[cursor_y_];
-
-    // Prefer the character to the left because the cursor commonly sits after
-    // a just-typed bracket. The right-side check covers hovering before a pair.
-    if (cursor_x_ > 0 && cursor_x_ - 1 < line.size() &&
-        utils::IsBracketCharacter(line[cursor_x_ - 1])) {
-        return std::make_pair(
-            static_cast<int>(cursor_x_ - 1),
-            static_cast<int>(cursor_y_));
-    }
-
-    if (cursor_x_ < line.size() && utils::IsBracketCharacter(line[cursor_x_])) {
-        return std::make_pair(
-            static_cast<int>(cursor_x_),
-            static_cast<int>(cursor_y_));
-    }
-
-    return std::nullopt;
-}
-
-std::optional<std::pair<int, int>> EditorComponent::FindMatchingBracket() const {
-    static constexpr size_t kMaxBracketScanCharacters = 200000;
-
-    const auto origin = FindBracketNearCursor();
-    if (!origin) {
-        return std::nullopt;
-    }
-
-    const size_t origin_x = static_cast<size_t>(origin->first);
-    const size_t origin_y = static_cast<size_t>(origin->second);
-    if (origin_y >= text_lines_.size() || origin_x >= text_lines_[origin_y].size()) {
-        return std::nullopt;
-    }
-
-    const char bracket = text_lines_[origin_y][origin_x];
-    const char match = utils::MatchingBracketFor(bracket);
-    if (match == '\0') {
-        return std::nullopt;
-    }
-
-    size_t scanned_characters = 0;
-    int balance = 0;
-
-    if (utils::IsOpeningBracket(bracket)) {
-        // Scan forward from the origin bracket, counting nested pairs of the
-        // same type so the first balanced closing token is selected.
-        for (size_t y = origin_y; y < text_lines_.size(); ++y) {
-            const std::string& line = text_lines_[y];
-            const size_t start_x = y == origin_y ? origin_x : 0;
-            for (size_t x = start_x; x < line.size(); ++x) {
-                if (++scanned_characters > kMaxBracketScanCharacters) {
-                    return std::nullopt;
+                if (!search_whole_word_ || (!has_word_before && !has_word_after)) {
+                    search_matches_.push_back({position, y, query.size()});
                 }
 
-                const char current = line[x];
-                if (current == bracket) {
-                    ++balance;
-                } else if (current == match) {
-                    --balance;
-                    if (balance == 0) {
-                        return std::make_pair(static_cast<int>(x), static_cast<int>(y));
+                position = searchable_line.find(needle, position + query.size());
+            }
+        }
+
+        if (!search_matches_.empty()) {
+            current_search_match_ = FindMatchAtOrAfterCursor();
+        }
+    }
+
+    void EditorComponent::ClearSearchHighlights() {
+        search_matches_.clear();
+        current_search_match_ = 0;
+    }
+
+    void EditorComponent::JumpToNextMatch() {
+        if (search_matches_.empty() || !doc_) {
+            return;
+        }
+
+        current_search_match_ = 0;
+        for (size_t i = 0; i < search_matches_.size(); ++i) {
+            const SearchMatch& match = search_matches_[i];
+            if (match.y > doc_->cursor_row || (match.y == doc_->cursor_row && match.x > doc_->cursor_col)) {
+                current_search_match_ = i;
+                break;
+            }
+        }
+        MoveCursorToSearchMatch(search_matches_[current_search_match_]);
+    }
+
+    void EditorComponent::JumpToPreviousMatch() {
+        if (search_matches_.empty() || !doc_) {
+            return;
+        }
+
+        current_search_match_ = search_matches_.size() - 1;
+        for (size_t i = search_matches_.size(); i-- > 0;) {
+            const SearchMatch& match = search_matches_[i];
+            if (match.y < doc_->cursor_row || (match.y == doc_->cursor_row && match.x < doc_->cursor_col)) {
+                current_search_match_ = i;
+                break;
+            }
+        }
+        MoveCursorToSearchMatch(search_matches_[current_search_match_]);
+    }
+
+    void EditorComponent::ExecuteReplaceNext(const std::string& query, const std::string& replacement) {
+        HighlightMatches(query);
+        if (search_matches_.empty() || !doc_) {
+            return;
+        }
+
+        const SearchMatch match = search_matches_[current_search_match_];
+        SaveSnapshot();
+        doc_->lines[match.y].replace(match.x, match.length, replacement);
+        doc_->cursor_row = match.y;
+        doc_->cursor_col = match.x + replacement.size();
+        ClearSelection();
+        HighlightMatches(query);
+        UpdateScroll();
+    }
+
+    void EditorComponent::ExecuteReplaceAll(const std::string& query, const std::string& replacement) {
+        HighlightMatches(query);
+        if (search_matches_.empty() || !doc_) {
+            return;
+        }
+
+        SaveSnapshot();
+        for (size_t index = search_matches_.size(); index-- > 0;) {
+            const SearchMatch& match = search_matches_[index];
+            doc_->lines[match.y].replace(match.x, match.length, replacement);
+        }
+
+        ClampCursorToBuffer();
+        ClearSelection();
+        HighlightMatches(query);
+        UpdateScroll();
+    }
+
+    void EditorComponent::ToggleSearchMatchCase() {
+        search_match_case_ = !search_match_case_;
+        if (config_) {
+            config_->search_match_case = search_match_case_;
+        }
+    }
+
+    void EditorComponent::ToggleSearchWholeWord() {
+        search_whole_word_ = !search_whole_word_;
+        if (config_) {
+            config_->search_whole_word = search_whole_word_;
+        }
+    }
+
+    bool EditorComponent::SearchMatchCase() const {
+        return search_match_case_;
+    }
+
+    bool EditorComponent::SearchWholeWord() const {
+        return search_whole_word_;
+    }
+
+    size_t EditorComponent::SearchMatchCount() const {
+        return search_matches_.size();
+    }
+
+    size_t EditorComponent::CurrentSearchMatchIndex() const {
+        if (search_matches_.empty()) {
+            return 0;
+        }
+        return current_search_match_ + 1;
+    }
+
+    std::optional<std::pair<size_t, size_t>> EditorComponent::FindBracketNearCursor() const {
+        if (!doc_ || doc_->lines.empty() || doc_->cursor_row >= doc_->lines.size()) {
+            return std::nullopt;
+        }
+
+        const std::string& line = doc_->lines[doc_->cursor_row];
+
+        if (doc_->cursor_col > 0 && doc_->cursor_col - 1 < line.size() &&
+            utils::IsBracketCharacter(line[doc_->cursor_col - 1])) {
+            return std::make_pair(doc_->cursor_col - 1, doc_->cursor_row);
+            }
+
+            if (doc_->cursor_col < line.size() && utils::IsBracketCharacter(line[doc_->cursor_col])) {
+                return std::make_pair(doc_->cursor_col, doc_->cursor_row);
+            }
+
+            return std::nullopt;
+    }
+
+    std::optional<std::pair<size_t, size_t>> EditorComponent::FindMatchingBracket() const {
+        static constexpr size_t kMaxBracketScanCharacters = 200000;
+
+        const auto origin = FindBracketNearCursor();
+        if (!origin || !doc_) {
+            return std::nullopt;
+        }
+
+        const size_t origin_x = origin->first;
+        const size_t origin_y = origin->second;
+        if (origin_y >= doc_->lines.size() || origin_x >= doc_->lines[origin_y].size()) {
+            return std::nullopt;
+        }
+
+        const char bracket = doc_->lines[origin_y][origin_x];
+        const char match = utils::MatchingBracketFor(bracket);
+        if (match == '\0') {
+            return std::nullopt;
+        }
+
+        size_t scanned_characters = 0;
+        int balance = 0;
+
+        if (utils::IsOpeningBracket(bracket)) {
+            for (size_t y = origin_y; y < doc_->lines.size(); ++y) {
+                const std::string& line = doc_->lines[y];
+                const size_t start_x = y == origin_y ? origin_x : 0;
+                for (size_t x = start_x; x < line.size(); ++x) {
+                    if (++scanned_characters > kMaxBracketScanCharacters) return std::nullopt;
+
+                    const char current = line[x];
+                    if (current == bracket) {
+                        ++balance;
+                    } else if (current == match) {
+                        --balance;
+                        if (balance == 0) return std::make_pair(x, y);
                     }
                 }
             }
-        }
-        return std::nullopt;
-    }
+        } else if (utils::IsClosingBracket(bracket)) {
+            for (size_t y = origin_y + 1; y > 0; --y) {
+                const size_t line_index = y - 1;
+                const std::string& line = doc_->lines[line_index];
+                if (line.empty()) continue;
 
-    if (!utils::IsClosingBracket(bracket)) {
-        return std::nullopt;
-    }
+                size_t x = line_index == origin_y ? origin_x : line.size() - 1;
+                while (true) {
+                    if (++scanned_characters > kMaxBracketScanCharacters) return std::nullopt;
 
-    // Scan backward from the origin bracket using the same nesting counter in
-    // reverse. This avoids matching a closing token to an inner opening token.
-    for (size_t y = origin_y + 1; y > 0; --y) {
-        const size_t line_index = y - 1;
-        const std::string& line = text_lines_[line_index];
-        if (line.empty()) {
-            continue;
-        }
+                    const char current = line[x];
+                    if (current == bracket) {
+                        ++balance;
+                    } else if (current == match) {
+                        --balance;
+                        if (balance == 0) return std::make_pair(x, line_index);
+                    }
 
-        size_t x = line_index == origin_y ? origin_x : line.size() - 1;
-        while (true) {
-            if (++scanned_characters > kMaxBracketScanCharacters) {
-                return std::nullopt;
-            }
-
-            const char current = line[x];
-            if (current == bracket) {
-                ++balance;
-            } else if (current == match) {
-                --balance;
-                if (balance == 0) {
-                    return std::make_pair(static_cast<int>(x), static_cast<int>(line_index));
+                    if (x == 0) break;
+                    --x;
                 }
             }
+        }
 
-            if (x == 0) {
-                break;
+        return std::nullopt;
+    }
+
+    bool EditorComponent::Focusable() const {
+        return true;
+    }
+
+    size_t EditorComponent::LineNumberWidth() const {
+        // Calculate width based on the document's total lines
+        return doc_ ? std::to_string(doc_->lines.size()).size() : 1;
+    }
+
+    std::string EditorComponent::LineNumberText(size_t line_index, size_t width) const {
+        std::string line_number = std::to_string(line_index + 1);
+        if (line_number.size() < width) {
+            line_number.insert(line_number.begin(), width - line_number.size(), ' ');
+        }
+        return line_number + " │ ";
+    }
+
+    bool EditorComponent::IsWordCharacter(char character) {
+        return utils::IsWordCharacter(character);
+    }
+
+    bool EditorComponent::IsCharacterSelected(size_t x, size_t y) const {
+        return doc_ && doc_->IsPositionSelected(x, y);
+    }
+
+    const EditorComponent::SearchMatch* EditorComponent::SearchMatchAt(size_t x, size_t y) const {
+        for (const SearchMatch& match : search_matches_) {
+            if (match.y == y && x >= match.x && x < match.x + match.length) {
+                return &match;
             }
-            --x;
         }
+        return nullptr;
     }
 
-    return std::nullopt;
-}
-
-bool EditorComponent::Focusable() const {
-    return true;
-}
-
-size_t EditorComponent::LineNumberWidth() const {
-    return std::to_string(text_lines_.size()).size();
-}
-
-std::string EditorComponent::LineNumberText(size_t line_index, size_t width) const {
-    std::string line_number = std::to_string(line_index + 1);
-    if (line_number.size() < width) {
-        line_number.insert(line_number.begin(), width - line_number.size(), ' ');
-    }
-    return line_number + " │ ";
-}
-
-bool EditorComponent::IsWordCharacter(char character) {
-    return utils::IsWordCharacter(character);
-}
-
-bool EditorComponent::IsCharacterSelected(size_t x, size_t y) const {
-    if (!HasSelection()) {
-        return false;
-    }
-
-    auto [start, end] = utils::OrderedSelection(
-        {selection_anchor_x_, selection_anchor_y_},
-        {cursor_x_, cursor_y_},
-        text_lines_);
-    const utils::Position character_position{x, y};
-    return !utils::PositionLess(character_position, start) &&
-        utils::PositionLess(character_position, end);
-}
-
-const EditorComponent::SearchMatch* EditorComponent::SearchMatchAt(size_t x, size_t y) const {
-    for (const SearchMatch& match : search_matches_) {
-        if (match.y == y && x >= match.x && x < match.x + match.length) {
-            return &match;
-        }
-    }
-    return nullptr;
-}
-
-bool EditorComponent::IsActiveSearchMatch(const SearchMatch& match) const {
-    if (!search_matches_.empty() && current_search_match_ < search_matches_.size()) {
-        const SearchMatch& active_match = search_matches_[current_search_match_];
-        if (match.x == active_match.x &&
-            match.y == active_match.y &&
-            match.length == active_match.length) {
-            return true;
-        }
-    }
-
-    return match.y == cursor_y_ &&
-        cursor_x_ >= match.x &&
-        cursor_x_ < match.x + match.length;
-}
-
-void EditorComponent::BeginSelection() {
-    if (!has_selection_) {
-        selection_anchor_x_ = cursor_x_;
-        selection_anchor_y_ = cursor_y_;
-    }
-    has_selection_ = true;
-}
-
-void EditorComponent::ClampCursorToBuffer() {
-    if (text_lines_.empty()) {
-        text_lines_.push_back("");
-    }
-
-    cursor_y_ = std::min(cursor_y_, text_lines_.size() - 1);
-    cursor_x_ = std::min(cursor_x_, text_lines_[cursor_y_].size());
-}
-
-void EditorComponent::MoveCursorHome() {
-    cursor_x_ = 0;
-}
-
-void EditorComponent::MoveCursorEnd() {
-    cursor_x_ = text_lines_[cursor_y_].size();
-}
-
-void EditorComponent::MoveCursorLeft() {
-    if (cursor_x_ > 0) {
-        cursor_x_--;
-    } else if (cursor_y_ > 0) {
-        cursor_y_--;
-        cursor_x_ = text_lines_[cursor_y_].size();
-    }
-}
-
-void EditorComponent::MoveCursorRight() {
-    if (cursor_x_ < text_lines_[cursor_y_].size()) {
-        cursor_x_++;
-    } else if (cursor_y_ + 1 < text_lines_.size()) {
-        cursor_y_++;
-        cursor_x_ = 0;
-    }
-}
-
-void EditorComponent::MoveCursorUp() {
-    ClampCursorToBuffer();
-    if (cursor_y_ > 0) {
-        cursor_y_--;
-    }
-    cursor_x_ = std::min(cursor_x_, text_lines_[cursor_y_].size());
-}
-
-void EditorComponent::MoveCursorDown() {
-    ClampCursorToBuffer();
-    if (cursor_y_ < text_lines_.size() - 1) {
-        cursor_y_++;
-    }
-    cursor_x_ = std::min(cursor_x_, text_lines_[cursor_y_].size());
-}
-
-void EditorComponent::MoveCursorPageUp() {
-    ClampCursorToBuffer();
-    const size_t page_step = std::max<size_t>(1, VisibleHeight() - 1);
-    cursor_y_ = cursor_y_ > page_step ? cursor_y_ - page_step : 0;
-    cursor_x_ = std::min(cursor_x_, text_lines_[cursor_y_].size());
-}
-
-void EditorComponent::MoveCursorPageDown() {
-    ClampCursorToBuffer();
-    const size_t page_step = std::max<size_t>(1, VisibleHeight() - 1);
-    cursor_y_ = std::min(cursor_y_ + page_step, text_lines_.size() - 1);
-    cursor_x_ = std::min(cursor_x_, text_lines_[cursor_y_].size());
-}
-
-void EditorComponent::MoveCursorToPreviousParagraph() {
-    ClampCursorToBuffer();
-
-    if (cursor_y_ == 0) {
-        cursor_x_ = 0;
-        return;
-    }
-
-    if (!IsBlankLine(text_lines_[cursor_y_])) {
-        size_t paragraph_start = cursor_y_;
-        while (paragraph_start > 0 && !IsBlankLine(text_lines_[paragraph_start - 1])) {
-            --paragraph_start;
-        }
-        if (cursor_y_ != paragraph_start || cursor_x_ != 0) {
-            cursor_y_ = paragraph_start;
-            cursor_x_ = 0;
-            return;
-        }
-    }
-
-    size_t target = cursor_y_;
-    if (target > 0) {
-        --target;
-    }
-    while (target > 0 && IsBlankLine(text_lines_[target])) {
-        --target;
-    }
-    while (target > 0 && !IsBlankLine(text_lines_[target - 1])) {
-        --target;
-    }
-
-    cursor_y_ = target;
-    cursor_x_ = 0;
-}
-
-void EditorComponent::MoveCursorToNextParagraph() {
-    ClampCursorToBuffer();
-
-    size_t target = cursor_y_;
-    if (!IsBlankLine(text_lines_[target])) {
-        while (target + 1 < text_lines_.size() && !IsBlankLine(text_lines_[target + 1])) {
-            ++target;
-        }
-    }
-    while (target + 1 < text_lines_.size() && IsBlankLine(text_lines_[target + 1])) {
-        ++target;
-    }
-
-    if (target + 1 < text_lines_.size()) {
-        cursor_y_ = target + 1;
-        cursor_x_ = 0;
-        return;
-    }
-
-    cursor_y_ = text_lines_.size() - 1;
-    cursor_x_ = text_lines_[cursor_y_].size();
-}
-
-void EditorComponent::MoveCursorToPreviousWord() {
-    ClampCursorToBuffer();
-
-    if (cursor_x_ == 0) {
-        if (cursor_y_ == 0) {
-            return;
-        }
-        cursor_y_--;
-        cursor_x_ = text_lines_[cursor_y_].size();
-    }
-
-    const std::string& line = text_lines_[cursor_y_];
-    while (cursor_x_ > 0 && !IsWordCharacter(line[cursor_x_ - 1])) {
-        cursor_x_--;
-    }
-    while (cursor_x_ > 0 && IsWordCharacter(line[cursor_x_ - 1])) {
-        cursor_x_--;
-    }
-
-    ClampCursorToBuffer();
-}
-
-void EditorComponent::MoveCursorToNextWord() {
-    ClampCursorToBuffer();
-
-    const std::string& line = text_lines_[cursor_y_];
-    while (cursor_x_ < line.size() && IsWordCharacter(line[cursor_x_])) {
-        cursor_x_++;
-    }
-    while (cursor_x_ < line.size() && !IsWordCharacter(line[cursor_x_])) {
-        cursor_x_++;
-    }
-
-    if (cursor_x_ == line.size() && cursor_y_ + 1 < text_lines_.size()) {
-        cursor_y_++;
-        cursor_x_ = 0;
-    }
-
-    ClampCursorToBuffer();
-}
-
-void EditorComponent::DeleteWordBackward() {
-    EndTypingGroup();
-    ClampCursorToBuffer();
-    if (HasSelection()) {
-        DeleteSelection();
-        return;
-    }
-
-    if (cursor_x_ == 0) {
-        if (cursor_y_ == 0) {
-            return;
+    bool EditorComponent::IsActiveSearchMatch(const SearchMatch& match) const {
+        if (!search_matches_.empty() && current_search_match_ < search_matches_.size()) {
+            const SearchMatch& active_match = search_matches_[current_search_match_];
+            if (match.x == active_match.x &&
+                match.y == active_match.y &&
+                match.length == active_match.length) {
+                return true;
+                }
         }
 
-        SaveSnapshot();
-        cursor_x_ = text_lines_[cursor_y_ - 1].size();
-        text_lines_[cursor_y_ - 1] += text_lines_[cursor_y_];
-        text_lines_.erase(text_lines_.begin() + static_cast<std::ptrdiff_t>(cursor_y_));
-        cursor_y_--;
-        is_dirty_ = true;
-        ClearSelection();
-        UpdateScroll();
-        return;
+        // Check if the match is currently being traversed by the cursor
+        return doc_ && match.y == doc_->cursor_row &&
+        doc_->cursor_col >= match.x &&
+        doc_->cursor_col < match.x + match.length;
     }
 
-    const size_t target = utils::FindWordDeleteStart(text_lines_[cursor_y_], cursor_x_);
-    if (target == cursor_x_) {
-        return;
+    void EditorComponent::BeginSelection() {
+        if (doc_) doc_->BeginSelection();
     }
 
-    SaveSnapshot();
-    text_lines_[cursor_y_].erase(target, cursor_x_ - target);
-    cursor_x_ = target;
-    is_dirty_ = true;
-    ClearSelection();
-    UpdateScroll();
-}
-
-void EditorComponent::DeleteWordForward() {
-    EndTypingGroup();
-    ClampCursorToBuffer();
-    if (HasSelection()) {
-        DeleteSelection();
-        return;
+    void EditorComponent::ClampCursorToBuffer() {
+        if (!doc_) return;
+        doc_->ClampCursor();
     }
 
-    if (cursor_x_ >= text_lines_[cursor_y_].size()) {
-        if (cursor_y_ + 1 >= text_lines_.size()) {
-            return;
-        }
-
-        SaveSnapshot();
-        text_lines_[cursor_y_] += text_lines_[cursor_y_ + 1];
-        text_lines_.erase(
-            text_lines_.begin() + static_cast<std::ptrdiff_t>(cursor_y_ + 1));
-        is_dirty_ = true;
-        ClearSelection();
-        UpdateScroll();
-        return;
+    void EditorComponent::MoveCursorHome() {
+        if (doc_) doc_->MoveCursorHome();
     }
 
-    const size_t target = utils::FindWordDeleteEnd(text_lines_[cursor_y_], cursor_x_);
-    if (target == cursor_x_) {
-        return;
+    void EditorComponent::MoveCursorEnd() {
+        if (doc_) doc_->MoveCursorEnd();
     }
 
-    SaveSnapshot();
-    text_lines_[cursor_y_].erase(cursor_x_, target - cursor_x_);
-    is_dirty_ = true;
-    ClearSelection();
-    UpdateScroll();
-}
-
-bool EditorComponent::MoveLinesUp() {
-    EndTypingGroup();
-    ClampCursorToBuffer();
-
-    if (text_lines_.size() < 2) {
-        return false;
+    void EditorComponent::MoveCursorLeft() {
+        if (doc_) doc_->MoveCursorLeft();
     }
 
-    if (!HasSelection()) {
-        if (cursor_y_ == 0) {
-            return false;
-        }
-
-        SaveSnapshot();
-        std::swap(text_lines_[cursor_y_], text_lines_[cursor_y_ - 1]);
-        --cursor_y_;
-        cursor_x_ = std::min(cursor_x_, text_lines_[cursor_y_].size());
-        ClearSelection();
-        is_dirty_ = true;
-        UpdateScroll();
-        return true;
+    void EditorComponent::MoveCursorRight() {
+        if (doc_) doc_->MoveCursorRight();
     }
 
-    auto [start, end] = utils::OrderedSelection(
-        {selection_anchor_x_, selection_anchor_y_},
-        {cursor_x_, cursor_y_},
-        text_lines_);
-    size_t start_row = start.y;
-    size_t end_row = end.y;
-    if (end.x == 0 && end_row > start_row) {
-        --end_row;
-    }
-    if (start_row == 0) {
-        return false;
+    void EditorComponent::MoveCursorUp() {
+        if (doc_) doc_->MoveCursorUp();
     }
 
-    SaveSnapshot();
-    std::rotate(
-        text_lines_.begin() + static_cast<std::ptrdiff_t>(start_row - 1),
-        text_lines_.begin() + static_cast<std::ptrdiff_t>(start_row),
-        text_lines_.begin() + static_cast<std::ptrdiff_t>(end_row + 1));
-    --cursor_y_;
-    --selection_anchor_y_;
-    ClampCursorToBuffer();
-    selection_anchor_y_ = std::min(selection_anchor_y_, text_lines_.size() - 1);
-    selection_anchor_x_ = std::min(selection_anchor_x_, text_lines_[selection_anchor_y_].size());
-    has_selection_ = true;
-    is_dirty_ = true;
-    UpdateScroll();
-    return true;
-}
-
-bool EditorComponent::MoveLinesDown() {
-    EndTypingGroup();
-    ClampCursorToBuffer();
-
-    if (text_lines_.size() < 2) {
-        return false;
+    void EditorComponent::MoveCursorDown() {
+        if (doc_) doc_->MoveCursorDown();
     }
 
-    if (!HasSelection()) {
-        if (cursor_y_ + 1 >= text_lines_.size()) {
-            return false;
-        }
-
-        SaveSnapshot();
-        std::swap(text_lines_[cursor_y_], text_lines_[cursor_y_ + 1]);
-        ++cursor_y_;
-        cursor_x_ = std::min(cursor_x_, text_lines_[cursor_y_].size());
-        ClearSelection();
-        is_dirty_ = true;
-        UpdateScroll();
-        return true;
+    void EditorComponent::MoveCursorPageUp() {
+        ClampCursorToBuffer();
+        if (!doc_) return;
+        const size_t page_step = std::max<size_t>(1, VisibleHeight() - 1);
+        doc_->cursor_row = doc_->cursor_row > page_step ? doc_->cursor_row - page_step : 0;
+        doc_->cursor_col = std::min(doc_->cursor_col, doc_->lines[doc_->cursor_row].size());
     }
 
-    auto [start, end] = utils::OrderedSelection(
-        {selection_anchor_x_, selection_anchor_y_},
-        {cursor_x_, cursor_y_},
-        text_lines_);
-    size_t start_row = start.y;
-    size_t end_row = end.y;
-    if (end.x == 0 && end_row > start_row) {
-        --end_row;
-    }
-    if (end_row + 1 >= text_lines_.size()) {
-        return false;
+    void EditorComponent::MoveCursorPageDown() {
+        ClampCursorToBuffer();
+        if (!doc_) return;
+        const size_t page_step = std::max<size_t>(1, VisibleHeight() - 1);
+        doc_->cursor_row = std::min(doc_->cursor_row + page_step, doc_->lines.size() - 1);
+        doc_->cursor_col = std::min(doc_->cursor_col, doc_->lines[doc_->cursor_row].size());
     }
 
-    SaveSnapshot();
-    std::rotate(
-        text_lines_.begin() + static_cast<std::ptrdiff_t>(start_row),
-        text_lines_.begin() + static_cast<std::ptrdiff_t>(end_row + 1),
-        text_lines_.begin() + static_cast<std::ptrdiff_t>(end_row + 2));
-    ++cursor_y_;
-    ++selection_anchor_y_;
-    ClampCursorToBuffer();
-    selection_anchor_y_ = std::min(selection_anchor_y_, text_lines_.size() - 1);
-    selection_anchor_x_ = std::min(selection_anchor_x_, text_lines_[selection_anchor_y_].size());
-    has_selection_ = true;
-    is_dirty_ = true;
-    UpdateScroll();
-    return true;
-}
-
-bool EditorComponent::DuplicateLines() {
-    EndTypingGroup();
-    ClampCursorToBuffer();
-
-    size_t start_row = cursor_y_;
-    size_t end_row = cursor_y_;
-    const bool had_selection = HasSelection();
-    if (had_selection) {
-        auto [start, end] = utils::OrderedSelection(
-            {selection_anchor_x_, selection_anchor_y_},
-            {cursor_x_, cursor_y_},
-            text_lines_);
-        start_row = start.y;
-        end_row = end.y;
-        if (end.x == 0 && end_row > start_row) {
-            --end_row;
-        }
+    void EditorComponent::MoveCursorToPreviousParagraph() {
+        if (doc_) doc_->MoveCursorToPreviousParagraph();
     }
 
-    if (start_row >= text_lines_.size() || end_row >= text_lines_.size() || start_row > end_row) {
-        return false;
+    void EditorComponent::MoveCursorToNextParagraph() {
+        if (doc_) doc_->MoveCursorToNextParagraph();
     }
 
-    SaveSnapshot();
-    const auto first = text_lines_.begin() + static_cast<std::ptrdiff_t>(start_row);
-    const auto last = text_lines_.begin() + static_cast<std::ptrdiff_t>(end_row + 1);
-    std::vector<std::string> copied_lines(first, last);
-    text_lines_.insert(
-        text_lines_.begin() + static_cast<std::ptrdiff_t>(end_row + 1),
-        copied_lines.begin(),
-        copied_lines.end());
-
-    if (!had_selection) {
-        ++cursor_y_;
-        cursor_x_ = std::min(cursor_x_, text_lines_[cursor_y_].size());
-        ClearSelection();
-    } else {
-        // Keep the original selection stable while inserting the duplicated block below it.
-        has_selection_ = true;
+    void EditorComponent::MoveCursorToPreviousWord() {
+        if (doc_) doc_->MoveCursorToPreviousWord();
     }
 
-    is_dirty_ = true;
-    UpdateScroll();
-    return true;
-}
-
-HistoryManager::State EditorComponent::CurrentState() const {
-    return {
-        text_lines_,
-        static_cast<int>(cursor_x_),
-        static_cast<int>(cursor_y_),
-    };
-}
-
-void EditorComponent::ApplyState(const HistoryManager::State& state) {
-    text_lines_ = state.lines;
-    if (text_lines_.empty()) {
-        text_lines_.push_back("");
+    void EditorComponent::MoveCursorToNextWord() {
+        if (doc_) doc_->MoveCursorToNextWord();
     }
 
-    cursor_x_ = state.cursor_x < 0 ? 0 : static_cast<size_t>(state.cursor_x);
-    cursor_y_ = state.cursor_y < 0 ? 0 : static_cast<size_t>(state.cursor_y);
-    ClearSelection();
-    UpdateScroll();
-}
-
-void EditorComponent::SaveSnapshot() {
-    ClampCursorToBuffer();
-    history_manager_.PushSnapshot(CurrentState());
-}
-
-void EditorComponent::SaveSnapshotForTyping(const std::string& input) {
-    ClampCursorToBuffer();
-    history_manager_.PushSnapshotForTyping(input, CurrentState(), HasSelection());
-}
-
-void EditorComponent::EndTypingGroup() {
-    history_manager_.EndTypingGroup();
-}
-
-void EditorComponent::Undo() {
-    HistoryManager::State state;
-    if (history_manager_.Undo(CurrentState(), &state)) {
-        ApplyState(state);
-    }
-}
-
-void EditorComponent::Redo() {
-    HistoryManager::State state;
-    if (history_manager_.Redo(CurrentState(), &state)) {
-        ApplyState(state);
-    }
-}
-
-std::string EditorComponent::GetCurrentLineText() const {
-    if (cursor_y_ < text_lines_.size()) {
-        return text_lines_[cursor_y_];
-    }
-    return "";
-}
-
-void EditorComponent::DeleteCurrentLine() {
-    if (text_lines_.empty()) return;
-
-    if (cursor_y_ < text_lines_.size()) {
+    void EditorComponent::DeleteWordBackward() {
         EndTypingGroup();
-        SaveSnapshot();
-        text_lines_.erase(text_lines_.begin() + cursor_y_);
-        
-        // Ensure the layout never drops to an absolute 0 rows state
-        if (text_lines_.empty()) {
-            text_lines_.push_back("");
-            cursor_y_ = 0;
-        } else if (cursor_y_ >= text_lines_.size()) {
-            // If the deleted row was the last one, snap index to the new tail
-            cursor_y_ = text_lines_.size() - 1;
+        ClampCursorToBuffer();
+        if (HasSelection()) {
+            DeleteSelection();
+            return;
         }
-        
-        // Reset horizontal position safely to the front of the line
-        cursor_x_ = 0;
+        if (!doc_) return;
+
+        if (doc_->DeleteWordBackward()) {
+            ClearSelection();
+            UpdateScroll();
+        }
+    }
+
+    void EditorComponent::DeleteWordForward() {
+        EndTypingGroup();
+        ClampCursorToBuffer();
+        if (HasSelection()) {
+            DeleteSelection();
+            return;
+        }
+        if (!doc_) return;
+
+        if (doc_->DeleteWordForward()) {
+            ClearSelection();
+            UpdateScroll();
+        }
+    }
+
+    bool EditorComponent::MoveLinesUp() {
+        EndTypingGroup();
+        ClampCursorToBuffer();
+        if (!doc_) return false;
+        const bool changed = doc_->MoveLinesUp();
+        if (changed) UpdateScroll();
+        return changed;
+    }
+
+    bool EditorComponent::MoveLinesDown() {
+        EndTypingGroup();
+        ClampCursorToBuffer();
+        if (!doc_) return false;
+        const bool changed = doc_->MoveLinesDown();
+        if (changed) UpdateScroll();
+        return changed;
+    }
+
+    bool EditorComponent::DuplicateLines() {
+        EndTypingGroup();
+        ClampCursorToBuffer();
+        if (!doc_) return false;
+
+        const bool changed = doc_->DuplicateLines();
+        if (changed) {
+            UpdateScroll();
+        }
+        return changed;
+    }
+
+    HistoryManager::State EditorComponent::CurrentState() const {
+        return doc_ ? doc_->CurrentState() : HistoryManager::State{};
+    }
+
+    void EditorComponent::ApplyState(const HistoryManager::State& state) {
+        if (!doc_) return;
+        doc_->ApplyState(state);
         ClearSelection();
-        
-        // Trigger layout adjustments so window scrolling does not break
         UpdateScroll();
     }
-}
+
+    void EditorComponent::SaveSnapshot() {
+        if (doc_) doc_->SaveSnapshot();
+    }
+
+    void EditorComponent::SaveSnapshotForTyping(const std::string& input) {
+        if (doc_) doc_->SaveSnapshotForTyping(input, HasSelection());
+    }
+
+    void EditorComponent::EndTypingGroup() {
+        if (doc_) doc_->EndTypingGroup();
+    }
+
+    void EditorComponent::Undo() {
+        if (doc_ && doc_->Undo()) {
+            ClearSelection();
+            UpdateScroll();
+        }
+    }
+
+    void EditorComponent::Redo() {
+        if (doc_ && doc_->Redo()) {
+            ClearSelection();
+            UpdateScroll();
+        }
+    }
+
+    std::string EditorComponent::GetCurrentLineText() const {
+        return doc_ ? doc_->CurrentLineText() : "";
+    }
+
+    void EditorComponent::DeleteCurrentLine() {
+        if (!doc_) return;
+        EndTypingGroup();
+        if (doc_->DeleteCurrentLine()) {
+            ClearSelection();
+            UpdateScroll();
+        }
+    }
 
 } // namespace textlt

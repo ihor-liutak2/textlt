@@ -28,22 +28,6 @@ std::string TrimTrailingNewlines(std::string value) {
     return value;
 }
 
-std::string FileTypeLabel(const std::string& path) {
-    if (path.size() >= 4 && path.substr(path.size() - 4) == ".cpp") {
-        return "C++ Source";
-    }
-    if (path.size() >= 4 && path.substr(path.size() - 4) == ".hpp") {
-        return "C++ Header";
-    }
-    if (path.size() >= 3 && path.substr(path.size() - 3) == ".md") {
-        return "Markdown Document";
-    }
-    if (path.size() >= 4 && path.substr(path.size() - 4) == ".txt") {
-        return "Text Document";
-    }
-    return "Unknown";
-}
-
 std::vector<std::string> LoadTextFileLines(const std::string& path) {
     std::ifstream file(path);
     if (!file) {

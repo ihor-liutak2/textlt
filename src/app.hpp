@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -14,8 +15,10 @@
 #include "file_dialog.hpp"
 #include "git_manager.hpp"
 #include "help_dialog.hpp"
+#include "menu_bar.hpp"
 #include "sidebar_component.hpp"
 #include "theme_dialog.hpp"
+#include "file_manager.hpp"
 
 namespace textlt {
 
@@ -66,7 +69,7 @@ private:
     void ToggleActiveFavorite();
     void UpdateFileMenuLabels();
     void UpdateOptionsMenuLabels();
-    void RunDropdownAction();
+    void RunDropdownAction(int menu_index, int item_index);
     ftxui::Element Render();
     ftxui::Element RenderFindPanel();
     ftxui::Element RenderGoToLinePanel();
@@ -84,7 +87,6 @@ private:
     void ReplaceNext();
     void ReplaceAll();
     std::string FindMatchStatus() const;
-    std::string FileTypeLabel(const std::string& file_path) const;
     
     // Sub-routers for handling dropdown actions by category
     void HandleFileMenu(int item);
@@ -107,29 +109,22 @@ private:
     HelpDialog help_dialog_;
     ThemeDialog theme_dialog_;
     CloudTtsPipeline cloud_tts_pipeline_;
+    
+    FileManager file_manager_;
 
-    std::vector<std::string> menu_entries_;
-    std::vector<std::vector<std::string>> dropdown_entries_;
-    std::vector<std::string> current_dropdown_entries_;
     std::string find_query_;
     std::string replace_text_;
     std::string goto_line_input_;
     std::string active_action_ = "Ready";
 
-    int selected_menu_item_ = 0;
-    int active_dropdown_ = -1;
     int focused_layer_ = 0;
-    int selected_dropdown_item_ = 0;
     int search_panel_tab_index_ = 0;
     bool sidebar_has_focus_ = false;
     bool show_goto_line_bar_ = false;
     bool exit_confirmation_open_ = false;
     bool exit_after_save_as_ = false;
     SearchMode current_search_mode_ = SearchMode::None;
-    ftxui::Box top_menu_box_;
-
-    ftxui::Component top_menu_;
-    ftxui::Component dropdown_menu_;
+    std::shared_ptr<MenuBarComponent> menu_bar_;
     ftxui::Component body_container_;
     ftxui::Component main_container_;
     ftxui::Component root_container_;

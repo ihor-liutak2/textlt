@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include "../syntax_highlighter.hpp"
+#include "syntax_highlighter.hpp"
 
 namespace textlt::lexers {
 

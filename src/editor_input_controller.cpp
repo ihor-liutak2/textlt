@@ -1,9 +1,9 @@
-#include "editor_component.hpp"
+#include "editor_input_controller.hpp"
 
 #include <cstddef>
 #include <string>
 
-#include "ftxui/component/event.hpp"
+#include "editor_component.hpp"
 
 namespace textlt {
 namespace {
@@ -187,9 +187,6 @@ bool IsDuplicateLinesEvent(const ftxui::Event& event) {
 
 bool IsWordDeleteBackwardEvent(const ftxui::Event& event) {
     const std::string& input = event.input();
-    // Do not treat raw Control-H (\x08) as Ctrl+Backspace. Many terminals emit
-    // it for Ctrl+H, and routing it here would turn the old Replace shortcut
-    // into destructive word deletion.
     return input == "Alt+Backspace" ||
         input == "Ctrl+Backspace" ||
         input == "\x1B[127;5u" ||
@@ -226,182 +223,155 @@ bool IsCtrlDeleteEvent(const ftxui::Event& event) {
         event == ftxui::Event::Special("\x1B[27;5;3~");
 }
 
+bool HasMultipleUtf8Codepoints(const std::string& input) {
+    size_t count = 0;
+    for (unsigned char character : input) {
+        if ((character & 0xC0) != 0x80) {
+            ++count;
+            if (count > 1) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 } // namespace
 
-bool EditorComponent::OnEvent(ftxui::Event event) {
-    if (event.is_mouse() && HandleMouseEvent(event)) {
-        return true;
-    }
-
+bool EditorInputController::HandleEvent(EditorComponent& editor, ftxui::Event event) {
     const std::string& input = event.input();
     if (input == "\x1A" || input == "Ctrl+Z") {
-        Undo();
+        editor.Undo();
         return true;
     }
     if (input == "\x19" || input == "Ctrl+Y") {
-        Redo();
+        editor.Redo();
         return true;
     }
     if (input == "\x1F" || input == "Ctrl+/" || event == ftxui::Event::Special("\x1F")) {
-        ToggleComment();
+        editor.ToggleComment();
         return true;
     }
     if (input == "\x14" || input == "Ctrl+T") {
-        ToggleCase();
+        editor.ToggleCase();
         return true;
     }
 
     if (IsDuplicateLinesEvent(event)) {
-        return DuplicateLines();
+        return editor.DuplicateLines();
     }
     if (IsMoveLinesUpEvent(event)) {
-        return MoveLinesUp();
+        return editor.MoveLinesUp();
     }
     if (IsMoveLinesDownEvent(event)) {
-        return MoveLinesDown();
+        return editor.MoveLinesDown();
     }
 
     if (event == ftxui::Event::Tab) {
-        const int configured_tab_size = config_ ? config_->tab_size : 4;
+        const int configured_tab_size = editor.config_ ? editor.config_->tab_size : 4;
         const size_t tab_size = configured_tab_size == 2 ? 2 : 4;
-        InsertText(std::string(tab_size, ' '));
+        editor.InsertText(std::string(tab_size, ' '));
         return true;
     }
 
     if (IsWordDeleteBackwardEvent(event)) {
-        DeleteWordBackward();
+        editor.DeleteWordBackward();
         return true;
     }
 
     if (IsCtrlDeleteEvent(event)) {
-        DeleteWordForward();
+        editor.DeleteWordForward();
         return true;
     }
 
-    if (event.is_character()) {
-        if ((!config_ || config_->auto_pairing) && HandleAutoPairCharacter(event.input())) {
+    if (event.is_character() && editor.doc_) {
+        const std::string& event_input = event.input();
+        if (HasMultipleUtf8Codepoints(event_input) ||
+            event_input.find('\n') != std::string::npos ||
+            event_input.find('\r') != std::string::npos) {
+            editor.InsertText(event_input);
             return true;
         }
 
-        // Insert incoming characters at the current cursor position.
-        SaveSnapshotForTyping(event.input());
-        if (HasSelection()) {
-            DeleteSelectionWithoutSnapshot();
+        if ((!editor.config_ || editor.config_->auto_pairing) &&
+            editor.HandleAutoPairCharacter(event.input())) {
+            return true;
         }
-        text_lines_[cursor_y_].insert(cursor_x_, event.input());
-        cursor_x_ += event.input().size();
-        is_dirty_ = true;
-        ClearSelection();
-        UpdateScroll();
+
+        editor.SaveSnapshotForTyping(event_input);
+        if (editor.HasSelection()) {
+            editor.DeleteSelectionWithoutSnapshot();
+        }
+        editor.doc_->InsertCharacter(event_input);
+        editor.ClearSelection();
+        editor.UpdateScroll();
         return true;
     }
 
-    if (event == ftxui::Event::Backspace) {
-        EndTypingGroup();
-        if (HasSelection()) {
-            DeleteSelection();
+    if (event == ftxui::Event::Backspace && editor.doc_) {
+        editor.EndTypingGroup();
+        if (editor.HasSelection()) {
+            editor.DeleteSelection();
             return true;
         }
 
-        // Delete the character before the cursor or join with the previous line.
-        if (cursor_x_ > 0) {
-            SaveSnapshot();
-            text_lines_[cursor_y_].erase(cursor_x_ - 1, 1);
-            cursor_x_--;
-        } else if (cursor_y_ > 0) {
-            SaveSnapshot();
-            cursor_x_ = text_lines_[cursor_y_ - 1].size();
-            text_lines_[cursor_y_ - 1] += text_lines_[cursor_y_];
-            text_lines_.erase(text_lines_.begin() + cursor_y_);
-            cursor_y_--;
+        if (editor.doc_->Backspace()) {
+            editor.ClearSelection();
+            editor.UpdateScroll();
         }
-        ClearSelection();
-        UpdateScroll();
         return true;
     }
 
-    if (event == ftxui::Event::Delete) {
-        EndTypingGroup();
-        if (HasSelection()) {
-            DeleteSelection();
+    if (event == ftxui::Event::Delete && editor.doc_) {
+        editor.EndTypingGroup();
+        if (editor.HasSelection()) {
+            editor.DeleteSelection();
             return true;
         }
 
-        if (cursor_x_ < text_lines_[cursor_y_].size()) {
-            SaveSnapshot();
-            text_lines_[cursor_y_].erase(cursor_x_, 1);
-        } else if (cursor_y_ + 1 < text_lines_.size()) {
-            SaveSnapshot();
-            text_lines_[cursor_y_] += text_lines_[cursor_y_ + 1];
-            text_lines_.erase(text_lines_.begin() + static_cast<std::ptrdiff_t>(cursor_y_ + 1));
+        if (editor.doc_->DeleteForward()) {
+            editor.ClearSelection();
+            editor.UpdateScroll();
         }
-        ClearSelection();
-        UpdateScroll();
         return true;
     }
 
     if (event == ftxui::Event::Return) {
-        return HandleAutoIndentReturn();
+        return editor.HandleAutoIndentReturn();
     }
 
     NavigationAction action = NavigationAction::Left;
     const bool extend_selection = IsShiftNavigationEvent(event, &action);
     if (extend_selection || IsNavigationEvent(event, &action)) {
-        EndTypingGroup();
+        editor.EndTypingGroup();
         if (extend_selection) {
-            BeginSelection();
+            editor.BeginSelection();
         }
 
         switch (action) {
-            case NavigationAction::Left:
-                MoveCursorLeft();
-                break;
-            case NavigationAction::Right:
-                MoveCursorRight();
-                break;
-            case NavigationAction::Up:
-                MoveCursorUp();
-                break;
-            case NavigationAction::Down:
-                MoveCursorDown();
-                break;
-            case NavigationAction::Home:
-                MoveCursorHome();
-                break;
-            case NavigationAction::End:
-                MoveCursorEnd();
-                break;
-            case NavigationAction::PageUp:
-                MoveCursorPageUp();
-                break;
-            case NavigationAction::PageDown:
-                MoveCursorPageDown();
-                break;
-            case NavigationAction::ParagraphUp:
-                MoveCursorToPreviousParagraph();
-                break;
-            case NavigationAction::ParagraphDown:
-                MoveCursorToNextParagraph();
-                break;
-            case NavigationAction::WordLeft:
-                MoveCursorToPreviousWord();
-                break;
-            case NavigationAction::WordRight:
-                MoveCursorToNextWord();
-                break;
+            case NavigationAction::Left: editor.MoveCursorLeft(); break;
+            case NavigationAction::Right: editor.MoveCursorRight(); break;
+            case NavigationAction::Up: editor.MoveCursorUp(); break;
+            case NavigationAction::Down: editor.MoveCursorDown(); break;
+            case NavigationAction::Home: editor.MoveCursorHome(); break;
+            case NavigationAction::End: editor.MoveCursorEnd(); break;
+            case NavigationAction::PageUp: editor.MoveCursorPageUp(); break;
+            case NavigationAction::PageDown: editor.MoveCursorPageDown(); break;
+            case NavigationAction::ParagraphUp: editor.MoveCursorToPreviousParagraph(); break;
+            case NavigationAction::ParagraphDown: editor.MoveCursorToNextParagraph(); break;
+            case NavigationAction::WordLeft: editor.MoveCursorToPreviousWord(); break;
+            case NavigationAction::WordRight: editor.MoveCursorToNextWord(); break;
         }
 
-        ClampCursorToBuffer();
+        editor.ClampCursorToBuffer();
         if (!extend_selection) {
-            ClearSelection();
+            editor.ClearSelection();
         }
-        UpdateScroll();
+        editor.UpdateScroll();
         return true;
     }
 
-    return ComponentBase::OnEvent(event);
+    return false;
 }
-
 
 } // namespace textlt

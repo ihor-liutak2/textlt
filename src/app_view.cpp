@@ -5,8 +5,11 @@
 
 #include "ftxui/component/event.hpp"
 #include "ftxui/component/mouse.hpp"
+#include <ftxui/component/component_base.hpp>
 #include "file_utils.hpp"
 #include "theme.hpp"
+
+using namespace ftxui;
 
 namespace textlt {
 
@@ -86,11 +89,7 @@ ftxui::Element TextltApp::Render() {
     }
     editor->SetBottomOverlayRows(bottom_overlay_rows);
     
-    Element top_menu_element =
-        top_menu_->Render() |
-        bgcolor(current_theme_.menu_background) |
-        color(current_theme_.menu_foreground) |
-        reflect(top_menu_box_);
+    Element top_menu_element = menu_bar_->Render();
         
     Element workspace = editor_config_.show_file_explorer
         ? hbox({
@@ -147,41 +146,27 @@ ftxui::Element TextltApp::Render() {
     if (editor->IsDirty()) {
         display_name += " *";
     }
+
+    auto doc = editor->GetDocument();
+    std::string type_label = doc ? doc->Label() : "Plain Text";
+
     base_rows.push_back(
         text(" File: " + display_name +
-             " | File Type: " + FileTypeLabel(file_path) +
-             " | Ln " + std::to_string(cursor_row) + ", Col " + std::to_string(cursor_col) +
-             " | " + editor->ActiveLineEndingLabel() +
-             git_branch_badge +
-             " | " + std::to_string(document_percent) + "%" +
-             " | Theme: " + current_theme_.name) |
-            color(current_theme_.menu_foreground));
+        " | File Type: " + type_label +
+        " | Ln " + std::to_string(cursor_row) + ", Col " + std::to_string(cursor_col) +
+        " | " + editor->ActiveLineEndingLabel() +
+        git_branch_badge +
+        " | " + std::to_string(document_percent) + "%" +
+        " | Theme: " + current_theme_.name) |
+        color(current_theme_.menu_foreground));
 
     Element base_layout = vbox(std::move(base_rows)) |
         bgcolor(current_theme_.background) |
         color(current_theme_.foreground);
 
-    if (active_dropdown_ < 0 && !file_dialog_.IsOpen() &&
-        !help_dialog_.IsOpen() && !theme_dialog_.IsOpen() &&
-        !exit_confirmation_open_) {
-        return base_layout;
-    }
-
     Elements layers = {base_layout};
-    if (active_dropdown_ >= 0) {
-        layers.push_back(vbox({
-            filler() | size(HEIGHT, EQUAL, top_menu_box_.y_max + 1),
-            hbox({
-                filler() | size(WIDTH, EQUAL, std::max(0, DropdownX())),
-                dropdown_menu_->Render() | 
-                    border | 
-                    bgcolor(current_theme_.menu_background) | 
-                    color(current_theme_.menu_foreground) | 
-                    clear_under,
-                filler(),
-            }),
-            filler(),
-        }));
+    if (menu_bar_->IsDropdownOpen()) {
+        layers.push_back(menu_bar_->RenderDropdown());
     }
 
     if (file_dialog_.IsOpen()) {
@@ -313,15 +298,70 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     const std::string& input = event.input();
     const bool has_input = !input.empty();
 
+    // --- Global Event Filter: Modals and Overlays (highest layer first) ---
+
+    // 1. Exit Confirmation Dialog
     if (exit_confirmation_open_) {
+        // Dispatch events to confirmation buttons
+        if (exit_save_button_->OnEvent(event) ||
+            exit_discard_button_->OnEvent(event) ||
+            exit_cancel_button_->OnEvent(event)) {
+            return true;
+        }
         if (event == ftxui::Event::Escape) {
             CloseExitConfirmationDialog();
             return true;
         }
-        return false;
+        return true; // Consume all other events when exit confirmation is open.
     }
 
+    // 2. Theme Dialog
+    if (theme_dialog_.IsOpen()) {
+        if (theme_dialog_.View()->OnEvent(event)) { // Pass event to the dialog's root component
+            return true;
+        }
+        if (event == ftxui::Event::Escape) {
+            CloseThemeDialog();
+            return true;
+        }
+        return true; // Consume all other events.
+    }
+
+    // 3. Help Dialog
+    if (help_dialog_.IsOpen()) {
+        if (help_dialog_.OnEvent(event)) { // HelpDialog has its own OnEvent
+            return true;
+        }
+        if (event == ftxui::Event::Escape) {
+            CloseHelpDialog();
+            return true;
+        }
+        return true; // Consume all other events.
+    }
+
+    // 4. File Dialog
+    if (file_dialog_.IsOpen()) {
+        if (file_dialog_.View()->OnEvent(event)) { // Pass event to the dialog's root component
+            return true;
+        }
+        if (event == ftxui::Event::Escape) {
+            CloseFileDialog();
+            return true;
+        }
+        return true; // Consume all other events.
+    }
+
+    // 5. Menu Bar: keyboard events belong here only while a dropdown is open.
+    // Mouse events still go to the menu bar so top-level menu clicks work.
+    if ((menu_bar_->IsDropdownOpen() || event.is_mouse()) && menu_bar_->OnEvent(event)) {
+        return true;
+    }
+
+    // 6. Go-to-Line Panel
     if (show_goto_line_bar_) {
+        if (goto_line_input_component_->OnEvent(event)) {
+            return true;
+        }
         if (event == ftxui::Event::Escape) {
             CloseGoToLinePanel();
             return true;
@@ -330,9 +370,22 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
             SubmitGoToLine();
             return true;
         }
+        return true; // Consume all other events.
     }
 
+    // 7. Find/Replace Panel
     if (current_search_mode_ != SearchMode::None) {
+        // Events are dispatched to focused input or buttons within the panel.
+        if (find_input_->OnEvent(event)) return true;
+        if (replace_find_input_->OnEvent(event)) return true;
+        if (replace_input_->OnEvent(event)) return true;
+        if (find_next_button_->OnEvent(event)) return true;
+        if (find_previous_button_->OnEvent(event)) return true;
+        if (replace_next_button_->OnEvent(event)) return true;
+        if (replace_all_button_->OnEvent(event)) return true;
+        if (search_match_case_checkbox_->OnEvent(event)) return true;
+        if (search_whole_word_checkbox_->OnEvent(event)) return true;
+
         if (event == ftxui::Event::Escape) {
             CloseFindPanel();
             return true;
@@ -341,252 +394,148 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
             FindNext();
             return true;
         }
-        if (input == "\x1B[13;2u" || input == "\x1B[27;2;13~") {
+        if (input == "\x1B[13;2u" || input == "\x1B[27;2;13~") { // Shift+F3
             FindPrevious();
             return true;
         }
+        return true; // Consume all other events.
     }
 
-    const bool can_open_find_panel =
-        !file_dialog_.IsOpen() && !help_dialog_.IsOpen() && !theme_dialog_.IsOpen() &&
-        !exit_confirmation_open_;
+    // --- End Global Event Filter ---
+    // Events reaching this point are not consumed by any active modal or overlay.
 
-    const bool editor_can_handle_direct_shortcut =
-        focused_layer_ == 0 &&
-        active_dropdown_ < 0 &&
-        !sidebar_has_focus_ &&
-        !file_dialog_.IsOpen() &&
-        !help_dialog_.IsOpen() &&
-        !theme_dialog_.IsOpen() &&
-        current_search_mode_ == SearchMode::None &&
-        !show_goto_line_bar_;
-    if (editor_can_handle_direct_shortcut && IsLineManipulationShortcut(event)) {
-        if (text_editor_->OnEvent(event)) {
+    const bool editor_is_focused = focused_layer_ == 0 && !sidebar_has_focus_;
+
+    // Editor-specific direct manipulation shortcuts (only if editor is focused)
+    if (editor_is_focused) {
+        if (IsLineManipulationShortcut(event)) {
+            if (text_editor_->OnEvent(event)) {
+                screen_.PostEvent(ftxui::Event::Custom);
+                return true;
+            }
+            return false;
+        }
+        if (IsWordDeleteBackwardShortcut(event)) {
+            auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+            editor_ptr->DeleteWordBackward();
             screen_.PostEvent(ftxui::Event::Custom);
             return true;
         }
-        return false;
+        if (IsWordDeleteForwardShortcut(event)) {
+            auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+            editor_ptr->DeleteWordForward();
+            screen_.PostEvent(ftxui::Event::Custom);
+            return true;
+        }
+        // Handle Enter key for new line insertion in the editor
+        if (event == ftxui::Event::Return) {
+            auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+            editor_ptr->HandleAutoIndentReturn();
+            screen_.PostEvent(ftxui::Event::Custom);
+            return true;
+        }
+        // Ctrl+A (Select All)
+        if (event == ftxui::Event::Special("\x01") ||
+            input == "\x01" ||
+            event == ftxui::Event::Special("Ctrl+A") ||
+            input == "Ctrl+A") {
+            auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+            editor_ptr->SelectAll();
+            active_action_ = "Selected all text";
+            screen_.PostEvent(ftxui::Event::Custom);
+            return true;
+        }
+        // Ctrl+J (TTS Debug)
+        if (event == ftxui::Event::Special("\x0A") ||
+            input == "\x0A" ||
+            event == ftxui::Event::Special("Ctrl+J") ||
+            input == "Ctrl+J") {
+            QueueCloudTtsDebugFromCursor();
+            return true;
+        }
+
+        // Pass all other editor-specific events (characters, navigation, etc.) to the editor.
+        if (text_editor_->OnEvent(event)) {
+            return true;
+        }
     }
 
-    if (editor_can_handle_direct_shortcut && IsWordDeleteBackwardShortcut(event)) {
-        auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-        editor_ptr->DeleteWordBackward();
-        screen_.PostEvent(ftxui::Event::Custom);
+    // Global App Shortcuts (available when no modals are active)
+    if (event.input() == "\x11") { // Ctrl+Q
+        RequestExit();
         return true;
     }
-    if (editor_can_handle_direct_shortcut && IsWordDeleteForwardShortcut(event)) {
-        auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-        editor_ptr->DeleteWordForward();
-        screen_.PostEvent(ftxui::Event::Custom);
+    if (event.input() == "\x13") { // Ctrl+S
+        SaveCurrentFile();
         return true;
     }
-
-    // Handle Enter key for new line insertion in the editor
-    if (editor_can_handle_direct_shortcut && event == ftxui::Event::Return) {
-        auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-        editor_ptr->HandleAutoIndentReturn();
-        screen_.PostEvent(ftxui::Event::Custom);
-        return true;
-    }
-
-    if (can_open_find_panel && (input == "\x06" || input == "Ctrl+F")) {
-        OpenFindPanel(false);
-        return true;
-    }
-
-    // Ctrl+H is indistinguishable from Backspace in many terminals, so Replace
-    // uses Ctrl+R to avoid stealing destructive editing input.
-    if (can_open_find_panel &&
-        (event == ftxui::Event::Special("\x12") || input == "\x12" || input == "Ctrl+R")) {
-        OpenFindPanel(true);
-        return true;
-    }
-
-    if (can_open_find_panel &&
-        (event == ftxui::Event::Special("\x07") || input == "\x07" || input == "Ctrl+G")) {
-        OpenGoToLinePanel();
-        return true;
-    }
-
-    if (editor_can_handle_direct_shortcut &&
-        (event == ftxui::Event::Special("\x01") ||
-         input == "\x01" ||
-         event == ftxui::Event::Special("Ctrl+A") ||
-         input == "Ctrl+A")) {
-        auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-        editor_ptr->SelectAll();
-        active_action_ = "Selected all text";
-        screen_.PostEvent(ftxui::Event::Custom);
-        return true;
-    }
-
-    if (editor_can_handle_direct_shortcut &&
-        (event == ftxui::Event::Special("\x0A") ||
-         input == "\x0A" ||
-         event == ftxui::Event::Special("Ctrl+J") ||
-         input == "Ctrl+J")) {
-        QueueCloudTtsDebugFromCursor();
+    if (event.input() == "\x0F") { // Ctrl+O
+        OpenFileDialog(FilePromptMode::Open);
         return true;
     }
 
+    // Clipboard shortcuts (trigger dropdown actions)
     if (event == ftxui::Event::Special("\x03") ||
         (has_input && input[0] == '\x03') ||
         event == ftxui::Event::Special("Ctrl+Shift+C") ||
         input == "Ctrl+Shift+C") {
-        selected_menu_item_ = 1;
-        active_dropdown_ = 1;
-        selected_dropdown_item_ = 4;
-        RunDropdownAction();
+        RunDropdownAction(1, 4); // This will trigger copy.
         screen_.PostEvent(ftxui::Event::Custom);
         return true;
     }
-
     if (event == ftxui::Event::Special("\x18") ||
         (has_input && input[0] == '\x18') ||
         event == ftxui::Event::Special("Ctrl+Shift+X") ||
         input == "Ctrl+Shift+X") {
-        selected_menu_item_ = 1;
-        active_dropdown_ = 1;
-        selected_dropdown_item_ = 3;
-        RunDropdownAction();
+        RunDropdownAction(1, 3); // This will trigger cut.
         screen_.PostEvent(ftxui::Event::Custom);
         return true;
     }
-    
     // Keep Ctrl+Shift+V for terminal configurations that reserve Ctrl+V.
     if (input == "\x16" ||
         input == "Ctrl+V" ||
         event == ftxui::Event::Special("Ctrl+Shift+V") ||
         input == "Ctrl+Shift+V") {
-        active_dropdown_ = 1;
-        selected_dropdown_item_ = 5; // Index for "Paste"
-        RunDropdownAction();
+        RunDropdownAction(1, 5); // Index for "Paste"
         return true;
     }
     
-    if (event.input() == "\x11") {
-        RequestExit();
+    // Shortcuts to open Find/Replace/Go-to-Line panels
+    if (input == "\x06" || input == "Ctrl+F") {
+        OpenFindPanel(false);
         return true;
     }
-    // Continue with the remaining global shortcut handlers.
-
-    if (event == ftxui::Event::Escape && help_dialog_.IsOpen()) {
-        CloseHelpDialog();
+    if (event == ftxui::Event::Special("\x12") || input == "\x12" || input == "Ctrl+R") {
+        OpenFindPanel(true);
         return true;
     }
-    if (help_dialog_.IsOpen()) {
-        help_dialog_.OnEvent(event);
-        return true;
-    }
-
-    if (event == ftxui::Event::Escape && theme_dialog_.IsOpen()) {
-        CloseThemeDialog();
-        return true;
-    }
-    if (theme_dialog_.IsOpen()) {
-        return false;
-    }
-
-    if (event.input() == "\x13" && !file_dialog_.IsOpen()) {
-        SaveCurrentFile();
-        return true;
-    }
-    if (event.input() == "\x0F" && !file_dialog_.IsOpen()) {
-        OpenFileDialog(FilePromptMode::Open);
+    if (event == ftxui::Event::Special("\x07") || input == "\x07" || input == "Ctrl+G") {
+        OpenGoToLinePanel();
         return true;
     }
 
-    if (event == ftxui::Event::Escape && file_dialog_.IsOpen()) {
-        CloseFileDialog();
-        return true;
-    }
-    if (file_dialog_.IsOpen()) {
-        return false;
-    }
-
-    if (event == ftxui::Event::Escape && active_dropdown_ >= 0) {
-        CloseDropdown();
-        return true;
-    }
-    if (event == ftxui::Event::ArrowLeft && active_dropdown_ >= 0) {
-        selected_menu_item_ =
-            (selected_menu_item_ + static_cast<int>(menu_entries_.size()) - 1) %
-            static_cast<int>(menu_entries_.size());
-        ActivateTopMenu();
-        return true;
-    }
-    if (event == ftxui::Event::ArrowRight && active_dropdown_ >= 0) {
-        selected_menu_item_ =
-            (selected_menu_item_ + 1) % static_cast<int>(menu_entries_.size());
-        ActivateTopMenu();
-        return true;
-    }
-
+    // F-key shortcuts to open main menu dropdowns/dialogs
     if (event == ftxui::Event::F1) {
-        selected_menu_item_ = 3;
         OpenHelpDialog();
         return true;
     }
     if (event == ftxui::Event::F2) {
-        selected_menu_item_ = 0;
-        OpenDropdown();
+        menu_bar_->OpenDropdown(0);
+        focused_layer_ = 0;
         return true;
     }
     if (event == ftxui::Event::F3) {
-        selected_menu_item_ = 1;
-        OpenDropdown();
+        menu_bar_->OpenDropdown(1);
+        focused_layer_ = 0;
         return true;
     }
     if (event == ftxui::Event::F4) {
-        selected_menu_item_ = 2;
-        OpenDropdown();
+        menu_bar_->OpenDropdown(2);
+        focused_layer_ = 0;
         return true;
     }
-
-    // Process initial left mouse click down on the top menu bar items
-    if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left &&
-        event.mouse().motion == ftxui::Mouse::Pressed &&
-        top_menu_box_.Contain(event.mouse().x, event.mouse().y)) {
-        int item_x = top_menu_box_.x_min;
-        for (size_t i = 0; i < menu_entries_.size(); ++i) {
-            const int item_width = static_cast<int>(menu_entries_[i].size());
-            if (event.mouse().x >= item_x && event.mouse().x < item_x + item_width) {
-                selected_menu_item_ = static_cast<int>(i);
-                ActivateTopMenu();
-                return true;
-            }
-            item_x += item_width + 1;
-        }
-    }
-
-    if (active_dropdown_ >= 0 && event.is_mouse() && 
-        event.mouse().button == ftxui::Mouse::Left && 
-        event.mouse().motion == ftxui::Mouse::Released) {
-        
-        // Target rendering geometry boundary checks
-        int min_x = std::max(0, DropdownX()) + 1; // Includes left border line offset
-        int min_y = top_menu_box_.y_max + 2;     // Lines layout offset below the top border
-        
-        int clicked_y = event.mouse().y - min_y;
-        int clicked_x = event.mouse().x - min_x;
-
-        // Check if the coordinates physically hit inside the boundaries of the dropdown layout box
-        if (clicked_y >= 0 && clicked_y < static_cast<int>(current_dropdown_entries_.size()) && clicked_x >= 0) {
-            selected_dropdown_item_ = clicked_y;
-            RunDropdownAction();
-            return true;
-        }
-    }
-
+    
     return false;
-}
-
-int TextltApp::DropdownX() const {
-    int dropdown_x = top_menu_box_.x_min;
-    for (int i = 0; i < active_dropdown_; ++i) {
-        dropdown_x += static_cast<int>(menu_entries_[i].size()) + 1;
-    }
-    return dropdown_x;
 }
 
 } // namespace textlt

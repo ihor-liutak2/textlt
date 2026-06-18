@@ -8,32 +8,35 @@
 
 namespace textlt {
 
-ThemeDialog::ThemeDialog(const Theme* active_theme,
-                         ThemeCallback on_preview,
-                         ThemeCallback on_select)
+// --- ThemeSelectionContent Implementation ---
+
+ThemeSelectionContent::ThemeSelectionContent(const Theme* active_theme,
+                                             ThemeCallback on_preview,
+                                             ThemeCallback on_select)
     : active_theme_(active_theme),
       on_preview_(std::move(on_preview)),
       on_select_(std::move(on_select)) {
-    
+
     ftxui::MenuOption option = ftxui::MenuOption::Vertical();
-    
+
     // Save and close the dialog explicitly when Enter key is pressed
     option.on_enter = [this] { SelectCurrentTheme(); };
-    
+
     // Dynamically apply the selected theme option in real-time as the index shifts
-    option.on_change = [this] { 
+    option.on_change = [this] {
         if (selected_theme_ >= 0 && selected_theme_ < static_cast<int>(theme_names_.size())) {
             if (on_preview_) {
                 on_preview_(theme_names_[selected_theme_]);
             }
         }
     };
-    
+
     // Customize rendering for each theme item in the list
     option.entries_option.transform = [this](const ftxui::EntryState& state) {
+        // Use the current active_theme_ for rendering
         const Theme& theme = active_theme_ ? *active_theme_ : FallbackTheme();
         ftxui::Element item = ftxui::text((state.active ? "> " : "  ") + state.label);
-        
+
         // Highlight active or focused selection row
         if (state.focused || state.active) {
             return item |
@@ -43,18 +46,11 @@ ThemeDialog::ThemeDialog(const Theme* active_theme,
         // Standard unselected text color inside modal
         return item | ftxui::color(theme.modal_text_color);
     };
-    
+
     menu_ = ftxui::Menu(&theme_names_, &selected_theme_, option);
-    
-    // Safe renderer assembly without conflicting mouse capture events
-    renderer_ = ftxui::Renderer(menu_, [this] { return Render(); });
 }
 
-ftxui::Component ThemeDialog::View() const {
-    return renderer_;
-}
-
-void ThemeDialog::Open(const std::vector<Theme>& themes, const std::string& active_name) {
+void ThemeSelectionContent::SetThemes(const std::vector<Theme>& themes, const std::string& active_name) {
     theme_names_.clear();
     for (const Theme& theme : themes) {
         theme_names_.push_back(theme.name);
@@ -67,33 +63,19 @@ void ThemeDialog::Open(const std::vector<Theme>& themes, const std::string& acti
     selected_theme_ = iter == theme_names_.end()
         ? 0
         : static_cast<int>(std::distance(theme_names_.begin(), iter));
-    open_ = true;
-    TakeFocus();
 }
 
-void ThemeDialog::Close() {
-    open_ = false;
-}
-
-bool ThemeDialog::IsOpen() const {
-    return open_;
-}
-
-void ThemeDialog::TakeFocus() {
-    menu_->TakeFocus();
-}
-
-void ThemeDialog::SelectCurrentTheme() {
+void ThemeSelectionContent::SelectCurrentTheme() {
     if (selected_theme_ < 0 || selected_theme_ >= static_cast<int>(theme_names_.size())) {
         return;
     }
     if (on_select_) {
         on_select_(theme_names_[selected_theme_]);
     }
-    Close();
+    // Note: ThemeSelectionContent itself does not close. Its parent ModalWindow handles closing.
 }
 
-ftxui::Element ThemeDialog::Render() {
+ftxui::Element ThemeSelectionContent::Render() {
     using namespace ftxui;
     const Theme& theme = active_theme_ ? *active_theme_ : FallbackTheme();
 
@@ -109,21 +91,67 @@ ftxui::Element ThemeDialog::Render() {
             size(HEIGHT, LESS_THAN, 14),
 
         separator() | color(theme.modal_border),
-        
-        // Footer hint text block
-        text(" Selection saves immediately. Escape closes. ") | dim | color(theme.modal_text_color),
-    }) |
-        bgcolor(theme.modal_background) |
-        color(theme.modal_text_color);
 
-    // Keep modal paint bounded to the window instead of the full overlay layer.
-    return window(
-        text(" Select Theme ") | bold | color(theme.modal_accent),
-        content) |
-        bgcolor(theme.modal_background) |
-        color(theme.modal_text_color) |
-        size(WIDTH, EQUAL, 46) |
-        clear_under;
+        // Footer hint text block
+        text(" Enter selects, Escape closes. ") | dim | color(theme.modal_text_color),
+    });
+
+    return content; // ModalWindow will wrap this with window()
+}
+
+void ThemeSelectionContent::TakeFocus() {
+    menu_->TakeFocus();
+}
+
+// --- ThemeDialog Implementation ---
+
+ThemeDialog::ThemeDialog(const Theme* active_theme, ThemeCallback on_preview, ThemeCallback on_select)
+    : current_active_theme_(active_theme) { // Initialize current_active_theme_
+    
+    content_impl_ = std::make_shared<ThemeSelectionContent>(current_active_theme_, on_preview, [this, on_select](const std::string& theme_name) {
+        on_select(theme_name);
+        Close(); // Close the dialog after selection
+    });
+    modal_window_ = std::make_shared<ModalWindow>(content_impl_, current_active_theme_, [this] { Close(); });
+}
+
+ftxui::Component ThemeDialog::View() const {
+    return modal_window_;
+}
+
+void ThemeDialog::Open(const std::vector<Theme>& themes, const std::string& active_name) {
+    open_ = true;
+    content_impl_->SetThemes(themes, active_name);
+    // Ensure the theme in content_impl_ and modal_window_ is the most current one.
+    // If the active_theme_ passed to TextltApp::theme_dialog_ changed, it needs to be set.
+    // TextltApp should call SetTheme on ThemeDialog directly.
+    content_impl_->SetTheme(current_active_theme_);
+    modal_window_->SetTheme(current_active_theme_);
+    content_impl_->TakeFocus();
+}
+
+void ThemeDialog::Close() {
+    open_ = false;
+}
+
+bool ThemeDialog::IsOpen() const {
+    return open_;
+}
+
+void ThemeDialog::TakeFocus() {
+    if (content_impl_) {
+        content_impl_->TakeFocus();
+    }
+}
+
+void ThemeDialog::SetTheme(const Theme* new_theme) {
+    current_active_theme_ = new_theme;
+    if (content_impl_) {
+        content_impl_->SetTheme(new_theme);
+    }
+    if (modal_window_) {
+        modal_window_->SetTheme(new_theme);
+    }
 }
 
 } // namespace textlt

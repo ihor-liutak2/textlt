@@ -5,9 +5,12 @@
 #include <cstdlib>
 #include <filesystem>
 #include <stdexcept>
+#include <string>
 
 #include "ftxui/component/component_options.hpp"
 #include "theme.hpp"
+#include "file_manager.hpp"
+#include "document.hpp"
 
 namespace textlt {
 namespace {
@@ -102,70 +105,14 @@ TextltApp::TextltApp()
       theme_dialog_(
           &current_theme_,
           [this](const std::string& theme_name) { PreviewTheme(theme_name); },
-          [this](const std::string& theme_name) { SelectTheme(theme_name); }),
-      menu_entries_({
-          " File ",
-          " Edit ",
-          " Options ",
-          " Help ",
-          " Exit ",
-      }),
-      dropdown_entries_({
-          {" New ", " Open ", " Save ", " Save As ", " [ ] Add to Favorites ", " Exit "},
-          {
-              " Undo              (Ctrl+Z) ",
-              " Redo              (Ctrl+Y) ",
-              " Select All        (Ctrl+A) ",
-              " Cut               (Ctrl+X) ",
-              " Copy              (Ctrl+C) ",
-              " Paste             (Ctrl+V) ",
-              " Toggle Comment    (Ctrl+/) ",
-              " Toggle Case       (Ctrl+T) ",
-              " Convert Indents: 4 -> 2 Spaces ",
-              " Convert Indents: 2 -> 4 Spaces ",
-              " Find...           (Ctrl+F) ",
-              " Replace...        (Ctrl+R) ",
-          },
-          {
-              " Toggle Line Numbers ",
-              " Toggle File Explorer ",
-              " Smart Word Wrap [ ] ",
-              " Syntax Highlighting [X] ",
-              " Auto Pairing [X] ",
-              " Smart Auto-Indent [X] ",
-              " Tab Size: 4 spaces ",
-              " Convert Tabs to Spaces ",
-              " Theme... ",
-          },
-          {" About textlt ", " Keyboard Shortcuts "},
-          {" Exit "},
-      }),
-      current_dropdown_entries_(dropdown_entries_[0]) {
+          [this](const std::string& theme_name) { SelectTheme(theme_name); }) {
+    menu_bar_ = ftxui::Make<MenuBarComponent>(
+        [this](int menu_index, int item_index) {
+            this->RunDropdownAction(menu_index, item_index);
+        },
+        &current_theme_);
     UpdateFileMenuLabels();
     UpdateOptionsMenuLabels();
-
-    ftxui::MenuOption top_menu_option = ftxui::MenuOption::Toggle();
-    top_menu_option.on_enter = [this] { ActivateTopMenu(); };
-    top_menu_option.on_change = [this] { ActivateTopMenu(); };
-    
-    top_menu_ = ftxui::Menu(&menu_entries_, &selected_menu_item_, top_menu_option);
-
-    ftxui::MenuOption dropdown_option = ftxui::MenuOption::Vertical();
-    dropdown_option.on_enter = [this] { RunDropdownAction(); };
-    
-    dropdown_option.entries_option.transform = [this](const ftxui::EntryState& state) {
-        ftxui::Element item = ftxui::text(state.label);
-        
-        // Apply theme colors for highlighted items safely
-        if (state.focused || state.active) {
-            return item | ftxui::bgcolor(current_theme_.menu_foreground) 
-                        | ftxui::color(current_theme_.menu_background);
-        }
-        return item;
-    };
-
-    dropdown_menu_ = ftxui::Menu(
-        &current_dropdown_entries_, &selected_dropdown_item_, dropdown_option);
 
     auto body_content = ftxui::Container::Horizontal({
         sidebar_panel_,
@@ -174,7 +121,7 @@ TextltApp::TextltApp()
     body_container_ = ftxui::CatchEvent(body_content, [this](ftxui::Event event) {
         if (event == ftxui::Event::Tab &&
             focused_layer_ == 0 &&
-            active_dropdown_ < 0 &&
+            (!menu_bar_ || !menu_bar_->IsDropdownOpen()) &&
             !file_dialog_.IsOpen() &&
             !help_dialog_.IsOpen() &&
             !theme_dialog_.IsOpen() &&
@@ -187,7 +134,7 @@ TextltApp::TextltApp()
 
     // FIXED: Added missing underscore to match class declaration
     main_container_ = ftxui::Container::Vertical({
-        top_menu_,
+        menu_bar_,
         body_container_,
     });
 
@@ -287,7 +234,6 @@ TextltApp::TextltApp()
 
     root_container_ = ftxui::Container::Tab({
         main_container_,
-        dropdown_menu_,
         file_dialog_.View(),
         help_dialog_.View(),
         theme_dialog_.View(),
@@ -314,19 +260,19 @@ void TextltApp::Run() {
 }
 
 void TextltApp::CloseDropdown() {
-    active_dropdown_ = -1;
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
     focused_layer_ = 0;
     FocusEditor();
 }
 
 void TextltApp::OpenDropdown() {
-    // FIXED: Added missing trailing underscore
-    active_dropdown_ = selected_menu_item_;
-    selected_dropdown_item_ = 0;
     UpdateFileMenuLabels();
-    current_dropdown_entries_ = dropdown_entries_[active_dropdown_];
-    focused_layer_ = 1;
-    dropdown_menu_->TakeFocus();
+    if (menu_bar_) {
+        menu_bar_->OpenDropdown(0);
+    }
+    focused_layer_ = 0;
 }
 
 void TextltApp::CloseFileDialog() {
@@ -337,8 +283,10 @@ void TextltApp::CloseFileDialog() {
 }
 
 void TextltApp::OpenFileDialog(FilePromptMode mode) {
-    active_dropdown_ = -1;
-    focused_layer_ = 2;
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+    focused_layer_ = 1;
     
     std::string default_path = std::static_pointer_cast<EditorComponent>(text_editor_)->CurrentFilePath();
     
@@ -359,7 +307,9 @@ void TextltApp::OpenFileDialog(FilePromptMode mode) {
 }
 
 void TextltApp::OpenAboutDialog() {
-    active_dropdown_ = -1;
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
     help_dialog_.OpenContent("About", {
         "textlt — Modern TUI Text Editor",
         "Version: 1.0.0 (Stable Release)",
@@ -372,14 +322,16 @@ void TextltApp::OpenAboutDialog() {
         "License: MIT License (c) 2026",
     }, true);
     active_action_ = "Opened About";
-    focused_layer_ = 3;
+    focused_layer_ = 2;
 }
 
 void TextltApp::OpenHelpDialog() {
-    active_dropdown_ = -1;
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
     help_dialog_.Open(ResolveHelpFilePath().string());
     active_action_ = "Opened Help";
-    focused_layer_ = 3;
+    focused_layer_ = 2;
 }
 
 void TextltApp::CloseHelpDialog() {
@@ -389,8 +341,10 @@ void TextltApp::CloseHelpDialog() {
 }
 
 void TextltApp::OpenThemeDialog() {
-    active_dropdown_ = -1;
-    focused_layer_ = 4;
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+    focused_layer_ = 3;
     theme_dialog_.Open(themes_, editor_config_.active_theme_name);
 }
 
@@ -401,9 +355,11 @@ void TextltApp::CloseThemeDialog() {
 }
 
 void TextltApp::ShowExitConfirmationDialog() {
-    active_dropdown_ = -1;
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
     exit_confirmation_open_ = true;
-    focused_layer_ = 7;
+    focused_layer_ = 6;
     exit_save_button_->TakeFocus();
     active_action_ = "Unsaved changes";
     screen_.PostEvent(ftxui::Event::Custom);
@@ -481,10 +437,12 @@ void TextltApp::FocusSidebar() {
 }
 
 void TextltApp::OpenFindPanel(bool replace_mode) {
-    active_dropdown_ = -1;
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
     current_search_mode_ = replace_mode ? SearchMode::Replace : SearchMode::Find;
     search_panel_tab_index_ = replace_mode ? 1 : 0;
-    focused_layer_ = 5;
+    focused_layer_ = 4;
     RefreshFindMatches();
     if (replace_mode) {
         replace_find_input_->TakeFocus();
@@ -500,12 +458,14 @@ void TextltApp::CloseFindPanel() {
 }
 
 void TextltApp::OpenGoToLinePanel() {
-    active_dropdown_ = -1;
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
     current_search_mode_ = SearchMode::None;
     std::static_pointer_cast<EditorComponent>(text_editor_)->ClearSearchHighlights();
     show_goto_line_bar_ = true;
     goto_line_input_.clear();
-    focused_layer_ = 6;
+    focused_layer_ = 5;
     goto_line_input_component_->TakeFocus();
     active_action_ = "Go to line";
 }
@@ -532,6 +492,48 @@ void TextltApp::SubmitGoToLine() {
 
     show_goto_line_bar_ = false;
     FocusEditor();
+}
+    
+    
+    
+bool TextltApp::SaveFile(const std::string& path, std::string& error) {
+    try {
+        auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+        const auto doc = editor_ptr->GetDocument();
+        if (!file_manager_.SaveAs(doc, path, error)) {
+            throw std::runtime_error(error);
+        }
+        git_manager_.SetWorkingDirectory(std::filesystem::path(path).parent_path());
+        git_manager_.Invalidate();
+        active_action_ = "Saved " + path;
+        return true;
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        active_action_ = error;
+        return false;
+    }
+}
+
+bool TextltApp::OpenFile(const std::string& path, std::string& error) {
+    try {
+        PersistActiveFavoriteCursor();
+        auto doc = file_manager_.Open(path, error);
+        if (!doc) {
+            throw std::runtime_error(error);
+        }
+
+        auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+        editor_ptr->SetDocument(doc);
+
+        RestoreFavoriteCursor(path);
+        git_manager_.SetWorkingDirectory(std::filesystem::path(path).parent_path());
+        active_action_ = "Opened " + path;
+        return true;
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        active_action_ = error;
+        return false;
+    }
 }
 
 void TextltApp::RefreshFindMatches() {
@@ -585,96 +587,6 @@ std::string TextltApp::FindMatchStatus() const {
         " of " + std::to_string(count);
 }
 
-std::string TextltApp::FileTypeLabel(const std::string& file_path) const {
-    const std::string extension = std::filesystem::path(file_path).extension().string();
-    const std::string filename = std::filesystem::path(file_path).filename().string();
-    if (extension == ".sh" || extension == ".bash" || extension == ".zsh" ||
-        extension == ".bashrc" || extension == ".profile" ||
-        filename == ".bashrc" || filename == ".profile") {
-        return "Bash Script";
-    }
-    if (extension == ".cpp" || extension == ".hpp" ||
-        extension == ".cc" || extension == ".h") {
-        return "C++ Source";
-    }
-    if (extension == ".json") {
-        return "JSON Document";
-    }
-    if (extension == ".txt") {
-        return "Text Document";
-    }
-    if (extension == ".md") {
-        return "Markdown Document";
-    }
-    if (extension == ".html" || extension == ".htm") {
-        return "HTML Document";
-    }
-    if (extension == ".css") {
-        return "CSS Stylesheet";
-    }
-    if (extension == ".go") {
-        return "Go Source";
-    }
-    if (extension == ".js") {
-        return "JavaScript Source";
-    }
-    if (extension == ".jsx") {
-        return "React JSX Source";
-    }
-    if (extension == ".ts") {
-        return "TypeScript Source";
-    }
-    if (extension == ".tsx") {
-        return "React TSX Source";
-    }
-    if (extension == ".php") {
-        if (filename.size() >= 10 &&
-            filename.compare(filename.size() - 10, 10, ".blade.php") == 0) {
-            return "Laravel Blade Template";
-        }
-        return "PHP Script";
-    }
-    if (extension == ".rs") {
-        return "Rust Source";
-    }
-    if (extension == ".java") {
-        return "Java Source";
-    }
-    if (extension == ".py") {
-        return "Python Script";
-    }
-    return "Plain Text";
-}
-
-bool TextltApp::SaveFile(const std::string& path, std::string& error) {
-    try {
-        std::static_pointer_cast<EditorComponent>(text_editor_)->SaveToFile(path);
-        git_manager_.SetWorkingDirectory(std::filesystem::path(path).parent_path());
-        git_manager_.Invalidate();
-        active_action_ = "Saved " + path;
-        return true;
-    } catch (const std::exception& exception) {
-        error = exception.what();
-        active_action_ = error;
-        return false;
-    }
-}
-
-bool TextltApp::OpenFile(const std::string& path, std::string& error) {
-    try {
-        PersistActiveFavoriteCursor();
-        auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-        editor_ptr->LoadFromFile(path);
-        RestoreFavoriteCursor(path);
-        git_manager_.SetWorkingDirectory(std::filesystem::path(path).parent_path());
-        active_action_ = "Opened " + path;
-        return true;
-    } catch (const std::exception& exception) {
-        error = exception.what();
-        active_action_ = error;
-        return false;
-    }
-}
 
 void TextltApp::InitializeWithFiles(const std::vector<std::string>& files_to_open) {
     if (files_to_open.empty()) {
@@ -772,8 +684,8 @@ void TextltApp::PersistActiveFavoriteCursor() {
         return;
     }
 
-    const size_t row = static_cast<size_t>(std::max(0, editor_ptr->GetCursorRow()));
-    const size_t column = static_cast<size_t>(std::max(0, editor_ptr->GetCursorCol()));
+    const size_t row = editor_ptr->GetCursorRow();
+    const size_t column = editor_ptr->GetCursorCol();
     editor_config_.UpdateFavoriteCursor(favorite_path, row, column);
 }
 
@@ -789,9 +701,12 @@ void TextltApp::RestoreFavoriteCursor(const std::string& path) {
 
 void TextltApp::QueueCloudTtsDebugFromCursor() {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+
+    // Submit document content and cursor row index for TTS processing
     cloud_tts_pipeline_.Submit(
-        editor_ptr->GetAllText(), // Entire document text
-        static_cast<size_t>(std::max(0, editor_ptr->GetCursorRow()))); // Current cursor line number
+        editor_ptr->GetAllText(),
+                               editor_ptr->GetCursorRow());
+
     active_action_ = "Queued Cloud TTS debug pipeline";
     screen_.PostEvent(ftxui::Event::Custom);
 }
@@ -828,84 +743,72 @@ void TextltApp::ToggleActiveFavorite() {
 }
 
 void TextltApp::UpdateFileMenuLabels() {
-    if (dropdown_entries_.empty() || dropdown_entries_[0].size() <= 4) {
+    if (!menu_bar_) {
         return;
     }
 
     const std::string favorite_path = ActiveDocumentFavoritePath();
-    dropdown_entries_[0][4] = editor_config_.IsFavorite(favorite_path)
-        ? " [X] Add to Favorites "
-        : " [ ] Add to Favorites ";
-
-    if (active_dropdown_ == 0) {
-        current_dropdown_entries_ = dropdown_entries_[0];
-    }
+    menu_bar_->SetFileFavoriteLabel(editor_config_.IsFavorite(favorite_path));
 }
 
 void TextltApp::UpdateOptionsMenuLabels() {
-    if (dropdown_entries_.size() <= 2 || dropdown_entries_[2].size() <= 6) {
+    if (!menu_bar_) {
         return;
     }
 
-    dropdown_entries_[2][2] = editor_config_.smart_word_wrap
-        ? " Smart Word Wrap [X] "
-        : " Smart Word Wrap [ ] ";
-    dropdown_entries_[2][3] = editor_config_.syntax_highlighting
-        ? " Syntax Highlighting [X] "
-        : " Syntax Highlighting [ ] ";
-    dropdown_entries_[2][4] = editor_config_.auto_pairing
-        ? " Auto Pairing [X] "
-        : " Auto Pairing [ ] ";
-    dropdown_entries_[2][5] = editor_config_.auto_indent
-        ? " Smart Auto-Indent [X] "
-        : " Smart Auto-Indent [ ] ";
-    dropdown_entries_[2][6] =
-        " Tab Size: " + std::to_string(editor_config_.tab_size) + " spaces ";
-
-    if (active_dropdown_ == 2) {
-        current_dropdown_entries_ = dropdown_entries_[2];
-    }
+    menu_bar_->SetOptionLabels(
+        editor_config_.smart_word_wrap,
+        editor_config_.syntax_highlighting,
+        editor_config_.auto_pairing,
+        editor_config_.auto_indent,
+        editor_config_.tab_size);
 }
 
-void TextltApp::RunDropdownAction() {
+void TextltApp::RunDropdownAction(int menu_index, int item_index) {
     // Generate simple trace actions for debugging inside the app status-bar
-    active_action_ = "DEBUG: Menu=" + std::to_string(active_dropdown_) + 
-                    " Item=" + std::to_string(selected_dropdown_item_);
+    active_action_ = "DEBUG: Menu=" + std::to_string(menu_index) +
+                    " Item=" + std::to_string(item_index);
 
     // Sub-route requests explicitly based on the active dropdown catalog index
-    switch (active_dropdown_) {
-        case 0: HandleFileMenu(selected_dropdown_item_);     return;
-        case 1: HandleEditMenu(selected_dropdown_item_);     return;
-        case 2: HandleOptionsMenu(selected_dropdown_item_);  return;
+    switch (menu_index) {
+        case 0: HandleFileMenu(item_index);     return;
+        case 1: HandleEditMenu(item_index);     return;
+        case 2: HandleOptionsMenu(item_index);  return;
         case 3:
-            if (selected_dropdown_item_ == 0) {
+            if (item_index == 0) {
                 OpenAboutDialog();
             } else {
                 OpenHelpDialog();
             }
             return;
-        case 4: if (selected_dropdown_item_ == 0) RequestExit(); return;
+        case 4: if (item_index == 0) RequestExit(); return;
         default: CloseDropdown();                            return;
     }
 }
     
     void TextltApp::HandleFileMenu(int item) {
-    if (item == 0) {
-        CloseDropdown();
         auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-        PersistActiveFavoriteCursor();
-        editor_ptr->NewFile("");
-        active_action_ = "New file";
+
+        switch (item) {
+            case 0: // New File
+                PersistActiveFavoriteCursor();
+                editor_ptr->NewFile("");
+                active_action_ = "New file";
+                screen_.PostEvent(ftxui::Event::Custom);
+                break;
+
+            case 1: OpenFileDialog(FilePromptMode::Open); return;
+            case 2: SaveCurrentFile(); return;
+            case 3: OpenFileDialog(FilePromptMode::SaveAs); return;
+            case 4: ToggleActiveFavorite(); return;
+            case 5: RequestExit(); return;
+
+            default:
+                CloseDropdown();
+                return;
+        }
+        CloseDropdown();
         FocusEditor();
-        screen_.PostEvent(ftxui::Event::Custom);
-        return;
-    }
-    if (item == 1) { OpenFileDialog(FilePromptMode::Open); return; }
-    if (item == 2) { SaveCurrentFile(); return; }
-    if (item == 3) { OpenFileDialog(FilePromptMode::SaveAs); return; }
-    if (item == 4) { ToggleActiveFavorite(); return; }
-    if (item == 5) { RequestExit(); return; }
-    CloseDropdown();
 }
 
 void TextltApp::HandleEditMenu(int item) {

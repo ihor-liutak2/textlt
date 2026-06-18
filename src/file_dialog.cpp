@@ -175,4 +175,4 @@ ftxui::Element FileDialog::Render() {
        | size(WIDTH, GREATER_THAN, 48);
 }
 
-} // namespace textltz
+} // namespace textlt
