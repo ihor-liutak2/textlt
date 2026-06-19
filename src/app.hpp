@@ -19,6 +19,7 @@
 #include "opened_config.hpp"
 #include "sidebar_component.hpp"
 #include "modals/theme_dialog.hpp"
+#include "modals/unsaved_changes_dialog.hpp"
 #include "file_manager.hpp"
 
 namespace textlt {
@@ -88,7 +89,6 @@ private:
     ftxui::Element Render();
     ftxui::Element RenderFindPanel();
     ftxui::Element RenderGoToLinePanel();
-    ftxui::Element RenderExitConfirmationDialog();
     bool HandleGlobalEvent(ftxui::Event event);
     int DropdownX() const;
     void OpenFindPanel(bool replace_mode);
@@ -124,6 +124,7 @@ private:
     FileDialog file_dialog_;
     HelpDialog help_dialog_;
     ThemeDialog theme_dialog_;
+    UnsavedChangesDialog unsaved_changes_dialog_;
     CloudTtsPipeline cloud_tts_pipeline_;
     
     FileManager file_manager_;
@@ -139,7 +140,6 @@ private:
     int search_panel_tab_index_ = 0;
     bool sidebar_has_focus_ = false;
     bool show_goto_line_bar_ = false;
-    bool exit_confirmation_open_ = false;
     bool exit_after_save_as_ = false;
     SearchMode current_search_mode_ = SearchMode::None;
     std::shared_ptr<MenuBarComponent> menu_bar_;
@@ -161,10 +161,6 @@ private:
     ftxui::Component search_match_case_checkbox_;
     ftxui::Component search_whole_word_checkbox_;
     ftxui::Component goto_line_input_component_;
-    ftxui::Component exit_save_button_;
-    ftxui::Component exit_discard_button_;
-    ftxui::Component exit_cancel_button_;
-    ftxui::Component exit_confirmation_container_;
     ftxui::Component renderer_;
     ftxui::Component global_shortcuts_;
 };

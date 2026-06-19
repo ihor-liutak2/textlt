@@ -178,8 +178,8 @@ ftxui::Element TextltApp::Render() {
     if (theme_dialog_.IsOpen()) {
         layers.push_back(theme_dialog_.View()->Render() | clear_under | center);
     }
-    if (exit_confirmation_open_) {
-        layers.push_back(RenderExitConfirmationDialog() | clear_under | center);
+    if (unsaved_changes_dialog_.IsOpen()) {
+        layers.push_back(unsaved_changes_dialog_.View()->Render() | clear_under | center);
     }
 
     return dbox(std::move(layers));
@@ -263,37 +263,6 @@ ftxui::Element TextltApp::RenderGoToLinePanel() {
         color(current_theme_.menu_foreground);
 }
 
-ftxui::Element TextltApp::RenderExitConfirmationDialog() {
-    using namespace ftxui;
-
-    const auto editor = std::static_pointer_cast<EditorComponent>(text_editor_);
-    const std::string file_path = editor->CurrentFilePath();
-    const std::string filename = std::filesystem::path(file_path).filename().string();
-    const std::string display_name = filename.empty() ? file_path : filename;
-
-    return vbox({
-        text(" Unsaved Changes ") | bold | color(current_theme_.modal_accent) | center,
-        separator() | color(current_theme_.modal_border),
-        text("Save changes to " + display_name + " before closing?") |
-            color(current_theme_.modal_text_color) |
-            center,
-        separator() | color(current_theme_.modal_border),
-        hbox({
-            filler(),
-            exit_save_button_->Render(),
-            text(" "),
-            exit_discard_button_->Render(),
-            text(" "),
-            exit_cancel_button_->Render(),
-            filler(),
-        }),
-    }) |
-        border |
-        bgcolor(current_theme_.modal_background) |
-        color(current_theme_.modal_text_color) |
-        size(WIDTH, GREATER_THAN, 52);
-}
-
 bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     const std::string& input = event.input();
     const bool has_input = !input.empty();
@@ -301,11 +270,8 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     // --- Global Event Filter: Modals and Overlays (highest layer first) ---
 
     // 1. Exit Confirmation Dialog
-    if (exit_confirmation_open_) {
-        // Dispatch events to confirmation buttons
-        if (exit_save_button_->OnEvent(event) ||
-            exit_discard_button_->OnEvent(event) ||
-            exit_cancel_button_->OnEvent(event)) {
+    if (unsaved_changes_dialog_.IsOpen()) {
+        if (unsaved_changes_dialog_.View()->OnEvent(event)) {
             return true;
         }
         if (event == ftxui::Event::Escape) {

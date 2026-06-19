@@ -43,6 +43,7 @@ add_executable(textlt
   src/modals/help_dialog.cpp
   src/modals/modal_window.cpp
   src/modals/theme_dialog.cpp
+  src/modals/unsaved_changes_dialog.cpp
   src/opened_config.cpp
   src/sidebar_component.cpp
   src/syntax_highlighter.cpp

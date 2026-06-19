@@ -59,6 +59,36 @@ bool IsWordCharacter(char character) {
     return std::isalnum(static_cast<unsigned char>(character)) || character == '_';
 }
 
+bool IsUtf8ContinuationByte(char character) {
+    return (static_cast<unsigned char>(character) & 0xC0) == 0x80;
+}
+
+size_t PreviousUtf8CodepointStart(const std::string& text, size_t index) {
+    index = std::min(index, text.size());
+    if (index == 0) {
+        return 0;
+    }
+
+    --index;
+    while (index > 0 && IsUtf8ContinuationByte(text[index])) {
+        --index;
+    }
+    return index;
+}
+
+size_t NextUtf8CodepointStart(const std::string& text, size_t index) {
+    index = std::min(index, text.size());
+    if (index >= text.size()) {
+        return text.size();
+    }
+
+    ++index;
+    while (index < text.size() && IsUtf8ContinuationByte(text[index])) {
+        ++index;
+    }
+    return index;
+}
+
 namespace {
 
 bool IsWhitespaceCharacter(char character) {

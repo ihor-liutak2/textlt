@@ -157,7 +157,12 @@ TextltApp::TextltApp()
       theme_dialog_(
           &current_theme_,
           [this](const std::string& theme_name) { PreviewTheme(theme_name); },
-          [this](const std::string& theme_name) { SelectTheme(theme_name); }) {
+          [this](const std::string& theme_name) { SelectTheme(theme_name); }),
+      unsaved_changes_dialog_(
+          &current_theme_,
+          [this] { SaveAndExit(); },
+          [this] { DiscardAndExit(); },
+          [this] { CloseExitConfirmationDialog(); }) {
     menu_bar_ = ftxui::Make<MenuBarComponent>(
         [this](int menu_index, int item_index) {
             this->RunDropdownAction(menu_index, item_index);
@@ -277,15 +282,6 @@ TextltApp::TextltApp()
         find_panel_filters_container_,
     });
 
-    exit_save_button_ = ftxui::Button("Save", [this] { SaveAndExit(); });
-    exit_discard_button_ = ftxui::Button("Don't Save", [this] { DiscardAndExit(); });
-    exit_cancel_button_ = ftxui::Button("Cancel", [this] { CloseExitConfirmationDialog(); });
-    exit_confirmation_container_ = ftxui::Container::Horizontal({
-        exit_save_button_,
-        exit_discard_button_,
-        exit_cancel_button_,
-    });
-
     root_container_ = ftxui::Container::Tab({
         main_container_,
         file_dialog_.View(),
@@ -293,7 +289,7 @@ TextltApp::TextltApp()
         theme_dialog_.View(),
         find_panel_container_,
         goto_line_input_component_,
-        exit_confirmation_container_,
+        unsaved_changes_dialog_.View(),
     }, &focused_layer_);
 
     renderer_ = ftxui::Renderer(root_container_, [this] { return Render(); });
@@ -421,15 +417,20 @@ void TextltApp::ShowExitConfirmationDialog() {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
-    exit_confirmation_open_ = true;
+
+    const auto editor = std::static_pointer_cast<EditorComponent>(text_editor_);
+    const std::string file_path = editor->CurrentFilePath();
+    const std::string filename = std::filesystem::path(file_path).filename().string();
+    const std::string display_name = filename.empty() ? file_path : filename;
+
+    unsaved_changes_dialog_.Open(display_name);
     focused_layer_ = 6;
-    exit_save_button_->TakeFocus();
     active_action_ = "Unsaved changes";
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
 void TextltApp::CloseExitConfirmationDialog() {
-    exit_confirmation_open_ = false;
+    unsaved_changes_dialog_.Close();
     exit_after_save_as_ = false;
     FocusEditor();
     screen_.PostEvent(ftxui::Event::Custom);
@@ -449,7 +450,7 @@ void TextltApp::SaveAndExit() {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
     const std::string current_path = editor_ptr->CurrentFilePath();
     if (current_path.empty() || current_path == "Untitled" || current_path == "untitled.txt") {
-        exit_confirmation_open_ = false;
+        unsaved_changes_dialog_.Close();
         exit_after_save_as_ = true;
         OpenFileDialog(FilePromptMode::SaveAs);
         return;

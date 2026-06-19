@@ -246,6 +246,34 @@ bool HasMultipleUtf8Codepoints(const std::string& input) {
     return false;
 }
 
+bool IsPrintableRawTextInput(const ftxui::Event& event) {
+    if (event.is_character() || event.is_mouse() || event.is_cursor_reporting()) {
+        return false;
+    }
+
+    const std::string& input = event.input();
+    if (input.empty()) {
+        return false;
+    }
+    if (input.find('\x1B') != std::string::npos ||
+        input.find('\n') != std::string::npos ||
+        input.find('\r') != std::string::npos ||
+        input.find('\t') != std::string::npos) {
+        return false;
+    }
+
+    bool has_non_ascii = false;
+    for (unsigned char character : input) {
+        if (character < 0x20 || character == 0x7F) {
+            return false;
+        }
+        if (character >= 0x80) {
+            has_non_ascii = true;
+        }
+    }
+    return has_non_ascii;
+}
+
 } // namespace
 
 bool EditorInputController::HandleEvent(EditorComponent& editor, ftxui::Event event) {
@@ -325,6 +353,11 @@ bool EditorInputController::HandleEvent(EditorComponent& editor, ftxui::Event ev
         editor.doc_->InsertCharacter(event_input);
         editor.ClearSelection();
         editor.UpdateScroll();
+        return true;
+    }
+
+    if (IsPrintableRawTextInput(event) && editor.doc_) {
+        editor.InsertText(event.input());
         return true;
     }
 

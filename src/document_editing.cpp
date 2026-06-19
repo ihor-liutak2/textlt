@@ -88,8 +88,10 @@ bool Document::Backspace() {
     EnsureValidBuffer();
     if (cursor_col > 0) {
         SaveSnapshot();
-        lines[cursor_row].erase(cursor_col - 1, 1);
-        --cursor_col;
+        const size_t erase_start =
+            utils::PreviousUtf8CodepointStart(lines[cursor_row], cursor_col);
+        lines[cursor_row].erase(erase_start, cursor_col - erase_start);
+        cursor_col = erase_start;
         is_dirty = true;
         return true;
     }
@@ -109,7 +111,9 @@ bool Document::DeleteForward() {
     EnsureValidBuffer();
     if (cursor_col < lines[cursor_row].size()) {
         SaveSnapshot();
-        lines[cursor_row].erase(cursor_col, 1);
+        const size_t erase_end =
+            utils::NextUtf8CodepointStart(lines[cursor_row], cursor_col);
+        lines[cursor_row].erase(cursor_col, erase_end - cursor_col);
         is_dirty = true;
         return true;
     }

@@ -25,6 +25,10 @@ bool IsBracketCharacter(char character);
 char MatchingBracketFor(char character);
 bool IsWordCharacter(char character);
 
+bool IsUtf8ContinuationByte(char character);
+size_t PreviousUtf8CodepointStart(const std::string& text, size_t index);
+size_t NextUtf8CodepointStart(const std::string& text, size_t index);
+
 size_t FindWordDeleteStart(const std::string& line, size_t cursor_x);
 size_t FindWordDeleteEnd(const std::string& line, size_t cursor_x);
 

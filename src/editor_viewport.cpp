@@ -159,8 +159,18 @@ ftxui::Element EditorComponent::RenderViewport() {
                 }
         }
 
-        for (size_t x = render_start; x < render_end && x < line_content.size(); ++x) {
-            ftxui::Element character = ftxui::text(line_content.substr(x, 1));
+        size_t glyph_start = render_start;
+        while (glyph_start < render_end &&
+               glyph_start < line_content.size() &&
+               utils::IsUtf8ContinuationByte(line_content[glyph_start])) {
+            ++glyph_start;
+        }
+
+        for (size_t x = glyph_start; x < render_end && x < line_content.size();) {
+            const size_t glyph_end =
+                std::min(utils::NextUtf8CodepointStart(line_content, x), render_end);
+            const std::string glyph = line_content.substr(x, glyph_end - x);
+            ftxui::Element character = ftxui::text(glyph);
             ftxui::Color text_color = theme.editor_text;
 
             if (syntax_tokens) {
@@ -191,10 +201,11 @@ ftxui::Element EditorComponent::RenderViewport() {
             }
 
             if (is_cursor_line && x == cursor_x) {
-                character = ftxui::text(line_content.substr(x, 1)) | ftxui::bgcolor(theme.selection_bg) |
+                character = ftxui::text(glyph) | ftxui::bgcolor(theme.selection_bg) |
                 ftxui::color(theme.selection_fg) | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 1);
             }
             line_parts.push_back(std::move(character));
+            x = glyph_end;
         }
 
         if (is_cursor_line && cursor_x == line_content.size() && cursor_x >= render_start && cursor_x <= render_end && segment.end == line_content.size()) {

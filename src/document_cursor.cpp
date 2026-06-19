@@ -58,7 +58,7 @@ void Document::MoveCursorEnd() {
 void Document::MoveCursorLeft() {
     ClampCursor();
     if (cursor_col > 0) {
-        --cursor_col;
+        cursor_col = utils::PreviousUtf8CodepointStart(lines[cursor_row], cursor_col);
     } else if (cursor_row > 0) {
         --cursor_row;
         cursor_col = lines[cursor_row].size();
@@ -68,7 +68,7 @@ void Document::MoveCursorLeft() {
 void Document::MoveCursorRight() {
     ClampCursor();
     if (cursor_col < lines[cursor_row].size()) {
-        ++cursor_col;
+        cursor_col = utils::NextUtf8CodepointStart(lines[cursor_row], cursor_col);
     } else if (cursor_row + 1 < lines.size()) {
         ++cursor_row;
         cursor_col = 0;
