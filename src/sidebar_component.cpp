@@ -20,10 +20,12 @@ std::string DisplayName(const std::filesystem::path& path) {
 
 SidebarPanel::SidebarPanel(
     FileOpenCallback on_file_open,
+    OpenedFileSelectCallback on_opened_file_select,
     const Theme* theme,
     GitManager* git_manager,
     EditorConfig* config)
     : on_file_open_(std::move(on_file_open)),
+      on_opened_file_select_(std::move(on_opened_file_select)),
       theme_(theme),
       git_manager_(git_manager),
       config_(config),
@@ -44,6 +46,11 @@ ftxui::Element SidebarPanel::Render() {
     ClampScrollOffset();
 
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    Element opened_tab =
+        text("[ Opened ]") |
+        color(theme.foreground) |
+        dim |
+        reflect(opened_tab_box_);
     Element project_tab =
         text("[ Project ]") |
         color(theme.foreground) |
@@ -56,7 +63,12 @@ ftxui::Element SidebarPanel::Render() {
         reflect(favorites_tab_box_);
 
     // Active tabs mirror the modal menu selection palette.
-    if (!show_favorites_mode_) {
+    if (mode_ == SidebarMode::Opened) {
+        opened_tab = opened_tab |
+            bgcolor(theme.modal_selected_item_bg) |
+            color(theme.modal_selected_item_fg) |
+            bold;
+    } else if (mode_ == SidebarMode::Project) {
         project_tab = project_tab |
             bgcolor(theme.modal_selected_item_bg) |
             color(theme.modal_selected_item_fg) |
@@ -74,7 +86,7 @@ ftxui::Element SidebarPanel::Render() {
         std::min(entry_labels_.size(), list_scroll_offset_ + visible_entry_count);
     for (size_t index = list_scroll_offset_; index < end_index; ++index) {
         Element row = text(entry_labels_[index]);
-        if (!show_favorites_mode_ &&
+        if (mode_ == SidebarMode::Project &&
             index < entry_paths_.size() &&
             index < entry_kinds_.size() &&
             (entry_kinds_[index] == EntryKind::Directory ||
@@ -104,6 +116,7 @@ ftxui::Element SidebarPanel::Render() {
             text(" "),
             favorites_tab,
         }),
+        opened_tab,
         separator(),
         vbox(std::move(rows)) | reflect(menu_box_) | frame | yflex,
     }) |
@@ -142,8 +155,16 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
     if (event.is_mouse() &&
         event.mouse().button == ftxui::Mouse::Left &&
         event.mouse().motion == ftxui::Mouse::Pressed &&
+        opened_tab_box_.Contain(event.mouse().x, event.mouse().y)) {
+        SetMode(SidebarMode::Opened);
+        return true;
+    }
+
+    if (event.is_mouse() &&
+        event.mouse().button == ftxui::Mouse::Left &&
+        event.mouse().motion == ftxui::Mouse::Pressed &&
         project_tab_box_.Contain(event.mouse().x, event.mouse().y)) {
-        SetFavoritesMode(false);
+        SetMode(SidebarMode::Project);
         return true;
     }
 
@@ -151,7 +172,7 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
         event.mouse().button == ftxui::Mouse::Left &&
         event.mouse().motion == ftxui::Mouse::Pressed &&
         favorites_tab_box_.Contain(event.mouse().x, event.mouse().y)) {
-        SetFavoritesMode(true);
+        SetMode(SidebarMode::Favorites);
         return true;
     }
 
@@ -168,7 +189,7 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
             selected_entry_ = clicked_entry;
             EnsureSelectedEntryVisible();
             FocusMenu();
-            if (show_favorites_mode_) {
+            if (mode_ == SidebarMode::Opened || mode_ == SidebarMode::Favorites) {
                 OpenSelectedEntry();
                 last_clicked_entry_ = -1;
                 last_click_time_ = {};
@@ -207,12 +228,24 @@ void SidebarPanel::Refresh() {
     RebuildEntries();
 }
 
-void SidebarPanel::SetFavoritesMode(bool enabled) {
-    if (show_favorites_mode_ == enabled) {
+void SidebarPanel::SetOpenedFiles(std::vector<OpenedFileEntry> opened_files, size_t active_index) {
+    opened_files_ = std::move(opened_files);
+    active_opened_file_index_ = active_index;
+    if (mode_ == SidebarMode::Opened) {
+        RebuildEntries();
+    }
+}
+
+void SidebarPanel::ShowOpenedFiles() {
+    SetMode(SidebarMode::Opened);
+}
+
+void SidebarPanel::SetMode(SidebarMode mode) {
+    if (mode_ == mode) {
         return;
     }
 
-    show_favorites_mode_ = enabled;
+    mode_ = mode;
     selected_entry_ = 0;
     list_scroll_offset_ = 0;
     last_clicked_entry_ = -1;
@@ -230,6 +263,13 @@ void SidebarPanel::OpenSelectedEntry() {
     const std::filesystem::path selected_path = entry_paths_[selected_entry_];
     const EntryKind selected_kind = entry_kinds_[selected_entry_];
     std::error_code error;
+    if (selected_kind == EntryKind::OpenedFile) {
+        if (on_opened_file_select_) {
+            on_opened_file_select_(static_cast<size_t>(selected_entry_));
+        }
+        return;
+    }
+
     if (selected_kind == EntryKind::FavoriteFile) {
         if (std::filesystem::is_regular_file(selected_path, error) && on_file_open_) {
             on_file_open_(selected_path);
@@ -255,7 +295,7 @@ void SidebarPanel::OpenSelectedEntry() {
 }
 
 bool SidebarPanel::OpenDirectoryEntry(int entry_index) {
-    if (show_favorites_mode_ ||
+    if (mode_ != SidebarMode::Project ||
         entry_index < 0 ||
         entry_index >= static_cast<int>(entry_paths_.size()) ||
         entry_index >= static_cast<int>(entry_kinds_.size()) ||
@@ -397,17 +437,42 @@ void SidebarPanel::RebuildEntries() {
     entry_labels_.clear();
     entry_kinds_.clear();
 
-    if (show_favorites_mode_) {
-        RebuildFavoriteEntries();
-    } else {
-        RebuildProjectEntries();
+    switch (mode_) {
+        case SidebarMode::Opened:
+            RebuildOpenedEntries();
+            break;
+        case SidebarMode::Project:
+            RebuildProjectEntries();
+            break;
+        case SidebarMode::Favorites:
+            RebuildFavoriteEntries();
+            break;
     }
 
     if (entry_labels_.empty()) {
-        AddEntry({}, show_favorites_mode_ ? " No favorites" : " <empty>", EntryKind::Placeholder);
+        const std::string placeholder =
+            mode_ == SidebarMode::Opened ? " No opened files" :
+            mode_ == SidebarMode::Favorites ? " No favorites" :
+            " <empty>";
+        AddEntry({}, placeholder, EntryKind::Placeholder);
     }
     selected_entry_ = std::min(selected_entry_, static_cast<int>(entry_labels_.size()) - 1);
     EnsureSelectedEntryVisible();
+}
+
+void SidebarPanel::RebuildOpenedEntries() {
+    for (size_t index = 0; index < opened_files_.size(); ++index) {
+        const OpenedFileEntry& opened = opened_files_[index];
+        std::string label = opened.active ? "> " : "  ";
+        label += opened.label.empty() ? DisplayName(opened.path) : opened.label;
+        if (opened.dirty) {
+            label += " *";
+        }
+        AddEntry(opened.path, label, EntryKind::OpenedFile);
+        if (opened.active) {
+            selected_entry_ = static_cast<int>(index);
+        }
+    }
 }
 
 void SidebarPanel::RebuildProjectEntries() {

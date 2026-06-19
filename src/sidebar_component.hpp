@@ -17,7 +17,14 @@ namespace textlt {
 
 class SidebarPanel : public ftxui::ComponentBase {
 private:
+    enum class SidebarMode {
+        Opened,
+        Project,
+        Favorites,
+    };
+
     enum class EntryKind {
+        OpenedFile,
         Directory,
         File,
         FavoriteFile,
@@ -25,10 +32,19 @@ private:
     };
 
 public:
+    struct OpenedFileEntry {
+        std::filesystem::path path;
+        std::string label;
+        bool dirty = false;
+        bool active = false;
+    };
+
     using FileOpenCallback = std::function<void(const std::filesystem::path&)>;
+    using OpenedFileSelectCallback = std::function<void(size_t index)>;
 
     SidebarPanel(
         FileOpenCallback on_file_open,
+        OpenedFileSelectCallback on_opened_file_select,
         const Theme* theme,
         GitManager* git_manager,
         EditorConfig* config);
@@ -38,11 +54,13 @@ public:
     bool Focusable() const override;
     void FocusMenu();
     void Refresh();
+    void SetOpenedFiles(std::vector<OpenedFileEntry> opened_files, size_t active_index);
+    void ShowOpenedFiles();
 
     std::filesystem::path CurrentPath() const { return current_path_; }
 
     std::filesystem::path GetSelectedDirectoryPath() const {
-        if (!show_favorites_mode_ &&
+        if (mode_ == SidebarMode::Project &&
             selected_entry_ >= 0 &&
             selected_entry_ < static_cast<int>(entry_paths_.size()) &&
             selected_entry_ < static_cast<int>(entry_kinds_.size())) {
@@ -56,7 +74,7 @@ public:
     }
 
 private:
-    void SetFavoritesMode(bool enabled);
+    void SetMode(SidebarMode mode);
     void OpenSelectedEntry();
     bool OpenDirectoryEntry(int entry_index);
     int EntryIndexAtMouse(const ftxui::Mouse& mouse) const;
@@ -68,23 +86,28 @@ private:
     void ClampSelectedEntryToVisible();
     void ScrollEntries(int delta);
     void RebuildEntries();
+    void RebuildOpenedEntries();
     void RebuildProjectEntries();
     void RebuildFavoriteEntries();
     void AddEntry(std::filesystem::path path, std::string label, EntryKind kind);
 
     FileOpenCallback on_file_open_;
+    OpenedFileSelectCallback on_opened_file_select_;
     const Theme* theme_ = nullptr;
     GitManager* git_manager_ = nullptr;
     EditorConfig* config_ = nullptr;
     std::filesystem::path current_path_;
+    std::vector<OpenedFileEntry> opened_files_;
+    size_t active_opened_file_index_ = 0;
     std::vector<std::filesystem::path> entry_paths_;
     std::vector<std::string> entry_labels_;
     std::vector<EntryKind> entry_kinds_;
     int selected_entry_ = 0;
     size_t list_scroll_offset_ = 0;
     int last_clicked_entry_ = -1;
-    bool show_favorites_mode_ = false;
+    SidebarMode mode_ = SidebarMode::Project;
     std::chrono::steady_clock::time_point last_click_time_{};
+    ftxui::Box opened_tab_box_;
     ftxui::Box project_tab_box_;
     ftxui::Box favorites_tab_box_;
     ftxui::Box panel_box_;

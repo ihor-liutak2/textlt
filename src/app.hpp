@@ -55,9 +55,15 @@ private:
     void FocusSidebar();
     bool SaveFile(const std::string& path, std::string& error);
     bool OpenFile(const std::string& path, std::string& error);
+    void ActivateOpenDocument(size_t index);
+    int FindOpenDocument(const std::filesystem::path& path) const;
+    void AddOpenDocument(std::shared_ptr<Document> doc);
+    void RefreshOpenedDocumentsSidebar();
+    std::shared_ptr<Document> ActiveDocument() const;
     void InitializeWithFiles(const std::vector<std::string>& files_to_open);
     void OpenSidebarFile(const std::filesystem::path& path);
     void SaveCurrentFile();
+    void SaveAllOpenedFiles();
     bool ConfirmFileDialog(FilePromptMode mode, const std::string& path, std::string& error);
     void PersistActiveFavoriteCursor();
     void RestoreFavoriteCursor(const std::string& path);
@@ -111,6 +117,8 @@ private:
     CloudTtsPipeline cloud_tts_pipeline_;
     
     FileManager file_manager_;
+    std::vector<std::shared_ptr<Document>> open_documents_;
+    size_t active_document_index_ = 0;
 
     std::string find_query_;
     std::string replace_text_;

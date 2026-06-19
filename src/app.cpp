@@ -92,6 +92,7 @@ TextltApp::TextltApp()
       text_editor_(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_)),
       sidebar_panel_(ftxui::Make<SidebarPanel>(
           [this](const std::filesystem::path& path) { OpenSidebarFile(path); },
+          [this](size_t index) { ActivateOpenDocument(index); },
           &current_theme_,
           &git_manager_,
           &editor_config_)),
@@ -111,6 +112,7 @@ TextltApp::TextltApp()
             this->RunDropdownAction(menu_index, item_index);
         },
         &current_theme_);
+    AddOpenDocument(std::static_pointer_cast<EditorComponent>(text_editor_)->GetDocument());
     UpdateFileMenuLabels();
     UpdateOptionsMenuLabels();
 
@@ -498,11 +500,11 @@ void TextltApp::SubmitGoToLine() {
     
 bool TextltApp::SaveFile(const std::string& path, std::string& error) {
     try {
-        auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-        const auto doc = editor_ptr->GetDocument();
+        const auto doc = ActiveDocument();
         if (!file_manager_.SaveAs(doc, path, error)) {
             throw std::runtime_error(error);
         }
+        RefreshOpenedDocumentsSidebar();
         git_manager_.SetWorkingDirectory(std::filesystem::path(path).parent_path());
         git_manager_.Invalidate();
         active_action_ = "Saved " + path;
@@ -514,16 +516,98 @@ bool TextltApp::SaveFile(const std::string& path, std::string& error) {
     }
 }
 
+std::shared_ptr<Document> TextltApp::ActiveDocument() const {
+    if (active_document_index_ < open_documents_.size()) {
+        return open_documents_[active_document_index_];
+    }
+    return std::static_pointer_cast<EditorComponent>(text_editor_)->GetDocument();
+}
+
+int TextltApp::FindOpenDocument(const std::filesystem::path& path) const {
+    std::error_code error;
+    std::filesystem::path normalized = std::filesystem::absolute(path, error);
+    if (error) {
+        normalized = path;
+    }
+
+    for (size_t index = 0; index < open_documents_.size(); ++index) {
+        const auto& doc = open_documents_[index];
+        if (!doc) continue;
+
+        std::filesystem::path doc_path = std::filesystem::absolute(doc->path, error);
+        if (error) {
+            doc_path = doc->path;
+            error.clear();
+        }
+        if (doc_path == normalized) {
+            return static_cast<int>(index);
+        }
+    }
+    return -1;
+}
+
+void TextltApp::AddOpenDocument(std::shared_ptr<Document> doc) {
+    if (!doc) {
+        return;
+    }
+
+    open_documents_.push_back(doc);
+    active_document_index_ = open_documents_.size() - 1;
+    std::static_pointer_cast<EditorComponent>(text_editor_)->SetDocument(doc);
+    RefreshOpenedDocumentsSidebar();
+}
+
+void TextltApp::ActivateOpenDocument(size_t index) {
+    if (index >= open_documents_.size() || !open_documents_[index]) {
+        return;
+    }
+
+    PersistActiveFavoriteCursor();
+    active_document_index_ = index;
+    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    editor_ptr->SetDocument(open_documents_[index]);
+    RestoreFavoriteCursor(open_documents_[index]->path.string());
+    RefreshOpenedDocumentsSidebar();
+    UpdateFileMenuLabels();
+    active_action_ = "Switched to " + editor_ptr->CurrentFilePath();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::RefreshOpenedDocumentsSidebar() {
+    auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
+    std::vector<SidebarPanel::OpenedFileEntry> entries;
+    entries.reserve(open_documents_.size());
+
+    for (size_t index = 0; index < open_documents_.size(); ++index) {
+        const auto& doc = open_documents_[index];
+        if (!doc) continue;
+
+        std::string label = doc->path.filename().string();
+        if (label.empty()) {
+            label = doc->path.string();
+        }
+        entries.push_back({doc->path, label, doc->is_dirty, index == active_document_index_});
+    }
+
+    sidebar->SetOpenedFiles(std::move(entries), active_document_index_);
+}
+
 bool TextltApp::OpenFile(const std::string& path, std::string& error) {
     try {
         PersistActiveFavoriteCursor();
+        const int open_index = FindOpenDocument(path);
+        if (open_index >= 0) {
+            ActivateOpenDocument(static_cast<size_t>(open_index));
+            active_action_ = "Opened " + path;
+            return true;
+        }
+
         auto doc = file_manager_.Open(path, error);
         if (!doc) {
             throw std::runtime_error(error);
         }
 
-        auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-        editor_ptr->SetDocument(doc);
+        AddOpenDocument(doc);
 
         RestoreFavoriteCursor(path);
         git_manager_.SetWorkingDirectory(std::filesystem::path(path).parent_path());
@@ -598,13 +682,23 @@ void TextltApp::InitializeWithFiles(const std::vector<std::string>& files_to_ope
     if (std::filesystem::exists(active_path)) {
         OpenFile(active_path.string(), error);
     } else {
-        std::static_pointer_cast<EditorComponent>(text_editor_)->NewFile(active_path.string());
+        auto doc = std::make_shared<Document>();
+        doc->Reset();
+        doc->SetPath(active_path);
+        AddOpenDocument(doc);
         active_action_ = "New file " + active_path.string();
     }
 
-    if (files_to_open.size() > 1) {
-        active_action_ += " (" + std::to_string(files_to_open.size() - 1) +
-            " additional path(s) ignored: tabs not implemented)";
+    for (size_t index = 1; index < files_to_open.size(); ++index) {
+        const std::filesystem::path path = files_to_open[index];
+        if (std::filesystem::exists(path)) {
+            OpenFile(path.string(), error);
+        } else {
+            auto doc = std::make_shared<Document>();
+            doc->Reset();
+            doc->SetPath(path);
+            AddOpenDocument(doc);
+        }
     }
 
     FocusEditor();
@@ -628,6 +722,47 @@ void TextltApp::SaveCurrentFile() {
 
     std::string error;
     SaveFile(current_path, error);
+}
+
+void TextltApp::SaveAllOpenedFiles() {
+    size_t saved_count = 0;
+    size_t skipped_count = 0;
+    std::string first_error;
+
+    for (const auto& doc : open_documents_) {
+        if (!doc || !doc->is_dirty) {
+            continue;
+        }
+
+        const std::string path = doc->path.string();
+        if (path.empty() || path == "Untitled" || path == "untitled.txt") {
+            ++skipped_count;
+            continue;
+        }
+
+        std::string error;
+        if (file_manager_.SaveAs(doc, path, error)) {
+            ++saved_count;
+        } else if (first_error.empty()) {
+            first_error = error;
+        }
+    }
+
+    RefreshOpenedDocumentsSidebar();
+    git_manager_.Invalidate();
+
+    if (!first_error.empty()) {
+        active_action_ = first_error;
+    } else if (skipped_count > 0) {
+        active_action_ = "Saved " + std::to_string(saved_count) +
+            " file(s); " + std::to_string(skipped_count) + " unsaved draft(s) need Save As";
+    } else {
+        active_action_ = "Saved " + std::to_string(saved_count) + " file(s)";
+    }
+
+    CloseDropdown();
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
 }
 
 bool TextltApp::ConfirmFileDialog(
@@ -792,16 +927,21 @@ void TextltApp::RunDropdownAction(int menu_index, int item_index) {
         switch (item) {
             case 0: // New File
                 PersistActiveFavoriteCursor();
-                editor_ptr->NewFile("");
+                {
+                    auto doc = std::make_shared<Document>();
+                    doc->Reset();
+                    AddOpenDocument(doc);
+                }
                 active_action_ = "New file";
                 screen_.PostEvent(ftxui::Event::Custom);
                 break;
 
             case 1: OpenFileDialog(FilePromptMode::Open); return;
             case 2: SaveCurrentFile(); return;
-            case 3: OpenFileDialog(FilePromptMode::SaveAs); return;
-            case 4: ToggleActiveFavorite(); return;
-            case 5: RequestExit(); return;
+            case 3: SaveAllOpenedFiles(); return;
+            case 4: OpenFileDialog(FilePromptMode::SaveAs); return;
+            case 5: ToggleActiveFavorite(); return;
+            case 6: RequestExit(); return;
 
             default:
                 CloseDropdown();
