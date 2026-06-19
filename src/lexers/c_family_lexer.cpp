@@ -8,34 +8,115 @@ namespace textlt::lexers {
 
 const std::unordered_set<std::string>& CppKeywords() {
     static const std::unordered_set<std::string> keywords = {
-        "if",
-        "else",
-        "return",
-        "while",
-        "for",
-        "class",
-        "struct",
-        "switch",
+        "alignas",
+        "alignof",
+        "and",
+        "and_eq",
+        "asm",
+        "bitand",
+        "bitor",
+        "break",
         "case",
-        "public",
+        "catch",
+        "class",
+        "compl",
+        "concept",
+        "const",
+        "consteval",
+        "constexpr",
+        "constinit",
+        "const_cast",
+        "continue",
+        "co_await",
+        "co_return",
+        "co_yield",
+        "decltype",
+        "default",
+        "delete",
+        "do",
+        "dynamic_cast",
+        "else",
+        "enum",
+        "explicit",
+        "export",
+        "extern",
+        "false",
+        "for",
+        "friend",
+        "goto",
+        "if",
+        "inline",
+        "mutable",
+        "namespace",
+        "new",
+        "noexcept",
+        "not",
+        "not_eq",
+        "nullptr",
+        "operator",
+        "or",
+        "or_eq",
         "private",
         "protected",
+        "public",
+        "requires",
+        "reinterpret_cast",
+        "return",
+        "sizeof",
+        "static",
+        "static_assert",
+        "static_cast",
+        "struct",
+        "switch",
+        "template",
+        "this",
+        "thread_local",
+        "throw",
+        "true",
+        "try",
+        "typedef",
+        "typeid",
+        "typename",
+        "union",
+        "using",
+        "virtual",
+        "volatile",
+        "while",
+        "xor",
+        "xor_eq",
     };
     return keywords;
 }
 
 const std::unordered_set<std::string>& CppTypes() {
     static const std::unordered_set<std::string> types = {
-        "void",
-        "int",
-        "float",
-        "double",
+        "auto",
         "bool",
         "char",
-        "auto",
+        "char8_t",
+        "char16_t",
+        "char32_t",
+        "double",
+        "float",
+        "int",
+        "long",
+        "short",
+        "signed",
         "size_t",
+        "std::filesystem::path",
+        "std::optional",
         "std::string",
+        "std::string_view",
+        "std::unordered_map",
+        "std::unordered_set",
         "std::vector",
+        "uint8_t",
+        "uint16_t",
+        "uint32_t",
+        "uint64_t",
+        "unsigned",
+        "void",
+        "wchar_t",
     };
     return types;
 }
@@ -515,6 +596,42 @@ bool IsJsxTagStart(const std::string& line, size_t index) {
         std::isalpha(static_cast<unsigned char>(line[index + 2]));
 }
 
+bool IsPreprocessorStart(const std::string& line, size_t index) {
+    if (index >= line.size() || line[index] != '#') {
+        return false;
+    }
+    for (size_t current = 0; current < index; ++current) {
+        if (!std::isspace(static_cast<unsigned char>(line[current]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+size_t ParsePreprocessorDirectiveEnd(const std::string& line, size_t index) {
+    ++index;
+    while (index < line.size() &&
+           std::isalpha(static_cast<unsigned char>(line[index]))) {
+        ++index;
+    }
+    return index;
+}
+
+size_t ParseIncludeTargetEnd(const std::string& line, size_t index) {
+    index = SkipWhitespace(line, index);
+    if (index >= line.size()) {
+        return index;
+    }
+    if (line[index] == '"') {
+        return ParseQuotedStringEnd(line, index);
+    }
+    if (line[index] == '<') {
+        const size_t close = line.find('>', index + 1);
+        return close == std::string::npos ? line.size() : close + 1;
+    }
+    return index;
+}
+
 size_t PushJsLikeToken(std::vector<SyntaxHighlighter::Token>& tokens,
                        const std::string& line,
                        size_t index,
@@ -704,6 +821,30 @@ std::vector<SyntaxHighlighter::Token> TokenizeCLikeLine(const std::string& line,
 
     size_t index = 0;
     while (index < line.size()) {
+        if (family == "cpp" && IsPreprocessorStart(line, index)) {
+            const size_t directive_start = index;
+            const size_t directive_end = ParsePreprocessorDirectiveEnd(line, index);
+            PushToken(tokens, directive_start, directive_end, SyntaxHighlighter::Style::Keyword);
+
+            const std::string directive =
+                line.substr(directive_start + 1, directive_end - directive_start - 1);
+            if (directive == "include" || directive == "import") {
+                const size_t target_start = SkipWhitespace(line, directive_end);
+                if (target_start > directive_end) {
+                    PushToken(tokens, directive_end, target_start, SyntaxHighlighter::Style::Normal);
+                }
+                const size_t target_end = ParseIncludeTargetEnd(line, target_start);
+                if (target_end > target_start) {
+                    PushToken(tokens, target_start, target_end, SyntaxHighlighter::Style::String);
+                    index = target_end;
+                    continue;
+                }
+            }
+
+            index = directive_end;
+            continue;
+        }
+
         if (line[index] == '/' && index + 1 < line.size() && line[index + 1] == '/') {
             PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Comment);
             break;

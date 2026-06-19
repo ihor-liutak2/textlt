@@ -1,0 +1,6 @@
+{
+  "name": "textlt",
+  "enabled": true,
+  "ports": [8080, 9090],
+  "theme": null
+}

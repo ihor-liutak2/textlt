@@ -1,0 +1,9 @@
+/* CSS lexer sample */
+:root {
+  --accent: #26a69a;
+}
+
+body.main {
+  color: rgb(10, 20, 30);
+  margin: 1.5rem;
+}

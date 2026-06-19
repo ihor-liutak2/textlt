@@ -29,6 +29,14 @@ TransformResult Convert4To2Spaces(std::vector<std::string>& lines,
 TransformResult Convert2To4Spaces(std::vector<std::string>& lines,
                                   CursorState cursor,
                                   SelectionState selection);
+TransformResult IndentLines(std::vector<std::string>& lines,
+                            CursorState cursor,
+                            SelectionState selection,
+                            size_t indent_width);
+TransformResult OutdentLines(std::vector<std::string>& lines,
+                             CursorState cursor,
+                             SelectionState selection,
+                             size_t indent_width);
 TransformResult ToggleCase(std::vector<std::string>& lines,
                            CursorState cursor,
                            SelectionState selection);

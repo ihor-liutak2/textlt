@@ -85,6 +85,48 @@ bool Document::Convert2To4Spaces() {
     return true;
 }
 
+bool Document::IndentLines(size_t tab_size) {
+    EnsureValidBuffer();
+    const HistoryManager::State before = CurrentState();
+    transform::TransformResult result = transform::IndentLines(
+        lines,
+        {cursor_col, cursor_row},
+        {HasSelection(), selection.anchor_x, selection.anchor_y},
+        tab_size);
+    if (!result.changed) return false;
+
+    history.PushSnapshot(before);
+    cursor_col = result.cursor.x;
+    cursor_row = result.cursor.y;
+    selection.anchor_x = result.selection.anchor_x;
+    selection.anchor_y = result.selection.anchor_y;
+    selection.active = result.selection.active;
+    is_dirty = true;
+    ClampCursor();
+    return true;
+}
+
+bool Document::OutdentLines(size_t tab_size) {
+    EnsureValidBuffer();
+    const HistoryManager::State before = CurrentState();
+    transform::TransformResult result = transform::OutdentLines(
+        lines,
+        {cursor_col, cursor_row},
+        {HasSelection(), selection.anchor_x, selection.anchor_y},
+        tab_size);
+    if (!result.changed) return false;
+
+    history.PushSnapshot(before);
+    cursor_col = result.cursor.x;
+    cursor_row = result.cursor.y;
+    selection.anchor_x = result.selection.anchor_x;
+    selection.anchor_y = result.selection.anchor_y;
+    selection.active = result.selection.active;
+    is_dirty = true;
+    ClampCursor();
+    return true;
+}
+
 bool Document::ToggleCase() {
     EnsureValidBuffer();
     const HistoryManager::State before = CurrentState();

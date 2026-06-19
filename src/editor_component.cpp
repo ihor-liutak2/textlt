@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "editor_utils.hpp"
+#include "syntax_highlighter.hpp"
 #include "text_transformer.hpp"
 
 namespace textlt {
@@ -86,6 +87,34 @@ namespace textlt {
                     std::tolower(static_cast<unsigned char>(character)));
             }
             return value;
+        }
+
+        bool IsBracketIgnoredStyle(SyntaxHighlighter::Style style) {
+            return style == SyntaxHighlighter::Style::String ||
+                style == SyntaxHighlighter::Style::Comment;
+        }
+
+        std::vector<std::vector<bool>> BuildIgnoredBracketMask(
+            const std::vector<std::string>& lines,
+            const std::string& file_path) {
+            std::vector<std::vector<bool>> ignored(lines.size());
+            SyntaxHighlighter::TokenizationContext context;
+
+            for (size_t y = 0; y < lines.size(); ++y) {
+                ignored[y].assign(lines[y].size(), false);
+                const auto tokens = SyntaxHighlighter::TokenizeLine(lines[y], file_path, &context);
+                for (const SyntaxHighlighter::Token& token : tokens) {
+                    if (!IsBracketIgnoredStyle(token.style)) {
+                        continue;
+                    }
+                    const size_t end = std::min(lines[y].size(), token.start + token.length);
+                    for (size_t x = token.start; x < end; ++x) {
+                        ignored[y][x] = true;
+                    }
+                }
+            }
+
+            return ignored;
         }
 
     } // namespace
@@ -361,38 +390,28 @@ namespace textlt {
             doc_->cursor_col < doc_->lines[doc_->cursor_row].size() &&
             doc_->lines[doc_->cursor_row][doc_->cursor_col] == character) {
             EndTypingGroup();
-        doc_->cursor_col++;
-        ClearSelection();
-        UpdateScroll();
-        return true;
-            }
-
-            if (!IsPairOpeningCharacter(character)) {
-                return false;
-            }
-
-            const char closing = ClosingPairFor(character);
-            if (closing == '\0') {
-                return false;
-            }
-
-            EndTypingGroup();
-            SaveSnapshot();
-
-            if (HasSelection()) {
-                const std::string selected = GetSelectedText();
-                DeleteSelectionWithoutSnapshot();
-                doc_->lines[doc_->cursor_row].insert(doc_->cursor_col, std::string(1, character) + selected + closing);
-                doc_->cursor_col += selected.size() + 2;
-            } else {
-                doc_->lines[doc_->cursor_row].insert(doc_->cursor_col, std::string(1, character) + closing);
-                doc_->cursor_col++;
-            }
-
-            doc_->is_dirty = true;
+            doc_->cursor_col++;
             ClearSelection();
             UpdateScroll();
             return true;
+        }
+
+        if (!IsPairOpeningCharacter(character)) {
+            return false;
+        }
+
+        const char closing = ClosingPairFor(character);
+        if (closing == '\0') {
+            return false;
+        }
+
+        if (doc_->InsertPairedCharacter(character, closing)) {
+            ClearSelection();
+            UpdateScroll();
+            return true;
+        }
+
+        return false;
     }
 
     bool EditorComponent::HandleAutoIndentReturn() {
@@ -460,6 +479,34 @@ namespace textlt {
         if (doc_->Convert2To4Spaces()) {
             UpdateScroll();
         }
+    }
+
+    bool EditorComponent::IndentLines() {
+        if (!doc_) return false;
+        const int configured_tab_size = config_ ? config_->tab_size : 4;
+        const size_t tab_size = configured_tab_size == 2 ? 2 : 4;
+
+        EndTypingGroup();
+        ClampCursorToBuffer();
+        const bool changed = doc_->IndentLines(tab_size);
+        if (changed) {
+            UpdateScroll();
+        }
+        return changed;
+    }
+
+    bool EditorComponent::OutdentLines() {
+        if (!doc_) return false;
+        const int configured_tab_size = config_ ? config_->tab_size : 4;
+        const size_t tab_size = configured_tab_size == 2 ? 2 : 4;
+
+        EndTypingGroup();
+        ClampCursorToBuffer();
+        const bool changed = doc_->OutdentLines(tab_size);
+        if (changed) {
+            UpdateScroll();
+        }
+        return changed;
     }
 
     void EditorComponent::ToggleCase() {
@@ -649,6 +696,14 @@ namespace textlt {
             return std::nullopt;
         }
 
+        const auto ignored_brackets =
+            BuildIgnoredBracketMask(doc_->lines, CurrentFilePath());
+        if (origin_y < ignored_brackets.size() &&
+            origin_x < ignored_brackets[origin_y].size() &&
+            ignored_brackets[origin_y][origin_x]) {
+            return std::nullopt;
+        }
+
         size_t scanned_characters = 0;
         int balance = 0;
 
@@ -658,6 +713,11 @@ namespace textlt {
                 const size_t start_x = y == origin_y ? origin_x : 0;
                 for (size_t x = start_x; x < line.size(); ++x) {
                     if (++scanned_characters > kMaxBracketScanCharacters) return std::nullopt;
+                    if (y < ignored_brackets.size() &&
+                        x < ignored_brackets[y].size() &&
+                        ignored_brackets[y][x]) {
+                        continue;
+                    }
 
                     const char current = line[x];
                     if (current == bracket) {
@@ -677,6 +737,13 @@ namespace textlt {
                 size_t x = line_index == origin_y ? origin_x : line.size() - 1;
                 while (true) {
                     if (++scanned_characters > kMaxBracketScanCharacters) return std::nullopt;
+                    if (line_index < ignored_brackets.size() &&
+                        x < ignored_brackets[line_index].size() &&
+                        ignored_brackets[line_index][x]) {
+                        if (x == 0) break;
+                        --x;
+                        continue;
+                    }
 
                     const char current = line[x];
                     if (current == bracket) {

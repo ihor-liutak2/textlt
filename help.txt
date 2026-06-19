@@ -28,6 +28,8 @@ Search & Replace
 Editing
   Ctrl + /      Toggle Comment
   Ctrl + T      Toggle Case (Invert Uppercase/Lowercase for selection or current word)
+  Tab           Indent selected lines, or insert spaces when nothing is selected
+  Shift+Tab     Remove one indent level from selected lines or the current line
   Alt+Backspace  Delete the previous word
   Ctrl+Delete   Delete the next word
   Edit Menu     Convert Indents: 4 -> 2 Spaces
@@ -46,7 +48,7 @@ Cloud TTS
   Ctrl+J        Read Text from Cursor (TTS Stage 1)
 
 Menus
-  Tab           Switch focus between File Explorer and Editor
+  Tab           Switch focus from File Explorer to Editor
   F1            Open this help window
   F2            Open the File menu
   F3            Open the Edit menu

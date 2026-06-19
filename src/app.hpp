@@ -16,6 +16,7 @@
 #include "git_manager.hpp"
 #include "help_dialog.hpp"
 #include "menu_bar.hpp"
+#include "opened_config.hpp"
 #include "sidebar_component.hpp"
 #include "theme_dialog.hpp"
 #include "file_manager.hpp"
@@ -58,6 +59,14 @@ private:
     void ActivateOpenDocument(size_t index);
     int FindOpenDocument(const std::filesystem::path& path) const;
     void AddOpenDocument(std::shared_ptr<Document> doc);
+    bool IsMemoryOnlyDocument(const std::shared_ptr<Document>& doc) const;
+    void EnsureOneOpenDocument();
+    void RemoveOpenDocument(size_t index);
+    void CloseCurrentFile();
+    void CloseAllOpenedFiles();
+    void PersistOpenedDocuments();
+    void RestoreOpenedDocuments();
+    void OpenRestoredDocument(const OpenedFileState& entry);
     void RefreshOpenedDocumentsSidebar();
     std::shared_ptr<Document> ActiveDocument() const;
     void InitializeWithFiles(const std::vector<std::string>& files_to_open);
@@ -105,6 +114,7 @@ private:
 
     ConfigManager config_manager_;
     EditorConfig editor_config_;
+    OpenedConfigStore opened_config_store_;
     std::vector<Theme> themes_;
     Theme current_theme_;
     ftxui::ScreenInteractive screen_;

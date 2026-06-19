@@ -15,6 +15,7 @@ namespace {
 enum class Language {
     Bash,
     Blade,
+    CMake,
     Cpp,
     Csharp,
     Css,
@@ -28,6 +29,7 @@ enum class Language {
     Jsx,
     Json,
     Go,
+    Markdown,
     Php,
     Plain,
     Python,
@@ -56,6 +58,9 @@ Language LanguageFromPath(const std::string& path) {
     if (filename.rfind("Dockerfile", 0) == 0) {
         return Language::Dockerfile;
     }
+    if (filename == "CMakeLists.txt") {
+        return Language::CMake;
+    }
     if (filename == "docker-compose.yml" || filename == "docker-compose.yaml") {
         return Language::Yaml;
     }
@@ -77,6 +82,9 @@ Language LanguageFromPath(const std::string& path) {
     }
     if (extension == ".conf" || extension == ".ini") {
         return Language::Ini;
+    }
+    if (extension == ".cmake") {
+        return Language::CMake;
     }
     if (extension == ".cs") {
         return Language::Csharp;
@@ -108,6 +116,9 @@ Language LanguageFromPath(const std::string& path) {
     }
     if (extension == ".json") {
         return Language::Json;
+    }
+    if (extension == ".md" || extension == ".markdown") {
+        return Language::Markdown;
     }
     if (extension == ".php") {
         return Language::Php;
@@ -177,6 +188,8 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             return lexers::TokenizeBash(line);
         case Language::Blade:
             return lexers::TokenizeBlade(line);
+        case Language::CMake:
+            return lexers::TokenizeCMake(line);
         case Language::Cpp:
             return lexers::TokenizeCpp(line);
         case Language::Csharp:
@@ -203,6 +216,8 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             return lexers::TokenizeJson(line);
         case Language::Jsx:
             return lexers::TokenizeJsx(line, false);
+        case Language::Markdown:
+            return lexers::TokenizeMarkdown(line);
         case Language::Php:
             return lexers::TokenizePhp(line, context);
         case Language::Python:

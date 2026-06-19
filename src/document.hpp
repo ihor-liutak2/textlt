@@ -13,6 +13,7 @@ namespace textlt {
     enum class DocumentType {
     PlainText,
     Bash,
+    CMake,
     Cpp,
     Json,
     Markdown,
@@ -98,6 +99,7 @@ struct Document {
     bool Redo();
     bool InsertText(const std::string& text);
     bool InsertCharacter(const std::string& input);
+    bool InsertPairedCharacter(char opening, char closing);
     bool Backspace();
     bool DeleteForward();
     bool DeleteWordBackward();
@@ -106,6 +108,8 @@ struct Document {
     bool ConvertTabsToSpaces(size_t tab_size);
     bool Convert4To2Spaces();
     bool Convert2To4Spaces();
+    bool IndentLines(size_t tab_size);
+    bool OutdentLines(size_t tab_size);
     bool ToggleCase();
     bool MoveLineUp();
     bool MoveLineDown();

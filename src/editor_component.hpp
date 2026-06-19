@@ -56,6 +56,8 @@ namespace textlt {
         void ConvertTabsToSpaces();
         void Convert4To2Spaces();
         void Convert2To4Spaces();
+        bool IndentLines();
+        bool OutdentLines();
         void ToggleComment();
         void ToggleCase();
         void DeleteWordBackward();

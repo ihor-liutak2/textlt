@@ -223,6 +223,16 @@ bool IsCtrlDeleteEvent(const ftxui::Event& event) {
         event == ftxui::Event::Special("\x1B[27;5;3~");
 }
 
+bool IsShiftTabEvent(const ftxui::Event& event) {
+    const std::string& input = event.input();
+    return input == "Shift+Tab" ||
+        input == "\x1B[Z" ||
+        input == "\x1B[1;2Z" ||
+        event == ftxui::Event::Special("Shift+Tab") ||
+        event == ftxui::Event::Special("\x1B[Z") ||
+        event == ftxui::Event::Special("\x1B[1;2Z");
+}
+
 bool HasMultipleUtf8Codepoints(const std::string& input) {
     size_t count = 0;
     for (unsigned char character : input) {
@@ -267,7 +277,17 @@ bool EditorInputController::HandleEvent(EditorComponent& editor, ftxui::Event ev
         return editor.MoveLinesDown();
     }
 
+    if (IsShiftTabEvent(event)) {
+        editor.OutdentLines();
+        return true;
+    }
+
     if (event == ftxui::Event::Tab) {
+        if (editor.HasSelection()) {
+            editor.IndentLines();
+            return true;
+        }
+
         const int configured_tab_size = editor.config_ ? editor.config_->tab_size : 4;
         const size_t tab_size = configured_tab_size == 2 ? 2 : 4;
         editor.InsertText(std::string(tab_size, ' '));

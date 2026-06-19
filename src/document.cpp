@@ -25,13 +25,18 @@ DocumentType DetermineDocumentType(const std::filesystem::path& path) {
     if (lower_filename == ".bashrc" || lower_filename == ".profile") {
         return DocumentType::Bash;
     }
+    if (lower_filename == "cmakelists.txt") {
+        return DocumentType::CMake;
+    }
 
     static const std::unordered_map<std::string, DocumentType> ext_map = {
         {".sh", DocumentType::Bash}, {".bash", DocumentType::Bash},
+        {".cmake", DocumentType::CMake},
         {".zsh", DocumentType::Bash}, {".cpp", DocumentType::Cpp},
         {".hpp", DocumentType::Cpp}, {".cc", DocumentType::Cpp},
         {".h", DocumentType::Cpp}, {".json", DocumentType::Json},
-        {".md", DocumentType::Markdown}, {".html", DocumentType::Html},
+        {".md", DocumentType::Markdown}, {".markdown", DocumentType::Markdown},
+        {".html", DocumentType::Html},
         {".htm", DocumentType::Html}, {".css", DocumentType::Css},
         {".go", DocumentType::Go}, {".js", DocumentType::Js},
         {".jsx", DocumentType::Jsx}, {".ts", DocumentType::Ts},
@@ -71,6 +76,7 @@ void Document::Reset() {
 std::string Document::Label() const {
     switch (type) {
         case DocumentType::Bash:       return "Bash Script";
+        case DocumentType::CMake:      return "CMake Script";
         case DocumentType::Cpp:        return "C++ Source";
         case DocumentType::Json:       return "JSON Document";
         case DocumentType::Markdown:   return "Markdown Document";

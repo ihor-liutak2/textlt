@@ -162,8 +162,7 @@ ftxui::Element TextltApp::Render() {
         color(current_theme_.menu_foreground));
 
     Element base_layout = vbox(std::move(base_rows)) |
-        bgcolor(current_theme_.background) |
-        color(current_theme_.foreground);
+        bgcolor(current_theme_.background);
 
     Elements layers = {base_layout};
     if (menu_bar_->IsDropdownOpen()) {
@@ -404,6 +403,14 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
 
     // --- End Global Event Filter ---
     // Events reaching this point are not consumed by any active modal or overlay.
+
+    if (input == "\x1Bw" ||
+        input == "\x1BW" ||
+        input == "Alt+W" ||
+        event == ftxui::Event::Special("Alt+W")) {
+        CloseCurrentFile();
+        return true;
+    }
 
     const bool editor_is_focused = focused_layer_ == 0 && !sidebar_has_focus_;
 

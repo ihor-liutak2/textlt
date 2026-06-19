@@ -46,6 +46,44 @@ bool Document::InsertCharacter(const std::string& input) {
     return true;
 }
 
+bool Document::InsertPairedCharacter(char opening, char closing) {
+    EnsureValidBuffer();
+    EndTypingGroup();
+    SaveSnapshot();
+
+    if (HasSelection()) {
+        const std::string selected = GetSelectedText();
+        DeleteSelectionWithoutSnapshot();
+        const std::string wrapped = std::string(1, opening) + selected + closing;
+        for (char character : wrapped) {
+            if (character == '\r') {
+                continue;
+            }
+            if (character == '\n') {
+                std::string next_line = lines[cursor_row].substr(cursor_col);
+                lines[cursor_row].erase(cursor_col);
+                lines.insert(
+                    lines.begin() + static_cast<std::ptrdiff_t>(cursor_row + 1),
+                    std::move(next_line));
+                ++cursor_row;
+                cursor_col = 0;
+                continue;
+            }
+            lines[cursor_row].insert(cursor_col, std::string(1, character));
+            ++cursor_col;
+        }
+        is_dirty = true;
+        ClearSelection();
+        return true;
+    }
+
+    lines[cursor_row].insert(cursor_col, std::string(1, opening) + closing);
+    ++cursor_col;
+    is_dirty = true;
+    ClearSelection();
+    return true;
+}
+
 bool Document::Backspace() {
     EnsureValidBuffer();
     if (cursor_col > 0) {

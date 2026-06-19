@@ -42,6 +42,7 @@ add_executable(textlt
   src/main.cpp
   src/menu_bar.cpp
   src/modal_window.cpp
+  src/opened_config.cpp
   src/sidebar_component.cpp
   src/syntax_highlighter.cpp
   src/terminal_flow_control_guard.cpp
