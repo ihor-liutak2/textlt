@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.14)
 project(textlt VERSION 0.1.0 LANGUAGES CXX)
 
+enable_testing()
+
 # Use the C++17 language standard.
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -64,3 +66,14 @@ add_executable(textlt
 
 target_include_directories(textlt PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(textlt PRIVATE ftxui::screen ftxui::dom ftxui::component)
+
+add_executable(textlt_document_navigation_test
+  tests/document_navigation_test.cpp
+  src/document_cursor.cpp
+  src/document_history.cpp
+  src/document_selection.cpp
+  src/editor_utils.cpp
+  src/history_manager.cpp
+)
+target_include_directories(textlt_document_navigation_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME textlt_document_navigation_test COMMAND textlt_document_navigation_test)

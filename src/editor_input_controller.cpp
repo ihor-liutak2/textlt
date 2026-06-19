@@ -34,11 +34,21 @@ bool IsShiftNavigationEvent(const ftxui::Event& event, NavigationAction* action)
         *action = NavigationAction::Right;
         return true;
     }
-    if (input == "\x1B[1;6D") {
+    if (input == "Shift+Ctrl+Left" ||
+        input == "Ctrl+Shift+Left" ||
+        input == "\x1B[1;6D" ||
+        input == "\x1B[1;10D" ||
+        input == "\x1B[27;6;68~" ||
+        input == "\x1B[68;6u") {
         *action = NavigationAction::WordLeft;
         return true;
     }
-    if (input == "\x1B[1;6C") {
+    if (input == "Shift+Ctrl+Right" ||
+        input == "Ctrl+Shift+Right" ||
+        input == "\x1B[1;6C" ||
+        input == "\x1B[1;10C" ||
+        input == "\x1B[27;6;67~" ||
+        input == "\x1B[67;6u") {
         *action = NavigationAction::WordRight;
         return true;
     }

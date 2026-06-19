@@ -56,7 +56,8 @@ char MatchingBracketFor(char character) {
 }
 
 bool IsWordCharacter(char character) {
-    return std::isalnum(static_cast<unsigned char>(character)) || character == '_';
+    const unsigned char byte = static_cast<unsigned char>(character);
+    return std::isalnum(byte) || character == '_' || byte >= 0x80;
 }
 
 bool IsUtf8ContinuationByte(char character) {
