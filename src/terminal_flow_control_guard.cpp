@@ -1,5 +1,16 @@
 #include "terminal_flow_control_guard.hpp"
 
+#ifdef _WIN32
+
+namespace textlt {
+
+TerminalFlowControlGuard::TerminalFlowControlGuard() = default;
+TerminalFlowControlGuard::~TerminalFlowControlGuard() = default;
+
+} // namespace textlt
+
+#else
+
 #include <string_view>
 #include <unistd.h>
 
@@ -40,3 +51,5 @@ TerminalFlowControlGuard::~TerminalFlowControlGuard() {
 }
 
 } // namespace textlt
+
+#endif

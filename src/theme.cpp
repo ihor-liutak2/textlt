@@ -8,6 +8,14 @@
 #include <map>
 #include <cstdio> // Used by sscanf for hexadecimal RGB parsing.
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace textlt {
     namespace {
         struct Rgb {
@@ -225,20 +233,50 @@ namespace textlt {
         }
 
         std::filesystem::path UserThemeDirectory() {
+#ifdef _WIN32
+            const char* app_data = std::getenv("APPDATA");
+            if (app_data && !std::string(app_data).empty()) {
+                return std::filesystem::path(app_data) / "textlt" / "themes";
+            }
+
+            const char* user_profile = std::getenv("USERPROFILE");
+            if (user_profile && !std::string(user_profile).empty()) {
+                return std::filesystem::path(user_profile) / "AppData" / "Roaming" /
+                       "textlt" / "themes";
+            }
+            return {};
+#else
             const char* home = std::getenv("HOME");
             if (!home || std::string(home).empty()) {
                 return {};
             }
             return std::filesystem::path(home) / ".config" / "textlt" / "themes";
+#endif
         }
 
         std::vector<std::filesystem::path> ExecutableThemeDirectories() {
+#ifdef _WIN32
+            std::string buffer(MAX_PATH, '\0');
+            DWORD length = GetModuleFileNameA(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+            while (length == buffer.size()) {
+                buffer.resize(buffer.size() * 2);
+                length = GetModuleFileNameA(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+            }
+
+            if (length == 0) {
+                return {};
+            }
+
+            buffer.resize(length);
+            const std::filesystem::path executable_path(buffer);
+#else
             std::error_code error;
             const std::filesystem::path executable_path =
                 std::filesystem::read_symlink("/proc/self/exe", error);
             if (error || executable_path.empty()) {
                 return {};
             }
+#endif
 
             const std::filesystem::path executable_directory = executable_path.parent_path();
             return {

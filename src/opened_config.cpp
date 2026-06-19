@@ -59,11 +59,25 @@ std::string JsonUnescape(const std::string& value) {
 }
 
 std::filesystem::path DefaultOpenedConfigPath() {
+#ifdef _WIN32
+    const char* app_data = std::getenv("APPDATA");
+    if (app_data && !std::string(app_data).empty()) {
+        return std::filesystem::path(app_data) / "textlt" / "opened_config.json";
+    }
+
+    const char* user_profile = std::getenv("USERPROFILE");
+    if (user_profile && !std::string(user_profile).empty()) {
+        return std::filesystem::path(user_profile) / "AppData" / "Roaming" /
+               "textlt" / "opened_config.json";
+    }
+    return "opened_config.json";
+#else
     const char* home = std::getenv("HOME");
     if (!home || std::string(home).empty()) {
         return "opened_config.json";
     }
     return std::filesystem::path(home) / ".config" / "textlt" / "opened_config.json";
+#endif
 }
 
 size_t ExtractSize(const std::string& content, const std::string& key, size_t fallback) {

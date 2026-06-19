@@ -26,12 +26,41 @@ std::string JsonEscape(const std::string& value) {
     return escaped;
 }
 
-std::filesystem::path HomePath() {
+std::filesystem::path UserConfigDirectory() {
+#ifdef _WIN32
+    const char* app_data = std::getenv("APPDATA");
+    if (app_data && !std::string(app_data).empty()) {
+        return std::filesystem::path(app_data) / "textlt";
+    }
+
+    const char* user_profile = std::getenv("USERPROFILE");
+    if (user_profile && !std::string(user_profile).empty()) {
+        return std::filesystem::path(user_profile) / "AppData" / "Roaming" / "textlt";
+    }
+    return {};
+#else
+    const char* home = std::getenv("HOME");
+    if (!home || std::string(home).empty()) {
+        return {};
+    }
+    return std::filesystem::path(home) / ".config" / "textlt";
+#endif
+}
+
+std::filesystem::path UserHomeDirectory() {
+#ifdef _WIN32
+    const char* user_profile = std::getenv("USERPROFILE");
+    if (!user_profile || std::string(user_profile).empty()) {
+        return {};
+    }
+    return std::filesystem::path(user_profile);
+#else
     const char* home = std::getenv("HOME");
     if (!home || std::string(home).empty()) {
         return {};
     }
     return std::filesystem::path(home);
+#endif
 }
 
 bool WriteConfigAtomically(const std::filesystem::path& path, const EditorConfig& config) {
@@ -200,15 +229,15 @@ bool EditorConfig::Persist() const {
 }
 
 std::filesystem::path EditorConfig::DefaultConfigPath() {
-    const std::filesystem::path home = HomePath();
-    if (home.empty()) {
+    const std::filesystem::path config_directory = UserConfigDirectory();
+    if (config_directory.empty()) {
         return "config.json";
     }
-    return home / ".config" / "textlt" / "config.json";
+    return config_directory / "config.json";
 }
 
 std::filesystem::path EditorConfig::FallbackConfigPath() {
-    const std::filesystem::path home = HomePath();
+    const std::filesystem::path home = UserHomeDirectory();
     if (home.empty()) {
         return {};
     }

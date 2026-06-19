@@ -10,6 +10,30 @@ namespace {
 
 constexpr auto kGitRefreshInterval = std::chrono::milliseconds(1200);
 
+FILE* OpenPipe(const std::string& command, const char* mode) {
+#ifdef _WIN32
+    return _popen(command.c_str(), mode);
+#else
+    return popen(command.c_str(), mode);
+#endif
+}
+
+int ClosePipe(FILE* pipe) {
+#ifdef _WIN32
+    return _pclose(pipe);
+#else
+    return pclose(pipe);
+#endif
+}
+
+std::string StderrToNull() {
+#ifdef _WIN32
+    return "2>nul";
+#else
+    return "2>/dev/null";
+#endif
+}
+
 } // namespace
 
 void GitManager::SetWorkingDirectory(const std::filesystem::path& directory) {
@@ -84,7 +108,7 @@ std::string GitManager::ExecuteCommand(const std::string& command) {
     std::array<char, 256> buffer{};
     std::string output;
 
-    FILE* pipe = popen(command.c_str(), "r");
+    FILE* pipe = OpenPipe(command, "r");
     if (!pipe) {
         return "";
     }
@@ -93,7 +117,7 @@ std::string GitManager::ExecuteCommand(const std::string& command) {
         output += buffer.data();
     }
 
-    const int status = pclose(pipe);
+    const int status = ClosePipe(pipe);
     if (status != 0) {
         return "";
     }
@@ -106,10 +130,11 @@ GitManager::Snapshot GitManager::CollectSnapshot(std::filesystem::path working_d
     const std::string quoted_directory = ShellQuote(working_directory.string());
     const std::string git_prefix = "git -C " + quoted_directory + " ";
 
-    snapshot.branch = Trim(ExecuteCommand(git_prefix + "branch --show-current 2>/dev/null"));
-    snapshot.repository_root = Trim(ExecuteCommand(git_prefix + "rev-parse --show-toplevel 2>/dev/null"));
+    snapshot.branch = Trim(ExecuteCommand(git_prefix + "branch --show-current " + StderrToNull()));
+    snapshot.repository_root = Trim(ExecuteCommand(
+        git_prefix + "rev-parse --show-toplevel " + StderrToNull()));
     snapshot.statuses = ParseStatusOutput(
-        ExecuteCommand(git_prefix + "status --porcelain 2>/dev/null"));
+        ExecuteCommand(git_prefix + "status --porcelain " + StderrToNull()));
 
     if (snapshot.repository_root.empty()) {
         snapshot.branch.clear();
@@ -120,6 +145,18 @@ GitManager::Snapshot GitManager::CollectSnapshot(std::filesystem::path working_d
 }
 
 std::string GitManager::ShellQuote(const std::string& value) {
+#ifdef _WIN32
+    std::string quoted = "\"";
+    for (char character : value) {
+        if (character == '"') {
+            quoted += "\\\"";
+        } else {
+            quoted += character;
+        }
+    }
+    quoted += "\"";
+    return quoted;
+#else
     std::string quoted = "'";
     for (char character : value) {
         if (character == '\'') {
@@ -130,6 +167,7 @@ std::string GitManager::ShellQuote(const std::string& value) {
     }
     quoted += "'";
     return quoted;
+#endif
 }
 
 std::string GitManager::Trim(std::string value) {
