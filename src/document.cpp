@@ -43,6 +43,8 @@ DocumentType DetermineDocumentType(const std::filesystem::path& path) {
         {".tsx", DocumentType::Tsx}, {".php", DocumentType::Php},
         {".rs", DocumentType::Rust}, {".java", DocumentType::Java},
         {".py", DocumentType::Python},
+        {".xml", DocumentType::Xml}, {".xsd", DocumentType::Xml},
+        {".xsl", DocumentType::Xml}, {".xslt", DocumentType::Xml},
     };
 
     if (const auto it = ext_map.find(lower_ext); it != ext_map.end()) {
@@ -92,6 +94,7 @@ std::string Document::Label() const {
         case DocumentType::Rust:       return "Rust Source";
         case DocumentType::Java:       return "Java Source";
         case DocumentType::Python:     return "Python Script";
+        case DocumentType::Xml:        return "XML Document";
         case DocumentType::PlainText:  return "Plain Text";
         default:                       return "Unknown";
     }

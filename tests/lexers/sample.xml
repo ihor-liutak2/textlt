@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Sample XML lexer fixture -->
+<!DOCTYPE catalog SYSTEM "catalog.dtd">
+<catalog xmlns:bk="https://example.com/book" updated="2026-06-19">
+  <bk:book id="bk101" available="true">
+    <title lang="en">Terminal UI Patterns</title>
+    <description><![CDATA[Use <tags> literally inside CDATA.]]></description>
+  </bk:book>
+</catalog>

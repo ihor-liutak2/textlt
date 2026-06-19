@@ -40,45 +40,96 @@ bool WriteTextToPipe(const std::string& command, const std::string& text) {
     return written == text.size() && close_status == 0;
 }
 
-bool ExistingFile(const std::filesystem::path& path) {
-    std::error_code error;
-    return !path.empty() &&
-        std::filesystem::exists(path, error) &&
-        std::filesystem::is_regular_file(path, error);
-}
-
-std::filesystem::path UserHelpFilePath() {
-    const char* home = std::getenv("HOME");
-    if (!home || std::string(home).empty()) {
-        return {};
-    }
-    return std::filesystem::path(home) / ".config" / "textlt" / "help.txt";
-}
-
-std::filesystem::path ResolveHelpFilePath() {
-    const std::filesystem::path user_help = UserHelpFilePath();
-    if (ExistingFile(user_help)) {
-        return user_help;
-    }
-
-    std::error_code error;
-    const std::filesystem::path executable_path =
-        std::filesystem::read_symlink("/proc/self/exe", error);
-    if (!error && !executable_path.empty()) {
-        const std::filesystem::path executable_directory = executable_path.parent_path();
-        const std::filesystem::path executable_help = executable_directory / "help.txt";
-        if (ExistingFile(executable_help)) {
-            return executable_help;
-        }
-
-        const std::filesystem::path shared_help =
-            executable_directory.parent_path() / "share" / "textlt" / "help.txt";
-        if (ExistingFile(shared_help)) {
-            return shared_help;
-        }
-    }
-
-    return "help.txt";
+std::vector<std::string> BuiltInHelpLines() {
+    return {
+        "textlt Help",
+        "",
+        "File",
+        "  Ctrl+O        Open a file",
+        "  Ctrl+S        Save the current file",
+        "  Ctrl+Q        Exit the editor",
+        "",
+        "Navigation",
+        "  Arrow Keys    Move the cursor",
+        "  Home          Move to the start of the current line",
+        "  End           Move to the end of the current line",
+        "  Page Up       Move one page up",
+        "  Page Down     Move one page down",
+        "  Ctrl+Left     Jump to the previous word",
+        "  Ctrl+Right    Jump to the next word",
+        "  Ctrl+Up       Jump to the previous paragraph",
+        "  Ctrl+Down     Jump to the next paragraph",
+        "  Shift+Ctrl+Up Select to the previous paragraph",
+        "  Shift+Ctrl+Down Select to the next paragraph",
+        "",
+        "Search & Replace",
+        "  Ctrl+F        Open Find Panel",
+        "  Ctrl+R        Open Replace Panel",
+        "  F3            Find Next Match",
+        "  Shift+Enter   Find Previous Match",
+        "  Escape        Close Find/Replace Panel",
+        "",
+        "Editing",
+        "  Ctrl + /      Toggle Comment",
+        "  Ctrl + T      Toggle Case",
+        "  Tab           Indent selected lines, or insert spaces",
+        "  Shift+Tab     Remove one indent level",
+        "  Alt+Backspace Delete the previous word",
+        "  Ctrl+Delete   Delete the next word",
+        "",
+        "Selection & Clipboard",
+        "  Shift+Arrows  Extend the active text selection",
+        "  Mouse Drag    Select text inside the editor viewport",
+        "  Ctrl+A        Select all text",
+        "  Ctrl+C        Copy selection or current line",
+        "  Ctrl+X        Cut selection or current line",
+        "  Ctrl+V        Paste clipboard text",
+        "  Ctrl+Shift+V  Paste when terminal reserves Ctrl+V",
+        "",
+        "Cloud TTS",
+        "  Ctrl+J        Read text from cursor",
+        "",
+        "Menus",
+        "  Tab           Switch focus from File Explorer to Editor",
+        "  F1            Open this help window",
+        "  F2            Open the File menu",
+        "  F3            Open the Edit menu",
+        "  F4            Open the Options menu",
+        "  Escape        Close the active dialog or menu",
+        "",
+        "Options",
+        "  Toggle Line Numbers changes the editor gutter immediately.",
+        "  Toggle File Explorer shows or hides the sidebar.",
+        "  Auto Pairing inserts matching brackets and quotes.",
+        "  Smart Auto-Indent carries indentation onto new lines.",
+        "  Theme opens the dynamic theme selector.",
+        "",
+        "Syntax Highlighting",
+        "  Language        Supported Extensions / Filenames",
+        "  C / C++         .c, .cpp, .hpp, .h",
+        "  C#              .cs",
+        "  Go              .go",
+        "  Rust            .rs",
+        "  Bash Scripting  .sh, .bash, .bashrc",
+        "  JavaScript      .js, .mjs, .cjs",
+        "  TypeScript      .ts, .mts",
+        "  React JSX/TSX   .jsx, .tsx",
+        "  GraphQL         .graphql, .gql",
+        "  Laravel Blade   .blade.php",
+        "  PHP             .php",
+        "  Python          .py",
+        "  Ruby            .rb, Gemfile",
+        "  Java            .java",
+        "  HTML            .html, .htm",
+        "  XML             .xml, .xsd, .xsl, .xslt",
+        "  CSS             .css",
+        "  JSON            .json",
+        "  INI             .ini, .conf",
+        "  Environment     .env, .env.local, .env.*",
+        "  YAML            .yaml, .yml",
+        "  Docker          Dockerfile, docker-compose.yml",
+        "  SQL             .sql",
+    };
 }
 
 } // namespace
@@ -341,7 +392,7 @@ void TextltApp::OpenHelpDialog() {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
-    help_dialog_.Open(ResolveHelpFilePath().string());
+    help_dialog_.OpenContent("Help", BuiltInHelpLines(), false);
     active_action_ = "Opened Help";
     focused_layer_ = 2;
 }

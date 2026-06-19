@@ -79,24 +79,9 @@ ftxui::Element ThemeSelectionContent::Render() {
     using namespace ftxui;
     const Theme& theme = active_theme_ ? *active_theme_ : FallbackTheme();
 
-    Element content = vbox({
-        // Isolated list view container to prevent text color bleed-through.
-        vbox({
-            menu_->Render()
-        }) |
-            bgcolor(theme.modal_input_bg) |
-            color(theme.modal_input_fg) |
-            frame |
-            size(WIDTH, EQUAL, 42) |
-            size(HEIGHT, LESS_THAN, 14),
-
-        separator() | color(theme.modal_border),
-
-        // Footer hint text block
-        text(" Enter selects, Escape closes. ") | dim | color(theme.modal_text_color),
-    });
-
-    return content; // ModalWindow will wrap this with window()
+    return menu_->Render() |
+        bgcolor(theme.modal_input_bg) |
+        color(theme.modal_input_fg);
 }
 
 void ThemeSelectionContent::TakeFocus() {
@@ -113,6 +98,15 @@ ThemeDialog::ThemeDialog(const Theme* active_theme, ThemeCallback on_preview, Th
         Close(); // Close the dialog after selection
     });
     modal_window_ = std::make_shared<ModalWindow>(content_impl_, current_active_theme_, [this] { Close(); });
+    modal_window_->SetFooterText("Enter selects, mouse wheel scrolls, Escape closes.");
+    modal_window_->SetFooterButtons({
+        {"Select", [this] {
+            if (content_impl_) {
+                content_impl_->SelectCurrentTheme();
+            }
+        }},
+        {"Close", [this] { Close(); }},
+    });
 }
 
 ftxui::Component ThemeDialog::View() const {

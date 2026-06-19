@@ -16,7 +16,7 @@ Optimized to run perfectly in native Linux environments (**MX Linux**, **Ubuntu*
 
 - **Intuitive Modeless Editing:** No "command" or "insert" modes. Just open, click, and start typing, exactly like modern GUI text editors.
 - **Advanced Polyglot Syntax Highlighting:** Powered by an ultra-fast state-machine engine that pre-scans syntax layout matrices up to the active viewport boundaries:
-  - **Languages:** `C++`, `C`, `PHP` (with native WordPress multi-language support), `Python`, `Ruby` (inc. `Gemfile`), `Java`, `JavaScript`, `TypeScript`, `HTML`, `CSS`, `SQL`, `GraphQL`.
+  - **Languages:** `C++`, `C`, `PHP` (with native WordPress multi-language support), `Python`, `Ruby` (inc. `Gemfile`), `Java`, `JavaScript`, `TypeScript`, `HTML`, `XML`, `CSS`, `SQL`, `GraphQL`.
   - **Configurations:** `YAML`, `JSON`, `Dockerfile`, `docker-compose.yml`, `.ini`, `.conf`, and `.env` profiles.
 - **Embedded Syntax Engine (Heredoc/Nowdoc):** Seamlessly shifts lexical token states inside PHP code streams when encountering `<<<HTML`, `<<<CSS`, or `<<<JS` blocks, matching enterprise IDE behavior.
 - **Full Interactive Mouse Integration:**
@@ -103,7 +103,7 @@ Open the interactive **Help** window inside the editor at any time to view the l
 | **Python** | `.py` | `#` |
 | **Ruby** | `.rb`, `Gemfile` | `#` |
 | **Java** | `.java` | `//` |
-| **HTML / CSS** | `.html`, `.htm`, `.css` | `` / `/* */` |
+| **HTML / XML / CSS** | `.html`, `.htm`, `.xml`, `.xsd`, `.xsl`, `.xslt`, `.css` | `` / `<!-- -->` / `/* */` |
 | **SQL** | `.sql` | `--` |
 | **GraphQL** | `.graphql`, `.gql` | `--` |
 | **YAML / Compose** | `.yaml`, `.yml`, `docker-compose.yml` | `#` |

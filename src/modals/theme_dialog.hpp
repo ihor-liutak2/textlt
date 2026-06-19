@@ -23,15 +23,15 @@ public:
     ftxui::Element Render() override;
     ftxui::Component GetMainComponent() override { return menu_; }
     std::string GetTitle() override { return "Select Theme"; }
+    ModalSizePreference GetModalSizePreference() const override { return {48, 22}; }
 
     // Public methods for ThemeDialog to call
     void SetThemes(const std::vector<Theme>& themes, const std::string& active_name);
     void SetTheme(const Theme* new_theme) { active_theme_ = new_theme; } // New method
     void TakeFocus(); // Delegate to internal menu
+    void SelectCurrentTheme();
     
 private:
-    void SelectCurrentTheme();
-
     const Theme* active_theme_ = nullptr; // This can be updated by SetTheme
     ThemeCallback on_preview_;
     ThemeCallback on_select_;

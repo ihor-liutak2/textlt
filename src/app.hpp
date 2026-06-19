@@ -12,13 +12,13 @@
 #include "config_manager.hpp"
 #include "editor_component.hpp"
 #include "editor_config.hpp"
-#include "file_dialog.hpp"
+#include "modals/file_dialog.hpp"
 #include "git_manager.hpp"
-#include "help_dialog.hpp"
+#include "modals/help_dialog.hpp"
 #include "menu_bar.hpp"
 #include "opened_config.hpp"
 #include "sidebar_component.hpp"
-#include "theme_dialog.hpp"
+#include "modals/theme_dialog.hpp"
 #include "file_manager.hpp"
 
 namespace textlt {

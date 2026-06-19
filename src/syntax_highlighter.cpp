@@ -38,6 +38,7 @@ enum class Language {
     Sql,
     Typescript,
     Tsx,
+    Xml,
     Yaml,
 };
 
@@ -104,6 +105,10 @@ Language LanguageFromPath(const std::string& path) {
     }
     if (extension == ".html" || extension == ".htm") {
         return Language::Html;
+    }
+    if (extension == ".xml" || extension == ".xsd" || extension == ".xsl" ||
+        extension == ".xslt") {
+        return Language::Xml;
     }
     if (extension == ".js" || extension == ".mjs" || extension == ".cjs") {
         return Language::Javascript;
@@ -232,6 +237,8 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             return lexers::TokenizeTypescript(line);
         case Language::Tsx:
             return lexers::TokenizeJsx(line, true);
+        case Language::Xml:
+            return lexers::TokenizeXml(line);
         case Language::Yaml:
             return lexers::TokenizeYaml(line);
         case Language::Plain:

@@ -28,7 +28,8 @@ namespace textlt {
     Blade,
     Rust,
     Java,
-    Python
+    Python,
+    Xml
 };
 
 enum class LineEnding {

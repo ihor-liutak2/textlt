@@ -30,10 +30,8 @@ add_executable(textlt
   src/editor_mouse.cpp
   src/editor_utils.cpp
   src/editor_viewport.cpp
-  src/file_dialog.cpp
   src/file_utils.cpp
   src/git_manager.cpp
-  src/help_dialog.cpp
   src/history_manager.cpp
   src/lexers/c_family_lexer.cpp
   src/lexers/config_script_lexer.cpp
@@ -41,13 +39,15 @@ add_executable(textlt
   src/lexers/web_lexer.cpp
   src/main.cpp
   src/menu_bar.cpp
-  src/modal_window.cpp
+  src/modals/file_dialog.cpp
+  src/modals/help_dialog.cpp
+  src/modals/modal_window.cpp
+  src/modals/theme_dialog.cpp
   src/opened_config.cpp
   src/sidebar_component.cpp
   src/syntax_highlighter.cpp
   src/terminal_flow_control_guard.cpp
   src/text_transformer.cpp
-  src/theme_dialog.cpp
   src/theme.cpp
   src/document.hpp
   src/document.cpp

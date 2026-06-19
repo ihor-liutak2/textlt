@@ -6,6 +6,11 @@
 
 namespace textlt {
 
+struct ModalSizePreference {
+    int width = 0;
+    int height = 0;
+};
+
 class IModalContent {
 public:
     virtual ~IModalContent() = default;
@@ -19,6 +24,9 @@ public:
 
     // Returns the title of the modal window.
     virtual std::string GetTitle() = 0;
+
+    // Allows modal content to request a preferred outer modal size.
+    virtual ModalSizePreference GetModalSizePreference() const { return {}; }
 };
 
 } // namespace textlt
