@@ -14,6 +14,9 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#ifdef RGB
+#undef RGB
+#endif
 #endif
 
 namespace textlt {

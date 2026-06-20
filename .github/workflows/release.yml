@@ -96,7 +96,11 @@ jobs:
             --output appimage
 
           ls -lh *.AppImage
-          mv TextLT*.AppImage TextLT-x86_64.AppImage
+          appimage="$(find . -maxdepth 1 -name '*.AppImage' ! -name 'linuxdeploy*.AppImage' -print -quit)"
+          test -n "$appimage"
+          if [ "$appimage" != "./TextLT-x86_64.AppImage" ]; then
+            mv "$appimage" TextLT-x86_64.AppImage
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
