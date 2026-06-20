@@ -2,232 +2,49 @@
 
 #include <algorithm>
 #include <cstdlib>
-#include <fstream>
-#include <iterator>
 #include <string>
 #include <utility>
+
+#include "json_utils.hpp"
 
 namespace textlt {
 namespace {
 
-bool ExtractBool(const std::string& content, const std::string& key, bool fallback) {
-    const std::string token = "\"" + key + "\"";
-    size_t key_pos = content.find(token);
-    if (key_pos == std::string::npos) {
-        return fallback;
-    }
-    size_t colon = content.find(':', key_pos + token.size());
-    size_t value_pos = content.find_first_not_of(" \t\n\r", colon + 1);
-    if (value_pos == std::string::npos) {
-        return fallback;
-    }
-    if (content.compare(value_pos, 4, "true") == 0) {
-        return true;
-    }
-    if (content.compare(value_pos, 5, "false") == 0) {
-        return false;
-    }
-    return fallback;
-}
-
-int ExtractInt(const std::string& content, const std::string& key, int fallback) {
-    const std::string token = "\"" + key + "\"";
-    size_t key_pos = content.find(token);
-    if (key_pos == std::string::npos) {
-        return fallback;
-    }
-    size_t colon = content.find(':', key_pos + token.size());
-    size_t value_pos = content.find_first_not_of(" \t\n\r", colon + 1);
-    if (colon == std::string::npos || value_pos == std::string::npos) {
-        return fallback;
-    }
-
-    size_t end_pos = value_pos;
-    while (end_pos < content.size() &&
-           content[end_pos] >= '0' && content[end_pos] <= '9') {
-        ++end_pos;
-    }
-    if (end_pos == value_pos) {
-        return fallback;
-    }
-
-    try {
-        return std::stoi(content.substr(value_pos, end_pos - value_pos));
-    } catch (...) {
-        return fallback;
-    }
-}
-
-std::string ExtractString(const std::string& content, const std::string& key, std::string fallback) {
-    const std::string token = "\"" + key + "\"";
-    size_t key_pos = content.find(token);
-    if (key_pos == std::string::npos) {
-        return fallback;
-    }
-    size_t colon = content.find(':', key_pos + token.size());
-    size_t first_quote = content.find('"', colon);
-    size_t second_quote = content.find('"', first_quote + 1);
-    if (colon == std::string::npos || first_quote == std::string::npos ||
-        second_quote == std::string::npos) {
-        return fallback;
-    }
-    return content.substr(first_quote + 1, second_quote - first_quote - 1);
-}
-
-std::string JsonUnescape(const std::string& value) {
-    std::string unescaped;
-    unescaped.reserve(value.size());
-    bool escaping = false;
-    for (char character : value) {
-        if (escaping) {
-            switch (character) {
-                case 'n': unescaped.push_back('\n'); break;
-                case 'r': unescaped.push_back('\r'); break;
-                case 't': unescaped.push_back('\t'); break;
-                case 'b': unescaped.push_back('\b'); break;
-                case 'f': unescaped.push_back('\f'); break;
-                default: unescaped.push_back(character); break;
-            }
-            escaping = false;
-            continue;
-        }
-        if (character == '\\') {
-            escaping = true;
-            continue;
-        }
-        unescaped.push_back(character);
-    }
-    if (escaping) {
-        unescaped.push_back('\\');
-    }
-    return unescaped;
-}
-
-std::vector<std::string> ExtractStringArray(const std::string& content, const std::string& key) {
+std::vector<std::string> ExtractStringArray(const Json& root, const char* key) {
     std::vector<std::string> values;
-    const std::string token = "\"" + key + "\"";
-    size_t key_pos = content.find(token);
-    if (key_pos == std::string::npos) {
+    const auto iter = root.find(key);
+    if (iter == root.end() || !iter->is_array()) {
         return values;
     }
-
-    size_t colon = content.find(':', key_pos + token.size());
-    size_t array_start = content.find('[', colon);
-    size_t array_end = content.find(']', array_start);
-    if (colon == std::string::npos ||
-        array_start == std::string::npos ||
-        array_end == std::string::npos) {
-        return values;
+    for (const Json& value : *iter) {
+        if (value.is_string()) {
+            values.push_back(value.get<std::string>());
+        }
     }
-
-    bool in_string = false;
-    bool escaping = false;
-    std::string value;
-    for (size_t index = array_start + 1; index < array_end; ++index) {
-        const char character = content[index];
-        if (!in_string) {
-            if (character == '"') {
-                in_string = true;
-                value.clear();
-            }
-            continue;
-        }
-
-        if (escaping) {
-            switch (character) {
-                case 'n': value.push_back('\n'); break;
-                case 'r': value.push_back('\r'); break;
-                case 't': value.push_back('\t'); break;
-                case 'b': value.push_back('\b'); break;
-                case 'f': value.push_back('\f'); break;
-                default: value.push_back(character); break;
-            }
-            escaping = false;
-            continue;
-        }
-
-        if (character == '\\') {
-            escaping = true;
-            continue;
-        }
-        if (character == '"') {
-            in_string = false;
-            values.push_back(value);
-            continue;
-        }
-        value.push_back(character);
-    }
-
     return values;
 }
 
-std::vector<FavoriteEntry> ExtractFavoriteEntries(const std::string& content,
-                                                  const std::string& key) {
+std::vector<FavoriteEntry> ExtractFavoriteEntries(const Json& root, const char* key) {
     std::vector<FavoriteEntry> favorites;
-    const std::string token = "\"" + key + "\"";
-    size_t key_pos = content.find(token);
-    if (key_pos == std::string::npos) {
+    const auto iter = root.find(key);
+    if (iter == root.end() || !iter->is_array()) {
         return favorites;
     }
 
-    size_t colon = content.find(':', key_pos + token.size());
-    size_t array_start = content.find('[', colon);
-    size_t array_end = content.find(']', array_start);
-    if (colon == std::string::npos ||
-        array_start == std::string::npos ||
-        array_end == std::string::npos) {
-        return favorites;
-    }
-
-    bool in_string = false;
-    bool escaping = false;
-    int object_depth = 0;
-    size_t object_start = std::string::npos;
-    for (size_t index = array_start + 1; index < array_end; ++index) {
-        const char character = content[index];
-        if (in_string) {
-            if (escaping) {
-                escaping = false;
-            } else if (character == '\\') {
-                escaping = true;
-            } else if (character == '"') {
-                in_string = false;
-            }
+    for (const Json& object : *iter) {
+        if (!object.is_object()) {
             continue;
         }
-
-        if (character == '"') {
-            in_string = true;
-            continue;
-        }
-        if (character == '{') {
-            if (object_depth == 0) {
-                object_start = index;
-            }
-            ++object_depth;
-            continue;
-        }
-        if (character != '}' || object_depth == 0) {
-            continue;
-        }
-
-        --object_depth;
-        if (object_depth != 0 || object_start == std::string::npos) {
-            continue;
-        }
-
-        const std::string object = content.substr(object_start, index - object_start + 1);
         const std::string path = EditorConfig::NormalizeFavoritePath(
-            JsonUnescape(ExtractString(object, "path", "")));
+            JsonString(object, "path"));
         if (path.empty()) {
             continue;
         }
         FavoriteEntry favorite;
         favorite.path = path;
-        favorite.row = static_cast<size_t>(std::max(0, ExtractInt(object, "row", 0)));
-        favorite.column = static_cast<size_t>(std::max(0, ExtractInt(object, "column", 0)));
+        favorite.row = JsonSize(object, "row", 0);
+        favorite.column = JsonSize(object, "column", 0);
         favorites.push_back(std::move(favorite));
-        object_start = std::string::npos;
     }
 
     return favorites;
@@ -260,39 +77,32 @@ ConfigManager::ConfigManager(std::filesystem::path path)
 EditorConfig ConfigManager::Load() const {
     EditorConfig config;
     config.SetConfigPath(path_);
-    std::ifstream file(path_);
-    if (!file) {
-        return config;
-    }
-
-    std::string content((std::istreambuf_iterator<char>(file)), {});
-    config.show_line_numbers = ExtractBool(content, "show_line_numbers", config.show_line_numbers);
-    config.show_file_explorer = ExtractBool(
-        content, "show_file_explorer", config.show_file_explorer);
-    config.smart_word_wrap = ExtractBool(content, "smart_word_wrap", config.smart_word_wrap);
-    config.syntax_highlighting = ExtractBool(
-        content, "syntax_highlighting", config.syntax_highlighting);
-    config.auto_pairing = ExtractBool(content, "auto_pairing", config.auto_pairing);
-    config.auto_indent = ExtractBool(content, "auto_indent", config.auto_indent);
-    config.search_match_case = ExtractBool(
-        content, "search_match_case", config.search_match_case);
-    config.search_whole_word = ExtractBool(
-        content, "search_whole_word", config.search_whole_word);
-    config.tab_size = ExtractInt(content, "tab_size", config.tab_size);
+    const Json root = LoadJsonObject(path_);
+    config.show_line_numbers = JsonBool(root, "show_line_numbers", config.show_line_numbers);
+    config.show_file_explorer = JsonBool(
+        root, "show_file_explorer", config.show_file_explorer);
+    config.smart_word_wrap = JsonBool(root, "smart_word_wrap", config.smart_word_wrap);
+    config.syntax_highlighting = JsonBool(
+        root, "syntax_highlighting", config.syntax_highlighting);
+    config.auto_pairing = JsonBool(root, "auto_pairing", config.auto_pairing);
+    config.auto_indent = JsonBool(root, "auto_indent", config.auto_indent);
+    config.search_match_case = JsonBool(root, "search_match_case", config.search_match_case);
+    config.search_whole_word = JsonBool(root, "search_whole_word", config.search_whole_word);
+    config.tab_size = JsonInt(root, "tab_size", config.tab_size);
     if (config.tab_size != 2 && config.tab_size != 4) {
         config.tab_size = 4;
     }
-    config.active_theme_name = ExtractString(
-        content, "active_theme_name", config.active_theme_name);
+    config.active_theme_name = JsonString(
+        root, "active_theme_name", config.active_theme_name);
 
-    std::vector<FavoriteEntry> favorite_entries = ExtractFavoriteEntries(content, "favorites_");
+    std::vector<FavoriteEntry> favorite_entries = ExtractFavoriteEntries(root, "favorites_");
     if (favorite_entries.empty()) {
-        favorite_entries = ExtractFavoriteEntries(content, "favorites");
+        favorite_entries = ExtractFavoriteEntries(root, "favorites");
     }
     if (favorite_entries.empty()) {
-        std::vector<std::string> favorites = ExtractStringArray(content, "favorites_");
+        std::vector<std::string> favorites = ExtractStringArray(root, "favorites_");
         if (favorites.empty()) {
-            favorites = ExtractStringArray(content, "favorites");
+            favorites = ExtractStringArray(root, "favorites");
         }
         for (const std::string& path : favorites) {
             const std::string normalized_path = EditorConfig::NormalizeFavoritePath(path);

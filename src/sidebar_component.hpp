@@ -56,6 +56,8 @@ public:
     void Refresh();
     void SetOpenedFiles(std::vector<OpenedFileEntry> opened_files, size_t active_index);
     void ShowOpenedFiles();
+    void ShowProject();
+    void ToggleOpenedProject();
 
     std::filesystem::path CurrentPath() const { return current_path_; }
 
@@ -71,6 +73,35 @@ public:
             }
         }
         return current_path_;
+    }
+
+    std::filesystem::path GetSelectedFileNameInCurrentDirectory() const {
+        if (mode_ == SidebarMode::Project &&
+            selected_entry_ >= 0 &&
+            selected_entry_ < static_cast<int>(entry_paths_.size()) &&
+            selected_entry_ < static_cast<int>(entry_kinds_.size()) &&
+            entry_kinds_[selected_entry_] == EntryKind::File) {
+            const std::filesystem::path& target_path = entry_paths_[selected_entry_];
+            if (target_path.parent_path() == current_path_) {
+                return target_path.filename();
+            }
+        }
+        return {};
+    }
+
+    std::filesystem::path GetSelectedPathInCurrentDirectory() const {
+        if (mode_ == SidebarMode::Project &&
+            selected_entry_ >= 0 &&
+            selected_entry_ < static_cast<int>(entry_paths_.size()) &&
+            selected_entry_ < static_cast<int>(entry_kinds_.size()) &&
+            (entry_kinds_[selected_entry_] == EntryKind::File ||
+             entry_kinds_[selected_entry_] == EntryKind::Directory)) {
+            const std::filesystem::path& target_path = entry_paths_[selected_entry_];
+            if (target_path.parent_path() == current_path_) {
+                return target_path.filename();
+            }
+        }
+        return {};
     }
 
 private:

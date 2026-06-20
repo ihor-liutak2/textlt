@@ -89,6 +89,13 @@ FileDialogContent::FileDialogContent(const Theme* theme,
 
 void FileDialogContent::Configure(const std::string& title, size_t cursor_position) {
     title_ = title.empty() ? "File" : title;
+    if (title_ == "Create Folder" || title_ == "Delete Folder" || title_ == "Delete File") {
+        label_ = "Name";
+        placeholder_ = title_ == "Delete File" ? "file name" : "folder name";
+    } else {
+        label_ = "Path";
+        placeholder_ = "path/to/file";
+    }
     RebuildInput(cursor_position);
 }
 
@@ -108,7 +115,7 @@ void FileDialogContent::RebuildInput(size_t cursor_position) {
             ftxui::color(theme.modal_input_fg);
     };
 
-    input_ = ftxui::Input(path_, "path/to/file", input_option);
+    input_ = ftxui::Input(path_, placeholder_, input_option);
     container_ = ftxui::Container::Vertical({input_});
 }
 
@@ -129,7 +136,7 @@ ftxui::Element FileDialogContent::Render() {
 
     return vbox({
         hbox({
-            text(" Path: ") | color(theme.modal_text_color),
+            text(" " + label_ + ": ") | color(theme.modal_text_color),
             input_->Render() | xflex | bgcolor(theme.modal_input_bg),
         }),
         error_line,
@@ -175,12 +182,31 @@ ftxui::Component FileDialog::View() const {
 void FileDialog::Open(FilePromptMode mode, const std::string& current_path) {
     mode_ = mode;
     error_.clear();
-    if (mode == FilePromptMode::Open) {
-        title_ = "Open File";
-        path_ = OpenDisplayPath(current_path);
-    } else {
-        title_ = "Save File";
-        path_ = SaveAsDisplayPath(current_path);
+    switch (mode) {
+        case FilePromptMode::Open:
+            title_ = "Open File";
+            path_ = OpenDisplayPath(current_path);
+            break;
+        case FilePromptMode::SaveAs:
+            title_ = "Save File";
+            path_ = SaveAsDisplayPath(current_path);
+            break;
+        case FilePromptMode::CreateFolder:
+            title_ = "Create Folder";
+            path_.clear();
+            break;
+        case FilePromptMode::DeleteFolder:
+            title_ = "Delete Folder";
+            path_.clear();
+            break;
+        case FilePromptMode::DeleteFile:
+            title_ = "Delete File";
+            path_ = current_path;
+            break;
+        case FilePromptMode::None:
+            title_ = "File";
+            path_.clear();
+            break;
     }
 
     content_impl_->SetTheme(theme_);
@@ -210,7 +236,13 @@ void FileDialog::Confirm() {
     path_ = entered_path;
 
     if (entered_path.empty()) {
-        error_ = "Enter a file path.";
+        if (mode_ == FilePromptMode::CreateFolder || mode_ == FilePromptMode::DeleteFolder) {
+            error_ = "Enter a folder name.";
+        } else if (mode_ == FilePromptMode::DeleteFile) {
+            error_ = "Enter a file name.";
+        } else {
+            error_ = "Enter a file path.";
+        }
         return;
     }
 

@@ -73,6 +73,55 @@ bool IsWordDeleteForwardShortcut(const ftxui::Event& event) {
         event == ftxui::Event::Special("\x1B[27;5;3~");
 }
 
+bool IsAltHShortcut(const ftxui::Event& event) {
+    const std::string& input = event.input();
+    return input == "\x1B" "h" ||
+        input == "\x1B" "H" ||
+        input == "Alt+H" ||
+        event == ftxui::Event::Special("Alt+H");
+}
+
+bool IsAltJShortcut(const ftxui::Event& event) {
+    const std::string& input = event.input();
+    return input == "\x1Bj" ||
+        input == "\x1BJ" ||
+        input == "Alt+J" ||
+        event == ftxui::Event::Special("Alt+J");
+}
+
+bool IsAltSShortcut(const ftxui::Event& event) {
+    const std::string& input = event.input();
+    return input == "\x1Bs" ||
+        input == "\x1BS" ||
+        input == "Alt+S" ||
+        event == ftxui::Event::Special("Alt+S");
+}
+
+bool IsCtrlBShortcut(const ftxui::Event& event) {
+    const std::string& input = event.input();
+    return input == "\x02" ||
+        input == "Ctrl+B" ||
+        event == ftxui::Event::Special("\x02") ||
+        event == ftxui::Event::Special("Ctrl+B");
+}
+
+bool IsAltBShortcut(const ftxui::Event& event) {
+    const std::string& input = event.input();
+    return input == "\x1B" "b" ||
+        input == "\x1B" "B" ||
+        input == "Alt+B" ||
+        event == ftxui::Event::Special("Alt+B");
+}
+
+bool IsOpenedSidebarChordKey(const ftxui::Event& event) {
+    const std::string& input = event.input();
+    return input == "o" ||
+        input == "O" ||
+        input == "\x0F" ||
+        input == "Ctrl+O" ||
+        event == ftxui::Event::Special("Ctrl+O");
+}
+
 } // namespace
 
 ftxui::Element TextltApp::Render() {
@@ -172,11 +221,23 @@ ftxui::Element TextltApp::Render() {
     if (file_dialog_.IsOpen()) {
         layers.push_back(file_dialog_.View()->Render() | clear_under | center);
     }
+    if (path_operation_dialog_.IsOpen()) {
+        layers.push_back(path_operation_dialog_.View()->Render() | clear_under | center);
+    }
     if (help_dialog_.IsOpen()) {
         layers.push_back(help_dialog_.View()->Render() | clear_under | center);
     }
     if (theme_dialog_.IsOpen()) {
         layers.push_back(theme_dialog_.View()->Render() | clear_under | center);
+    }
+    if (tts_modal_.IsOpen()) {
+        layers.push_back(tts_modal_.View()->Render() | clear_under | center);
+    }
+    if (ai_actions_modal_.IsOpen()) {
+        layers.push_back(ai_actions_modal_.View()->Render() | clear_under | center);
+    }
+    if (assistant_settings_modal_.IsOpen()) {
+        layers.push_back(assistant_settings_modal_.View()->Render() | clear_under | center);
     }
     if (unsaved_changes_dialog_.IsOpen()) {
         layers.push_back(unsaved_changes_dialog_.View()->Render() | clear_under | center);
@@ -293,6 +354,49 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         return true; // Consume all other events.
     }
 
+    // 3. Assistant Modals
+    if (assistant_settings_modal_.IsOpen()) {
+        if (assistant_settings_modal_.OnEvent(event)) {
+            if (!assistant_settings_modal_.IsOpen()) {
+                FocusEditor();
+            }
+            return true;
+        }
+        if (event == ftxui::Event::Escape) {
+            CloseAssistantSettingsModal();
+            return true;
+        }
+        return true;
+    }
+
+    if (ai_actions_modal_.IsOpen()) {
+        if (ai_actions_modal_.OnEvent(event)) {
+            if (!ai_actions_modal_.IsOpen()) {
+                FocusEditor();
+            }
+            return true;
+        }
+        if (event == ftxui::Event::Escape) {
+            CloseAiActionsModal();
+            return true;
+        }
+        return true;
+    }
+
+    if (tts_modal_.IsOpen()) {
+        if (tts_modal_.OnEvent(event)) {
+            if (!tts_modal_.IsOpen()) {
+                FocusEditor();
+            }
+            return true;
+        }
+        if (event == ftxui::Event::Escape) {
+            CloseTtsModal();
+            return true;
+        }
+        return true;
+    }
+
     // 3. Help Dialog
     if (help_dialog_.IsOpen()) {
         if (help_dialog_.OnEvent(event)) { // HelpDialog has its own OnEvent
@@ -315,6 +419,17 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
             return true;
         }
         return true; // Consume all other events.
+    }
+
+    if (path_operation_dialog_.IsOpen()) {
+        if (path_operation_dialog_.View()->OnEvent(event)) {
+            return true;
+        }
+        if (event == ftxui::Event::Escape) {
+            ClosePathOperationDialog();
+            return true;
+        }
+        return true;
     }
 
     // 5. Menu Bar: keyboard events belong here only while a dropdown is open.
@@ -370,11 +485,73 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     // --- End Global Event Filter ---
     // Events reaching this point are not consumed by any active modal or overlay.
 
+    if (IsAltJShortcut(event)) {
+        OpenAiActionsModal();
+        return true;
+    }
+    if (IsAltSShortcut(event)) {
+        OpenAssistantSettingsModal();
+        return true;
+    }
+
     if (input == "\x1Bw" ||
         input == "\x1BW" ||
         input == "Alt+W" ||
         event == ftxui::Event::Special("Alt+W")) {
         CloseCurrentFile();
+        return true;
+    }
+
+    if (pending_sidebar_chord_) {
+        pending_sidebar_chord_ = false;
+        if (IsOpenedSidebarChordKey(event)) {
+            ShowOpenedFilesSidebar();
+            return true;
+        }
+    }
+
+    if (IsAltBShortcut(event)) {
+        pending_sidebar_chord_ = false;
+        ToggleSidebarOpenedProject();
+        return true;
+    }
+
+    if (IsCtrlBShortcut(event)) {
+        pending_sidebar_chord_ = true;
+        HandleCtrlBFileExplorer();
+        return true;
+    }
+
+    if (editor_config_.show_file_explorer &&
+        event.is_mouse() &&
+        sidebar_panel_->OnEvent(event)) {
+        sidebar_has_focus_ = true;
+        focused_layer_ = 0;
+        screen_.PostEvent(ftxui::Event::Custom);
+        return true;
+    }
+
+    const bool sidebar_is_focused = focused_layer_ == 0 && sidebar_has_focus_;
+    if (sidebar_is_focused) {
+        if (event == ftxui::Event::Escape) {
+            FocusEditor();
+            return true;
+        }
+        if (event == ftxui::Event::ArrowUp ||
+            event == ftxui::Event::ArrowDown ||
+            event == ftxui::Event::Return ||
+            input == "\x0A") {
+            const ftxui::Event sidebar_event =
+                input == "\x0A" ? ftxui::Event::Return : event;
+            if (sidebar_panel_->OnEvent(sidebar_event)) {
+                screen_.PostEvent(ftxui::Event::Custom);
+                return true;
+            }
+        }
+    }
+
+    if (IsAltHShortcut(event)) {
+        OpenTtsModal();
         return true;
     }
 
@@ -419,15 +596,6 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
             screen_.PostEvent(ftxui::Event::Custom);
             return true;
         }
-        // Ctrl+J (TTS Debug)
-        if (event == ftxui::Event::Special("\x0A") ||
-            input == "\x0A" ||
-            event == ftxui::Event::Special("Ctrl+J") ||
-            input == "Ctrl+J") {
-            QueueCloudTtsDebugFromCursor();
-            return true;
-        }
-
         // Pass all other editor-specific events (characters, navigation, etc.) to the editor.
         if (text_editor_->OnEvent(event)) {
             return true;

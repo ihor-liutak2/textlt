@@ -2,29 +2,12 @@
 
 #include <algorithm>
 #include <cstdlib>
-#include <fstream>
 #include <system_error>
+
+#include "json_utils.hpp"
 
 namespace textlt {
 namespace {
-
-std::string JsonEscape(const std::string& value) {
-    std::string escaped;
-    escaped.reserve(value.size());
-    for (char character : value) {
-        switch (character) {
-            case '\\': escaped += "\\\\"; break;
-            case '"': escaped += "\\\""; break;
-            case '\b': escaped += "\\b"; break;
-            case '\f': escaped += "\\f"; break;
-            case '\n': escaped += "\\n"; break;
-            case '\r': escaped += "\\r"; break;
-            case '\t': escaped += "\\t"; break;
-            default: escaped.push_back(character); break;
-        }
-    }
-    return escaped;
-}
 
 std::filesystem::path UserConfigDirectory() {
 #ifdef _WIN32
@@ -64,61 +47,27 @@ std::filesystem::path UserHomeDirectory() {
 }
 
 bool WriteConfigAtomically(const std::filesystem::path& path, const EditorConfig& config) {
-    std::error_code error;
-    const std::filesystem::path parent = path.parent_path();
-    if (!parent.empty()) {
-        std::filesystem::create_directories(parent, error);
-        if (error) {
-            return false;
-        }
+    Json root = {
+        {"show_line_numbers", config.show_line_numbers},
+        {"show_file_explorer", config.show_file_explorer},
+        {"smart_word_wrap", config.smart_word_wrap},
+        {"syntax_highlighting", config.syntax_highlighting},
+        {"auto_pairing", config.auto_pairing},
+        {"auto_indent", config.auto_indent},
+        {"search_match_case", config.search_match_case},
+        {"search_whole_word", config.search_whole_word},
+        {"tab_size", config.tab_size},
+        {"active_theme_name", config.active_theme_name},
+        {"favorites_", Json::array()},
+    };
+    for (const FavoriteEntry& favorite : config.favorites_) {
+        root["favorites_"].push_back({
+            {"path", favorite.path},
+            {"row", favorite.row},
+            {"column", favorite.column},
+        });
     }
-
-    const std::filesystem::path temp_path = path.string() + ".tmp";
-    {
-        std::ofstream file(temp_path, std::ios::binary | std::ios::trunc);
-        if (!file) {
-            return false;
-        }
-
-        file << "{\n";
-        file << "  \"show_line_numbers\": " << (config.show_line_numbers ? "true" : "false") << ",\n";
-        file << "  \"show_file_explorer\": " << (config.show_file_explorer ? "true" : "false") << ",\n";
-        file << "  \"smart_word_wrap\": " << (config.smart_word_wrap ? "true" : "false") << ",\n";
-        file << "  \"syntax_highlighting\": " << (config.syntax_highlighting ? "true" : "false") << ",\n";
-        file << "  \"auto_pairing\": " << (config.auto_pairing ? "true" : "false") << ",\n";
-        file << "  \"auto_indent\": " << (config.auto_indent ? "true" : "false") << ",\n";
-        file << "  \"search_match_case\": " << (config.search_match_case ? "true" : "false") << ",\n";
-        file << "  \"search_whole_word\": " << (config.search_whole_word ? "true" : "false") << ",\n";
-        file << "  \"tab_size\": " << config.tab_size << ",\n";
-        file << "  \"active_theme_name\": \"" << JsonEscape(config.active_theme_name) << "\",\n";
-        file << "  \"favorites_\": [\n";
-        for (size_t index = 0; index < config.favorites_.size(); ++index) {
-            const FavoriteEntry& favorite = config.favorites_[index];
-            file << "    {\n";
-            file << "      \"path\": \"" << JsonEscape(favorite.path) << "\",\n";
-            file << "      \"row\": " << favorite.row << ",\n";
-            file << "      \"column\": " << favorite.column << "\n";
-            file << "    }";
-            if (index + 1 < config.favorites_.size()) {
-                file << ",";
-            }
-            file << "\n";
-        }
-        file << "  ]\n";
-        file << "}\n";
-        file.flush();
-        if (!file) {
-            std::filesystem::remove(temp_path, error);
-            return false;
-        }
-    }
-
-    std::filesystem::rename(temp_path, path, error);
-    if (error) {
-        std::filesystem::remove(temp_path, error);
-        return false;
-    }
-    return true;
+    return WriteJsonAtomically(path, root);
 }
 
 } // namespace

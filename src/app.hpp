@@ -14,9 +14,11 @@
 #include "editor_config.hpp"
 #include "modals/file_dialog.hpp"
 #include "git_manager.hpp"
+#include "modals/assistant_modals.hpp"
 #include "modals/help_dialog.hpp"
 #include "menu_bar.hpp"
 #include "opened_config.hpp"
+#include "modals/path_operation_dialog.hpp"
 #include "sidebar_component.hpp"
 #include "modals/theme_dialog.hpp"
 #include "modals/unsaved_changes_dialog.hpp"
@@ -41,9 +43,20 @@ private:
     void OpenDropdown();
     void CloseFileDialog();
     void OpenFileDialog(FilePromptMode mode);
+    void ClosePathOperationDialog();
+    void OpenPathOperationDialog(PathOperationMode mode);
+    std::filesystem::path CurrentSidebarDirectory() const;
+    std::string SelectedSidebarFileName() const;
+    std::string SelectedSidebarPathName() const;
     void OpenAboutDialog();
     void OpenHelpDialog();
     void CloseHelpDialog();
+    void OpenTtsModal();
+    void CloseTtsModal();
+    void OpenAiActionsModal();
+    void CloseAiActionsModal();
+    void OpenAssistantSettingsModal();
+    void CloseAssistantSettingsModal();
     void OpenThemeDialog();
     void CloseThemeDialog();
     void ShowExitConfirmationDialog();
@@ -57,6 +70,14 @@ private:
     void FocusSidebar();
     bool SaveFile(const std::string& path, std::string& error);
     bool OpenFile(const std::string& path, std::string& error);
+    bool CreateFolderInCurrentDirectory(const std::string& name, std::string& error);
+    bool DeleteFolderInCurrentDirectory(const std::string& name, std::string& error);
+    bool DeleteFileInCurrentDirectory(const std::string& name, std::string& error);
+    bool ConfirmPathOperation(
+        PathOperationMode mode,
+        const std::string& from,
+        const std::string& to,
+        std::string& error);
     void ActivateOpenDocument(size_t index);
     int FindOpenDocument(const std::filesystem::path& path) const;
     void AddOpenDocument(std::shared_ptr<Document> doc);
@@ -85,6 +106,7 @@ private:
     void ToggleActiveFavorite();
     void UpdateFileMenuLabels();
     void UpdateOptionsMenuLabels();
+    void RefreshProjectSidebar();
     void RunDropdownAction(int menu_index, int item_index);
     ftxui::Element Render();
     ftxui::Element RenderFindPanel();
@@ -96,17 +118,30 @@ private:
     void OpenGoToLinePanel();
     void CloseGoToLinePanel();
     void SubmitGoToLine();
+    void ToggleFileExplorer();
+    void HandleCtrlBFileExplorer();
+    void ShowOpenedFilesSidebar();
+    void ToggleSidebarOpenedProject();
     void RefreshFindMatches();
     void FindNext();
     void FindPrevious();
     void ReplaceNext();
     void ReplaceAll();
     std::string FindMatchStatus() const;
+    std::vector<std::string> CurrentProjectPathCandidates() const;
+    bool ResolveProjectRelativePath(
+        const std::string& path,
+        std::filesystem::path* resolved,
+        std::string& error) const;
+    void UpdateOpenDocumentPathsAfterMove(
+        const std::filesystem::path& from,
+        const std::filesystem::path& to);
     
     // Sub-routers for handling dropdown actions by category
     void HandleFileMenu(int item);
     void HandleEditMenu(int item);
     void HandleOptionsMenu(int item);
+    void HandleAiMenu(int item);
     
     // Platform-specific clipboard abstraction utilities
     std::string ReadSystemClipboard();
@@ -122,7 +157,11 @@ private:
     ftxui::Component text_editor_;
     ftxui::Component sidebar_panel_;
     FileDialog file_dialog_;
+    PathOperationDialog path_operation_dialog_;
     HelpDialog help_dialog_;
+    TtsModal tts_modal_;
+    AiActionsModal ai_actions_modal_;
+    AssistantSettingsModal assistant_settings_modal_;
     ThemeDialog theme_dialog_;
     UnsavedChangesDialog unsaved_changes_dialog_;
     CloudTtsPipeline cloud_tts_pipeline_;
@@ -139,6 +178,7 @@ private:
     int focused_layer_ = 0;
     int search_panel_tab_index_ = 0;
     bool sidebar_has_focus_ = false;
+    bool pending_sidebar_chord_ = false;
     bool show_goto_line_bar_ = false;
     bool exit_after_save_as_ = false;
     SearchMode current_search_mode_ = SearchMode::None;

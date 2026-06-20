@@ -15,6 +15,9 @@ enum class FilePromptMode {
     None,
     Open,
     SaveAs,
+    CreateFolder,
+    DeleteFolder,
+    DeleteFile,
 };
 
 class FileDialogContent : public IModalContent {
@@ -41,6 +44,8 @@ private:
     std::string* path_ = nullptr;
     std::string* error_ = nullptr;
     std::string title_ = "File";
+    std::string label_ = "Path";
+    std::string placeholder_ = "path/to/file";
     ConfirmAction on_confirm_;
     ftxui::Component input_;
     ftxui::Component container_;

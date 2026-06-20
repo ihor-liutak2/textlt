@@ -265,6 +265,30 @@ ftxui::Element ModalWindow::Render() {
 }
 
 bool ModalWindow::OnEvent(ftxui::Event event) {
+    if (event.is_mouse()) {
+        if (ComponentBase::OnEvent(event)) {
+            return true;
+        }
+        return true;
+    }
+
+    if ((event == ftxui::Event::ArrowLeft || event == ftxui::Event::ArrowRight) &&
+        active_child_index_ == 0) {
+        if (ftxui::Component active = ActiveChild()) {
+            active->OnEvent(event);
+        }
+        return true;
+    }
+
+    if ((event == ftxui::Event::Tab || event == ftxui::Event::TabReverse) &&
+        active_child_index_ == 0) {
+        if (ftxui::Component active = ActiveChild()) {
+            if (active->OnEvent(event)) {
+                return true;
+            }
+        }
+    }
+
     if (event == ftxui::Event::ArrowLeft || event == ftxui::Event::TabReverse) {
         MoveActionFocus(-1);
         return true;
@@ -272,13 +296,6 @@ bool ModalWindow::OnEvent(ftxui::Event event) {
 
     if (event == ftxui::Event::ArrowRight || event == ftxui::Event::Tab) {
         MoveActionFocus(1);
-        return true;
-    }
-
-    if (event.is_mouse()) {
-        if (ComponentBase::OnEvent(event)) {
-            return true;
-        }
         return true;
     }
 

@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 
 #include "ftxui/component/component_options.hpp"
 #include "theme.hpp"
@@ -34,6 +35,27 @@ bool IsWslEnvironment() {
     }
     return CommandAvailable("clip.exe");
 #endif
+}
+
+bool IsPlainFolderName(const std::string& name) {
+    return !name.empty() &&
+           name != "." &&
+           name != ".." &&
+           name.find('/') == std::string::npos &&
+           name.find('\\') == std::string::npos &&
+           !std::filesystem::path(name).has_parent_path() &&
+           !std::filesystem::path(name).is_absolute();
+}
+
+std::string WithTrailingSeparator(std::filesystem::path path) {
+    std::string value = path.lexically_normal().string();
+    if (value.empty()) {
+        value = std::filesystem::current_path().string();
+    }
+    if (!value.empty() && value.back() != '/' && value.back() != '\\') {
+        value += std::filesystem::path::preferred_separator;
+    }
+    return value;
 }
 
 FILE* OpenPipe(const std::string& command, const char* mode) {
@@ -110,11 +132,16 @@ std::vector<std::string> BuiltInHelpLines() {
         "  Ctrl+V        Paste clipboard text",
         "  Ctrl+Shift+V  Paste when terminal reserves Ctrl+V",
         "",
-        "Cloud TTS",
-        "  Ctrl+J        Read text from cursor",
+        "AI",
+        "  Alt+H         Open Text-to-Speech",
+        "  Alt+J         Open AI Actions",
+        "  Alt+S         Open Assistant Settings",
         "",
         "Menus",
         "  Tab           Switch focus from File Explorer to Editor",
+        "  Ctrl+B        Toggle File Explorer",
+        "  Ctrl+B, O     Open File Explorer on the Opened tab",
+        "  Alt+B         Toggle File Explorer between Opened and Project",
         "  F1            Open this help window",
         "  F2            Open the File menu",
         "  F3            Open the Edit menu",
@@ -177,7 +204,17 @@ TextltApp::TextltApp()
           std::string& error) {
           return ConfirmFileDialog(mode, path, error);
       }),
+      path_operation_dialog_(&current_theme_, [this](
+          PathOperationMode mode,
+          const std::string& from,
+          const std::string& to,
+          std::string& error) {
+          return ConfirmPathOperation(mode, from, to, error);
+      }),
       help_dialog_(&current_theme_),
+      tts_modal_(&current_theme_),
+      ai_actions_modal_(&current_theme_),
+      assistant_settings_modal_(&current_theme_),
       theme_dialog_(
           &current_theme_,
           [this](const std::string& theme_name) { PreviewTheme(theme_name); },
@@ -207,6 +244,9 @@ TextltApp::TextltApp()
             (!menu_bar_ || !menu_bar_->IsDropdownOpen()) &&
             !file_dialog_.IsOpen() &&
             !help_dialog_.IsOpen() &&
+            !tts_modal_.IsOpen() &&
+            !ai_actions_modal_.IsOpen() &&
+            !assistant_settings_modal_.IsOpen() &&
             !theme_dialog_.IsOpen() &&
             !sidebar_has_focus_) {
             text_editor_->OnEvent(event);
@@ -309,11 +349,15 @@ TextltApp::TextltApp()
     root_container_ = ftxui::Container::Tab({
         main_container_,
         file_dialog_.View(),
+        path_operation_dialog_.View(),
         help_dialog_.View(),
         theme_dialog_.View(),
         find_panel_container_,
         goto_line_input_component_,
         unsaved_changes_dialog_.View(),
+        tts_modal_.View(),
+        ai_actions_modal_.View(),
+        assistant_settings_modal_.View(),
     }, &focused_layer_);
 
     renderer_ = ftxui::Renderer(root_container_, [this] { return Render(); });
@@ -365,28 +409,62 @@ void TextltApp::CloseFileDialog() {
     FocusEditor();
 }
 
+void TextltApp::ClosePathOperationDialog() {
+    path_operation_dialog_.Close();
+    focused_layer_ = 0;
+    FocusEditor();
+}
+
 void TextltApp::OpenFileDialog(FilePromptMode mode) {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
     focused_layer_ = 1;
-    
-    std::string default_path = std::static_pointer_cast<EditorComponent>(text_editor_)->CurrentFilePath();
-    
-    // If the active file has no path or is an untitled draft, sync with the sidebar selection.
-    if (default_path.empty() || default_path == "Untitled" || default_path == "untitled.txt") {
-        auto sidebar_ptr = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
-        
-        // Dynamic path acquisition directly from the highlighted tree node.
-        default_path = sidebar_ptr->GetSelectedDirectoryPath().string();
-        
-        // Append trailing slash so the path is prepared for filename entry instantly
-        if (!default_path.empty() && default_path.back() != '/') {
-            default_path += "/";
+
+    std::string default_path = WithTrailingSeparator(CurrentSidebarDirectory());
+    if (mode == FilePromptMode::SaveAs) {
+        const std::string current_path =
+            std::static_pointer_cast<EditorComponent>(text_editor_)->CurrentFilePath();
+        if (!current_path.empty() &&
+            current_path != "Untitled" &&
+            current_path != "untitled.txt") {
+            const std::string filename = std::filesystem::path(current_path).filename().string();
+            if (!filename.empty()) {
+                default_path += filename;
+            }
         }
+    } else if (mode == FilePromptMode::DeleteFile) {
+        default_path = SelectedSidebarFileName();
     }
-    
+
     file_dialog_.Open(mode, default_path);
+}
+
+void TextltApp::OpenPathOperationDialog(PathOperationMode mode) {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+    focused_layer_ = 2;
+    path_operation_dialog_.Open(
+        mode,
+        SelectedSidebarPathName(),
+        CurrentProjectPathCandidates());
+}
+
+std::filesystem::path TextltApp::CurrentSidebarDirectory() const {
+    return std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->CurrentPath();
+}
+
+std::string TextltApp::SelectedSidebarFileName() const {
+    return std::static_pointer_cast<SidebarPanel>(sidebar_panel_)
+        ->GetSelectedFileNameInCurrentDirectory()
+        .string();
+}
+
+std::string TextltApp::SelectedSidebarPathName() const {
+    return std::static_pointer_cast<SidebarPanel>(sidebar_panel_)
+        ->GetSelectedPathInCurrentDirectory()
+        .string();
 }
 
 void TextltApp::OpenAboutDialog() {
@@ -405,7 +483,7 @@ void TextltApp::OpenAboutDialog() {
         "License: MIT License (c) 2026",
     }, true);
     active_action_ = "Opened About";
-    focused_layer_ = 2;
+    focused_layer_ = 3;
 }
 
 void TextltApp::OpenHelpDialog() {
@@ -414,7 +492,7 @@ void TextltApp::OpenHelpDialog() {
     }
     help_dialog_.OpenContent("Help", BuiltInHelpLines(), false);
     active_action_ = "Opened Help";
-    focused_layer_ = 2;
+    focused_layer_ = 3;
 }
 
 void TextltApp::CloseHelpDialog() {
@@ -423,11 +501,53 @@ void TextltApp::CloseHelpDialog() {
     FocusEditor();
 }
 
+void TextltApp::OpenTtsModal() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+    tts_modal_.Open();
+    active_action_ = "Opened Text-to-Speech";
+    focused_layer_ = 8;
+}
+
+void TextltApp::CloseTtsModal() {
+    tts_modal_.Close();
+    FocusEditor();
+}
+
+void TextltApp::OpenAiActionsModal() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+    ai_actions_modal_.Open();
+    active_action_ = "Opened AI Actions";
+    focused_layer_ = 9;
+}
+
+void TextltApp::CloseAiActionsModal() {
+    ai_actions_modal_.Close();
+    FocusEditor();
+}
+
+void TextltApp::OpenAssistantSettingsModal() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+    assistant_settings_modal_.Open();
+    active_action_ = "Opened Assistant Settings";
+    focused_layer_ = 10;
+}
+
+void TextltApp::CloseAssistantSettingsModal() {
+    assistant_settings_modal_.Close();
+    FocusEditor();
+}
+
 void TextltApp::OpenThemeDialog() {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
-    focused_layer_ = 3;
+    focused_layer_ = 4;
     theme_dialog_.Open(themes_, editor_config_.active_theme_name);
 }
 
@@ -448,7 +568,7 @@ void TextltApp::ShowExitConfirmationDialog() {
     const std::string display_name = filename.empty() ? file_path : filename;
 
     unsaved_changes_dialog_.Open(display_name);
-    focused_layer_ = 6;
+    focused_layer_ = 7;
     active_action_ = "Unsaved changes";
     screen_.PostEvent(ftxui::Event::Custom);
 }
@@ -462,6 +582,16 @@ void TextltApp::CloseExitConfirmationDialog() {
 
 void TextltApp::RequestExit() {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    const bool has_only_empty_memory_document =
+        open_documents_.size() == 1 &&
+        IsMemoryOnlyDocument(open_documents_.front()) &&
+        editor_ptr->GetAllText().empty();
+    if (has_only_empty_memory_document) {
+        PersistActiveFavoriteCursor();
+        screen_.Exit();
+        return;
+    }
+
     if (editor_ptr->IsDirty()) {
         ShowExitConfirmationDialog();
         return;
@@ -524,13 +654,79 @@ void TextltApp::FocusSidebar() {
     std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->FocusMenu();
 }
 
+void TextltApp::ToggleFileExplorer() {
+    editor_config_.show_file_explorer = !editor_config_.show_file_explorer;
+    if (editor_config_.show_file_explorer) {
+        active_action_ = "File Explorer enabled";
+        FocusSidebar();
+    } else {
+        active_action_ = "File Explorer disabled";
+        FocusEditor();
+    }
+    SaveConfig();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::HandleCtrlBFileExplorer() {
+    auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
+    if (!editor_config_.show_file_explorer) {
+        editor_config_.show_file_explorer = true;
+        sidebar->ShowProject();
+        active_action_ = "File Explorer enabled";
+        FocusSidebar();
+        SaveConfig();
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+
+    if (!sidebar_has_focus_) {
+        sidebar->ShowProject();
+        active_action_ = "Project files";
+        FocusSidebar();
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+
+    editor_config_.show_file_explorer = false;
+    active_action_ = "File Explorer disabled";
+    FocusEditor();
+    SaveConfig();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::ShowOpenedFilesSidebar() {
+    if (!editor_config_.show_file_explorer) {
+        editor_config_.show_file_explorer = true;
+        SaveConfig();
+    }
+
+    auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
+    sidebar->ShowOpenedFiles();
+    FocusSidebar();
+    active_action_ = "Opened files";
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::ToggleSidebarOpenedProject() {
+    if (!editor_config_.show_file_explorer) {
+        editor_config_.show_file_explorer = true;
+        SaveConfig();
+    }
+
+    auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
+    sidebar->ToggleOpenedProject();
+    FocusSidebar();
+    active_action_ = "Switched File Explorer tab";
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
 void TextltApp::OpenFindPanel(bool replace_mode) {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
     current_search_mode_ = replace_mode ? SearchMode::Replace : SearchMode::Find;
     search_panel_tab_index_ = replace_mode ? 1 : 0;
-    focused_layer_ = 4;
+    focused_layer_ = 5;
     RefreshFindMatches();
     if (replace_mode) {
         replace_find_input_->TakeFocus();
@@ -553,7 +749,7 @@ void TextltApp::OpenGoToLinePanel() {
     std::static_pointer_cast<EditorComponent>(text_editor_)->ClearSearchHighlights();
     show_goto_line_bar_ = true;
     goto_line_input_.clear();
-    focused_layer_ = 5;
+    focused_layer_ = 6;
     goto_line_input_component_->TakeFocus();
     active_action_ = "Go to line";
 }
@@ -591,6 +787,7 @@ bool TextltApp::SaveFile(const std::string& path, std::string& error) {
             throw std::runtime_error(error);
         }
         RefreshOpenedDocumentsSidebar();
+        RefreshProjectSidebar();
         git_manager_.SetWorkingDirectory(std::filesystem::path(path).parent_path());
         git_manager_.Invalidate();
         PersistOpenedDocuments();
@@ -1042,9 +1239,23 @@ bool TextltApp::ConfirmFileDialog(
     std::string& error) {
     bool success = false;
     if (mode == FilePromptMode::Open) {
-        success = OpenFile(path, error);
+        std::filesystem::path file_path(path);
+        if (!file_path.is_absolute()) {
+            file_path = CurrentSidebarDirectory() / file_path;
+        }
+        success = OpenFile(file_path.string(), error);
     } else if (mode == FilePromptMode::SaveAs) {
-        success = SaveFile(path, error);
+        std::filesystem::path file_path(path);
+        if (!file_path.is_absolute()) {
+            file_path = CurrentSidebarDirectory() / file_path;
+        }
+        success = SaveFile(file_path.string(), error);
+    } else if (mode == FilePromptMode::CreateFolder) {
+        success = CreateFolderInCurrentDirectory(path, error);
+    } else if (mode == FilePromptMode::DeleteFolder) {
+        success = DeleteFolderInCurrentDirectory(path, error);
+    } else if (mode == FilePromptMode::DeleteFile) {
+        success = DeleteFileInCurrentDirectory(path, error);
     } else {
         error = "No file action selected.";
         return false;
@@ -1056,6 +1267,237 @@ bool TextltApp::ConfirmFileDialog(
         screen_.Exit();
     }
     return success;
+}
+
+bool TextltApp::CreateFolderInCurrentDirectory(const std::string& name, std::string& error) {
+    if (!IsPlainFolderName(name)) {
+        error = "Enter only a folder name.";
+        return false;
+    }
+
+    const std::filesystem::path folder_name(name);
+    const std::filesystem::path target = CurrentSidebarDirectory() / folder_name;
+    std::error_code status_error;
+    if (std::filesystem::exists(target, status_error)) {
+        error = "Folder already exists.";
+        return false;
+    }
+
+    std::error_code create_error;
+    if (!std::filesystem::create_directory(target, create_error) || create_error) {
+        error = create_error ? create_error.message() : "Unable to create folder.";
+        return false;
+    }
+
+    RefreshProjectSidebar();
+    git_manager_.Invalidate();
+    active_action_ = "Created folder " + target.filename().string();
+    screen_.PostEvent(ftxui::Event::Custom);
+    return true;
+}
+
+bool TextltApp::DeleteFileInCurrentDirectory(const std::string& name, std::string& error) {
+    if (!IsPlainFolderName(name)) {
+        error = "Enter only a file name.";
+        return false;
+    }
+
+    const std::filesystem::path file_name(name);
+    const std::filesystem::path target = CurrentSidebarDirectory() / file_name;
+    std::error_code status_error;
+    if (!std::filesystem::is_regular_file(target, status_error)) {
+        error = "File does not exist.";
+        return false;
+    }
+
+    std::error_code remove_error;
+    if (!std::filesystem::remove(target, remove_error) || remove_error) {
+        error = remove_error ? remove_error.message() : "Unable to delete file.";
+        return false;
+    }
+
+    RefreshProjectSidebar();
+    git_manager_.Invalidate();
+    active_action_ = "Deleted file " + target.filename().string();
+    screen_.PostEvent(ftxui::Event::Custom);
+    return true;
+}
+
+bool TextltApp::DeleteFolderInCurrentDirectory(const std::string& name, std::string& error) {
+    if (!IsPlainFolderName(name)) {
+        error = "Enter only a folder name.";
+        return false;
+    }
+
+    const std::filesystem::path folder_name(name);
+    const std::filesystem::path target = CurrentSidebarDirectory() / folder_name;
+    std::error_code status_error;
+    if (!std::filesystem::is_directory(target, status_error)) {
+        error = "Folder does not exist.";
+        return false;
+    }
+
+    std::error_code remove_error;
+    if (!std::filesystem::remove(target, remove_error) || remove_error) {
+        error = remove_error ? remove_error.message() : "Unable to delete folder.";
+        return false;
+    }
+
+    RefreshProjectSidebar();
+    git_manager_.Invalidate();
+    active_action_ = "Deleted folder " + target.filename().string();
+    screen_.PostEvent(ftxui::Event::Custom);
+    return true;
+}
+
+std::vector<std::string> TextltApp::CurrentProjectPathCandidates() const {
+    std::vector<std::string> candidates;
+    const std::filesystem::path root = CurrentSidebarDirectory();
+    std::error_code error;
+    if (!std::filesystem::is_directory(root, error)) {
+        return candidates;
+    }
+
+    std::filesystem::recursive_directory_iterator iter(
+        root,
+        std::filesystem::directory_options::skip_permission_denied,
+        error);
+    const std::filesystem::recursive_directory_iterator end;
+    for (; !error && iter != end; iter.increment(error)) {
+        const std::filesystem::directory_entry& entry = *iter;
+        std::error_code status_error;
+        if (!entry.is_directory(status_error) && !entry.is_regular_file(status_error)) {
+            continue;
+        }
+
+        const std::filesystem::path relative = entry.path().lexically_relative(root);
+        if (!relative.empty()) {
+            candidates.push_back(relative.generic_string());
+        }
+    }
+
+    std::sort(candidates.begin(), candidates.end());
+    return candidates;
+}
+
+bool TextltApp::ResolveProjectRelativePath(
+    const std::string& path,
+    std::filesystem::path* resolved,
+    std::string& error) const {
+    if (path.empty()) {
+        error = "Enter a path.";
+        return false;
+    }
+
+    std::filesystem::path relative(path);
+    if (relative.is_absolute()) {
+        error = "Use a path inside the current folder.";
+        return false;
+    }
+
+    relative = relative.lexically_normal();
+    if (relative.empty() || relative == ".") {
+        error = "Enter a path.";
+        return false;
+    }
+
+    for (const std::filesystem::path& part : relative) {
+        if (part == "..") {
+            error = "Use a path inside the current folder.";
+            return false;
+        }
+    }
+
+    if (resolved) {
+        *resolved = (CurrentSidebarDirectory() / relative).lexically_normal();
+    }
+    return true;
+}
+
+void TextltApp::UpdateOpenDocumentPathsAfterMove(
+    const std::filesystem::path& from,
+    const std::filesystem::path& to) {
+    const std::filesystem::path source = std::filesystem::absolute(from).lexically_normal();
+    const std::filesystem::path destination = std::filesystem::absolute(to).lexically_normal();
+    bool changed = false;
+
+    for (const auto& doc : open_documents_) {
+        if (!doc || doc->path.empty() || doc->path == "Untitled" || doc->path == "untitled.txt") {
+            continue;
+        }
+
+        const std::filesystem::path document_path =
+            std::filesystem::absolute(doc->path).lexically_normal();
+        if (document_path == source) {
+            doc->SetPath(destination);
+            changed = true;
+            continue;
+        }
+
+        const std::filesystem::path relative = document_path.lexically_relative(source);
+        if (!relative.empty()) {
+            auto iter = relative.begin();
+            if (iter != relative.end() && *iter != "..") {
+                doc->SetPath(destination / relative);
+                changed = true;
+            }
+        }
+    }
+
+    if (changed) {
+        RefreshOpenedDocumentsSidebar();
+        PersistOpenedDocuments();
+    }
+}
+
+bool TextltApp::ConfirmPathOperation(
+    PathOperationMode mode,
+    const std::string& from,
+    const std::string& to,
+    std::string& error) {
+    std::filesystem::path source;
+    std::filesystem::path destination;
+    if (!ResolveProjectRelativePath(from, &source, error) ||
+        !ResolveProjectRelativePath(to, &destination, error)) {
+        return false;
+    }
+
+    if (source == destination) {
+        error = "Source and destination are the same.";
+        return false;
+    }
+
+    std::error_code status_error;
+    if (!std::filesystem::exists(source, status_error)) {
+        error = "Source does not exist.";
+        return false;
+    }
+    if (std::filesystem::exists(destination, status_error)) {
+        error = "Destination already exists.";
+        return false;
+    }
+
+    const std::filesystem::path parent = destination.parent_path();
+    if (parent.empty() || !std::filesystem::is_directory(parent, status_error)) {
+        error = "Destination folder does not exist.";
+        return false;
+    }
+
+    std::error_code rename_error;
+    std::filesystem::rename(source, destination, rename_error);
+    if (rename_error) {
+        error = rename_error.message();
+        return false;
+    }
+
+    UpdateOpenDocumentPathsAfterMove(source, destination);
+    RefreshProjectSidebar();
+    git_manager_.Invalidate();
+    active_action_ =
+        (mode == PathOperationMode::Rename ? "Renamed " : "Moved ") +
+        source.filename().string();
+    screen_.PostEvent(ftxui::Event::Custom);
+    return true;
 }
 
 void TextltApp::PreviewTheme(const std::string& theme_name) {
@@ -1170,6 +1612,12 @@ void TextltApp::UpdateOptionsMenuLabels() {
         editor_config_.tab_size);
 }
 
+void TextltApp::RefreshProjectSidebar() {
+    auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
+    sidebar->ShowProject();
+    sidebar->Refresh();
+}
+
 void TextltApp::RunDropdownAction(int menu_index, int item_index) {
     // Generate simple trace actions for debugging inside the app status-bar
     active_action_ = "DEBUG: Menu=" + std::to_string(menu_index) +
@@ -1181,13 +1629,16 @@ void TextltApp::RunDropdownAction(int menu_index, int item_index) {
         case 1: HandleEditMenu(item_index);     return;
         case 2: HandleOptionsMenu(item_index);  return;
         case 3:
+            HandleAiMenu(item_index);
+            return;
+        case 4:
             if (item_index == 0) {
                 OpenAboutDialog();
             } else {
                 OpenHelpDialog();
             }
             return;
-        case 4: if (item_index == 0) RequestExit(); return;
+        case 5: if (item_index == 0) RequestExit(); return;
         default: CloseDropdown();                            return;
     }
 }
@@ -1208,14 +1659,19 @@ void TextltApp::RunDropdownAction(int menu_index, int item_index) {
                 screen_.PostEvent(ftxui::Event::Custom);
                 break;
 
-            case 1: OpenFileDialog(FilePromptMode::Open); return;
-            case 2: CloseCurrentFile(); return;
-            case 3: CloseAllOpenedFiles(); return;
-            case 4: SaveCurrentFile(); return;
-            case 5: SaveAllOpenedFiles(); return;
-            case 6: OpenFileDialog(FilePromptMode::SaveAs); return;
-            case 7: ToggleActiveFavorite(); return;
-            case 8: RequestExit(); return;
+            case 1: OpenFileDialog(FilePromptMode::CreateFolder); return;
+            case 2: OpenFileDialog(FilePromptMode::DeleteFolder); return;
+            case 3: OpenFileDialog(FilePromptMode::DeleteFile); return;
+            case 4: OpenPathOperationDialog(PathOperationMode::Rename); return;
+            case 5: OpenPathOperationDialog(PathOperationMode::Move); return;
+            case 6: OpenFileDialog(FilePromptMode::Open); return;
+            case 7: CloseCurrentFile(); return;
+            case 8: CloseAllOpenedFiles(); return;
+            case 9: SaveCurrentFile(); return;
+            case 10: SaveAllOpenedFiles(); return;
+            case 11: OpenFileDialog(FilePromptMode::SaveAs); return;
+            case 12: ToggleActiveFavorite(); return;
+            case 13: RequestExit(); return;
 
             default:
                 CloseDropdown();
@@ -1363,15 +1819,30 @@ void TextltApp::HandleEditMenu(int item) {
     CloseDropdown();
 }
 
+void TextltApp::HandleAiMenu(int item) {
+    switch (item) {
+        case 0:
+            OpenTtsModal();
+            return;
+        case 1:
+            OpenAiActionsModal();
+            return;
+        case 2:
+            OpenAssistantSettingsModal();
+            return;
+        default:
+            CloseDropdown();
+            return;
+    }
+}
+
 void TextltApp::HandleOptionsMenu(int item) {
     if (item == 0) {
         editor_config_.show_line_numbers = !editor_config_.show_line_numbers;
         active_action_ = editor_config_.show_line_numbers ? "Line numbers enabled" : "Line numbers disabled";
         SaveConfig();
     } else if (item == 1) {
-        editor_config_.show_file_explorer = !editor_config_.show_file_explorer;
-        active_action_ = editor_config_.show_file_explorer ? "File Explorer enabled" : "File Explorer disabled";
-        SaveConfig();
+        ToggleFileExplorer();
     } else if (item == 2) {
         editor_config_.smart_word_wrap = !editor_config_.smart_word_wrap;
         active_action_ = editor_config_.smart_word_wrap ? "Smart Word Wrap enabled" : "Smart Word Wrap disabled";

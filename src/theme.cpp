@@ -3,10 +3,10 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstdint>
-#include <fstream>
-#include <iterator>
 #include <map>
 #include <cstdio> // Used by sscanf for hexadecimal RGB parsing.
+
+#include "json_utils.hpp"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -42,22 +42,6 @@ namespace textlt {
                 {"yellow", {ftxui::Color::Yellow, {170, 85, 0}}},
             };
             return colors;
-        }
-
-        std::string ExtractString(const std::string& content, const std::string& key) {
-            const std::string token = "\"" + key + "\"";
-            size_t key_pos = content.find(token);
-            if (key_pos == std::string::npos) {
-                return "";
-            }
-            size_t colon = content.find(':', key_pos + token.size());
-            size_t first_quote = content.find('"', colon);
-            size_t second_quote = content.find('"', first_quote + 1);
-            if (colon == std::string::npos || first_quote == std::string::npos ||
-                second_quote == std::string::npos) {
-                return "";
-                }
-                return content.substr(first_quote + 1, second_quote - first_quote - 1);
         }
 
         bool TryParseRgb(const std::string& name, Rgb* rgb) {
@@ -159,33 +143,32 @@ namespace textlt {
 
         Theme LoadThemeFile(const std::filesystem::path& path) {
             Theme theme = FallbackTheme();
-            std::ifstream file(path);
-            std::string content((std::istreambuf_iterator<char>(file)), {});
+            const Json content = LoadJsonObject(path);
 
-            const std::string name = ExtractString(content, "name");
+            const std::string name = JsonString(content, "name");
             if (!name.empty()) {
                 theme.name = name;
             }
-            const std::string background = ExtractString(content, "background");
-            const std::string foreground = ExtractString(content, "foreground");
-            const std::string menu_foreground = ExtractString(content, "menu_foreground");
-            const std::string editor_text = ExtractString(content, "editor_text");
-            const std::string syntax_keyword = ExtractString(content, "syntax_keyword");
-            const std::string syntax_type = ExtractString(content, "syntax_type");
-            const std::string syntax_string = ExtractString(content, "syntax_string");
-            const std::string syntax_number = ExtractString(content, "syntax_number");
-            const std::string syntax_comment = ExtractString(content, "syntax_comment");
-            const std::string gutter = ExtractString(content, "gutter");
-            const std::string selection_bg = ExtractString(content, "selection_bg");
-            const std::string selection_fg = ExtractString(content, "selection_fg");
+            const std::string background = JsonString(content, "background");
+            const std::string foreground = JsonString(content, "foreground");
+            const std::string menu_foreground = JsonString(content, "menu_foreground");
+            const std::string editor_text = JsonString(content, "editor_text");
+            const std::string syntax_keyword = JsonString(content, "syntax_keyword");
+            const std::string syntax_type = JsonString(content, "syntax_type");
+            const std::string syntax_string = JsonString(content, "syntax_string");
+            const std::string syntax_number = JsonString(content, "syntax_number");
+            const std::string syntax_comment = JsonString(content, "syntax_comment");
+            const std::string gutter = JsonString(content, "gutter");
+            const std::string selection_bg = JsonString(content, "selection_bg");
+            const std::string selection_fg = JsonString(content, "selection_fg");
 
             theme.background = ColorFromName(background, theme.background);
             theme.foreground = ColorFromName(foreground, theme.foreground);
-            theme.header = ColorFromName(ExtractString(content, "header"), theme.header);
+            theme.header = ColorFromName(JsonString(content, "header"), theme.header);
             theme.menu_background = ColorFromName(
-                ExtractString(content, "menu_background"), theme.menu_background);
+                JsonString(content, "menu_background"), theme.menu_background);
             theme.menu_foreground = ColorFromName(menu_foreground, theme.menu_foreground);
-            theme.status = ColorFromName(ExtractString(content, "status"), theme.status);
+            theme.status = ColorFromName(JsonString(content, "status"), theme.status);
             theme.editor_text = ColorFromName(editor_text, theme.editor_text);
             theme.syntax_keyword = ColorFromName(syntax_keyword, theme.syntax_keyword);
             theme.syntax_type = ColorFromName(syntax_type, theme.syntax_type);
@@ -193,28 +176,28 @@ namespace textlt {
             theme.syntax_number = ColorFromName(syntax_number, theme.syntax_number);
             theme.syntax_comment = ColorFromName(syntax_comment, theme.syntax_comment);
             theme.gutter = ColorFromName(gutter, theme.gutter);
-            theme.cursor = ColorFromName(ExtractString(content, "cursor"), theme.cursor);
+            theme.cursor = ColorFromName(JsonString(content, "cursor"), theme.cursor);
             theme.selection_bg = ColorFromName(selection_bg, theme.selection_bg);
             theme.selection_fg = ColorFromName(selection_fg, theme.selection_fg);
-            theme.match_bg = ColorFromName(ExtractString(content, "match_bg"), theme.match_bg);
+            theme.match_bg = ColorFromName(JsonString(content, "match_bg"), theme.match_bg);
             theme.active_match_bg = ColorFromName(
-                ExtractString(content, "active_match_bg"), theme.active_match_bg);
+                JsonString(content, "active_match_bg"), theme.active_match_bg);
             theme.modal_background = ColorFromName(
-                ExtractString(content, "modal_background"), theme.modal_background);
+                JsonString(content, "modal_background"), theme.modal_background);
             theme.modal_foreground = ColorFromName(
-                ExtractString(content, "modal_foreground"), theme.modal_foreground);
-            theme.modal_border = ColorFromName(ExtractString(content, "modal_border"), theme.modal_border);
-            theme.modal_accent = ColorFromName(ExtractString(content, "modal_accent"), theme.modal_accent);
+                JsonString(content, "modal_foreground"), theme.modal_foreground);
+            theme.modal_border = ColorFromName(JsonString(content, "modal_border"), theme.modal_border);
+            theme.modal_accent = ColorFromName(JsonString(content, "modal_accent"), theme.modal_accent);
             theme.modal_text_color = ColorFromName(
-                ExtractString(content, "modal_text_color"), theme.modal_text_color);
+                JsonString(content, "modal_text_color"), theme.modal_text_color);
             theme.modal_input_bg = ColorFromName(
-                ExtractString(content, "modal_input_bg"), theme.modal_input_bg);
+                JsonString(content, "modal_input_bg"), theme.modal_input_bg);
             theme.modal_input_fg = ColorFromName(
-                ExtractString(content, "modal_input_fg"), theme.modal_input_fg);
+                JsonString(content, "modal_input_fg"), theme.modal_input_fg);
             theme.modal_selected_item_bg = ColorFromName(
-                ExtractString(content, "modal_selected_item_bg"), theme.modal_selected_item_bg);
+                JsonString(content, "modal_selected_item_bg"), theme.modal_selected_item_bg);
             theme.modal_selected_item_fg = ColorFromName(
-                ExtractString(content, "modal_selected_item_fg"), theme.modal_selected_item_fg);
+                JsonString(content, "modal_selected_item_fg"), theme.modal_selected_item_fg);
             if (IsLightColor(background)) {
                 ApplyLightThemeContrastFallbacks(theme,
                                                  foreground,

@@ -240,6 +240,14 @@ void SidebarPanel::ShowOpenedFiles() {
     SetMode(SidebarMode::Opened);
 }
 
+void SidebarPanel::ShowProject() {
+    SetMode(SidebarMode::Project);
+}
+
+void SidebarPanel::ToggleOpenedProject() {
+    SetMode(mode_ == SidebarMode::Opened ? SidebarMode::Project : SidebarMode::Opened);
+}
+
 void SidebarPanel::SetMode(SidebarMode mode) {
     if (mode_ == mode) {
         return;

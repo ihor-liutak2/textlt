@@ -20,12 +20,18 @@ MenuBarComponent::MenuBarComponent(
           " File ",
           " Edit ",
           " Options ",
+          " AI ",
           " Help ",
           " Exit ",
       }),
       dropdown_entries_({
           {
               " New ",
+              " Create Folder... ",
+              " Delete Folder... ",
+              " Delete File... ",
+              " Rename... ",
+              " Move... ",
               " Open               (Ctrl+O) ",
               " Close              (Alt+W) ",
               " Close All ",
@@ -51,7 +57,7 @@ MenuBarComponent::MenuBarComponent(
           },
           {
               " Toggle Line Numbers ",
-              " Toggle File Explorer ",
+              " Toggle File Explorer (Ctrl+B) ",
               " Smart Word Wrap [ ] ",
               " Syntax Highlighting [X] ",
               " Auto Pairing [X] ",
@@ -59,6 +65,11 @@ MenuBarComponent::MenuBarComponent(
               " Tab Size: 4 spaces ",
               " Convert Tabs to Spaces ",
               " Theme... ",
+          },
+          {
+              " TTS                 (Alt+H) ",
+              " AI Actions          (Alt+J) ",
+              " Assistant Settings  (Alt+S) ",
           },
           {" About textlt ", " Keyboard Shortcuts "},
           {" Exit "},
@@ -255,11 +266,11 @@ bool MenuBarComponent::OnEvent(ftxui::Event event) {
     
     
 void MenuBarComponent::SetFileFavoriteLabel(bool is_favorite) {
-    if (dropdown_entries_.empty() || dropdown_entries_[0].size() <= 7) {
+    if (dropdown_entries_.empty() || dropdown_entries_[0].size() <= 12) {
         return;
     }
 
-    dropdown_entries_[0][7] = is_favorite
+    dropdown_entries_[0][12] = is_favorite
         ? " [X] Add to Favorites "
         : " [ ] Add to Favorites ";
     RefreshCurrentDropdownEntries();

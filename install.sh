@@ -41,8 +41,6 @@ readonly INSTALL_PATH="$INSTALL_DIR/$APP_NAME"
 readonly TTS_INSTALL_DIR="$INSTALL_DIR/tts"
 readonly TTS_BIN_DIR="$TTS_INSTALL_DIR/bin"
 readonly TTS_MODELS_DIR="$TTS_INSTALL_DIR/models"
-readonly PIPER_DOWNLOAD_URL="https://github.com/rhasspy/piper/releases/download/v1.2.0/piper_amd64.tar.gz"
-readonly PIPER_EXPECTED_BIN_PATH="$TTS_BIN_DIR/piper"
 readonly CONFIG_DIR="$TARGET_HOME/.config/textlt"
 readonly THEME_CONFIG_DIR="$CONFIG_DIR/themes"
 readonly BASHRC="$TARGET_HOME/.bashrc"
@@ -126,7 +124,7 @@ validate_dependencies() {
   local missing=()
   local tool
 
-  for tool in cmake g++ make curl tar; do
+  for tool in cmake g++ make; do
     if ! command -v "$tool" >/dev/null 2>&1; then
       missing+=("$tool")
     fi
@@ -136,7 +134,7 @@ validate_dependencies() {
     install_dependencies_if_requested "${missing[@]}"
   fi
 
-  for tool in cmake g++ make curl tar; do
+  for tool in cmake g++ make; do
     command -v "$tool" >/dev/null 2>&1 ||
       die "$tool is still missing after dependency validation."
   done
@@ -186,86 +184,12 @@ deploy_binary() {
 }
 
 install_tts_assets() {
-  log_info "Starting TTS asset installation."
-
+  log_info "Creating optional TTS asset directories."
   mkdir -p "$TTS_BIN_DIR" "$TTS_MODELS_DIR"
   restore_target_ownership "$TTS_INSTALL_DIR"
-
-  # --- Piper TTS Download and Setup ---
-  log_info "Downloading Piper TTS binary from $PIPER_DOWNLOAD_URL."
-  local piper_archive="/tmp/piper_amd64.tar.gz"
-  if curl -L "$PIPER_DOWNLOAD_URL" -o "$piper_archive"; then
-    log_info "Extracting Piper TTS to $TTS_BIN_DIR."
-    if tar -xzf "$piper_archive" -C "$TTS_BIN_DIR" --strip-components=1 piper; then
-      rm -f "$piper_archive"
-      if [[ -f "$PIPER_EXPECTED_BIN_PATH" ]]; then
-        chmod +x "$PIPER_EXPECTED_BIN_PATH"
-        log_success "Piper TTS installed at $PIPER_EXPECTED_BIN_PATH."
-      else
-        die "Piper binary not found after extraction in $TTS_BIN_DIR."
-      fi
-    else
-      rm -f "$piper_archive" # Clean up archive even if extraction fails
-      die "Failed to extract Piper TTS archive to $TTS_BIN_DIR."
-    fi
-  else
-    die "Failed to download Piper TTS from $PIPER_DOWNLOAD_URL."
-  fi
   restore_target_ownership "$TTS_BIN_DIR"
-
-  # --- TTS Voice Models Download ---
-  log_info "Downloading TTS voice models."
-  local models=(
-    "uk/uk_UA-tetyana-medium/uk_UA-tetyana-medium"
-    "uk/uk_UA-mykyta-medium/uk_UA-mykyta-medium"
-    "en/en_US-lessac-medium/en_US-lessac-medium"
-    "en/en_US-joe-medium/en_US-joe-medium"
-    "ru/ru_RU-dmitry-medium/ru_RU-dmitry-medium"
-    "ru/ru_RU-svetlana-medium/ru_RU-svetlana-medium"
-    "de/de_DE-karlsson-medium/de_DE-karlsson-medium"
-    "de/de_DE-eva_k-medium/de_DE-eva_k-medium"
-  )
-  local base_url="https://huggingface.co/rhasspy/piper-voices/resolve/main"
-  local model_download_failed=0
-
-  for model in "${models[@]}"; do
-    local model_name="$(basename "$model")"
-    local onnx_url="$base_url/$model.onnx"
-    local json_url="$base_url/$model.onnx.json"
-    local onnx_path="$TTS_MODELS_DIR/$model_name.onnx"
-    local json_path="$TTS_MODELS_DIR/$model_name.onnx.json"
-
-    log_info "Downloading model: $model_name (.onnx) to $onnx_path"
-    if ! curl -L "$onnx_url" -o "$onnx_path"; then
-      log_warn "Failed to download $model_name.onnx from $onnx_url"
-      model_download_failed=1
-    fi
-
-    log_info "Downloading model: $model_name (.onnx.json) to $json_path"
-    if ! curl -L "$json_url" -o "$json_path"; then
-      log_warn "Failed to download $model_name.onnx.json from $json_url"
-      model_download_failed=1
-    fi
-  done
-
   restore_target_ownership "$TTS_MODELS_DIR"
-
-  if (( model_download_failed == 1 )); then
-    log_warn "Some TTS voice models failed to download. Please check the logs above for details."
-  else
-    log_success "All requested TTS voice models installed."
-  fi
-
-  # --- Verification of directories not being empty ---
-  if [[ ! -f "$PIPER_EXPECTED_BIN_PATH" ]]; then
-    die "Error: Piper binary not found at $PIPER_EXPECTED_BIN_PATH after installation."
-  fi
-  log_success "TTS binary ($PIPER_EXPECTED_BIN_PATH) verified."
-
-  if ! find "$TTS_MODELS_DIR" -mindepth 1 -print -quit | grep -q .; then
-    die "Error: TTS models directory ($TTS_MODELS_DIR) is empty after installation. No models were downloaded."
-  fi
-  log_success "TTS models directory ($TTS_MODELS_DIR) verified."
+  log_success "TTS directories are ready. Piper voices and AI models are not downloaded during install."
 }
 
 ensure_local_bin_on_path() {

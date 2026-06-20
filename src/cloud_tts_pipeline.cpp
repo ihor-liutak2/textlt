@@ -2,12 +2,11 @@
 
 #include <algorithm>
 #include <cctype>
-#include <fstream>
 #include <iterator>
 #include <sstream>
-#include <system_error>
 
 #include "editor_config.hpp"
+#include "json_utils.hpp"
 
 namespace textlt {
 namespace {
@@ -16,24 +15,6 @@ constexpr size_t kMinimumChunkBytes = 1229;
 constexpr size_t kIdealChunkBytes = 1843;
 constexpr size_t kMaximumChunkBytes = 2253;
 constexpr size_t kMaximumWordLength = 25;
-
-std::string JsonEscape(const std::string& value) {
-    std::string escaped;
-    escaped.reserve(value.size());
-    for (char character : value) {
-        switch (character) {
-            case '\\': escaped += "\\\\"; break;
-            case '"': escaped += "\\\""; break;
-            case '\b': escaped += "\\b"; break;
-            case '\f': escaped += "\\f"; break;
-            case '\n': escaped += "\\n"; break;
-            case '\r': escaped += "\\r"; break;
-            case '\t': escaped += "\\t"; break;
-            default: escaped.push_back(character); break;
-        }
-    }
-    return escaped;
-}
 
 bool IsSentenceBoundary(char character) {
     return character == '.' || character == '!' || character == '?';
@@ -293,37 +274,20 @@ std::filesystem::path CloudTtsPipeline::DiagnosticPath() {
 
 void CloudTtsPipeline::WriteDiagnostics(
     const std::vector<ChunkDiagnostic>& diagnostics) {
-    const std::filesystem::path path = DiagnosticPath();
-    std::error_code error;
-    std::filesystem::create_directories(path.parent_path(), error);
-    if (error) {
-        return;
+    Json root = Json::array();
+    for (const ChunkDiagnostic& diagnostic : diagnostics) {
+        root.push_back({
+            {"chunk_index", diagnostic.chunk_index},
+            {"start_line", diagnostic.start_line},
+            {"start_column", diagnostic.start_column},
+            {"end_line", diagnostic.end_line},
+            {"end_column", diagnostic.end_column},
+            {"raw_size_bytes", diagnostic.raw_size_bytes},
+            {"cleansed_text", diagnostic.cleansed_text},
+            {"network_status", diagnostic.network_status},
+        });
     }
-
-    std::ofstream file(path, std::ios::binary | std::ios::trunc);
-    if (!file) {
-        return;
-    }
-
-    file << "[\n";
-    for (size_t index = 0; index < diagnostics.size(); ++index) {
-        const ChunkDiagnostic& diagnostic = diagnostics[index];
-        file << "  {\n";
-        file << "    \"chunk_index\": " << diagnostic.chunk_index << ",\n";
-        file << "    \"start_line\": " << diagnostic.start_line << ",\n";
-        file << "    \"start_column\": " << diagnostic.start_column << ",\n";
-        file << "    \"end_line\": " << diagnostic.end_line << ",\n";
-        file << "    \"end_column\": " << diagnostic.end_column << ",\n";
-        file << "    \"raw_size_bytes\": " << diagnostic.raw_size_bytes << ",\n";
-        file << "    \"cleansed_text\": \"" << JsonEscape(diagnostic.cleansed_text) << "\",\n";
-        file << "    \"network_status\": \"" << diagnostic.network_status << "\"\n";
-        file << "  }";
-        if (index + 1 < diagnostics.size()) {
-            file << ",";
-        }
-        file << "\n";
-    }
-    file << "]\n";
+    WriteJsonAtomically(DiagnosticPath(), root);
 }
 
 void CloudTtsPipeline::JoinWorker() {
