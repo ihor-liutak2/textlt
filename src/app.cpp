@@ -8,6 +8,7 @@
 #include <string>
 #include <system_error>
 
+#include "app_resources.hpp"
 #include "ftxui/component/component_options.hpp"
 #include "theme.hpp"
 #include "file_manager.hpp"
@@ -533,6 +534,7 @@ void TextltApp::OpenAssistantSettingsModal() {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
+    EnsureAssistantResources();
     assistant_settings_modal_.Open();
     active_action_ = "Opened Assistant Settings";
     focused_layer_ = 10;

@@ -41,10 +41,11 @@ jobs:
         run: |
           mkdir -p package/textlt
           cp build/textlt package/textlt/
+          cp -R themes package/textlt/themes
 
-          if [ -d resources/registries ]; then
+          if [ -d docs/registries ]; then
             mkdir -p package/textlt/resources
-            cp -R resources/registries package/textlt/resources/
+            cp -R docs/registries package/textlt/resources/
           fi
 
           tar -czf textlt-linux-x64.tar.gz -C package textlt
@@ -57,10 +58,11 @@ jobs:
           mkdir -p AppDir/usr/share/textlt
 
           cp build/textlt AppDir/usr/bin/textlt
+          cp -R themes AppDir/usr/share/textlt/themes
 
-          if [ -d resources/registries ]; then
+          if [ -d docs/registries ]; then
             mkdir -p AppDir/usr/share/textlt/resources
-            cp -R resources/registries AppDir/usr/share/textlt/resources/
+            cp -R docs/registries AppDir/usr/share/textlt/resources/
           fi
 
           cat > AppDir/usr/share/applications/textlt.desktop <<EOF
@@ -91,7 +93,7 @@ jobs:
             --executable AppDir/usr/bin/textlt \
             --desktop-file AppDir/usr/share/applications/textlt.desktop \
             --icon-file AppDir/usr/share/icons/hicolor/256x256/apps/textlt.png \
-            --plugin appimage
+            --output appimage
 
           ls -lh *.AppImage
           mv TextLT*.AppImage TextLT-x86_64.AppImage
@@ -105,7 +107,7 @@ jobs:
 
   build-windows:
     name: Build Windows x64
-    runs-on: windows-latest
+    runs-on: windows-2022
 
     steps:
       - uses: actions/checkout@v4
@@ -136,10 +138,11 @@ jobs:
           New-Item -ItemType Directory -Force package/textlt | Out-Null
 
           Copy-Item build/Release/textlt.exe package/textlt/
+          Copy-Item themes package/textlt/themes -Recurse
 
-          if (Test-Path resources/registries) {
+          if (Test-Path docs/registries) {
             New-Item -ItemType Directory -Force package/textlt/resources | Out-Null
-            Copy-Item resources/registries package/textlt/resources/registries -Recurse
+            Copy-Item docs/registries package/textlt/resources/registries -Recurse
           }
 
           Compress-Archive -Path package/textlt -DestinationPath textlt-windows-x64.zip -Force

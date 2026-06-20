@@ -63,6 +63,7 @@ endif()
 
 add_executable(textlt
   src/app.cpp
+  src/app_resources.cpp
   src/app_view.cpp
   src/cloud_tts_pipeline.cpp
   src/config_manager.cpp

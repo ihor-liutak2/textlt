@@ -1,3 +1,4 @@
+#include "app_resources.hpp"
 #include "app.hpp"
 #include "terminal_flow_control_guard.hpp"
 
@@ -15,6 +16,8 @@ int main(int argc, char* argv[]) {
     // Force 24-bit color before themes are loaded, because FTXUI resolves
     // Color::RGB values at construction time and otherwise down-samples them.
     ftxui::Terminal::SetColorSupport(ftxui::Terminal::Color::TrueColor);
+
+    textlt::EnsureStartupResources();
 
     textlt::TerminalFlowControlGuard terminal_flow_control_guard;
     textlt::TextltApp app(files_to_open);
