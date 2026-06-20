@@ -1,0 +1,173 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    name: Build Linux x64
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            git \
+            wget \
+            file \
+            libfuse2 \
+            imagemagick \
+            libcurl4-openssl-dev \
+            libarchive-dev
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: |
+          cmake --build build --config Release --parallel
+
+      - name: Package Linux tar.gz
+        run: |
+          mkdir -p package/textlt
+          cp build/textlt package/textlt/
+
+          if [ -d resources/registries ]; then
+            mkdir -p package/textlt/resources
+            cp -R resources/registries package/textlt/resources/
+          fi
+
+          tar -czf textlt-linux-x64.tar.gz -C package textlt
+
+      - name: Prepare AppDir
+        run: |
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          mkdir -p AppDir/usr/share/textlt
+
+          cp build/textlt AppDir/usr/bin/textlt
+
+          if [ -d resources/registries ]; then
+            mkdir -p AppDir/usr/share/textlt/resources
+            cp -R resources/registries AppDir/usr/share/textlt/resources/
+          fi
+
+          cat > AppDir/usr/share/applications/textlt.desktop <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=TextLT
+          Comment=Terminal text editor
+          Exec=textlt
+          Icon=textlt
+          Terminal=true
+          Categories=Utility;TextEditor;
+          EOF
+
+          convert -size 256x256 xc:"#1e1e1e" \
+            -fill "#76f3ff" \
+            -gravity center \
+            -pointsize 72 \
+            -annotate 0 "TL" \
+            AppDir/usr/share/icons/hicolor/256x256/apps/textlt.png
+
+      - name: Build AppImage
+        run: |
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
+
+          chmod +x linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-plugin-appimage-x86_64.AppImage
+
+          ./linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
+            --executable AppDir/usr/bin/textlt \
+            --desktop-file AppDir/usr/share/applications/textlt.desktop \
+            --icon-file AppDir/usr/share/icons/hicolor/256x256/apps/textlt.png \
+            --plugin appimage
+
+          mv TextLT*.AppImage TextLT-x86_64.AppImage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: textlt-linux-x64
+          path: |
+            textlt-linux-x64.tar.gz
+            TextLT-x86_64.AppImage
+
+  build-windows:
+    name: Build Windows x64
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies with vcpkg
+        shell: pwsh
+        run: |
+          vcpkg install curl libarchive --triplet x64-windows-static
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -S . -B build `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --build build --config Release --parallel
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force package/textlt | Out-Null
+
+          Copy-Item build/Release/textlt.exe package/textlt/
+
+          if (Test-Path resources/registries) {
+            New-Item -ItemType Directory -Force package/textlt/resources | Out-Null
+            Copy-Item resources/registries package/textlt/resources/registries -Recurse
+          }
+
+          Compress-Archive -Path package/textlt -DestinationPath textlt-windows-x64.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: textlt-windows-x64
+          path: textlt-windows-x64.zip
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs:
+      - build-linux
+      - build-windows
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/textlt-linux-x64.tar.gz
+            release-assets/TextLT-x86_64.AppImage
+            release-assets/textlt-windows-x64.zip
