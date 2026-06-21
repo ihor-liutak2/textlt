@@ -172,8 +172,12 @@ ftxui::Element ModalWindow::RenderFooter(const Theme& theme) {
     using namespace ftxui;
 
     Elements row;
-    if (!footer_text_.empty()) {
-        row.push_back(text(" " + footer_text_ + " ") |
+    const std::string footer_text =
+        content_ && !content_->GetFooterText().empty()
+            ? content_->GetFooterText()
+            : footer_text_;
+    if (!footer_text.empty()) {
+        row.push_back(text(" " + footer_text + " ") |
                       dim |
                       color(theme.modal_text_color));
     }
@@ -187,7 +191,7 @@ ftxui::Element ModalWindow::RenderFooter(const Theme& theme) {
         row.push_back(footer_buttons_[index]->Render());
     }
 
-    if (footer_text_.empty() && footer_buttons_.empty()) {
+    if (footer_text.empty() && footer_buttons_.empty()) {
         row.push_back(text(" "));
     }
 
@@ -225,7 +229,7 @@ int ModalWindow::BodyHeight() const {
     const int modal_height = ModalHeight();
     if (modal_height > 0) {
         int used_rows = 2;
-        if (show_header_) {
+        if (show_header_ && FrameStyle() == ModalFrameStyle::HeaderInsideBorder) {
             used_rows += 2;
         }
         if (show_footer_) {
@@ -236,12 +240,17 @@ int ModalWindow::BodyHeight() const {
     return max_body_height_;
 }
 
+ModalFrameStyle ModalWindow::FrameStyle() const {
+    return content_ ? content_->GetModalFrameStyle() : ModalFrameStyle::HeaderInsideBorder;
+}
+
 ftxui::Element ModalWindow::Render() {
     using namespace ftxui;
     const Theme& current_theme = theme_ ? *theme_ : FallbackTheme();
+    const ModalFrameStyle frame_style = FrameStyle();
 
     Elements rows;
-    if (show_header_) {
+    if (show_header_ && frame_style == ModalFrameStyle::HeaderInsideBorder) {
         rows.push_back(RenderHeader(current_theme));
         rows.push_back(separator() | color(current_theme.modal_border));
     }
@@ -253,8 +262,24 @@ ftxui::Element ModalWindow::Render() {
         rows.push_back(RenderFooter(current_theme));
     }
 
-    return vbox(std::move(rows)) |
-        border |
+    Element framed = vbox(std::move(rows));
+    if (frame_style == ModalFrameStyle::TitleInBorder) {
+        Element title = content_ ? content_->RenderTitle() : text("");
+        if (show_header_close_) {
+            title = hbox({
+                title,
+                filler(),
+                header_close_button_->Render(),
+            }) | size(WIDTH, EQUAL, BodyWidth());
+        }
+        framed = window(
+            title,
+            framed);
+    } else {
+        framed = framed | border;
+    }
+
+    return framed |
         bgcolor(current_theme.modal_background) |
         color(current_theme.modal_border) |
         clear_under |

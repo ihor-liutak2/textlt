@@ -56,6 +56,7 @@ private:
     ftxui::Element RenderHeader(const Theme& theme);
     ftxui::Element RenderFooter(const Theme& theme);
     ftxui::Element RenderBody(const Theme& theme);
+    ModalFrameStyle FrameStyle() const;
     int ModalWidth() const;
     int ModalHeight() const;
     int BodyHeight() const;

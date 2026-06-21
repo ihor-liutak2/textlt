@@ -215,7 +215,9 @@ TextltApp::TextltApp()
       help_dialog_(&current_theme_),
       tts_modal_(&current_theme_),
       ai_actions_modal_(&current_theme_),
-      assistant_settings_modal_(&current_theme_),
+      assistant_settings_modal_(
+          &current_theme_,
+          [this] { screen_.PostEvent(ftxui::Event::Custom); }),
       theme_dialog_(
           &current_theme_,
           [this](const std::string& theme_name) { PreviewTheme(theme_name); },

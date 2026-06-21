@@ -85,6 +85,8 @@ add_executable(textlt
   src/menu_bar.cpp
   src/modals/file_dialog.cpp
   src/modals/assistant_modals.cpp
+  src/modals/assistant_modals_ai.cpp
+  src/modals/assistant_modals_tts.cpp
   src/modals/help_dialog.cpp
   src/modals/modal_window.cpp
   src/modals/path_operation_dialog.cpp
