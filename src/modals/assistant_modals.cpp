@@ -104,6 +104,14 @@ RegistryLoadResult LoadUserRegistryJson(const char* filename, Json* root) {
     return RegistryLoadResult::Loaded;
 }
 
+const char* RegistryFilename(RegistryKind kind) {
+    return kind == RegistryKind::Piper ? kPiperRegistryFile : kAiRegistryFile;
+}
+
+RegistryLoadResult LoadUserRegistryJson(RegistryKind kind, Json* root) {
+    return LoadUserRegistryJson(RegistryFilename(kind), root);
+}
+
 std::string JsonLabel(const Json& object, const char* primary, const char* fallback) {
     const std::string value = JsonString(object, primary);
     return value.empty() ? JsonString(object, fallback) : value;
@@ -133,6 +141,75 @@ bool IsValidJsonFile(const std::filesystem::path& path) {
     }
     const Json parsed = Json::parse(file, nullptr, false);
     return !parsed.is_discarded() && parsed.is_object();
+}
+
+std::string EscapeRawNewlinesInJsonStrings(const std::string& input) {
+    std::string output;
+    output.reserve(input.size());
+    bool in_string = false;
+    bool escaped = false;
+    for (char character : input) {
+        if (escaped) {
+            output.push_back(character);
+            escaped = false;
+            continue;
+        }
+        if (character == '\\' && in_string) {
+            output.push_back(character);
+            escaped = true;
+            continue;
+        }
+        if (character == '"') {
+            in_string = !in_string;
+            output.push_back(character);
+            continue;
+        }
+        if (in_string && character == '\n') {
+            output += "\\n";
+            continue;
+        }
+        if (in_string && character == '\r') {
+            continue;
+        }
+        output.push_back(character);
+    }
+    return output;
+}
+
+bool NormalizeJsonFile(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        return false;
+    }
+    const std::string content(
+        (std::istreambuf_iterator<char>(input)),
+        std::istreambuf_iterator<char>());
+    const std::string normalized = EscapeRawNewlinesInJsonStrings(content);
+    const Json parsed = Json::parse(normalized, nullptr, false);
+    if (parsed.is_discarded() || !parsed.is_object()) {
+        return false;
+    }
+
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        return false;
+    }
+    output << normalized;
+    return static_cast<bool>(output);
+}
+
+bool ReplaceFileFromFile(const std::filesystem::path& source,
+                         const std::filesystem::path& destination) {
+    std::ifstream input(source, std::ios::binary);
+    if (!input) {
+        return false;
+    }
+    std::ofstream output(destination, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        return false;
+    }
+    output << input.rdbuf();
+    return static_cast<bool>(output);
 }
 
 bool FetchJsonUrl(const char* url, Json* root) {
@@ -185,7 +262,7 @@ std::string AiRuntimeAssetPattern() {
     using namespace assistant_modal_detail;
 
     Json root;
-    if (LoadUserRegistryJson(kAiRegistryFile, &root) != RegistryLoadResult::Loaded) {
+    if (LoadUserRegistryJson(RegistryKind::Ai, &root) != RegistryLoadResult::Loaded) {
         return {};
     }
 
@@ -247,7 +324,7 @@ bool FindSelectedAiModel(int selected_model, Json* selected) {
     using namespace assistant_modal_detail;
 
     Json root;
-    if (LoadUserRegistryJson(kAiRegistryFile, &root) != RegistryLoadResult::Loaded) {
+    if (LoadUserRegistryJson(RegistryKind::Ai, &root) != RegistryLoadResult::Loaded) {
         return false;
     }
 
@@ -558,68 +635,63 @@ bool RuntimeBinaryExists(const std::filesystem::path& directory) {
 
 RegistryDownloadResult DownloadRegistry(const char* url, const char* filename) {
     const std::filesystem::path registry_directory = RegistryDirectory();
-    const std::filesystem::path cache_directory = DownloadCacheDirectory();
-    if (registry_directory.empty() || cache_directory.empty()) {
+    if (registry_directory.empty()) {
         return RegistryDownloadResult::Failed;
     }
 
     CreateDirectory(registry_directory);
-    CreateDirectory(cache_directory);
 
     const std::filesystem::path final_path = registry_directory / filename;
-    const std::filesystem::path part_path = cache_directory / (std::string(filename) + ".part");
-    std::error_code error;
-    std::filesystem::remove(part_path, error);
-
-    FILE* file = std::fopen(part_path.string().c_str(), "wb");
-    if (!file) {
-        return RegistryDownloadResult::Failed;
-    }
-
+    std::string response;
     CURL* curl = curl_easy_init();
     if (!curl) {
-        std::fclose(file);
-        std::filesystem::remove(part_path, error);
         return RegistryDownloadResult::Failed;
     }
 
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteFileCallback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
+    const auto cache_bust =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch())
+            .count();
+    const std::string request_url =
+        std::string(url) + (std::string(url).find('?') == std::string::npos ? "?" : "&") +
+        "_textlt_cache_bust=" + std::to_string(cache_bust);
+    curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, "Cache-Control: no-cache");
+    headers = curl_slist_append(headers, "Pragma: no-cache");
+
+    curl_easy_setopt(curl, CURLOPT_URL, request_url.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteStringCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "textlt/1.0");
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_FRESH_CONNECT, 1L);
 
     const CURLcode result = curl_easy_perform(curl);
     long response_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
     curl_easy_cleanup(curl);
-    const bool close_ok = std::fclose(file) == 0;
+    curl_slist_free_all(headers);
 
-    if (result != CURLE_OK || !close_ok || response_code >= 400) {
-        std::filesystem::remove(part_path, error);
+    if (result != CURLE_OK || response_code >= 400) {
         return RegistryDownloadResult::Failed;
     }
 
-    const uintmax_t file_size = std::filesystem::file_size(part_path, error);
-    if (error || file_size == 0) {
-        std::filesystem::remove(part_path, error);
+    if (response.empty()) {
         return RegistryDownloadResult::Empty;
     }
 
-    if (!IsValidJsonFile(part_path)) {
-        std::filesystem::remove(part_path, error);
+    Json parsed = Json::parse(response, nullptr, false);
+    if (parsed.is_discarded() || !parsed.is_object()) {
+        response = EscapeRawNewlinesInJsonStrings(response);
+        parsed = Json::parse(response, nullptr, false);
+    }
+    if (parsed.is_discarded() || !parsed.is_object()) {
         return RegistryDownloadResult::InvalidJson;
     }
 
-    std::filesystem::rename(part_path, final_path, error);
-    if (error) {
-        std::filesystem::remove(final_path, error);
-        error.clear();
-        std::filesystem::rename(part_path, final_path, error);
-    }
-    if (error) {
-        std::filesystem::remove(part_path, error);
+    if (!WriteJsonAtomically(final_path, parsed)) {
         return RegistryDownloadResult::Failed;
     }
 
@@ -695,7 +767,7 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
     tts_voice_menu_ = ftxui::Menu(&tts_voice_labels_, &selected_tts_voice_, checkbox_option);
     ai_model_menu_ = ftxui::Menu(&ai_model_labels_, &selected_ai_model_, checkbox_option);
 
-    fetch_tts_button_ = make_button("Fetch registry", [this] { FetchTtsRegistry(); });
+    fetch_tts_button_ = make_button("Fetch registry", [this] { FetchRegistries(); });
     tts_download_button_ = make_button("Download", [this] { StartTtsVoiceDownload(); });
     tts_delete_button_ = make_button("Delete", [this] { StartTtsVoiceDelete(); });
     tts_confirm_delete_button_ =
@@ -703,7 +775,7 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
     tts_cancel_delete_button_ =
         make_button("Cancel", [this] { CancelTtsVoiceDelete(); });
     tts_test_button_ = make_button("Test", [this] { TestTtsVoice(); });
-    fetch_ai_button_ = make_button("Fetch registry", [this] { FetchAiRegistry(); });
+    fetch_ai_button_ = make_button("Fetch registry", [this] { FetchRegistries(); });
     ai_runtime_download_button_ =
         make_button("Download AI runtime", [this] { StartAiRuntimeDownload(); });
     ai_runtime_delete_button_ =
@@ -714,9 +786,12 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
         make_button("Cancel", [this] { CancelAiRuntimeDelete(); });
     ai_model_download_button_ =
         make_button("Download model", [this] { StartAiModelDownload(); });
-    ai_delete_model_button_ = make_button("Delete model", [this] {
-        SetTodoStatus("AI model delete");
-    });
+    ai_delete_model_button_ =
+        make_button("Delete model", [this] { StartAiModelDelete(); });
+    ai_model_confirm_delete_button_ =
+        make_button("Confirm delete", [this] { ConfirmAiModelDelete(); });
+    ai_model_cancel_delete_button_ =
+        make_button("Cancel", [this] { CancelAiModelDelete(); });
 
     tab_body_container_ = ftxui::Container::Tab({
         ftxui::Container::Vertical({
@@ -742,6 +817,8 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
                 ai_runtime_cancel_delete_button_,
                 ai_model_download_button_,
                 ai_delete_model_button_,
+                ai_model_confirm_delete_button_,
+                ai_model_cancel_delete_button_,
             }),
             ai_model_menu_,
         }),
@@ -796,6 +873,71 @@ std::string AssistantSettingsModalContent::GetFooterText() const {
 void AssistantSettingsModalContent::LoadRegistries() {
     LoadPiperRegistry();
     LoadAiRegistry();
+}
+
+void AssistantSettingsModalContent::FetchRegistries() {
+    using namespace assistant_modal_detail;
+
+    {
+        std::lock_guard<std::mutex> tts_lock(tts_download_mutex_);
+        if (tts_downloading_) {
+            tts_status_ = "Voice download is running";
+            return;
+        }
+        tts_status_ = "Fetching TTS registry...";
+        tts_progress_ = 0.0f;
+    }
+    {
+        std::lock_guard<std::mutex> ai_lock(ai_runtime_mutex_);
+        ai_status_ = "Fetching AI registry...";
+        ai_progress_ = 0.0f;
+    }
+
+    const RegistryDownloadResult piper_download_result =
+        DownloadRegistry(kPiperRegistryUrl, RegistryFilename(RegistryKind::Piper));
+    const RegistryDownloadResult ai_download_result =
+        DownloadRegistry(kAiRegistryUrl, RegistryFilename(RegistryKind::Ai));
+
+    LoadPiperRegistry();
+    LoadAiRegistry();
+
+    auto registry_status = [](const std::string& label,
+                              RegistryDownloadResult download_result,
+                              RegistryLoadResult load_result) {
+        if (download_result == RegistryDownloadResult::Saved &&
+            load_result == RegistryLoadResult::Loaded) {
+            return label + " registry loaded";
+        }
+        if (download_result == RegistryDownloadResult::Empty) {
+            return label + " registry file is empty";
+        }
+        if (download_result == RegistryDownloadResult::InvalidJson) {
+            return "Downloaded " + label + " registry is invalid JSON";
+        }
+        if (load_result == RegistryLoadResult::Missing) {
+            return label + " registry not loaded";
+        }
+        if (load_result == RegistryLoadResult::ParseFailed) {
+            return label + " registry parse failed";
+        }
+        return label + " registry download failed";
+    };
+
+    Json piper_root;
+    Json ai_root;
+    const RegistryLoadResult piper_load_result =
+        LoadUserRegistryJson(RegistryKind::Piper, &piper_root);
+    const RegistryLoadResult ai_load_result =
+        LoadUserRegistryJson(RegistryKind::Ai, &ai_root);
+
+    {
+        std::lock_guard<std::mutex> lock(tts_download_mutex_);
+        tts_status_ = registry_status("TTS", piper_download_result, piper_load_result);
+    }
+    {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        ai_status_ = registry_status("AI", ai_download_result, ai_load_result);
+    }
 }
 
 void AssistantSettingsModalContent::SetTodoStatus(std::string action) {
@@ -879,7 +1021,7 @@ void AssistantSettingsModalContent::StartAiRuntimeDownload() {
 
     {
         std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        if (ai_runtime_downloading_ || ai_model_downloading_) {
+        if (ai_runtime_downloading_ || ai_model_downloading_ || ai_model_deleting_) {
             return;
         }
     }
@@ -980,7 +1122,7 @@ void AssistantSettingsModalContent::StartAiRuntimeDelete() {
 
     {
         std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        if (ai_model_downloading_) {
+        if (ai_model_downloading_ || ai_model_deleting_) {
             return;
         }
         ai_runtime_delete_confirm_visible_ = true;
@@ -997,7 +1139,7 @@ void AssistantSettingsModalContent::ConfirmAiRuntimeDelete() {
         UserDataDirectory() / "ai" / "runtimes" / "llama_cpp";
     {
         std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        if (ai_runtime_downloading_ || ai_model_downloading_) {
+        if (ai_runtime_downloading_ || ai_model_downloading_ || ai_model_deleting_) {
             return;
         }
     }
@@ -1064,7 +1206,7 @@ void AssistantSettingsModalContent::StartAiModelDownload() {
 
     {
         std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        if (ai_runtime_downloading_ || ai_model_downloading_) {
+        if (ai_runtime_downloading_ || ai_model_downloading_ || ai_model_deleting_) {
             return;
         }
     }
@@ -1106,6 +1248,7 @@ void AssistantSettingsModalContent::StartAiModelDownload() {
         ai_model_downloaded_bytes_ = 0;
         ai_model_total_bytes_ = 0;
         ai_status_ = "Model downloading...";
+        ai_model_delete_confirm_visible_ = false;
     }
     RequestRedraw();
 
@@ -1132,6 +1275,148 @@ void AssistantSettingsModalContent::StartAiModelDownload() {
         }
         RequestRedraw();
     });
+}
+
+void AssistantSettingsModalContent::StartAiModelDelete() {
+    using namespace assistant_modal_detail;
+
+    {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        if (ai_runtime_downloading_ || ai_model_downloading_ || ai_model_deleting_) {
+            return;
+        }
+    }
+    if (ai_model_thread_.joinable()) {
+        ai_model_thread_.join();
+    }
+
+    Json model;
+    if (!FindSelectedAiModel(selected_ai_model_, &model)) {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        ai_model_delete_confirm_visible_ = false;
+        ai_model_delete_pending_filename_.clear();
+        ai_status_ = "No model selected";
+        return;
+    }
+
+    const std::string filename = JsonString(model, "filename");
+    if (filename.empty()) {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        ai_model_delete_confirm_visible_ = false;
+        ai_model_delete_pending_filename_.clear();
+        ai_status_ = "Model filename is missing";
+        return;
+    }
+
+    const std::filesystem::path model_path =
+        UserDataDirectory() / "ai" / "models" / filename;
+    std::error_code error;
+    if (!std::filesystem::exists(model_path, error)) {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        ai_model_delete_confirm_visible_ = false;
+        ai_model_delete_pending_filename_.clear();
+        ai_status_ = "Model not installed";
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        ai_model_delete_pending_filename_ = filename;
+        ai_model_delete_confirm_visible_ = true;
+        ai_model_progress_visible_ = false;
+        ai_status_ = "Confirm model delete";
+    }
+    if (ai_model_confirm_delete_button_) {
+        ai_model_confirm_delete_button_->TakeFocus();
+    }
+}
+
+void AssistantSettingsModalContent::ConfirmAiModelDelete() {
+    using namespace assistant_modal_detail;
+
+    std::string filename;
+    {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        if (ai_runtime_downloading_ || ai_model_downloading_ || ai_model_deleting_) {
+            return;
+        }
+        filename = ai_model_delete_pending_filename_;
+    }
+    if (ai_model_thread_.joinable()) {
+        ai_model_thread_.join();
+    }
+    if (filename.empty()) {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        ai_model_delete_confirm_visible_ = false;
+        ai_status_ = "No model selected";
+        return;
+    }
+
+    const std::filesystem::path model_path =
+        UserDataDirectory() / "ai" / "models" / filename;
+    const std::filesystem::path cache_directory = DownloadCacheDirectory();
+    const std::filesystem::path part_path =
+        cache_directory.empty() ? std::filesystem::path{} : cache_directory / (filename + ".part");
+    std::error_code exists_error;
+    if (!std::filesystem::exists(model_path, exists_error)) {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        ai_model_delete_confirm_visible_ = false;
+        ai_model_delete_pending_filename_.clear();
+        ai_status_ = "Model not installed";
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        ai_model_deleting_ = true;
+        ai_model_progress_visible_ = true;
+        ai_model_delete_confirm_visible_ = false;
+        ai_progress_ = 0.0f;
+        ai_model_downloaded_bytes_ = 0;
+        ai_model_total_bytes_ = 0;
+        ai_status_ = "Model deleting...";
+    }
+    RequestRedraw();
+
+    ai_model_thread_ = std::thread([this, model_path, part_path] {
+        for (int step = 1; step <= 60; ++step) {
+            {
+                std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+                ai_progress_ = static_cast<float>(step) / 60.0f;
+            }
+            RequestRedraw();
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
+        std::error_code remove_error;
+        std::filesystem::remove(model_path, remove_error);
+        std::error_code part_error;
+        if (!part_path.empty()) {
+            std::filesystem::remove(part_path, part_error);
+        }
+
+        std::error_code verify_error;
+        const bool still_exists = std::filesystem::exists(model_path, verify_error);
+        const bool deleted = !remove_error && !verify_error && !still_exists;
+        {
+            std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+            ai_model_deleting_ = false;
+            ai_model_progress_visible_ = false;
+            ai_model_delete_pending_filename_.clear();
+            ai_progress_ = 0.0f;
+            ai_model_downloaded_bytes_ = 0;
+            ai_model_total_bytes_ = 0;
+            ai_refresh_after_model_download_ = true;
+            ai_status_ = deleted ? "Model deleted" : "Delete model failed";
+        }
+        RequestRedraw();
+    });
+}
+
+void AssistantSettingsModalContent::CancelAiModelDelete() {
+    std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+    ai_model_delete_confirm_visible_ = false;
+    ai_model_delete_pending_filename_.clear();
 }
 
 TtsModal::TtsModal(const Theme* theme)

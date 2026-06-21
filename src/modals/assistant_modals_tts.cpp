@@ -62,7 +62,7 @@ bool FindSelectedPiperVoice(const std::string& selected_language,
     using namespace assistant_modal_detail;
 
     Json root;
-    if (LoadUserRegistryJson(kPiperRegistryFile, &root) != RegistryLoadResult::Loaded) {
+    if (LoadUserRegistryJson(RegistryKind::Piper, &root) != RegistryLoadResult::Loaded) {
         return false;
     }
 
@@ -297,7 +297,7 @@ void AssistantSettingsModalContent::LoadPiperRegistry() {
     using namespace assistant_modal_detail;
 
     Json root;
-    const RegistryLoadResult load_result = LoadUserRegistryJson(kPiperRegistryFile, &root);
+    const RegistryLoadResult load_result = LoadUserRegistryJson(RegistryKind::Piper, &root);
     std::map<std::string, std::vector<std::string>> voices_by_language;
     if (load_result == RegistryLoadResult::Loaded) {
         const auto voices = root.find("voices");
@@ -342,7 +342,7 @@ void AssistantSettingsModalContent::RebuildTtsVoices() {
     tts_delete_pending_voices_.clear();
 
     Json root;
-    const RegistryLoadResult load_result = LoadUserRegistryJson(kPiperRegistryFile, &root);
+    const RegistryLoadResult load_result = LoadUserRegistryJson(RegistryKind::Piper, &root);
     const std::string selected_language =
         selected_tts_language_ >= 0 &&
                 selected_tts_language_ < static_cast<int>(tts_language_labels_.size())
@@ -375,33 +375,6 @@ void AssistantSettingsModalContent::RebuildTtsVoices() {
         tts_voice_labels_.push_back("No voices");
     }
     selected_tts_voice_ = 0;
-}
-
-void AssistantSettingsModalContent::FetchTtsRegistry() {
-    using namespace assistant_modal_detail;
-
-    {
-        std::lock_guard<std::mutex> lock(tts_download_mutex_);
-        if (tts_downloading_) {
-            tts_status_ = "Voice download is running";
-            return;
-        }
-    }
-
-    tts_status_ = "Fetching registry...";
-    tts_progress_ = 0.0f;
-    const RegistryDownloadResult result =
-        DownloadRegistry(kPiperRegistryUrl, kPiperRegistryFile);
-    if (result == RegistryDownloadResult::Saved) {
-        LoadPiperRegistry();
-        tts_status_ = "Registry loaded";
-    } else if (result == RegistryDownloadResult::Empty) {
-        tts_status_ = "Registry file is empty";
-    } else if (result == RegistryDownloadResult::InvalidJson) {
-        tts_status_ = "Downloaded registry is invalid JSON";
-    } else {
-        tts_status_ = "Registry download failed";
-    }
 }
 
 void AssistantSettingsModalContent::StartTtsVoiceDownload() {
@@ -445,7 +418,7 @@ void AssistantSettingsModalContent::StartTtsVoiceDownload() {
     }
 
     Json root;
-    if (LoadUserRegistryJson(kPiperRegistryFile, &root) != RegistryLoadResult::Loaded) {
+    if (LoadUserRegistryJson(RegistryKind::Piper, &root) != RegistryLoadResult::Loaded) {
         std::lock_guard<std::mutex> lock(tts_download_mutex_);
         tts_status_ = "Registry not loaded";
         tts_download_visible_ = false;

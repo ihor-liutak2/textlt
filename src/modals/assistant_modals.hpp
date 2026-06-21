@@ -40,10 +40,17 @@ enum class RegistryLoadResult {
     ParseFailed,
 };
 
+enum class RegistryKind {
+    Piper,
+    Ai,
+};
+
 std::filesystem::path UserDataDirectory();
 std::filesystem::path DownloadCacheDirectory();
 void CreateDirectory(const std::filesystem::path& path);
+const char* RegistryFilename(RegistryKind kind);
 RegistryLoadResult LoadUserRegistryJson(const char* filename, Json* root);
+RegistryLoadResult LoadUserRegistryJson(RegistryKind kind, Json* root);
 RegistryDownloadResult DownloadRegistry(const char* url, const char* filename);
 std::string JsonLabel(const Json& object, const char* primary, const char* fallback);
 std::string BracketLabel(const std::string& label);
@@ -106,14 +113,16 @@ private:
     void LoadPiperRegistry();
     void LoadAiRegistry();
     void RebuildTtsVoices();
-    void FetchTtsRegistry();
-    void FetchAiRegistry();
+    void FetchRegistries();
     bool ResolveAiRuntimeDownload();
     void StartAiRuntimeDownload();
     void StartAiRuntimeDelete();
     void ConfirmAiRuntimeDelete();
     void CancelAiRuntimeDelete();
     void StartAiModelDownload();
+    void StartAiModelDelete();
+    void ConfirmAiModelDelete();
+    void CancelAiModelDelete();
     void StartTtsVoiceDownload();
     void StartTtsVoiceDelete();
     void ConfirmTtsVoiceDelete();
@@ -165,8 +174,11 @@ private:
     unsigned long long ai_runtime_total_bytes_ = 0;
     std::thread ai_model_thread_;
     bool ai_model_downloading_ = false;
+    bool ai_model_deleting_ = false;
     bool ai_model_progress_visible_ = false;
+    bool ai_model_delete_confirm_visible_ = false;
     bool ai_refresh_after_model_download_ = false;
+    std::string ai_model_delete_pending_filename_;
     unsigned long long ai_model_downloaded_bytes_ = 0;
     unsigned long long ai_model_total_bytes_ = 0;
 
@@ -189,6 +201,8 @@ private:
     ftxui::Component ai_runtime_cancel_delete_button_;
     ftxui::Component ai_model_download_button_;
     ftxui::Component ai_delete_model_button_;
+    ftxui::Component ai_model_confirm_delete_button_;
+    ftxui::Component ai_model_cancel_delete_button_;
     ftxui::Component tab_body_container_;
     ftxui::Component container_;
 };

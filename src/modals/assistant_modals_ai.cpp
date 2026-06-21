@@ -84,7 +84,7 @@ std::string SelectedAiModelDescription(int selected_model) {
     using namespace assistant_modal_detail;
 
     Json root;
-    if (LoadUserRegistryJson(kAiRegistryFile, &root) != RegistryLoadResult::Loaded) {
+    if (LoadUserRegistryJson(RegistryKind::Ai, &root) != RegistryLoadResult::Loaded) {
         return {};
     }
 
@@ -167,7 +167,7 @@ void AssistantSettingsModalContent::LoadAiRegistry() {
     using namespace assistant_modal_detail;
 
     Json root;
-    const RegistryLoadResult load_result = LoadUserRegistryJson(kAiRegistryFile, &root);
+    const RegistryLoadResult load_result = LoadUserRegistryJson(RegistryKind::Ai, &root);
     ai_model_labels_.clear();
     if (load_result == RegistryLoadResult::Loaded) {
         const auto models = root.find("models");
@@ -201,25 +201,6 @@ void AssistantSettingsModalContent::LoadAiRegistry() {
     selected_ai_model_ = 0;
 }
 
-void AssistantSettingsModalContent::FetchAiRegistry() {
-    using namespace assistant_modal_detail;
-
-    ai_status_ = "Fetching registry...";
-    ai_progress_ = 0.0f;
-    const RegistryDownloadResult result =
-        DownloadRegistry(kAiRegistryUrl, kAiRegistryFile);
-    if (result == RegistryDownloadResult::Saved) {
-        LoadAiRegistry();
-        ai_status_ = "Registry loaded";
-    } else if (result == RegistryDownloadResult::Empty) {
-        ai_status_ = "Registry file is empty";
-    } else if (result == RegistryDownloadResult::InvalidJson) {
-        ai_status_ = "Downloaded registry is invalid JSON";
-    } else {
-        ai_status_ = "Registry download failed";
-    }
-}
-
 ftxui::Element AssistantSettingsModalContent::RenderAiTab(const Theme& theme) {
     using namespace ftxui;
     bool refresh_models = false;
@@ -227,6 +208,8 @@ ftxui::Element AssistantSettingsModalContent::RenderAiTab(const Theme& theme) {
     bool show_runtime_progress = false;
     bool show_extraction_progress = false;
     bool show_model_progress = false;
+    bool show_model_delete_confirmation = false;
+    bool show_model_delete_progress = false;
     unsigned long long downloaded_bytes = 0;
     unsigned long long total_bytes = 0;
     unsigned long long model_downloaded_bytes = 0;
@@ -239,6 +222,8 @@ ftxui::Element AssistantSettingsModalContent::RenderAiTab(const Theme& theme) {
         show_runtime_progress = ai_runtime_progress_visible_;
         show_extraction_progress = ai_runtime_extracting_;
         show_model_progress = ai_model_progress_visible_;
+        show_model_delete_confirmation = ai_model_delete_confirm_visible_;
+        show_model_delete_progress = ai_model_deleting_;
         downloaded_bytes = ai_runtime_downloaded_bytes_;
         total_bytes = ai_runtime_total_bytes_;
         model_downloaded_bytes = ai_model_downloaded_bytes_;
@@ -312,18 +297,35 @@ ftxui::Element AssistantSettingsModalContent::RenderAiTab(const Theme& theme) {
         text(" "),
         ai_delete_model_button_->Render(),
     }));
-    if (show_model_progress) {
-        std::string byte_text = FormatBytes(model_downloaded_bytes) + " bytes";
-        if (model_total_bytes > 0) {
-            byte_text = FormatBytes(model_downloaded_bytes) + " / " +
-                        FormatBytes(model_total_bytes) + " bytes";
-        }
-        const int percent = static_cast<int>(ai_progress * 100.0f + 0.5f);
+    if (show_model_delete_confirmation) {
+        rows.push_back(text(" Delete selected model?") |
+                       bold |
+                       color(theme.modal_text_color));
         rows.push_back(hbox({
-            text(" " + byte_text) | color(theme.modal_text_color),
-            filler(),
-            text(std::to_string(percent) + "% ") | color(theme.modal_text_color),
+            ai_model_confirm_delete_button_->Render(),
+            text(" "),
+            ai_model_cancel_delete_button_->Render(),
         }));
+    }
+    if (show_model_progress) {
+        const int percent = static_cast<int>(ai_progress * 100.0f + 0.5f);
+        if (show_model_delete_progress) {
+            rows.push_back(hbox({
+                filler(),
+                text(std::to_string(percent) + "% ") | color(theme.modal_text_color),
+            }));
+        } else {
+            std::string byte_text = FormatBytes(model_downloaded_bytes) + " bytes";
+            if (model_total_bytes > 0) {
+                byte_text = FormatBytes(model_downloaded_bytes) + " / " +
+                            FormatBytes(model_total_bytes) + " bytes";
+            }
+            rows.push_back(hbox({
+                text(" " + byte_text) | color(theme.modal_text_color),
+                filler(),
+                text(std::to_string(percent) + "% ") | color(theme.modal_text_color),
+            }));
+        }
         rows.push_back(gauge(ai_progress) | border);
     }
     rows.push_back(ai_model_menu_->Render() | border);
