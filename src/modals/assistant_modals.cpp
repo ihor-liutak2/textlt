@@ -2,11 +2,14 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <functional>
 #include <utility>
 
+#include <archive.h>
+#include <archive_entry.h>
 #include <curl/curl.h>
 
 #include "ftxui/component/component_options.hpp"
@@ -117,6 +120,12 @@ size_t WriteFileCallback(char* data, size_t size, size_t count, void* user_data)
     return std::fwrite(data, size, count, file);
 }
 
+size_t WriteStringCallback(char* data, size_t size, size_t count, void* user_data) {
+    auto* output = static_cast<std::string*>(user_data);
+    output->append(data, size * count);
+    return size * count;
+}
+
 bool IsValidJsonFile(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary);
     if (!file) {
@@ -124,6 +133,425 @@ bool IsValidJsonFile(const std::filesystem::path& path) {
     }
     const Json parsed = Json::parse(file, nullptr, false);
     return !parsed.is_discarded() && parsed.is_object();
+}
+
+bool FetchJsonUrl(const char* url, Json* root) {
+    std::string response;
+    CURL* curl = curl_easy_init();
+    if (!curl) {
+        return false;
+    }
+
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteStringCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "textlt/1.0");
+
+    const CURLcode result = curl_easy_perform(curl);
+    long response_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+    curl_easy_cleanup(curl);
+    if (result != CURLE_OK || response_code >= 400 || response.empty()) {
+        return false;
+    }
+
+    Json parsed = Json::parse(response, nullptr, false);
+    if (parsed.is_discarded() || !parsed.is_object()) {
+        return false;
+    }
+    *root = std::move(parsed);
+    return true;
+}
+
+std::string CurrentRuntimePlatform() {
+#ifdef _WIN32
+    return "windows";
+#else
+    return "linux";
+#endif
+}
+
+std::string CurrentRuntimeArch() {
+#if defined(__x86_64__) || defined(_M_X64)
+    return "x64";
+#else
+    return {};
+#endif
+}
+
+std::string AiRuntimeAssetPattern() {
+    using namespace assistant_modal_detail;
+
+    Json root;
+    if (LoadUserRegistryJson(kAiRegistryFile, &root) != RegistryLoadResult::Loaded) {
+        return {};
+    }
+
+    const std::string backend_id = JsonString(root, "default_backend", "llama_cpp");
+    const std::string platform = CurrentRuntimePlatform();
+    const std::string arch = CurrentRuntimeArch();
+    if (platform.empty() || arch.empty()) {
+        return {};
+    }
+
+    const auto backends = root.find("backends");
+    if (backends == root.end() || !backends->is_array()) {
+        return {};
+    }
+    for (const Json& backend : *backends) {
+        if (!backend.is_object() || JsonString(backend, "id") != backend_id) {
+            continue;
+        }
+        const auto runtime = backend.find("runtime");
+        if (runtime == backend.end() || !runtime->is_object()) {
+            return {};
+        }
+        const auto assets = runtime->find("runtime_assets");
+        if (assets == runtime->end() || !assets->is_array()) {
+            return {};
+        }
+        for (const Json& asset : *assets) {
+            if (!asset.is_object() ||
+                JsonString(asset, "platform") != platform ||
+                JsonString(asset, "arch") != arch ||
+                JsonString(asset, "backend") != "cpu") {
+                continue;
+            }
+            return JsonString(asset, "asset_pattern");
+        }
+    }
+    return {};
+}
+
+bool MatchesRuntimeAssetPattern(const std::string& name,
+                                const std::string& pattern) {
+    if (name.rfind("llama-", 0) != 0) {
+        return false;
+    }
+
+    const size_t wildcard = pattern.find('*');
+    if (wildcard == std::string::npos) {
+        return name == pattern;
+    }
+
+    const std::string prefix = pattern.substr(0, wildcard);
+    const std::string suffix = pattern.substr(wildcard + 1);
+    return name.rfind(prefix, 0) == 0 &&
+           name.size() >= suffix.size() &&
+           name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+bool FindSelectedAiModel(int selected_model, Json* selected) {
+    using namespace assistant_modal_detail;
+
+    Json root;
+    if (LoadUserRegistryJson(kAiRegistryFile, &root) != RegistryLoadResult::Loaded) {
+        return false;
+    }
+
+    const auto models = root.find("models");
+    if (models == root.end() || !models->is_array()) {
+        return false;
+    }
+
+    int visible_index = 0;
+    for (const Json& model : *models) {
+        if (!model.is_object()) {
+            continue;
+        }
+        if (visible_index == selected_model) {
+            *selected = model;
+            return true;
+        }
+        ++visible_index;
+    }
+    return false;
+}
+
+struct RuntimeDownloadContext {
+    std::mutex* mutex = nullptr;
+    std::atomic<float>* progress = nullptr;
+    unsigned long long* downloaded_bytes = nullptr;
+    unsigned long long* total_bytes = nullptr;
+    std::function<void()>* request_redraw = nullptr;
+};
+
+int RuntimeProgressCallback(void* client,
+                            curl_off_t total,
+                            curl_off_t downloaded,
+                            curl_off_t,
+                            curl_off_t) {
+    auto* context = static_cast<RuntimeDownloadContext*>(client);
+    if (!context || !context->mutex || !context->progress) {
+        return 0;
+    }
+    {
+        std::lock_guard<std::mutex> lock(*context->mutex);
+        if (context->downloaded_bytes) {
+            *context->downloaded_bytes =
+                downloaded > 0 ? static_cast<unsigned long long>(downloaded) : 0;
+        }
+        if (context->total_bytes && total > 0) {
+            *context->total_bytes = static_cast<unsigned long long>(total);
+        }
+        context->progress->store(total > 0
+            ? static_cast<float>(downloaded) / static_cast<float>(total)
+            : (downloaded > 0 ? 0.05f : 0.0f));
+    }
+    if (context->request_redraw && *context->request_redraw) {
+        (*context->request_redraw)();
+    }
+    return 0;
+}
+
+bool DownloadRuntimeArchive(const std::string& url,
+                            const std::filesystem::path& final_path,
+                            std::mutex& state_mutex,
+                            std::atomic<float>& progress,
+                            unsigned long long& downloaded_bytes,
+                            unsigned long long& total_bytes,
+                            std::function<void()>& request_redraw) {
+    using namespace assistant_modal_detail;
+
+    CreateDirectory(final_path.parent_path());
+    const std::filesystem::path part_path = final_path.string() + ".part";
+    std::error_code error;
+    std::filesystem::remove(part_path, error);
+
+    FILE* file = std::fopen(part_path.string().c_str(), "wb");
+    if (!file) {
+        return false;
+    }
+
+    CURL* curl = curl_easy_init();
+    if (!curl) {
+        std::fclose(file);
+        std::filesystem::remove(part_path, error);
+        return false;
+    }
+
+    RuntimeDownloadContext context{
+        &state_mutex,
+        &progress,
+        &downloaded_bytes,
+        &total_bytes,
+        &request_redraw,
+    };
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteFileCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "textlt/1.0");
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, RuntimeProgressCallback);
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &context);
+
+    const CURLcode result = curl_easy_perform(curl);
+    long response_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+    curl_easy_cleanup(curl);
+    const bool close_ok = std::fclose(file) == 0;
+
+    if (result != CURLE_OK || !close_ok || response_code >= 400) {
+        std::filesystem::remove(part_path, error);
+        return false;
+    }
+
+    std::filesystem::rename(part_path, final_path, error);
+    if (error) {
+        std::filesystem::remove(final_path, error);
+        error.clear();
+        std::filesystem::rename(part_path, final_path, error);
+    }
+    if (error) {
+        std::filesystem::remove(part_path, error);
+        return false;
+    }
+    return true;
+}
+
+bool DownloadAiModelFile(const std::string& url,
+                         const std::filesystem::path& final_path,
+                         const std::filesystem::path& part_path,
+                         std::mutex& state_mutex,
+                         std::atomic<float>& progress,
+                         unsigned long long& downloaded_bytes,
+                         unsigned long long& total_bytes,
+                         std::function<void()>& request_redraw) {
+    using namespace assistant_modal_detail;
+
+    CreateDirectory(final_path.parent_path());
+    CreateDirectory(part_path.parent_path());
+    std::error_code error;
+    std::filesystem::remove(part_path, error);
+
+    FILE* file = std::fopen(part_path.string().c_str(), "wb");
+    if (!file) {
+        return false;
+    }
+
+    CURL* curl = curl_easy_init();
+    if (!curl) {
+        std::fclose(file);
+        std::filesystem::remove(part_path, error);
+        return false;
+    }
+
+    RuntimeDownloadContext context{
+        &state_mutex,
+        &progress,
+        &downloaded_bytes,
+        &total_bytes,
+        &request_redraw,
+    };
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteFileCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "textlt/1.0");
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, RuntimeProgressCallback);
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &context);
+
+    const CURLcode result = curl_easy_perform(curl);
+    long response_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+    curl_easy_cleanup(curl);
+    const bool close_ok = std::fclose(file) == 0;
+
+    if (result != CURLE_OK || !close_ok || response_code >= 400) {
+        std::filesystem::remove(part_path, error);
+        return false;
+    }
+
+    std::filesystem::rename(part_path, final_path, error);
+    if (error) {
+        std::filesystem::remove(final_path, error);
+        error.clear();
+        std::filesystem::rename(part_path, final_path, error);
+    }
+    if (error) {
+        std::filesystem::remove(part_path, error);
+        return false;
+    }
+    return true;
+}
+
+bool IsSafeArchivePath(const std::filesystem::path& path) {
+    if (path.empty() || path.is_absolute()) {
+        return false;
+    }
+    for (const auto& part : path) {
+        if (part == "..") {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool CopyArchiveData(archive* input, archive* output) {
+    const void* buffer = nullptr;
+    size_t size = 0;
+    la_int64_t offset = 0;
+    while (true) {
+        const int result = archive_read_data_block(input, &buffer, &size, &offset);
+        if (result == ARCHIVE_EOF) {
+            return true;
+        }
+        if (result != ARCHIVE_OK) {
+            return false;
+        }
+        if (archive_write_data_block(output, buffer, size, offset) != ARCHIVE_OK) {
+            return false;
+        }
+    }
+}
+
+bool ExtractRuntimeArchive(const std::filesystem::path& archive_path,
+                           const std::filesystem::path& destination) {
+    using namespace assistant_modal_detail;
+
+    CreateDirectory(destination);
+
+    archive* input = archive_read_new();
+    archive* output = archive_write_disk_new();
+    if (!input || !output) {
+        if (input) {
+            archive_read_free(input);
+        }
+        if (output) {
+            archive_write_free(output);
+        }
+        return false;
+    }
+
+    archive_read_support_filter_all(input);
+    archive_read_support_format_all(input);
+    archive_write_disk_set_options(
+        output,
+        ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_PERM | ARCHIVE_EXTRACT_SECURE_SYMLINKS);
+
+    if (archive_read_open_filename(input, archive_path.string().c_str(), 10240) != ARCHIVE_OK) {
+        archive_read_free(input);
+        archive_write_free(output);
+        return false;
+    }
+
+    archive_entry* entry = nullptr;
+    bool ok = true;
+    while (archive_read_next_header(input, &entry) == ARCHIVE_OK) {
+        const char* pathname = archive_entry_pathname(entry);
+        const std::filesystem::path relative_path = pathname ? pathname : "";
+        if (!IsSafeArchivePath(relative_path)) {
+            archive_read_data_skip(input);
+            continue;
+        }
+
+        const std::filesystem::path full_path = destination / relative_path;
+        const std::string full_path_string = full_path.string();
+        archive_entry_set_pathname(entry, full_path_string.c_str());
+
+        const int header_result = archive_write_header(output, entry);
+        if (header_result != ARCHIVE_OK && header_result != ARCHIVE_WARN) {
+            ok = false;
+            break;
+        }
+        if (archive_entry_size(entry) > 0 && !CopyArchiveData(input, output)) {
+            ok = false;
+            break;
+        }
+        if (archive_write_finish_entry(output) != ARCHIVE_OK) {
+            ok = false;
+            break;
+        }
+    }
+
+    archive_read_close(input);
+    archive_read_free(input);
+    archive_write_close(output);
+    archive_write_free(output);
+    return ok;
+}
+
+bool RuntimeBinaryExists(const std::filesystem::path& directory) {
+    std::error_code error;
+    if (!std::filesystem::exists(directory, error)) {
+        return false;
+    }
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(directory, error)) {
+        if (error) {
+            return false;
+        }
+        const std::string filename = entry.path().filename().string();
+        if (filename == "llama-cli" || filename == "llama-cli.exe") {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace
@@ -269,19 +697,23 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
 
     fetch_tts_button_ = make_button("Fetch registry", [this] { FetchTtsRegistry(); });
     tts_download_button_ = make_button("Download", [this] { StartTtsVoiceDownload(); });
-    tts_delete_button_ = make_button("Delete", [this] {
-        SetTodoStatus("TTS voice delete");
-    });
-    tts_test_button_ = make_button("Test", [this] {
-        SetTodoStatus("TTS voice test");
-    });
+    tts_delete_button_ = make_button("Delete", [this] { StartTtsVoiceDelete(); });
+    tts_confirm_delete_button_ =
+        make_button("Confirm delete", [this] { ConfirmTtsVoiceDelete(); });
+    tts_cancel_delete_button_ =
+        make_button("Cancel", [this] { CancelTtsVoiceDelete(); });
+    tts_test_button_ = make_button("Test", [this] { TestTtsVoice(); });
     fetch_ai_button_ = make_button("Fetch registry", [this] { FetchAiRegistry(); });
-    ai_runtime_download_button_ = make_button("Download AI runtime", [this] {
-        SetTodoStatus("AI runtime download");
-    });
-    ai_model_download_button_ = make_button("Download model", [this] {
-        SetTodoStatus("AI model download");
-    });
+    ai_runtime_download_button_ =
+        make_button("Download AI runtime", [this] { StartAiRuntimeDownload(); });
+    ai_runtime_delete_button_ =
+        make_button("Delete runtime", [this] { StartAiRuntimeDelete(); });
+    ai_runtime_confirm_delete_button_ =
+        make_button("Confirm delete", [this] { ConfirmAiRuntimeDelete(); });
+    ai_runtime_cancel_delete_button_ =
+        make_button("Cancel", [this] { CancelAiRuntimeDelete(); });
+    ai_model_download_button_ =
+        make_button("Download model", [this] { StartAiModelDownload(); });
     ai_delete_model_button_ = make_button("Delete model", [this] {
         SetTodoStatus("AI model delete");
     });
@@ -296,11 +728,18 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
             }),
             tts_language_menu_,
             tts_voice_menu_,
+            ftxui::Container::Horizontal({
+                tts_confirm_delete_button_,
+                tts_cancel_delete_button_,
+            }),
         }),
         ftxui::Container::Vertical({
             ftxui::Container::Horizontal({
                 fetch_ai_button_,
                 ai_runtime_download_button_,
+                ai_runtime_delete_button_,
+                ai_runtime_confirm_delete_button_,
+                ai_runtime_cancel_delete_button_,
                 ai_model_download_button_,
                 ai_delete_model_button_,
             }),
@@ -320,6 +759,12 @@ AssistantSettingsModalContent::~AssistantSettingsModalContent() {
     tts_cancel_download_ = true;
     if (tts_download_thread_.joinable()) {
         tts_download_thread_.join();
+    }
+    if (ai_runtime_thread_.joinable()) {
+        ai_runtime_thread_.join();
+    }
+    if (ai_model_thread_.joinable()) {
+        ai_model_thread_.join();
     }
 }
 
@@ -344,6 +789,7 @@ std::string AssistantSettingsModalContent::GetFooterText() const {
         std::lock_guard<std::mutex> lock(tts_download_mutex_);
         return tts_status_;
     }
+    std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
     return ai_status_;
 }
 
@@ -366,8 +812,326 @@ void AssistantSettingsModalContent::SetTodoStatus(std::string action) {
     CreateDirectory(UserDataDirectory() / "ai" / "models");
     CreateDirectory(UserDataDirectory() / "ai" / "runtimes");
     CreateDirectory(DownloadCacheDirectory());
+    std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
     ai_status_ = "TODO: " + action + " support is not implemented";
+    ai_runtime_progress_visible_ = false;
+    ai_runtime_extracting_ = false;
     ai_progress_ = 0.0f;
+}
+
+bool AssistantSettingsModalContent::ResolveAiRuntimeDownload() {
+    using namespace assistant_modal_detail;
+
+    CreateDirectory(UserDataDirectory() / "ai" / "runtimes");
+    CreateDirectory(DownloadCacheDirectory());
+
+    ai_runtime_download_url_.clear();
+    ai_runtime_asset_name_.clear();
+    ai_runtime_progress_visible_ = false;
+    ai_runtime_extracting_ = false;
+    ai_progress_ = 0.0f;
+    ai_status_ = "Fetching runtime release...";
+
+    const std::string asset_pattern = AiRuntimeAssetPattern();
+    if (asset_pattern.empty()) {
+        ai_status_ = "Runtime asset not found";
+        return false;
+    }
+
+    Json release;
+    if (!FetchJsonUrl(
+            "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest",
+            &release)) {
+        ai_status_ = "Runtime asset not found";
+        return false;
+    }
+
+    const auto assets = release.find("assets");
+    if (assets == release.end() || !assets->is_array()) {
+        ai_status_ = "Runtime asset not found";
+        return false;
+    }
+
+    for (const Json& asset : *assets) {
+        if (!asset.is_object()) {
+            continue;
+        }
+        const std::string name = JsonString(asset, "name");
+        if (!MatchesRuntimeAssetPattern(name, asset_pattern)) {
+            continue;
+        }
+        const std::string url = JsonString(asset, "browser_download_url");
+        if (url.empty()) {
+            continue;
+        }
+        ai_runtime_download_url_ = url;
+        ai_runtime_asset_name_ = name;
+        ai_status_ = "Runtime asset found: " + name;
+        return true;
+    }
+
+    ai_status_ = "Runtime asset not found";
+    return false;
+}
+
+void AssistantSettingsModalContent::StartAiRuntimeDownload() {
+    using namespace assistant_modal_detail;
+
+    {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        if (ai_runtime_downloading_ || ai_model_downloading_) {
+            return;
+        }
+    }
+    if (ai_runtime_thread_.joinable()) {
+        ai_runtime_thread_.join();
+    }
+
+    if (ai_runtime_download_url_.empty() && !ResolveAiRuntimeDownload()) {
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        ai_runtime_downloading_ = true;
+        ai_runtime_progress_visible_ = true;
+        ai_runtime_extracting_ = false;
+        ai_progress_ = 0.0f;
+        ai_runtime_downloaded_bytes_ = 0;
+        ai_runtime_total_bytes_ = 0;
+        ai_status_ = "Runtime downloading...";
+    }
+    RequestRedraw();
+
+    const std::string url = ai_runtime_download_url_;
+    const std::string asset_name = ai_runtime_asset_name_.empty()
+        ? std::filesystem::path(url).filename().string()
+        : ai_runtime_asset_name_;
+    const std::filesystem::path archive_path = DownloadCacheDirectory() / asset_name;
+    const std::filesystem::path runtime_directory =
+        UserDataDirectory() / "ai" / "runtimes" / "llama_cpp";
+
+    ai_runtime_thread_ = std::thread([this, url, archive_path, runtime_directory] {
+        const bool download_ok = DownloadRuntimeArchive(
+            url,
+            archive_path,
+            ai_runtime_mutex_,
+            ai_progress_,
+            ai_runtime_downloaded_bytes_,
+            ai_runtime_total_bytes_,
+            request_redraw_);
+        if (!download_ok) {
+            std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+            ai_runtime_downloading_ = false;
+            ai_runtime_progress_visible_ = false;
+            ai_runtime_extracting_ = false;
+            ai_progress_ = 0.0f;
+            ai_runtime_downloaded_bytes_ = 0;
+            ai_runtime_total_bytes_ = 0;
+            ai_status_ = "Runtime install failed";
+            RequestRedraw();
+            return;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+            ai_status_ = "Runtime extracting...";
+            ai_runtime_progress_visible_ = true;
+            ai_runtime_extracting_ = true;
+            ai_progress_ = 0.0f;
+            ai_runtime_downloaded_bytes_ = 0;
+            ai_runtime_total_bytes_ = 0;
+        }
+        RequestRedraw();
+
+        const bool extract_ok = ExtractRuntimeArchive(archive_path, runtime_directory);
+        for (int step = 1; step <= 200; ++step) {
+            {
+                std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+                ai_progress_ = static_cast<float>(step) / 200.0f;
+            }
+            RequestRedraw();
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        const bool binary_ok = extract_ok && RuntimeBinaryExists(runtime_directory);
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        ai_runtime_downloading_ = false;
+        ai_runtime_progress_visible_ = false;
+        ai_runtime_extracting_ = false;
+        ai_progress_ = 0.0f;
+        ai_runtime_downloaded_bytes_ = 0;
+        ai_runtime_total_bytes_ = 0;
+        ai_status_ = binary_ok ? "Runtime installed" : "Runtime install failed";
+        RequestRedraw();
+    });
+}
+
+void AssistantSettingsModalContent::StartAiRuntimeDelete() {
+    using namespace assistant_modal_detail;
+
+    const std::filesystem::path runtime_directory =
+        UserDataDirectory() / "ai" / "runtimes" / "llama_cpp";
+    if (!RuntimeBinaryExists(runtime_directory)) {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        ai_runtime_delete_confirm_visible_ = false;
+        ai_status_ = "Runtime not installed";
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        if (ai_model_downloading_) {
+            return;
+        }
+        ai_runtime_delete_confirm_visible_ = true;
+    }
+    if (ai_runtime_confirm_delete_button_) {
+        ai_runtime_confirm_delete_button_->TakeFocus();
+    }
+}
+
+void AssistantSettingsModalContent::ConfirmAiRuntimeDelete() {
+    using namespace assistant_modal_detail;
+
+    const std::filesystem::path runtime_directory =
+        UserDataDirectory() / "ai" / "runtimes" / "llama_cpp";
+    {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        if (ai_runtime_downloading_ || ai_model_downloading_) {
+            return;
+        }
+    }
+    if (ai_runtime_thread_.joinable()) {
+        ai_runtime_thread_.join();
+    }
+
+    if (!RuntimeBinaryExists(runtime_directory)) {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        ai_runtime_delete_confirm_visible_ = false;
+        ai_status_ = "Runtime not installed";
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        ai_runtime_downloading_ = true;
+        ai_runtime_delete_confirm_visible_ = false;
+        ai_runtime_progress_visible_ = true;
+        ai_runtime_extracting_ = true;
+        ai_status_ = "Runtime deleting...";
+        ai_progress_ = 0.0f;
+        ai_runtime_downloaded_bytes_ = 0;
+        ai_runtime_total_bytes_ = 0;
+    }
+    RequestRedraw();
+
+    ai_runtime_thread_ = std::thread([this, runtime_directory] {
+        for (int step = 1; step <= 70; ++step) {
+            {
+                std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+                ai_progress_ = static_cast<float>(step) / 70.0f;
+            }
+            RequestRedraw();
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
+        std::error_code error;
+        std::filesystem::remove_all(runtime_directory, error);
+        const bool deleted = !error && !RuntimeBinaryExists(runtime_directory);
+        {
+            std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+            ai_runtime_downloading_ = false;
+            ai_runtime_progress_visible_ = false;
+            ai_runtime_extracting_ = false;
+            ai_runtime_download_url_.clear();
+            ai_runtime_asset_name_.clear();
+            ai_progress_ = 0.0f;
+            ai_runtime_downloaded_bytes_ = 0;
+            ai_runtime_total_bytes_ = 0;
+            ai_status_ = deleted ? "Runtime deleted" : "Delete runtime failed";
+        }
+        RequestRedraw();
+    });
+}
+
+void AssistantSettingsModalContent::CancelAiRuntimeDelete() {
+    std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+    ai_runtime_delete_confirm_visible_ = false;
+}
+
+void AssistantSettingsModalContent::StartAiModelDownload() {
+    using namespace assistant_modal_detail;
+
+    {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        if (ai_runtime_downloading_ || ai_model_downloading_) {
+            return;
+        }
+    }
+    if (ai_model_thread_.joinable()) {
+        ai_model_thread_.join();
+    }
+
+    Json model;
+    if (!FindSelectedAiModel(selected_ai_model_, &model)) {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        ai_status_ = "Model download failed";
+        return;
+    }
+
+    const std::string url = JsonString(model, "model_url");
+    if (url.empty()) {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        ai_status_ = "Model URL is missing";
+        return;
+    }
+
+    const std::string filename = JsonString(model, "filename");
+    if (filename.empty()) {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        ai_status_ = "Model filename is missing";
+        return;
+    }
+
+    const std::filesystem::path final_path =
+        UserDataDirectory() / "ai" / "models" / filename;
+    const std::filesystem::path part_path =
+        DownloadCacheDirectory() / (filename + ".part");
+
+    {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        ai_model_downloading_ = true;
+        ai_model_progress_visible_ = true;
+        ai_progress_ = 0.0f;
+        ai_model_downloaded_bytes_ = 0;
+        ai_model_total_bytes_ = 0;
+        ai_status_ = "Model downloading...";
+    }
+    RequestRedraw();
+
+    ai_model_thread_ = std::thread([this, url, final_path, part_path] {
+        const bool ok = DownloadAiModelFile(
+            url,
+            final_path,
+            part_path,
+            ai_runtime_mutex_,
+            ai_progress_,
+            ai_model_downloaded_bytes_,
+            ai_model_total_bytes_,
+            request_redraw_);
+
+        {
+            std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+            ai_model_downloading_ = false;
+            ai_model_progress_visible_ = false;
+            ai_progress_ = 0.0f;
+            ai_model_downloaded_bytes_ = 0;
+            ai_model_total_bytes_ = 0;
+            ai_refresh_after_model_download_ = ok;
+            ai_status_ = ok ? "Model downloaded" : "Model download failed";
+        }
+        RequestRedraw();
+    });
 }
 
 TtsModal::TtsModal(const Theme* theme)

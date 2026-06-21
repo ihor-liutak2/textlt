@@ -93,7 +93,7 @@ public:
     ftxui::Component GetMainComponent() override { return container_; }
     std::string GetTitle() override { return "Assistant Settings"; }
     ftxui::Element RenderTitle() override;
-    ModalSizePreference GetModalSizePreference() const override { return {74, 22}; }
+    ModalSizePreference GetModalSizePreference() const override { return {80, 28}; }
     ModalFrameStyle GetModalFrameStyle() const override {
         return ModalFrameStyle::TitleInBorder;
     }
@@ -108,7 +108,17 @@ private:
     void RebuildTtsVoices();
     void FetchTtsRegistry();
     void FetchAiRegistry();
+    bool ResolveAiRuntimeDownload();
+    void StartAiRuntimeDownload();
+    void StartAiRuntimeDelete();
+    void ConfirmAiRuntimeDelete();
+    void CancelAiRuntimeDelete();
+    void StartAiModelDownload();
     void StartTtsVoiceDownload();
+    void StartTtsVoiceDelete();
+    void ConfirmTtsVoiceDelete();
+    void CancelTtsVoiceDelete();
+    void TestTtsVoice();
     void ApplyTtsDownloadCompletion();
     void RequestRedraw() const;
     void SetTodoStatus(std::string action);
@@ -128,8 +138,10 @@ private:
     std::string ai_status_ = "Registry not loaded";
     std::vector<std::string> ai_model_labels_ = {"No models"};
     int selected_ai_model_ = 0;
+    std::string ai_runtime_download_url_;
+    std::string ai_runtime_asset_name_;
     float tts_progress_ = 0.0f;
-    float ai_progress_ = 0.0f;
+    std::atomic<float> ai_progress_{0.0f};
 
     std::thread tts_download_thread_;
     mutable std::mutex tts_download_mutex_;
@@ -137,10 +149,26 @@ private:
     bool tts_downloading_ = false;
     bool tts_download_visible_ = false;
     bool tts_refresh_after_download_ = false;
+    bool tts_delete_confirm_visible_ = false;
+    std::vector<Json> tts_delete_pending_voices_;
     std::string tts_download_current_file_;
     unsigned long long tts_downloaded_bytes_ = 0;
     unsigned long long tts_total_bytes_ = 0;
     float tts_progress_ratio_ = 0.0f;
+    std::thread ai_runtime_thread_;
+    mutable std::mutex ai_runtime_mutex_;
+    bool ai_runtime_downloading_ = false;
+    bool ai_runtime_delete_confirm_visible_ = false;
+    bool ai_runtime_progress_visible_ = false;
+    bool ai_runtime_extracting_ = false;
+    unsigned long long ai_runtime_downloaded_bytes_ = 0;
+    unsigned long long ai_runtime_total_bytes_ = 0;
+    std::thread ai_model_thread_;
+    bool ai_model_downloading_ = false;
+    bool ai_model_progress_visible_ = false;
+    bool ai_refresh_after_model_download_ = false;
+    unsigned long long ai_model_downloaded_bytes_ = 0;
+    unsigned long long ai_model_total_bytes_ = 0;
 
     ftxui::Component tts_tab_button_;
     ftxui::Component ai_tab_button_;
@@ -151,9 +179,14 @@ private:
     ftxui::Component fetch_tts_button_;
     ftxui::Component tts_download_button_;
     ftxui::Component tts_delete_button_;
+    ftxui::Component tts_confirm_delete_button_;
+    ftxui::Component tts_cancel_delete_button_;
     ftxui::Component tts_test_button_;
     ftxui::Component fetch_ai_button_;
     ftxui::Component ai_runtime_download_button_;
+    ftxui::Component ai_runtime_delete_button_;
+    ftxui::Component ai_runtime_confirm_delete_button_;
+    ftxui::Component ai_runtime_cancel_delete_button_;
     ftxui::Component ai_model_download_button_;
     ftxui::Component ai_delete_model_button_;
     ftxui::Component tab_body_container_;

@@ -92,6 +92,40 @@ bool FindSelectedPiperVoice(const std::string& selected_language,
     return false;
 }
 
+std::string SelectedPiperLanguage(const std::vector<std::string>& labels,
+                                  int selected_language) {
+    return selected_language >= 0 &&
+            selected_language < static_cast<int>(labels.size())
+        ? labels[selected_language]
+        : "";
+}
+
+int SelectedPiperVoiceCount(const std::vector<std::string>& labels,
+                            int selected_voice) {
+    if (selected_voice < 0 ||
+        selected_voice >= static_cast<int>(labels.size()) ||
+        labels[selected_voice] == "No voices") {
+        return 0;
+    }
+    return 1;
+}
+
+std::vector<Json> SelectedInstalledPiperVoices(const std::string& selected_language,
+                                               int selected_voice,
+                                               const std::vector<std::string>& labels) {
+    std::vector<Json> selected;
+    if (SelectedPiperVoiceCount(labels, selected_voice) == 0) {
+        return selected;
+    }
+
+    Json voice;
+    if (FindSelectedPiperVoice(selected_language, selected_voice, &voice) &&
+        PiperVoiceInstalled(voice)) {
+        selected.push_back(std::move(voice));
+    }
+    return selected;
+}
+
 size_t WriteFileCallback(char* data, size_t size, size_t count, void* user_data) {
     FILE* file = static_cast<FILE*>(user_data);
     return std::fwrite(data, size, count, file);
@@ -304,6 +338,9 @@ void AssistantSettingsModalContent::LoadPiperRegistry() {
 void AssistantSettingsModalContent::RebuildTtsVoices() {
     using namespace assistant_modal_detail;
 
+    tts_delete_confirm_visible_ = false;
+    tts_delete_pending_voices_.clear();
+
     Json root;
     const RegistryLoadResult load_result = LoadUserRegistryJson(kPiperRegistryFile, &root);
     const std::string selected_language =
@@ -508,6 +545,112 @@ void AssistantSettingsModalContent::StartTtsVoiceDownload() {
     });
 }
 
+void AssistantSettingsModalContent::StartTtsVoiceDelete() {
+    const std::string selected_language =
+        SelectedPiperLanguage(tts_language_labels_, selected_tts_language_);
+    std::vector<Json> voices =
+        SelectedInstalledPiperVoices(selected_language, selected_tts_voice_, tts_voice_labels_);
+    if (voices.empty()) {
+        std::lock_guard<std::mutex> lock(tts_download_mutex_);
+        tts_delete_confirm_visible_ = false;
+        tts_delete_pending_voices_.clear();
+        tts_status_ = "No installed voice selected";
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(tts_download_mutex_);
+        tts_delete_pending_voices_ = std::move(voices);
+        tts_delete_confirm_visible_ = true;
+        tts_download_visible_ = false;
+    }
+    if (tts_confirm_delete_button_) {
+        tts_confirm_delete_button_->TakeFocus();
+    }
+}
+
+void AssistantSettingsModalContent::ConfirmTtsVoiceDelete() {
+    using namespace assistant_modal_detail;
+
+    std::vector<Json> voices;
+    {
+        std::lock_guard<std::mutex> lock(tts_download_mutex_);
+        voices = tts_delete_pending_voices_;
+    }
+    if (voices.empty()) {
+        std::lock_guard<std::mutex> lock(tts_download_mutex_);
+        tts_delete_confirm_visible_ = false;
+        tts_status_ = "No installed voice selected";
+        return;
+    }
+
+    const std::filesystem::path models_directory =
+        UserDataDirectory() / "piper" / "models";
+    for (const Json& voice : voices) {
+        const std::string model_path = JsonString(voice, "model_path");
+        const std::string config_path = JsonString(voice, "config_path");
+        std::error_code error;
+        if (!model_path.empty()) {
+            std::filesystem::remove(models_directory / model_path, error);
+        }
+        error.clear();
+        if (!config_path.empty()) {
+            std::filesystem::remove(models_directory / config_path, error);
+        }
+    }
+
+    const size_t deleted_count = voices.size();
+    {
+        std::lock_guard<std::mutex> lock(tts_download_mutex_);
+        tts_delete_confirm_visible_ = false;
+        tts_delete_pending_voices_.clear();
+    }
+    RebuildTtsVoices();
+    selected_tts_voice_ = -1;
+    {
+        std::lock_guard<std::mutex> lock(tts_download_mutex_);
+        tts_status_ = deleted_count == 1 ? "Voice deleted" : "Voices deleted";
+    }
+}
+
+void AssistantSettingsModalContent::CancelTtsVoiceDelete() {
+    std::lock_guard<std::mutex> lock(tts_download_mutex_);
+    tts_delete_confirm_visible_ = false;
+    tts_delete_pending_voices_.clear();
+}
+
+void AssistantSettingsModalContent::TestTtsVoice() {
+    const int selected_count =
+        SelectedPiperVoiceCount(tts_voice_labels_, selected_tts_voice_);
+    if (selected_count == 0) {
+        std::lock_guard<std::mutex> lock(tts_download_mutex_);
+        tts_status_ = "No voice selected";
+        return;
+    }
+    if (selected_count > 1) {
+        std::lock_guard<std::mutex> lock(tts_download_mutex_);
+        tts_status_ = "Select one voice to test";
+        return;
+    }
+
+    Json voice;
+    const std::string selected_language =
+        SelectedPiperLanguage(tts_language_labels_, selected_tts_language_);
+    if (!FindSelectedPiperVoice(selected_language, selected_tts_voice_, &voice)) {
+        std::lock_guard<std::mutex> lock(tts_download_mutex_);
+        tts_status_ = "No voice selected";
+        return;
+    }
+    if (!PiperVoiceInstalled(voice)) {
+        std::lock_guard<std::mutex> lock(tts_download_mutex_);
+        tts_status_ = "Voice is not installed";
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(tts_download_mutex_);
+    tts_status_ = "TODO: Piper test playback not implemented";
+}
+
 void AssistantSettingsModalContent::ApplyTtsDownloadCompletion() {
     bool should_refresh = false;
     {
@@ -531,6 +674,7 @@ ftxui::Element AssistantSettingsModalContent::RenderTtsTab(const Theme& theme) {
     ApplyTtsDownloadCompletion();
 
     bool show_download_progress = false;
+    bool show_delete_confirmation = false;
     std::string current_file;
     unsigned long long downloaded_bytes = 0;
     unsigned long long total_bytes = 0;
@@ -538,6 +682,7 @@ ftxui::Element AssistantSettingsModalContent::RenderTtsTab(const Theme& theme) {
     {
         std::lock_guard<std::mutex> lock(tts_download_mutex_);
         show_download_progress = tts_download_visible_;
+        show_delete_confirmation = tts_delete_confirm_visible_;
         current_file = tts_download_current_file_;
         downloaded_bytes = tts_downloaded_bytes_;
         total_bytes = tts_total_bytes_;
@@ -568,20 +713,29 @@ ftxui::Element AssistantSettingsModalContent::RenderTtsTab(const Theme& theme) {
             byte_text = FormatBytes(downloaded_bytes) + " / " +
                         FormatBytes(total_bytes) + " bytes";
         }
-        rows.push_back(text(" " + byte_text) | color(theme.modal_text_color));
         const int percent =
             static_cast<int>(progress_ratio * 100.0f + 0.5f);
         rows.push_back(hbox({
-            text(" downloading:") | color(theme.modal_text_color),
-            gauge(progress_ratio) | flex,
-            text(" " + std::to_string(percent) + "%") |
+            text(" " + byte_text) | color(theme.modal_text_color),
+            filler(),
+            text(std::to_string(percent) + "% ") |
                 color(theme.modal_text_color),
         }));
+        rows.push_back(gauge(progress_ratio) | border);
     }
-    if (!show_download_progress) {
-        rows.push_back(text(" Voices") | bold | color(theme.modal_text_color));
-        rows.push_back(tts_voice_menu_->Render() | border);
+    if (show_delete_confirmation) {
+        rows.push_back(separator() | color(theme.modal_border));
+        rows.push_back(text(" Delete selected voice files?") |
+                       bold |
+                       color(theme.modal_text_color));
+        rows.push_back(hbox({
+            tts_confirm_delete_button_->Render(),
+            text(" "),
+            tts_cancel_delete_button_->Render(),
+        }));
     }
+    rows.push_back(text(" Voices") | bold | color(theme.modal_text_color));
+    rows.push_back(tts_voice_menu_->Render() | border);
     return vbox(std::move(rows)) | border;
 }
 
