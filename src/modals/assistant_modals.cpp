@@ -1419,13 +1419,19 @@ void AssistantSettingsModalContent::CancelAiModelDelete() {
     ai_model_delete_pending_filename_.clear();
 }
 
-TtsModal::TtsModal(const Theme* theme)
+TtsModal::TtsModal(
+    const Theme* theme,
+    CloudTtsPipeline* pipeline,
+    std::function<void()> prepare_current_file)
     : theme_(theme) {
-    content_ = std::make_shared<TtsModalContent>(theme_);
+    content_ = std::make_shared<TtsModalContent>(
+        theme_,
+        pipeline,
+        std::move(prepare_current_file));
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
-    modal_->SetFooterText("Placeholder only. Escape closes.");
+    modal_->SetFooterText("Escape closes.");
     modal_->SetFooterButtons({{"Close", [this] { Close(); }}});
-    modal_->SetBodyFrameScrolling(false);
+    modal_->SetBodyFrameScrolling(true);
 }
 
 ftxui::Component TtsModal::View() const {
@@ -1435,6 +1441,7 @@ ftxui::Component TtsModal::View() const {
 void TtsModal::Open() {
     open_ = true;
     content_->SetTheme(theme_);
+    content_->RefreshLibrary();
     modal_->SetTheme(theme_);
     content_->GetMainComponent()->TakeFocus();
 }

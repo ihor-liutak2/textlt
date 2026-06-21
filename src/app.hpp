@@ -98,7 +98,7 @@ private:
     bool ConfirmFileDialog(FilePromptMode mode, const std::string& path, std::string& error);
     void PersistActiveFavoriteCursor();
     void RestoreFavoriteCursor(const std::string& path);
-    void QueueCloudTtsDebugFromCursor();
+    void QueueTtsBookPreparationFromCursor();
     void PreviewTheme(const std::string& theme_name);
     void SelectTheme(const std::string& theme_name);
     void SaveConfig();
@@ -159,13 +159,12 @@ private:
     FileDialog file_dialog_;
     PathOperationDialog path_operation_dialog_;
     HelpDialog help_dialog_;
+    CloudTtsPipeline cloud_tts_pipeline_;
     TtsModal tts_modal_;
     AiActionsModal ai_actions_modal_;
     AssistantSettingsModal assistant_settings_modal_;
     ThemeDialog theme_dialog_;
     UnsavedChangesDialog unsaved_changes_dialog_;
-    CloudTtsPipeline cloud_tts_pipeline_;
-    
     FileManager file_manager_;
     std::vector<std::shared_ptr<Document>> open_documents_;
     size_t active_document_index_ = 0;

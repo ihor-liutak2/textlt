@@ -213,7 +213,10 @@ TextltApp::TextltApp()
           return ConfirmPathOperation(mode, from, to, error);
       }),
       help_dialog_(&current_theme_),
-      tts_modal_(&current_theme_),
+      tts_modal_(
+          &current_theme_,
+          &cloud_tts_pipeline_,
+          [this] { QueueTtsBookPreparationFromCursor(); }),
       ai_actions_modal_(&current_theme_),
       assistant_settings_modal_(
           &current_theme_,
@@ -1551,15 +1554,16 @@ void TextltApp::RestoreFavoriteCursor(const std::string& path) {
         ->SetCursorPosition(favorite->row, favorite->column);
 }
 
-void TextltApp::QueueCloudTtsDebugFromCursor() {
+void TextltApp::QueueTtsBookPreparationFromCursor() {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
 
     // Submit document content and cursor row index for TTS processing
     cloud_tts_pipeline_.Submit(
         editor_ptr->GetAllText(),
-                               editor_ptr->GetCursorRow());
+        editor_ptr->CurrentFilePath(),
+        editor_ptr->GetCursorRow());
 
-    active_action_ = "Queued Cloud TTS debug pipeline";
+    active_action_ = "Queued TTS book preparation";
     screen_.PostEvent(ftxui::Event::Custom);
 }
 

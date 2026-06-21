@@ -2,10 +2,13 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
+#include <cstdlib>
+#include <iomanip>
 #include <iterator>
 #include <sstream>
+#include <system_error>
 
-#include "editor_config.hpp"
 #include "json_utils.hpp"
 
 namespace textlt {
@@ -58,6 +61,15 @@ std::string SplitIdentifierToken(const std::string& token) {
     return split;
 }
 
+unsigned long long StableHash(const std::string& text) {
+    unsigned long long hash = 14695981039346656037ull;
+    for (unsigned char character : text) {
+        hash ^= character;
+        hash *= 1099511628211ull;
+    }
+    return hash;
+}
+
 } // namespace
 
 CloudTtsPipeline::CloudTtsPipeline() = default;
@@ -66,37 +78,153 @@ CloudTtsPipeline::~CloudTtsPipeline() {
     JoinWorker();
 }
 
-void CloudTtsPipeline::Submit(std::string entire_document_text, size_t current_cursor_line) {
+std::vector<CloudTtsPipeline::BookInfo> CloudTtsPipeline::ListLocalBooks() const {
+    std::vector<BookInfo> books;
+    const std::filesystem::path library = LibraryDirectory();
+    if (library.empty()) {
+        return books;
+    }
+
+    std::error_code error;
+    if (!std::filesystem::is_directory(library, error)) {
+        return books;
+    }
+
+    for (const auto& entry : std::filesystem::directory_iterator(library, error)) {
+        if (error) {
+            break;
+        }
+        if (!entry.is_directory(error) || error) {
+            error.clear();
+            continue;
+        }
+
+        BookInfo book;
+        if (LoadBookInfo(entry.path(), &book)) {
+            books.push_back(std::move(book));
+        }
+    }
+
+    std::sort(books.begin(), books.end(), [](const BookInfo& left, const BookInfo& right) {
+        const auto left_key = std::make_tuple(
+            left.series,
+            left.series_index,
+            left.title.empty() ? left.source_file_name : left.title,
+            left.source_file_name);
+        const auto right_key = std::make_tuple(
+            right.series,
+            right.series_index,
+            right.title.empty() ? right.source_file_name : right.title,
+            right.source_file_name);
+        return left_key < right_key;
+    });
+    return books;
+}
+
+bool CloudTtsPipeline::LoadBookMetadata(const std::string& book_id, BookMetadata* book) const {
+    if (!book || book_id.empty()) {
+        return false;
+    }
+
+    const std::filesystem::path book_directory = BookDirectory(book_id);
+    if (book_directory.empty()) {
+        return false;
+    }
+    const Json book_json = LoadJsonObject(book_directory / "book.json");
+    if (book_json.empty()) {
+        return false;
+    }
+
+    BookMetadata loaded;
+    loaded.book_id = JsonString(book_json, "book_id", book_id);
+    loaded.source_file_path = JsonString(book_json, "source_file_path");
+    loaded.file_name = JsonString(book_json, "file_name");
+    loaded.file_size = static_cast<uintmax_t>(JsonSize(book_json, "file_size", 0));
+    const auto modified = book_json.find("modified_time");
+    if (modified != book_json.end() && modified->is_number_integer()) {
+        loaded.modified_time = modified->get<long long>();
+    }
+    loaded.title = JsonString(book_json, "title");
+    loaded.author = JsonString(book_json, "author");
+    loaded.series = JsonString(book_json, "series");
+    loaded.genre = JsonString(book_json, "genre");
+    loaded.series_index = JsonInt(book_json, "series_index", 0);
+    loaded.language = JsonString(book_json, "language");
+    loaded.piper_voice_id = JsonString(book_json, "piper_voice_id");
+    loaded.last_cursor_line = JsonSize(book_json, "last_cursor_line", 0);
+
+    if (loaded.book_id.empty()) {
+        return false;
+    }
+    *book = std::move(loaded);
+    return true;
+}
+
+bool CloudTtsPipeline::UpdateBookMetadata(
+    const std::string& book_id,
+    const EditableBookMetadata& metadata) const {
+    if (book_id.empty()) {
+        return false;
+    }
+
+    const std::filesystem::path book_directory = BookDirectory(book_id);
+    if (book_directory.empty()) {
+        return false;
+    }
+    const std::filesystem::path book_path = book_directory / "book.json";
+    Json book_json = LoadJsonObject(book_path);
+    if (book_json.empty()) {
+        return false;
+    }
+
+    book_json["title"] = metadata.title;
+    book_json["author"] = metadata.author;
+    book_json["series"] = metadata.series;
+    book_json["genre"] = metadata.genre;
+    book_json["series_index"] = metadata.series_index;
+    book_json["language"] = metadata.language;
+    book_json["piper_voice_id"] = metadata.piper_voice_id;
+    return WriteJsonAtomically(book_path, book_json);
+}
+
+void CloudTtsPipeline::Submit(
+    std::string entire_document_text,
+    std::filesystem::path source_file_path,
+    size_t current_cursor_line) {
     JoinWorker();
-    worker_ = std::thread([text = std::move(entire_document_text), current_cursor_line] {
-        // BuildDiagnostics still expects SourcePosition, so we construct one from the line number.
+    worker_ = std::thread([
+        text = std::move(entire_document_text),
+        source_file_path = std::move(source_file_path),
+        current_cursor_line] {
         SourcePosition start_pos = {current_cursor_line, 0};
-        WriteDiagnostics(BuildDiagnostics(text, start_pos));
+        const BookMetadata book =
+            BuildBookMetadata(source_file_path, text, current_cursor_line);
+        WriteBook(book, BuildPreparedChunks(text, start_pos));
     });
 }
 
-std::vector<CloudTtsPipeline::ChunkDiagnostic> CloudTtsPipeline::BuildDiagnostics(
+std::vector<CloudTtsPipeline::PreparedChunk> CloudTtsPipeline::BuildPreparedChunks(
     const std::string& text,
     SourcePosition start_position) {
-    std::vector<ChunkDiagnostic> diagnostics;
+    std::vector<PreparedChunk> chunks;
     SourcePosition position = start_position;
-    const std::vector<std::string> chunks = BuildRawChunks(text);
+    const std::vector<std::string> raw_chunks = BuildRawChunks(text);
 
-    for (const std::string& chunk : chunks) {
-        ChunkDiagnostic diagnostic;
-        diagnostic.chunk_index = diagnostics.size();
-        diagnostic.start_line = position.line;
-        diagnostic.start_column = position.column;
-        position = AdvancePosition(position, chunk);
-        diagnostic.end_line = position.line;
-        diagnostic.end_column = position.column;
-        diagnostic.raw_size_bytes = chunk.size();
-        diagnostic.cleansed_text = CleanseText(chunk);
-        diagnostic.network_status = "simulated_prepared";
-        diagnostics.push_back(std::move(diagnostic));
+    for (const std::string& raw_chunk : raw_chunks) {
+        PreparedChunk chunk;
+        chunk.chunk_index = chunks.size();
+        chunk.start_line = position.line;
+        chunk.start_column = position.column;
+        position = AdvancePosition(position, raw_chunk);
+        chunk.end_line = position.line;
+        chunk.end_column = position.column;
+        chunk.raw_size_bytes = raw_chunk.size();
+        chunk.cleansed_text = CleanseText(raw_chunk);
+        chunk.status = "prepared";
+        chunks.push_back(std::move(chunk));
     }
 
-    return diagnostics;
+    return chunks;
 }
 
 std::vector<std::string> CloudTtsPipeline::BuildRawChunks(const std::string& text) {
@@ -268,26 +396,201 @@ std::string CloudTtsPipeline::CleanseText(const std::string& text) {
     return cleansed.str();
 }
 
-std::filesystem::path CloudTtsPipeline::DiagnosticPath() {
-    return EditorConfig::DefaultConfigPath().parent_path() / "debug_tts.json";
+std::filesystem::path CloudTtsPipeline::UserDataDirectory() {
+#ifdef _WIN32
+    const char* local_app_data = std::getenv("LOCALAPPDATA");
+    if (local_app_data && !std::string(local_app_data).empty()) {
+        return std::filesystem::path(local_app_data) / "textlt";
+    }
+    const char* user_profile = std::getenv("USERPROFILE");
+    if (user_profile && !std::string(user_profile).empty()) {
+        return std::filesystem::path(user_profile) / "AppData" / "Local" / "textlt";
+    }
+    return {};
+#else
+    const char* xdg_data_home = std::getenv("XDG_DATA_HOME");
+    if (xdg_data_home && !std::string(xdg_data_home).empty()) {
+        return std::filesystem::path(xdg_data_home) / "textlt";
+    }
+    const char* home = std::getenv("HOME");
+    if (!home || std::string(home).empty()) {
+        return {};
+    }
+    return std::filesystem::path(home) / ".local" / "share" / "textlt";
+#endif
 }
 
-void CloudTtsPipeline::WriteDiagnostics(
-    const std::vector<ChunkDiagnostic>& diagnostics) {
-    Json root = Json::array();
-    for (const ChunkDiagnostic& diagnostic : diagnostics) {
-        root.push_back({
-            {"chunk_index", diagnostic.chunk_index},
-            {"start_line", diagnostic.start_line},
-            {"start_column", diagnostic.start_column},
-            {"end_line", diagnostic.end_line},
-            {"end_column", diagnostic.end_column},
-            {"raw_size_bytes", diagnostic.raw_size_bytes},
-            {"cleansed_text", diagnostic.cleansed_text},
-            {"network_status", diagnostic.network_status},
+std::filesystem::path CloudTtsPipeline::LibraryDirectory() {
+    const std::filesystem::path data = UserDataDirectory();
+    return data.empty() ? std::filesystem::path{} : data / "tts" / "library" / "books";
+}
+
+std::filesystem::path CloudTtsPipeline::BookDirectory(const std::string& book_id) {
+    const std::filesystem::path library = LibraryDirectory();
+    return library.empty() ? std::filesystem::path{} : library / book_id;
+}
+
+std::string CloudTtsPipeline::BuildBookId(
+    const std::filesystem::path& source_file_path,
+    const std::string& text) {
+    std::string key = source_file_path.lexically_normal().string();
+    if (key.empty() || key == "Untitled" || key == "untitled.txt") {
+        key = text;
+    }
+
+    std::ostringstream output;
+    output << "book_" << std::hex << std::setw(16) << std::setfill('0')
+           << StableHash(key);
+    return output.str();
+}
+
+CloudTtsPipeline::BookMetadata CloudTtsPipeline::BuildBookMetadata(
+    const std::filesystem::path& source_file_path,
+    const std::string& text,
+    size_t current_cursor_line) {
+    BookMetadata book;
+    book.book_id = BuildBookId(source_file_path, text);
+    book.source_file_path = source_file_path;
+    book.file_name = source_file_path.filename().string();
+    book.title = source_file_path.stem().string();
+    book.last_cursor_line = current_cursor_line;
+
+    std::error_code error;
+    if (std::filesystem::is_regular_file(source_file_path, error)) {
+        error.clear();
+        book.file_size = std::filesystem::file_size(source_file_path, error);
+        error.clear();
+        const auto modified = std::filesystem::last_write_time(source_file_path, error);
+        if (!error) {
+            const auto system_time =
+                std::chrono::time_point_cast<std::chrono::seconds>(
+                    modified - decltype(modified)::clock::now() +
+                    std::chrono::system_clock::now());
+            book.modified_time = system_time.time_since_epoch().count();
+        }
+    } else {
+        book.file_size = text.size();
+    }
+
+    return book;
+}
+
+bool CloudTtsPipeline::LoadBookInfo(
+    const std::filesystem::path& book_directory,
+    BookInfo* book) {
+    const Json book_json = LoadJsonObject(book_directory / "book.json");
+    if (book_json.empty()) {
+        return false;
+    }
+
+    BookInfo loaded;
+    loaded.book_id = JsonString(book_json, "book_id");
+    if (loaded.book_id.empty()) {
+        loaded.book_id = book_directory.filename().string();
+    }
+    if (loaded.book_id.empty()) {
+        return false;
+    }
+
+    loaded.title = JsonString(book_json, "title");
+    loaded.author = JsonString(book_json, "author");
+    loaded.series = JsonString(book_json, "series");
+    loaded.genre = JsonString(book_json, "genre");
+    loaded.series_index = JsonInt(book_json, "series_index", 0);
+    loaded.language = JsonString(book_json, "language");
+    loaded.piper_voice_id = JsonString(book_json, "piper_voice_id");
+    loaded.source_file_name = JsonString(book_json, "file_name");
+    loaded.source_path = JsonString(book_json, "source_file_path");
+    loaded.file_size = static_cast<uintmax_t>(JsonSize(book_json, "file_size", 0));
+    const auto modified = book_json.find("modified_time");
+    if (modified != book_json.end() && modified->is_number_integer()) {
+        loaded.modified_time = modified->get<long long>();
+    }
+    loaded.last_cursor_line = JsonSize(book_json, "last_cursor_line", 0);
+
+    std::ifstream chunks_file(book_directory / "chunks.json", std::ios::binary);
+    if (!chunks_file) {
+        return false;
+    }
+    const Json chunks_json = Json::parse(chunks_file, nullptr, false);
+    if (chunks_json.is_discarded() || !chunks_json.is_array()) {
+        return false;
+    }
+
+    loaded.total_chunks = chunks_json.size();
+    for (const Json& chunk : chunks_json) {
+        if (!chunk.is_object()) {
+            continue;
+        }
+        const std::string status = JsonString(chunk, "status");
+        if (status == "prepared") {
+            ++loaded.prepared_chunks;
+        } else if (status == "ready") {
+            ++loaded.ready_chunks;
+        } else if (status == "failed") {
+            ++loaded.failed_chunks;
+        } else if (status == "played") {
+            ++loaded.played_chunks;
+        }
+    }
+
+    if (loaded.total_chunks > 0) {
+        const size_t complete_chunks = loaded.ready_chunks + loaded.played_chunks;
+        loaded.progress_ratio =
+            static_cast<double>(complete_chunks) / static_cast<double>(loaded.total_chunks);
+    }
+
+    *book = std::move(loaded);
+    return true;
+}
+
+bool CloudTtsPipeline::WriteBook(
+    const BookMetadata& book,
+    const std::vector<PreparedChunk>& chunks) {
+    const std::filesystem::path book_directory = BookDirectory(book.book_id);
+    if (book_directory.empty()) {
+        return false;
+    }
+
+    std::error_code error;
+    std::filesystem::create_directories(book_directory / "audio", error);
+    if (error) {
+        return false;
+    }
+
+    const Json book_json = {
+        {"book_id", book.book_id},
+        {"source_file_path", book.source_file_path.string()},
+        {"file_name", book.file_name},
+        {"file_size", book.file_size},
+        {"modified_time", book.modified_time},
+        {"title", book.title},
+        {"author", book.author},
+        {"series", book.series},
+        {"genre", book.genre},
+        {"series_index", book.series_index},
+        {"language", book.language},
+        {"piper_voice_id", book.piper_voice_id},
+        {"last_cursor_line", book.last_cursor_line},
+    };
+
+    Json chunks_json = Json::array();
+    for (const PreparedChunk& chunk : chunks) {
+        chunks_json.push_back({
+            {"chunk_index", chunk.chunk_index},
+            {"start_line", chunk.start_line},
+            {"start_column", chunk.start_column},
+            {"end_line", chunk.end_line},
+            {"end_column", chunk.end_column},
+            {"raw_size", chunk.raw_size_bytes},
+            {"cleansed_text", chunk.cleansed_text},
+            {"status", chunk.status},
+            {"audio_path", chunk.audio_path},
         });
     }
-    WriteJsonAtomically(DiagnosticPath(), root);
+
+    return WriteJsonAtomically(book_directory / "book.json", book_json) &&
+           WriteJsonAtomically(book_directory / "chunks.json", chunks_json);
 }
 
 void CloudTtsPipeline::JoinWorker() {

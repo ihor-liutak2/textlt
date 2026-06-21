@@ -16,6 +16,19 @@ std::string DisplayName(const std::filesystem::path& path) {
     return path.filename().empty() ? path.string() : path.filename().string();
 }
 
+ftxui::Color SidebarTextColor(const Theme& theme) {
+    if (theme.name == "Solarized Light") {
+        return ftxui::Color::RGB(7, 54, 66);
+    }
+    if (theme.name == "GitHub Light") {
+        return ftxui::Color::RGB(12, 18, 28);
+    }
+    if (theme.name == "Pantone Peach Fuzz") {
+        return ftxui::Color::RGB(43, 27, 18);
+    }
+    return theme.foreground;
+}
+
 } // namespace
 
 SidebarPanel::SidebarPanel(
@@ -46,19 +59,20 @@ ftxui::Element SidebarPanel::Render() {
     ClampScrollOffset();
 
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    const ftxui::Color sidebar_text = SidebarTextColor(theme);
     Element opened_tab =
         text("[ Opened ]") |
-        color(theme.foreground) |
+        color(sidebar_text) |
         dim |
         reflect(opened_tab_box_);
     Element project_tab =
         text("[ Project ]") |
-        color(theme.foreground) |
+        color(sidebar_text) |
         dim |
         reflect(project_tab_box_);
     Element favorites_tab =
         text("[ Favorites ]") |
-        color(theme.foreground) |
+        color(sidebar_text) |
         dim |
         reflect(favorites_tab_box_);
 
@@ -85,7 +99,7 @@ ftxui::Element SidebarPanel::Render() {
     const size_t end_index =
         std::min(entry_labels_.size(), list_scroll_offset_ + visible_entry_count);
     for (size_t index = list_scroll_offset_; index < end_index; ++index) {
-        Element row = text(entry_labels_[index]);
+        Element row = text(entry_labels_[index]) | color(sidebar_text);
         if (mode_ == SidebarMode::Project &&
             index < entry_paths_.size() &&
             index < entry_kinds_.size() &&

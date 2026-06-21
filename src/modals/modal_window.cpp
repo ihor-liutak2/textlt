@@ -151,13 +151,14 @@ ftxui::Element ModalWindow::RenderBody(const Theme& theme) {
     using namespace ftxui;
 
     Element body = content_->Render() |
-        size(WIDTH, EQUAL, BodyWidth()) |
-        size(HEIGHT, EQUAL, BodyHeight());
-
+        size(WIDTH, EQUAL, BodyWidth());
     if (body_frame_scrolling_) {
         body = body |
-            vscroll_indicator |
-            yframe;
+            yframe |
+            vscroll_indicator;
+    } else {
+        body = body |
+            size(HEIGHT, EQUAL, BodyHeight());
     }
 
     return body |
