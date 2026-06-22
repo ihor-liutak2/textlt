@@ -227,6 +227,9 @@ ftxui::Element TextltApp::Render() {
     if (help_dialog_.IsOpen()) {
         layers.push_back(help_dialog_.View()->Render() | clear_under | center);
     }
+    if (recent_files_modal_.IsOpen()) {
+        layers.push_back(recent_files_modal_.View()->Render() | clear_under | center);
+    }
     if (theme_dialog_.IsOpen()) {
         layers.push_back(theme_dialog_.View()->Render() | clear_under | center);
     }
@@ -352,6 +355,20 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
             return true;
         }
         return true; // Consume all other events.
+    }
+
+    if (recent_files_modal_.IsOpen()) {
+        if (recent_files_modal_.OnEvent(event)) {
+            if (!recent_files_modal_.IsOpen()) {
+                FocusEditor();
+            }
+            return true;
+        }
+        if (event == ftxui::Event::Escape) {
+            CloseRecentFilesModal();
+            return true;
+        }
+        return true;
     }
 
     // 3. Assistant Modals

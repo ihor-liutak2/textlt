@@ -17,9 +17,11 @@
 #include "modals/assistant_modals.hpp"
 #include "modals/help_dialog.hpp"
 #include "modals/modal_ai.hpp"
+#include "modals/modal_recent_files.hpp"
 #include "modals/modal_tts.hpp"
 #include "menu_bar.hpp"
 #include "opened_config.hpp"
+#include "recent_files.hpp"
 #include "modals/path_operation_dialog.hpp"
 #include "sidebar_component.hpp"
 #include "modals/theme_dialog.hpp"
@@ -45,6 +47,8 @@ private:
     void OpenDropdown();
     void CloseFileDialog();
     void OpenFileDialog(FilePromptMode mode);
+    void OpenRecentFilesModal();
+    void CloseRecentFilesModal();
     void ClosePathOperationDialog();
     void OpenPathOperationDialog(PathOperationMode mode);
     std::filesystem::path CurrentSidebarDirectory() const;
@@ -161,6 +165,8 @@ private:
     FileDialog file_dialog_;
     PathOperationDialog path_operation_dialog_;
     HelpDialog help_dialog_;
+    RecentFilesHistory recent_files_history_;
+    RecentFilesModal recent_files_modal_;
     CloudTtsPipeline cloud_tts_pipeline_;
     TtsModal tts_modal_;
     AiActionsModal ai_actions_modal_;

@@ -40,6 +40,52 @@ Optimized to run perfectly in native Linux environments (**MX Linux**, **Ubuntu*
 
 ## Getting Started
 
+### Install from Release
+
+#### Linux
+
+Copy and paste this into Bash. Change `VERSION` to the release tag you want, for example `v1.0.0`.
+
+```bash
+VERSION="v1.0.0"
+mkdir -p "$HOME/.local/bin"
+wget -O /tmp/textlt-linux-x64.tar.gz "https://github.com/ihor-liutak2/textlt/releases/download/${VERSION}/textlt-linux-x64.tar.gz"
+tar -xzf /tmp/textlt-linux-x64.tar.gz -C "$HOME/.local/bin"
+chmod +x "$HOME/.local/bin/textlt"
+grep -qxF 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+grep -qxF 'export COLORTERM=truecolor' "$HOME/.bashrc" || echo 'export COLORTERM=truecolor' >> "$HOME/.bashrc"
+grep -qxF 'export TERM=xterm-256color' "$HOME/.bashrc" || echo 'export TERM=xterm-256color' >> "$HOME/.bashrc"
+source "$HOME/.bashrc"
+textlt
+```
+
+After this, start the editor from any terminal with:
+
+```bash
+textlt path/to/file.cpp
+```
+
+#### Windows
+
+Copy and paste this into PowerShell. Change `VERSION` to the release tag you want, for example `v1.0.0`.
+
+```powershell
+$VERSION = "v1.0.0"
+$InstallDir = "$env:LOCALAPPDATA\Programs\textlt"
+New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+wget "https://github.com/ihor-liutak2/textlt/releases/download/$VERSION/textlt-windows-x64.zip" -OutFile "$env:TEMP\textlt-windows-x64.zip"
+Expand-Archive -Force "$env:TEMP\textlt-windows-x64.zip" -DestinationPath $InstallDir
+$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+if ($UserPath -notlike "*$InstallDir*") { [Environment]::SetEnvironmentVariable("Path", "$UserPath;$InstallDir", "User") }
+& "$InstallDir\textlt.exe"
+```
+
+Open a new terminal after installing so Windows reloads `PATH`, then start the editor with:
+
+```powershell
+textlt path\to\file.cpp
+```
+
 ### Automated 1-Click Installation
 The repository includes an intelligent interactive deployment script that installs missing dependencies (`build-essential`, `cmake`), compiles the binary in `Release` mode, safely copies it into your user local binary path, and updates your environment path configurations.
 

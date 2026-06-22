@@ -89,12 +89,14 @@ add_executable(textlt
   src/modals/assistant_modals_tts.cpp
   src/modals/help_dialog.cpp
   src/modals/modal_ai.cpp
+  src/modals/modal_recent_files.cpp
   src/modals/modal_tts.cpp
   src/modals/modal_window.cpp
   src/modals/path_operation_dialog.cpp
   src/modals/theme_dialog.cpp
   src/modals/unsaved_changes_dialog.cpp
   src/opened_config.cpp
+  src/recent_files.cpp
   src/sidebar_component.cpp
   src/syntax_highlighter.cpp
   src/terminal_flow_control_guard.cpp

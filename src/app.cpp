@@ -213,6 +213,17 @@ TextltApp::TextltApp()
           return ConfirmPathOperation(mode, from, to, error);
       }),
       help_dialog_(&current_theme_),
+      recent_files_modal_(
+          &current_theme_,
+          &recent_files_history_,
+          [this](const std::filesystem::path& path, std::string& error) {
+              const bool opened = OpenFile(path.string(), error);
+              if (opened) {
+                  FocusEditor();
+                  screen_.PostEvent(ftxui::Event::Custom);
+              }
+              return opened;
+          }),
       tts_modal_(
           &current_theme_,
           &cloud_tts_pipeline_,
@@ -230,6 +241,7 @@ TextltApp::TextltApp()
           [this] { SaveAndExit(); },
           [this] { DiscardAndExit(); },
           [this] { CloseExitConfirmationDialog(); }) {
+    recent_files_history_.Load();
     menu_bar_ = ftxui::Make<MenuBarComponent>(
         [this](int menu_index, int item_index) {
             this->RunDropdownAction(menu_index, item_index);
@@ -250,6 +262,7 @@ TextltApp::TextltApp()
             (!menu_bar_ || !menu_bar_->IsDropdownOpen()) &&
             !file_dialog_.IsOpen() &&
             !help_dialog_.IsOpen() &&
+            !recent_files_modal_.IsOpen() &&
             !tts_modal_.IsOpen() &&
             !ai_actions_modal_.IsOpen() &&
             !assistant_settings_modal_.IsOpen() &&
@@ -507,13 +520,27 @@ void TextltApp::CloseHelpDialog() {
     FocusEditor();
 }
 
+void TextltApp::OpenRecentFilesModal() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+    recent_files_modal_.Open();
+    active_action_ = "Opened Recent Files";
+    focused_layer_ = 8;
+}
+
+void TextltApp::CloseRecentFilesModal() {
+    recent_files_modal_.Close();
+    FocusEditor();
+}
+
 void TextltApp::OpenTtsModal() {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
     tts_modal_.Open();
     active_action_ = "Opened Text-to-Speech";
-    focused_layer_ = 8;
+    focused_layer_ = 9;
 }
 
 void TextltApp::CloseTtsModal() {
@@ -527,7 +554,7 @@ void TextltApp::OpenAiActionsModal() {
     }
     ai_actions_modal_.Open();
     active_action_ = "Opened AI Actions";
-    focused_layer_ = 9;
+    focused_layer_ = 10;
 }
 
 void TextltApp::CloseAiActionsModal() {
@@ -542,7 +569,7 @@ void TextltApp::OpenAssistantSettingsModal() {
     EnsureAssistantResources();
     assistant_settings_modal_.Open();
     active_action_ = "Opened Assistant Settings";
-    focused_layer_ = 10;
+    focused_layer_ = 11;
 }
 
 void TextltApp::CloseAssistantSettingsModal() {
@@ -1071,6 +1098,7 @@ bool TextltApp::OpenFile(const std::string& path, std::string& error) {
         if (open_index >= 0) {
             ActivateOpenDocument(static_cast<size_t>(open_index));
             PersistOpenedDocuments();
+            recent_files_history_.AddFile(path);
             active_action_ = "Opened " + path;
             return true;
         }
@@ -1085,6 +1113,7 @@ bool TextltApp::OpenFile(const std::string& path, std::string& error) {
         RestoreFavoriteCursor(path);
         git_manager_.SetWorkingDirectory(std::filesystem::path(path).parent_path());
         PersistOpenedDocuments();
+        recent_files_history_.AddFile(path);
         active_action_ = "Opened " + path;
         return true;
     } catch (const std::exception& exception) {
@@ -1673,13 +1702,14 @@ void TextltApp::RunDropdownAction(int menu_index, int item_index) {
             case 4: OpenPathOperationDialog(PathOperationMode::Rename); return;
             case 5: OpenPathOperationDialog(PathOperationMode::Move); return;
             case 6: OpenFileDialog(FilePromptMode::Open); return;
-            case 7: CloseCurrentFile(); return;
-            case 8: CloseAllOpenedFiles(); return;
-            case 9: SaveCurrentFile(); return;
-            case 10: SaveAllOpenedFiles(); return;
-            case 11: OpenFileDialog(FilePromptMode::SaveAs); return;
-            case 12: ToggleActiveFavorite(); return;
-            case 13: RequestExit(); return;
+            case 7: OpenRecentFilesModal(); return;
+            case 8: CloseCurrentFile(); return;
+            case 9: CloseAllOpenedFiles(); return;
+            case 10: SaveCurrentFile(); return;
+            case 11: SaveAllOpenedFiles(); return;
+            case 12: OpenFileDialog(FilePromptMode::SaveAs); return;
+            case 13: ToggleActiveFavorite(); return;
+            case 14: RequestExit(); return;
 
             default:
                 CloseDropdown();

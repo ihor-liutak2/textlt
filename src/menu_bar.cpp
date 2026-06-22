@@ -33,6 +33,7 @@ MenuBarComponent::MenuBarComponent(
               " Rename... ",
               " Move... ",
               " Open               (Ctrl+O) ",
+              " Recent Files ",
               " Close              (Alt+W) ",
               " Close All ",
               " Save               (Ctrl+S) ",
@@ -266,12 +267,12 @@ bool MenuBarComponent::OnEvent(ftxui::Event event) {
     
     
 void MenuBarComponent::SetFileFavoriteLabel(bool is_favorite) {
-    if (dropdown_entries_.empty() || dropdown_entries_[0].size() <= 12) {
+    if (dropdown_entries_.empty() || dropdown_entries_[0].size() <= 13) {
         return;
     }
 
-    dropdown_entries_[0][12] = is_favorite
-        ? " [X] Add to Favorites "
+    dropdown_entries_[0][13] = is_favorite
+        ? " [X] Remove from Favorites "
         : " [ ] Add to Favorites ";
     RefreshCurrentDropdownEntries();
 }
