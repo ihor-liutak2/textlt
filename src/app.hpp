@@ -16,6 +16,8 @@
 #include "git_manager.hpp"
 #include "modals/assistant_modals.hpp"
 #include "modals/help_dialog.hpp"
+#include "modals/modal_ai.hpp"
+#include "modals/modal_tts.hpp"
 #include "menu_bar.hpp"
 #include "opened_config.hpp"
 #include "modals/path_operation_dialog.hpp"

@@ -139,30 +139,6 @@ std::vector<std::string> WrapText(const std::string& text, size_t width) {
 
 } // namespace
 
-AiActionsModalContent::AiActionsModalContent(const Theme* theme)
-    : theme_(theme) {
-    renderer_ = ftxui::Renderer([this] { return Render(); });
-}
-
-ftxui::Element AiActionsModalContent::Render() {
-    using namespace ftxui;
-    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-
-    return vbox({
-        text(" AI Actions") | bold | color(theme.modal_accent),
-        separator() | color(theme.modal_border),
-        StatusLine("Model", "gemma3:1b", theme),
-        text(""),
-        text(" Actions") | bold | color(theme.modal_text_color),
-        text("  - improve") | color(theme.modal_text_color),
-        text("  - translate") | color(theme.modal_text_color),
-        text("  - summarize") | color(theme.modal_text_color),
-        text("  - explain") | color(theme.modal_text_color),
-    }) |
-        bgcolor(theme.modal_input_bg) |
-        color(theme.modal_input_fg);
-}
-
 void AssistantSettingsModalContent::LoadAiRegistry() {
     using namespace assistant_modal_detail;
 

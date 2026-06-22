@@ -6,6 +6,8 @@
 #include <thread>
 #include <vector>
 
+#include "json_utils.hpp"
+
 namespace textlt {
 
 class CloudTtsPipeline {
@@ -75,6 +77,22 @@ public:
         std::string piper_voice_id;
     };
 
+    struct MetadataSuggestions {
+        std::vector<std::string> series;
+        std::vector<std::string> genres;
+    };
+
+    struct LanguageOption {
+        std::string code;
+        std::string label;
+    };
+
+    struct PiperVoiceOption {
+        std::string id;
+        std::string label;
+        bool installed = false;
+    };
+
     CloudTtsPipeline();
     ~CloudTtsPipeline();
 
@@ -90,6 +108,11 @@ public:
     bool UpdateBookMetadata(
         const std::string& book_id,
         const EditableBookMetadata& metadata) const;
+    MetadataSuggestions BuildMetadataSuggestions(
+        const std::vector<BookInfo>& books) const;
+    std::vector<LanguageOption> ListLanguageOptions() const;
+    std::vector<PiperVoiceOption> ListPiperVoiceOptions(
+        const std::string& language_code) const;
 
 private:
     static std::vector<PreparedChunk> BuildPreparedChunks(
@@ -104,6 +127,8 @@ private:
     static std::filesystem::path UserDataDirectory();
     static std::filesystem::path LibraryDirectory();
     static std::filesystem::path BookDirectory(const std::string& book_id);
+    static std::filesystem::path RegistryDirectory();
+    static bool PiperVoiceInstalled(const Json& voice);
     static std::string BuildBookId(
         const std::filesystem::path& source_file_path,
         const std::string& text);

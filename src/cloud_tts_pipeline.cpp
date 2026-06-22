@@ -4,8 +4,10 @@
 #include <cctype>
 #include <chrono>
 #include <cstdlib>
+#include <fstream>
 #include <iomanip>
 #include <iterator>
+#include <set>
 #include <sstream>
 #include <system_error>
 
@@ -185,6 +187,110 @@ bool CloudTtsPipeline::UpdateBookMetadata(
     book_json["language"] = metadata.language;
     book_json["piper_voice_id"] = metadata.piper_voice_id;
     return WriteJsonAtomically(book_path, book_json);
+}
+
+CloudTtsPipeline::MetadataSuggestions CloudTtsPipeline::BuildMetadataSuggestions(
+    const std::vector<BookInfo>& books) const {
+    std::set<std::string> series_values;
+    std::set<std::string> genre_values;
+    for (const BookInfo& book : books) {
+        if (!book.series.empty()) {
+            series_values.insert(book.series);
+        }
+        if (!book.genre.empty()) {
+            genre_values.insert(book.genre);
+        }
+    }
+
+    MetadataSuggestions suggestions;
+    suggestions.series.assign(series_values.begin(), series_values.end());
+    suggestions.genres.assign(genre_values.begin(), genre_values.end());
+    return suggestions;
+}
+
+std::vector<CloudTtsPipeline::LanguageOption> CloudTtsPipeline::ListLanguageOptions() const {
+    std::vector<LanguageOption> options = {{"unknown", "Unknown"}};
+    const std::filesystem::path registry_path =
+        RegistryDirectory() / "piper_voices_index.json";
+    std::ifstream file(registry_path, std::ios::binary);
+    if (!file) {
+        return options;
+    }
+
+    const Json root = Json::parse(file, nullptr, false);
+    if (root.is_discarded() || !root.is_object()) {
+        return options;
+    }
+
+    std::set<std::string> seen_codes = {"unknown"};
+    const auto voices = root.find("voices");
+    if (voices == root.end() || !voices->is_array()) {
+        return options;
+    }
+
+    for (const Json& voice : *voices) {
+        if (!voice.is_object()) {
+            continue;
+        }
+        const std::string code = JsonString(voice, "language_code");
+        if (code.empty() || !seen_codes.insert(code).second) {
+            continue;
+        }
+        const std::string name = JsonString(voice, "language_name", code);
+        const std::string country = JsonString(voice, "country");
+        const std::string label =
+            (country.empty() ? name : name + " - " + country) + " (" + code + ")";
+        options.push_back({code, label});
+    }
+    return options;
+}
+
+std::vector<CloudTtsPipeline::PiperVoiceOption> CloudTtsPipeline::ListPiperVoiceOptions(
+    const std::string& language_code) const {
+    std::vector<PiperVoiceOption> options;
+    if (language_code.empty() || language_code == "unknown") {
+        return options;
+    }
+
+    const std::filesystem::path registry_path =
+        RegistryDirectory() / "piper_voices_index.json";
+    std::ifstream file(registry_path, std::ios::binary);
+    if (!file) {
+        return options;
+    }
+
+    const Json root = Json::parse(file, nullptr, false);
+    if (root.is_discarded() || !root.is_object()) {
+        return options;
+    }
+
+    const auto voices = root.find("voices");
+    if (voices == root.end() || !voices->is_array()) {
+        return options;
+    }
+
+    for (const Json& voice : *voices) {
+        if (!voice.is_object() || JsonString(voice, "language_code") != language_code) {
+            continue;
+        }
+        const std::string id = JsonString(voice, "id");
+        if (id.empty()) {
+            continue;
+        }
+        const bool installed = PiperVoiceInstalled(voice);
+        std::string label = id;
+        const std::string quality = JsonString(voice, "quality");
+        const std::string speaker = JsonString(voice, "speaker");
+        if (!speaker.empty()) {
+            label += " | " + speaker;
+        }
+        if (!quality.empty()) {
+            label += " | " + quality;
+        }
+        label += installed ? " | installed" : " | not installed";
+        options.push_back({id, label, installed});
+    }
+    return options;
 }
 
 void CloudTtsPipeline::Submit(
@@ -428,6 +534,25 @@ std::filesystem::path CloudTtsPipeline::LibraryDirectory() {
 std::filesystem::path CloudTtsPipeline::BookDirectory(const std::string& book_id) {
     const std::filesystem::path library = LibraryDirectory();
     return library.empty() ? std::filesystem::path{} : library / book_id;
+}
+
+std::filesystem::path CloudTtsPipeline::RegistryDirectory() {
+    const std::filesystem::path data = UserDataDirectory();
+    return data.empty() ? std::filesystem::path{} : data / "registries";
+}
+
+bool CloudTtsPipeline::PiperVoiceInstalled(const Json& voice) {
+    const std::string model_path = JsonString(voice, "model_path");
+    const std::string config_path = JsonString(voice, "config_path");
+    if (model_path.empty() || config_path.empty()) {
+        return false;
+    }
+
+    const std::filesystem::path models_directory =
+        UserDataDirectory() / "piper" / "models";
+    std::error_code error;
+    return std::filesystem::exists(models_directory / model_path, error) &&
+           std::filesystem::exists(models_directory / config_path, error);
 }
 
 std::string CloudTtsPipeline::BuildBookId(
