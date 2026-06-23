@@ -46,6 +46,8 @@ public:
 
     bool HandleEvent(ftxui::Event event);
 
+    void SaveFiltersFromFooter();
+
 private:
     struct DirectoryChoice {
         FileSearchRoot root;
@@ -141,10 +143,25 @@ private:
 
     ftxui::Component search_tab_button_;
     ftxui::Component results_tab_button_;
+    ftxui::Component filters_tab_button_;
     ftxui::Component tab_buttons_;
 
     ftxui::Component query_input_;
     ftxui::Component masks_input_;
+    std::vector<std::string> filter_labels_;
+    int selected_filter_ = 0;
+
+    std::string filter_name_input_;
+    std::string filter_value_input_;
+
+    ftxui::Component filter_menu_;
+    ftxui::Component filter_name_input_component_;
+    ftxui::Component filter_value_input_component_;
+
+    ftxui::Component apply_filter_button_;
+    ftxui::Component add_filter_button_;
+    ftxui::Component delete_filter_button_;
+    ftxui::Component save_filters_button_;
     ftxui::Component context_before_input_component_;
     ftxui::Component context_after_input_component_;
 
@@ -161,8 +178,24 @@ private:
 
     ftxui::Component search_tab_container_;
     ftxui::Component results_tab_container_;
+    ftxui::Component filters_tab_container_;
     ftxui::Component tab_body_container_;
     ftxui::Component container_;
+
+    std::filesystem::path FilterConfigPath() const;
+
+    void LoadFilters();
+    void SaveFilters();
+
+    void RebuildFilterLabels();
+    void SyncFilterInputsFromSelection();
+    void UpdateSelectedFilterFromInputs();
+
+    void ApplySelectedFilter();
+    void AddFilter();
+    void DeleteFilter();
+
+    ftxui::Element RenderFiltersTab();
 };
 
 class SearchFilesModal {

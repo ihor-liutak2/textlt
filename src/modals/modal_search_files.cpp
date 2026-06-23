@@ -3,8 +3,11 @@
 #include <algorithm>
 #include <cctype>
 #include <sstream>
+#include <cstdlib>
+#include <fstream>
 #include <system_error>
 #include <utility>
+#include "json_utils.hpp"
 
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/dom/elements.hpp"
@@ -76,17 +79,24 @@ SearchFilesModalContent::SearchFilesModalContent(
       root_provider_(std::move(root_provider)),
       on_open_(std::move(on_open)),
       mask_sets_(FileSearchEngine::DefaultMaskSets()) {
+          LoadFilters();
+
     if (mask_sets_.empty()) {
         mask_sets_.push_back(FileSearchEngine::DefaultCodeMaskSet());
     }
 
+    RebuildFilterLabels();
     UseMaskSet(0);
+    SyncFilterInputsFromSelection();
 
     search_tab_button_ = MakeTabButton("Search", 0);
     results_tab_button_ = MakeTabButton("Results", 1);
+    filters_tab_button_ = MakeTabButton("Filters", 2);
+
     tab_buttons_ = ftxui::Container::Horizontal({
         search_tab_button_,
         results_tab_button_,
+        filters_tab_button_,
     });
 
     ftxui::InputOption query_option;
@@ -98,6 +108,47 @@ SearchFilesModalContent::SearchFilesModalContent(
     masks_option.multiline = false;
     masks_option.on_enter = [this] { ExecuteSearch(); };
     masks_input_ = ftxui::Input(&masks_, "*.cpp *.hpp *.txt", masks_option);
+
+    ftxui::MenuOption filter_option = ftxui::MenuOption::Vertical();
+    filter_option.on_change = [this] {
+        SyncFilterInputsFromSelection();
+    };
+    filter_option.entries_option.transform = [this](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+
+        ftxui::Element row = ftxui::text(state.label);
+        if (state.focused || state.active) {
+            return row |
+            ftxui::bgcolor(theme.modal_selected_item_bg) |
+            ftxui::color(theme.modal_selected_item_fg) |
+            ftxui::bold;
+        }
+
+        return row | ftxui::color(theme.modal_text_color);
+    };
+
+    filter_menu_ = ftxui::Menu(&filter_labels_, &selected_filter_, filter_option);
+
+    ftxui::InputOption filter_name_option;
+    filter_name_option.multiline = false;
+    filter_name_option.on_enter = [this] {
+        UpdateSelectedFilterFromInputs();
+    };
+    filter_name_input_component_ =
+    ftxui::Input(&filter_name_input_, "filter name", filter_name_option);
+
+    ftxui::InputOption filter_value_option;
+    filter_value_option.multiline = false;
+    filter_value_option.on_enter = [this] {
+        UpdateSelectedFilterFromInputs();
+    };
+    filter_value_input_component_ =
+    ftxui::Input(&filter_value_input_, "file masks", filter_value_option);
+
+    apply_filter_button_ = MakeTextButton("Apply", [this] { ApplySelectedFilter(); });
+    add_filter_button_ = MakeTextButton("Add", [this] { AddFilter(); });
+    delete_filter_button_ = MakeTextButton("Delete", [this] { DeleteFilter(); });
+    save_filters_button_ = MakeTextButton("Save", [this] { SaveFilters(); });
 
     ftxui::InputOption context_before_option;
     context_before_option.multiline = false;
@@ -190,9 +241,22 @@ SearchFilesModalContent::SearchFilesModalContent(
         result_list_component_,
     });
 
+    filters_tab_container_ = ftxui::Container::Vertical({
+        filter_menu_,
+        filter_name_input_component_,
+        filter_value_input_component_,
+        ftxui::Container::Horizontal({
+            apply_filter_button_,
+            add_filter_button_,
+            delete_filter_button_,
+            save_filters_button_,
+        }),
+    });
+
     tab_body_container_ = ftxui::Container::Tab({
         search_tab_container_,
         results_tab_container_,
+        filters_tab_container_,
     }, &selected_tab_);
 
     container_ = ftxui::Container::Vertical({
@@ -252,6 +316,11 @@ ftxui::Component SearchFilesModalContent::MakeTabButton(
 }
 
 void SearchFilesModalContent::Open() {
+    LoadFilters();
+    RebuildFilterLabels();
+    UseMaskSet(std::min(selected_mask_set_, mask_sets_.size() - 1));
+    SyncFilterInputsFromSelection();
+
     selected_tab_ = 0;
     selected_result_ = 0;
     status_.clear();
@@ -276,25 +345,42 @@ ftxui::Element SearchFilesModalContent::RenderTitle() {
         search_tab_button_->Render(),
         ftxui::text(" "),
         results_tab_button_->Render(),
+        ftxui::text(" "),
+        filters_tab_button_->Render(),
     });
 }
 
 ftxui::Element SearchFilesModalContent::Render() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
-    return (selected_tab_ == 0 ? RenderSearchTab() : RenderResultsTab()) |
-        ftxui::bgcolor(theme.modal_background) |
-        ftxui::color(theme.modal_foreground);
+    ftxui::Element body;
+    if (selected_tab_ == 0) {
+        body = RenderSearchTab();
+    } else if (selected_tab_ == 1) {
+        body = RenderResultsTab();
+    } else {
+        body = RenderFiltersTab();
+    }
+
+    return body |
+    ftxui::bgcolor(theme.modal_background) |
+    ftxui::color(theme.modal_foreground);
 }
 
 std::string SearchFilesModalContent::GetFooterText() const {
     if (!status_.empty()) {
         return status_;
     }
+
     if (selected_tab_ == 0) {
         return DirectorySummaryText();
     }
-    return StatusText();
+
+    if (selected_tab_ == 1) {
+        return StatusText();
+    }
+
+    return "Filters are saved to search_file_filter.json";
 }
 
 void SearchFilesModalContent::BuildDirectoryChoices() {
@@ -469,11 +555,13 @@ std::vector<FileSearchRoot> SearchFilesModalContent::SelectedRoots() const {
 void SearchFilesModalContent::UseMaskSet(size_t index) {
     if (mask_sets_.empty()) {
         selected_mask_set_ = 0;
+        selected_filter_ = 0;
         masks_.clear();
         return;
     }
 
     selected_mask_set_ = std::min(index, mask_sets_.size() - 1);
+    selected_filter_ = static_cast<int>(selected_mask_set_);
     masks_ = mask_sets_[selected_mask_set_].value;
 }
 
@@ -878,6 +966,302 @@ std::string SearchFilesModalContent::TrimForDisplay(
     return text.substr(0, max_size - 3) + "...";
 }
 
+std::filesystem::path SearchFilesModalContent::FilterConfigPath() const {
+    #ifdef _WIN32
+    const char* app_data = std::getenv("APPDATA");
+    if (app_data && std::string(app_data).size() > 0) {
+        return std::filesystem::path(app_data) / "textlt" / "search_file_filter.json";
+    }
+
+    const char* user_profile = std::getenv("USERPROFILE");
+    if (user_profile && std::string(user_profile).size() > 0) {
+        return std::filesystem::path(user_profile) /
+        "AppData" / "Roaming" / "textlt" / "search_file_filter.json";
+    }
+
+    return std::filesystem::path("search_file_filter.json");
+    #else
+    const char* xdg_config_home = std::getenv("XDG_CONFIG_HOME");
+    if (xdg_config_home && std::string(xdg_config_home).size() > 0) {
+        return std::filesystem::path(xdg_config_home) /
+        "textlt" / "search_file_filter.json";
+    }
+
+    const char* home = std::getenv("HOME");
+    if (home && std::string(home).size() > 0) {
+        return std::filesystem::path(home) /
+        ".config" / "textlt" / "search_file_filter.json";
+    }
+
+    return std::filesystem::path("search_file_filter.json");
+    #endif
+}
+
+void SearchFilesModalContent::LoadFilters() {
+    std::vector<FileSearchMaskSet> loaded;
+
+    const std::filesystem::path path = FilterConfigPath();
+    std::error_code exists_error;
+    if (std::filesystem::exists(path, exists_error)) {
+        std::ifstream file(path, std::ios::binary);
+        if (file) {
+            const Json root = Json::parse(file, nullptr, false);
+            if (!root.is_discarded() && root.is_object()) {
+                const auto filters = root.find("filters");
+                if (filters != root.end() && filters->is_array()) {
+                    for (const Json& item : *filters) {
+                        if (!item.is_object()) {
+                            continue;
+                        }
+
+                        const std::string name = JsonString(item, "name");
+                        const std::string value = JsonString(item, "value");
+
+                        if (!name.empty() && !value.empty()) {
+                            loaded.push_back({name, value});
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (loaded.empty()) {
+        loaded = FileSearchEngine::DefaultMaskSets();
+    }
+
+    if (loaded.empty()) {
+        loaded.push_back(FileSearchEngine::DefaultCodeMaskSet());
+    }
+
+    mask_sets_ = std::move(loaded);
+
+    if (selected_mask_set_ >= mask_sets_.size()) {
+        selected_mask_set_ = 0;
+    }
+    selected_filter_ = static_cast<int>(selected_mask_set_);
+}
+
+void SearchFilesModalContent::SaveFilters() {
+    UpdateSelectedFilterFromInputs();
+
+    const std::filesystem::path path = FilterConfigPath();
+
+    std::error_code directory_error;
+    std::filesystem::create_directories(path.parent_path(), directory_error);
+
+    Json root = Json::object();
+    root["filters"] = Json::array();
+
+    for (const FileSearchMaskSet& filter : mask_sets_) {
+        Json item = Json::object();
+        item["name"] = filter.name;
+        item["value"] = filter.value;
+        root["filters"].push_back(item);
+    }
+
+    if (WriteJsonAtomically(path, root)) {
+        status_ = "Filters saved: " + path.string();
+    } else {
+        status_ = "Unable to save filters: " + path.string();
+    }
+
+    RebuildFilterLabels();
+}
+
+void SearchFilesModalContent::SaveFiltersFromFooter() {
+    SaveFilters();
+}
+
+void SearchFilesModalContent::RebuildFilterLabels() {
+    filter_labels_.clear();
+    filter_labels_.reserve(mask_sets_.size());
+
+    for (const FileSearchMaskSet& filter : mask_sets_) {
+        filter_labels_.push_back(
+            filter.name + " — " + TrimForDisplay(filter.value, 90));
+    }
+
+    if (selected_filter_ < 0) {
+        selected_filter_ = 0;
+    }
+
+    if (!filter_labels_.empty() &&
+        selected_filter_ >= static_cast<int>(filter_labels_.size())) {
+        selected_filter_ = static_cast<int>(filter_labels_.size() - 1);
+        }
+}
+
+void SearchFilesModalContent::SyncFilterInputsFromSelection() {
+    if (mask_sets_.empty()) {
+        filter_name_input_.clear();
+        filter_value_input_.clear();
+        selected_mask_set_ = 0;
+        selected_filter_ = 0;
+        return;
+    }
+
+    if (selected_filter_ < 0) {
+        selected_filter_ = 0;
+    }
+
+    if (selected_filter_ >= static_cast<int>(mask_sets_.size())) {
+        selected_filter_ = static_cast<int>(mask_sets_.size() - 1);
+    }
+
+    selected_mask_set_ = static_cast<size_t>(selected_filter_);
+
+    filter_name_input_ = mask_sets_[selected_mask_set_].name;
+    filter_value_input_ = mask_sets_[selected_mask_set_].value;
+}
+
+void SearchFilesModalContent::UpdateSelectedFilterFromInputs() {
+    if (mask_sets_.empty()) {
+        return;
+    }
+
+    if (selected_filter_ < 0) {
+        selected_filter_ = 0;
+    }
+
+    if (selected_filter_ >= static_cast<int>(mask_sets_.size())) {
+        selected_filter_ = static_cast<int>(mask_sets_.size() - 1);
+    }
+
+    selected_mask_set_ = static_cast<size_t>(selected_filter_);
+
+    if (filter_name_input_.empty()) {
+        filter_name_input_ = "New Filter";
+    }
+
+    if (filter_value_input_.empty()) {
+        filter_value_input_ = "*";
+    }
+
+    mask_sets_[selected_mask_set_].name = filter_name_input_;
+    mask_sets_[selected_mask_set_].value = filter_value_input_;
+
+    RebuildFilterLabels();
+}
+
+void SearchFilesModalContent::ApplySelectedFilter() {
+    UpdateSelectedFilterFromInputs();
+
+    if (mask_sets_.empty()) {
+        status_ = "No filters available.";
+        return;
+    }
+
+    UseMaskSet(static_cast<size_t>(selected_filter_));
+    selected_tab_ = 0;
+    status_ = "Applied filter: " + mask_sets_[selected_mask_set_].name;
+
+    if (query_input_) {
+        query_input_->TakeFocus();
+    }
+}
+
+void SearchFilesModalContent::AddFilter() {
+    UpdateSelectedFilterFromInputs();
+
+    FileSearchMaskSet filter;
+    filter.name = filter_name_input_.empty() ? "New Filter" : filter_name_input_;
+    filter.value = filter_value_input_.empty() ? masks_ : filter_value_input_;
+
+    if (filter.value.empty()) {
+        filter.value = "*";
+    }
+
+    mask_sets_.push_back(filter);
+
+    selected_mask_set_ = mask_sets_.size() - 1;
+    selected_filter_ = static_cast<int>(selected_mask_set_);
+
+    RebuildFilterLabels();
+    SyncFilterInputsFromSelection();
+
+    status_ = "Filter added.";
+}
+
+void SearchFilesModalContent::DeleteFilter() {
+    if (mask_sets_.size() <= 1) {
+        status_ = "At least one filter is required.";
+        return;
+    }
+
+    if (selected_filter_ < 0) {
+        selected_filter_ = 0;
+    }
+
+    if (selected_filter_ >= static_cast<int>(mask_sets_.size())) {
+        selected_filter_ = static_cast<int>(mask_sets_.size() - 1);
+    }
+
+    mask_sets_.erase(mask_sets_.begin() + selected_filter_);
+
+    if (selected_filter_ >= static_cast<int>(mask_sets_.size())) {
+        selected_filter_ = static_cast<int>(mask_sets_.size() - 1);
+    }
+
+    selected_mask_set_ = static_cast<size_t>(selected_filter_);
+
+    RebuildFilterLabels();
+    SyncFilterInputsFromSelection();
+
+    status_ = "Filter deleted.";
+}
+
+ftxui::Element SearchFilesModalContent::RenderFiltersTab() {
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+
+    return ftxui::vbox({
+        ftxui::text(""),
+                       ftxui::hbox({
+                           ftxui::text("Filters:") |
+                           ftxui::bold |
+                           ftxui::color(theme.modal_accent),
+                                   ftxui::filler(),
+                                   apply_filter_button_->Render(),
+                                   ftxui::text(" "),
+                                   add_filter_button_->Render(),
+                                   ftxui::text(" "),
+                                   delete_filter_button_->Render(),
+                                   ftxui::text(" "),
+                                   save_filters_button_->Render(),
+                       }),
+                       ftxui::separator() | ftxui::color(theme.modal_border),
+                       ftxui::hbox({
+                           filter_menu_->Render() |
+                           ftxui::vscroll_indicator |
+                           ftxui::frame |
+                           ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 45) |
+                           ftxui::yflex,
+
+                           ftxui::separator() | ftxui::color(theme.modal_border),
+
+                                   ftxui::vbox({
+                                       ftxui::text("Name:") | ftxui::color(theme.modal_text_color),
+                                               filter_name_input_component_->Render() |
+                                               ftxui::bgcolor(theme.modal_input_bg) |
+                                               ftxui::color(theme.modal_input_fg),
+
+                                               ftxui::text(""),
+                                               ftxui::text("Masks:") | ftxui::color(theme.modal_text_color),
+                                               filter_value_input_component_->Render() |
+                                               ftxui::bgcolor(theme.modal_input_bg) |
+                                               ftxui::color(theme.modal_input_fg),
+
+                                               ftxui::text(""),
+                                               ftxui::paragraph(
+                                                   "Apply copies the selected filter into the Search tab. "
+                                                   "Save writes search_file_filter.json.") |
+                                                   ftxui::color(theme.modal_text_color) |
+                                                   ftxui::dim,
+                                   }) | ftxui::xflex,
+                       }) | ftxui::yflex,
+    });
+}
+
 SearchFilesModal::SearchFilesModal(
     const Theme* theme,
     RootProvider root_provider,
@@ -889,14 +1273,21 @@ SearchFilesModal::SearchFilesModal(
         std::move(on_open));
 
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
+
     modal_->SetFooterButtons({
         {"Search", [this] {
             if (content_) {
                 content_->ExecuteSearchFromFooter();
             }
         }},
+        {"Save", [this] {
+            if (content_) {
+                content_->SaveFiltersFromFooter();
+            }
+        }},
         {"Close", [this] { Close(); }},
     });
+
     modal_->SetBodyFrameScrolling(false);
 }
 
