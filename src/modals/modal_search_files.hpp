@@ -1,0 +1,193 @@
+#pragma once
+
+#include <filesystem>
+#include <functional>
+#include <memory>
+#include <string>
+#include <vector>
+#include <chrono>
+
+#include "ftxui/component/component.hpp"
+#include "ftxui/component/event.hpp"
+#include "ftxui/dom/elements.hpp"
+
+#include "modal_interface.hpp"
+#include "modal_window.hpp"
+#include "search_in_files.hpp"
+#include "theme.hpp"
+
+namespace textlt {
+
+class SearchFilesModalContent : public IModalContent {
+public:
+    using RootProvider = std::function<std::vector<FileSearchRoot>()>;
+    using OpenMatchCallback = std::function<bool(const FileSearchMatch& match, std::string& error)>;
+
+    SearchFilesModalContent(
+        const Theme* theme,
+        RootProvider root_provider,
+        OpenMatchCallback on_open);
+
+    ftxui::Element Render() override;
+    ftxui::Component GetMainComponent() override { return container_; }
+    std::string GetTitle() override { return "Search in Files"; }
+    ftxui::Element RenderTitle() override;
+    ModalSizePreference GetModalSizePreference() const override { return {118, 34}; }
+    ModalFrameStyle GetModalFrameStyle() const override {
+        return ModalFrameStyle::TitleInBorder;
+    }
+    std::string GetFooterText() const override;
+
+    void Open();
+    void Close();
+    void SetTheme(const Theme* theme) { theme_ = theme; }
+
+    void ExecuteSearchFromFooter();
+
+    bool HandleEvent(ftxui::Event event);
+
+private:
+    struct DirectoryChoice {
+        FileSearchRoot root;
+        bool selected = false;
+    };
+
+    ftxui::Component MakeTextButton(
+        std::string label,
+        std::function<void()> on_click);
+
+    ftxui::Component MakeTabButton(
+        std::string label,
+        int tab_index);
+
+    void BuildDirectoryChoices();
+    void AddDirectoryChoice(
+        const FileSearchRoot& root,
+        bool selected,
+        std::vector<std::string>* seen_paths);
+
+    void RefreshDirectoryLabels();
+    void ToggleSelectedDirectory();
+    void SelectAllDirectories();
+    void ClearDirectorySelection();
+
+    std::vector<FileSearchRoot> SelectedRoots() const;
+
+    void UseMaskSet(size_t index);
+    void UseFirstMaskSet();
+    void UsePreviousMaskSet();
+    void UseNextMaskSet();
+
+    void ExecuteSearch();
+    void OpenSelectedMatch();
+
+    void MoveResultSelection(int delta);
+    void ClampResultSelection();
+
+    void RebuildResultLabels();
+    bool HandleResultsMouseEvent(ftxui::Event event);
+    ftxui::Element RenderSelectedResultPreview() const;
+
+    size_t ParseContextValue(const std::string& value) const;
+
+    ftxui::Element RenderSearchTab();
+    ftxui::Element RenderResultsTab();
+
+    ftxui::Element RenderDirectoryList() const;
+    ftxui::Element RenderResultList() const;
+    ftxui::Element RenderMatch(
+        const FileSearchMatch& match,
+        size_t index,
+        bool selected) const;
+    ftxui::Element RenderContextLine(const FileSearchContextLine& line) const;
+
+    std::string StatusText() const;
+    std::string DirectorySummaryText() const;
+    std::string FormatLocation(const FileSearchMatch& match) const;
+    std::string FormatLineNumber(size_t line_number) const;
+    std::string TrimForDisplay(const std::string& text, size_t max_size) const;
+
+    const Theme* theme_ = nullptr;
+    RootProvider root_provider_;
+    OpenMatchCallback on_open_;
+
+    FileSearchEngine engine_;
+    FileSearchSummary summary_;
+
+    int selected_tab_ = 0;
+
+    std::vector<FileSearchMaskSet> mask_sets_;
+    size_t selected_mask_set_ = 0;
+
+    std::vector<DirectoryChoice> directories_;
+    std::vector<std::string> directory_labels_;
+    int selected_directory_ = 0;
+
+    std::string query_;
+    std::string masks_;
+    std::string context_before_input_ = "0";
+    std::string context_after_input_ = "0";
+
+    std::string status_;
+
+    int selected_result_ = 0;
+    std::vector<std::string> result_labels_;
+    ftxui::Component result_menu_;
+    ftxui::Component result_list_component_;
+    
+    std::chrono::steady_clock::time_point last_result_click_time_{};
+    int last_result_click_x_ = -1;
+    int last_result_click_y_ = -1;
+
+    ftxui::Component search_tab_button_;
+    ftxui::Component results_tab_button_;
+    ftxui::Component tab_buttons_;
+
+    ftxui::Component query_input_;
+    ftxui::Component masks_input_;
+    ftxui::Component context_before_input_component_;
+    ftxui::Component context_after_input_component_;
+
+    ftxui::Component start_mask_button_;
+    ftxui::Component previous_mask_button_;
+    ftxui::Component next_mask_button_;
+
+    ftxui::Component directory_menu_;
+    ftxui::Component toggle_directory_button_;
+    ftxui::Component all_directories_button_;
+    ftxui::Component none_directories_button_;
+
+    ftxui::Component open_button_;
+
+    ftxui::Component search_tab_container_;
+    ftxui::Component results_tab_container_;
+    ftxui::Component tab_body_container_;
+    ftxui::Component container_;
+};
+
+class SearchFilesModal {
+public:
+    using RootProvider = SearchFilesModalContent::RootProvider;
+    using OpenMatchCallback = SearchFilesModalContent::OpenMatchCallback;
+
+    SearchFilesModal(
+        const Theme* theme,
+        RootProvider root_provider,
+        OpenMatchCallback on_open);
+
+    ftxui::Component View() const;
+
+    void Open();
+    void Close();
+    bool IsOpen() const;
+    bool OnEvent(ftxui::Event event);
+
+private:
+    bool open_ = false;
+    const Theme* theme_ = nullptr;
+
+    std::shared_ptr<SearchFilesModalContent> content_;
+    std::shared_ptr<ModalWindow> modal_;
+};
+
+} // namespace textlt

@@ -1,0 +1,40 @@
+{
+  "name": "Pantone Mocha Dark",
+
+  "background": "#2F2018",
+  "foreground": "#F7E6D6",
+
+  "header": "#3A281F",
+  "menu_background": "#24160F",
+  "menu_foreground": "#F7E6D6",
+  "status": "#24160F",
+
+  "editor_text": "#F7E6D6",
+
+  "syntax_keyword": "#F9B78B",
+  "syntax_type": "#DD8F63",
+  "syntax_string": "#D89B71",
+  "syntax_number": "#FAC596",
+  "syntax_comment": "#A5836C",
+
+  "gutter": "#8E715D",
+  "cursor": "#F9B78B",
+
+  "selection_bg": "#6E4D3A",
+  "selection_fg": "#FFF4EA",
+
+  "match_bg": "#6B4427",
+  "active_match_bg": "#C9824A",
+
+  "modal_background": "#332219",
+  "modal_foreground": "#F7E6D6",
+  "modal_border": "#8B6750",
+  "modal_accent": "#F9B78B",
+  "modal_text_color": "#F7E6D6",
+
+  "modal_input_bg": "#24160F",
+  "modal_input_fg": "#F7E6D6",
+
+  "modal_selected_item_bg": "#7A4D25",
+  "modal_selected_item_fg": "#FFF4EA"
+}

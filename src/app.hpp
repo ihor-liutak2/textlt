@@ -19,6 +19,7 @@
 #include "modals/modal_ai.hpp"
 #include "modals/modal_recent_files.hpp"
 #include "modals/modal_tts.hpp"
+#include "modals/modal_search_files.hpp"
 #include "menu_bar.hpp"
 #include "opened_config.hpp"
 #include "recent_files.hpp"
@@ -49,6 +50,13 @@ private:
     void OpenFileDialog(FilePromptMode mode);
     void OpenRecentFilesModal();
     void CloseRecentFilesModal();
+
+    void OpenSearchFilesModal();
+    void CloseSearchFilesModal();
+
+    std::vector<FileSearchRoot> CurrentSearchFileRoots() const;
+    bool OpenSearchFileMatch(const FileSearchMatch& match, std::string& error);
+
     void ClosePathOperationDialog();
     void OpenPathOperationDialog(PathOperationMode mode);
     std::filesystem::path CurrentSidebarDirectory() const;
@@ -167,6 +175,9 @@ private:
     HelpDialog help_dialog_;
     RecentFilesHistory recent_files_history_;
     RecentFilesModal recent_files_modal_;
+
+    SearchFilesModal search_files_modal_;
+
     CloudTtsPipeline cloud_tts_pipeline_;
     TtsModal tts_modal_;
     AiActionsModal ai_actions_modal_;

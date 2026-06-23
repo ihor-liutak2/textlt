@@ -1,0 +1,40 @@
+{
+  "name": "Pantone Olive Grove Dark",
+
+  "background": "#202318",
+  "foreground": "#ECE8D8",
+
+  "header": "#2B3020",
+  "menu_background": "#181B12",
+  "menu_foreground": "#DCD8C3",
+  "status": "#181B12",
+
+  "editor_text": "#ECE8D8",
+
+  "syntax_keyword": "#B8D66A",
+  "syntax_type": "#9FB58A",
+  "syntax_string": "#D3B86C",
+  "syntax_number": "#C9CF7A",
+  "syntax_comment": "#7C8065",
+
+  "gutter": "#6B7249",
+  "cursor": "#CDE86A",
+
+  "selection_bg": "#3F4A2A",
+  "selection_fg": "#F5F2DF",
+
+  "match_bg": "#4F5E2E",
+  "active_match_bg": "#9CBF3A",
+
+  "modal_background": "#2B3020",
+  "modal_foreground": "#ECE8D8",
+  "modal_border": "#6B7249",
+  "modal_accent": "#B8D66A",
+  "modal_text_color": "#DCD8C3",
+
+  "modal_input_bg": "#181B12",
+  "modal_input_fg": "#ECE8D8",
+
+  "modal_selected_item_bg": "#54692C",
+  "modal_selected_item_fg": "#F5F2DF"
+}

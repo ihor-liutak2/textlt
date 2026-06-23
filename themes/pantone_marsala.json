@@ -1,28 +1,40 @@
 {
   "name": "Pantone Marsala",
-  "background": "#3A1F23",
+
+  "background": "#2A1619",
   "foreground": "#F5E6E8",
-  "header": "#532B30",
-  "menu_background": "#3A1F23",
+
+  "header": "#3A2024",
+  "menu_background": "#241114",
   "menu_foreground": "#E0C3C7",
-  "status": "#532B30",
+  "status": "#241114",
+
   "editor_text": "#F5E6E8",
-  "syntax_keyword": "#FF79C6",
-  "syntax_type": "#8BE9FD",
-  "syntax_string": "#F1FA8C",
-  "syntax_number": "#BD93F9",
-  "syntax_comment": "#6272A4",
-  "gutter": "#6B3F44",
+
+  "syntax_keyword": "#E8A7A1",
+  "syntax_type": "#D68A91",
+  "syntax_string": "#E6C7A8",
+  "syntax_number": "#CFA0D8",
+  "syntax_comment": "#8A6F75",
+
+  "gutter": "#7A4A51",
   "cursor": "#E8A7A1",
-  "match_bg": "#4A70D7",
-  "active_match_bg": "#CCEE00",
-  "modal_background": "#532B30",
+
+  "selection_bg": "#6B3F44",
+  "selection_fg": "#FFF2F4",
+
+  "match_bg": "#6A3B42",
+  "active_match_bg": "#C9828A",
+
+  "modal_background": "#3A2024",
   "modal_foreground": "#F5E6E8",
-  "modal_border": "#E8A7A1",
+  "modal_border": "#9E6269",
   "modal_accent": "#E8A7A1",
   "modal_text_color": "#E0C3C7",
-  "modal_input_bg": "#2A1619",
+
+  "modal_input_bg": "#1F0F12",
   "modal_input_fg": "#FFFFFF",
-  "modal_selected_item_bg": "#E8A7A1",
-  "modal_selected_item_fg": "#3A1F23"
+
+  "modal_selected_item_bg": "#9E6269",
+  "modal_selected_item_fg": "#2A1619"
 }

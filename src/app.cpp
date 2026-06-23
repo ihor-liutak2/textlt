@@ -224,7 +224,15 @@ TextltApp::TextltApp()
               }
               return opened;
           }),
-      tts_modal_(
+          search_files_modal_(
+              &current_theme_,
+              [this] {
+                  return CurrentSearchFileRoots();
+              },
+              [this](const FileSearchMatch& match, std::string& error) {
+                  return OpenSearchFileMatch(match, error);
+              }),
+              tts_modal_(
           &current_theme_,
           &cloud_tts_pipeline_,
           [this] { QueueTtsBookPreparationFromCursor(); }),
@@ -263,6 +271,7 @@ TextltApp::TextltApp()
             !file_dialog_.IsOpen() &&
             !help_dialog_.IsOpen() &&
             !recent_files_modal_.IsOpen() &&
+            !search_files_modal_.IsOpen() &&
             !tts_modal_.IsOpen() &&
             !ai_actions_modal_.IsOpen() &&
             !assistant_settings_modal_.IsOpen() &&
@@ -532,6 +541,58 @@ void TextltApp::OpenRecentFilesModal() {
 void TextltApp::CloseRecentFilesModal() {
     recent_files_modal_.Close();
     FocusEditor();
+}
+
+void TextltApp::OpenSearchFilesModal() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+
+    search_files_modal_.Open();
+    active_action_ = "Opened Search in Files";
+    focused_layer_ = 0;
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::CloseSearchFilesModal() {
+    search_files_modal_.Close();
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+std::vector<FileSearchRoot> TextltApp::CurrentSearchFileRoots() const {
+    const std::filesystem::path root = CurrentSidebarDirectory();
+
+    std::string label = root.filename().string();
+    if (label.empty()) {
+        label = root.string();
+    }
+    if (label.empty()) {
+        label = "Current Folder";
+    }
+
+    return {
+        FileSearchRoot{root, label}
+    };
+}
+
+bool TextltApp::OpenSearchFileMatch(const FileSearchMatch& match, std::string& error) {
+    if (!OpenFile(match.path.string(), error)) {
+        return false;
+    }
+
+    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    editor_ptr->JumpToLine(match.line_number);
+
+    active_action_ =
+    "Opened search result " +
+    match.relative_path.generic_string() +
+    ":" +
+    std::to_string(match.line_number);
+
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
+    return true;
 }
 
 void TextltApp::OpenTtsModal() {
@@ -1851,6 +1912,13 @@ void TextltApp::HandleEditMenu(int item) {
         CloseDropdown();
         OpenFindPanel(true);
         active_action_ = "Replace";
+        return;
+    }
+
+    if (item == 12) { // Search in Files...
+        CloseDropdown();
+        OpenSearchFilesModal();
+        active_action_ = "Search in Files";
         return;
     }
 

@@ -55,6 +55,7 @@ MenuBarComponent::MenuBarComponent(
               " Convert Indents: 2 -> 4 Spaces ",
               " Find...            (Ctrl+F) ",
               " Replace...         (Ctrl+R) ",
+              " Search in Files...",
           },
           {
               " Toggle Line Numbers ",

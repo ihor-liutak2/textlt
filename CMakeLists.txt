@@ -95,6 +95,7 @@ add_executable(textlt
   src/modals/path_operation_dialog.cpp
   src/modals/theme_dialog.cpp
   src/modals/unsaved_changes_dialog.cpp
+  src/modals/modal_search_files.cpp
   src/opened_config.cpp
   src/recent_files.cpp
   src/sidebar_component.cpp
@@ -111,6 +112,7 @@ add_executable(textlt
   src/document_selection.cpp
   src/document_transform.cpp
   src/file_manager.cpp
+  src/search_in_files.cpp
 )
 
 target_include_directories(textlt PRIVATE
