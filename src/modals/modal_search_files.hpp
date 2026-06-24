@@ -13,6 +13,7 @@
 
 #include "modal_interface.hpp"
 #include "modal_window.hpp"
+#include "json_utils.hpp"
 #include "search_in_files.hpp"
 #include "theme.hpp"
 
@@ -22,12 +23,16 @@ class SearchFilesModalContent : public IModalContent {
 public:
     using RootProvider = std::function<std::vector<FileSearchRoot>()>;
     using OpenMatchCallback = std::function<bool(const FileSearchMatch& match, std::string& error)>;
+    using ReadClipboardCallback = std::function<std::string()>;
+    using WriteClipboardCallback = std::function<void(const std::string& text)>;
     using CloseCallback = std::function<void()>;
 
     SearchFilesModalContent(
         const Theme* theme,
         RootProvider root_provider,
         OpenMatchCallback on_open,
+        ReadClipboardCallback read_clipboard,
+        WriteClipboardCallback write_clipboard,
         CloseCallback on_close);
 
     ftxui::Element Render() override;
@@ -85,6 +90,14 @@ private:
 
     void ExecuteSearch();
     void OpenSelectedMatch();
+    void PasteSearchQuery();
+    void ClearSearchQuery();
+    void CopyResultPaths();
+
+    std::filesystem::path CurrentRootPath() const;
+    void RestoreSelectedDirectoriesForCurrentRoot();
+    void SaveSelectedDirectoriesForCurrentRoot();
+    void SelectMaskByValue(const std::string& value);
 
     void MoveResultSelection(int delta);
     void ClampResultSelection();
@@ -115,6 +128,8 @@ private:
     const Theme* theme_ = nullptr;
     RootProvider root_provider_;
     OpenMatchCallback on_open_;
+    ReadClipboardCallback read_clipboard_;
+    WriteClipboardCallback write_clipboard_;
     CloseCallback on_close_;
 
     FileSearchEngine engine_;
@@ -125,10 +140,12 @@ private:
     std::vector<FileSearchMaskSet> mask_sets_;
     size_t selected_mask_set_ = 0;
 
+    std::filesystem::path current_root_path_;
     std::vector<DirectoryChoice> directories_;
     std::vector<std::string> directory_labels_;
     int selected_directory_ = 0;
 
+    int query_cursor_position_ = 0;
     std::string query_;
     std::string masks_;
     std::string context_before_input_ = "0";
@@ -147,12 +164,16 @@ private:
     std::chrono::steady_clock::time_point last_directory_click_time_{};
     int last_clicked_directory_ = -1;
 
+    std::chrono::steady_clock::time_point last_query_click_time_{};
+
     ftxui::Component search_tab_button_;
     ftxui::Component results_tab_button_;
     ftxui::Component filters_tab_button_;
     ftxui::Component tab_buttons_;
 
     ftxui::Component query_input_;
+    ftxui::Component search_paste_button_;
+    ftxui::Component search_clear_button_;
     ftxui::Component masks_input_;
     std::vector<std::string> filter_labels_;
     int selected_filter_ = 0;
@@ -182,6 +203,7 @@ private:
     ftxui::Component none_directories_button_;
 
     ftxui::Component open_button_;
+    ftxui::Component copy_paths_button_;
 
     ftxui::Component search_tab_container_;
     ftxui::Component results_tab_container_;
@@ -191,6 +213,8 @@ private:
 
     std::filesystem::path FilterConfigPath() const;
 
+    Json LoadFilterConfig() const;
+    bool SaveFilterConfig(const Json& root) const;
     void LoadFilters();
     void SaveFilters();
 
@@ -213,7 +237,9 @@ public:
     SearchFilesModal(
         const Theme* theme,
         RootProvider root_provider,
-        OpenMatchCallback on_open);
+        OpenMatchCallback on_open,
+        SearchFilesModalContent::ReadClipboardCallback read_clipboard,
+        SearchFilesModalContent::WriteClipboardCallback write_clipboard);
 
     ftxui::Component View() const;
 

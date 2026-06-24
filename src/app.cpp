@@ -100,6 +100,12 @@ TextltApp::TextltApp()
               },
               [this](const FileSearchMatch& match, std::string& error) {
                   return OpenSearchFileMatch(match, error);
+              },
+              [this] {
+                  return ReadSystemClipboard();
+              },
+              [this](const std::string& text) {
+                  WriteSystemClipboard(text);
               }),
               tts_modal_(
           &current_theme_,

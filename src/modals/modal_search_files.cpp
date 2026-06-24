@@ -75,10 +75,14 @@ SearchFilesModalContent::SearchFilesModalContent(
     const Theme* theme,
     RootProvider root_provider,
     OpenMatchCallback on_open,
+    ReadClipboardCallback read_clipboard,
+    WriteClipboardCallback write_clipboard,
     CloseCallback on_close)
     : theme_(theme),
         root_provider_(std::move(root_provider)),
         on_open_(std::move(on_open)),
+        read_clipboard_(std::move(read_clipboard)),
+        write_clipboard_(std::move(write_clipboard)),
         on_close_(std::move(on_close)),
         mask_sets_(FileSearchEngine::DefaultMaskSets()) {
           LoadFilters();
@@ -104,7 +108,10 @@ SearchFilesModalContent::SearchFilesModalContent(
     ftxui::InputOption query_option;
     query_option.multiline = false;
     query_option.on_enter = [this] { ExecuteSearch(); };
+    query_option.cursor_position = &query_cursor_position_;
     query_input_ = ftxui::Input(&query_, "text to search", query_option);
+    search_paste_button_ = MakeTextButton("Paste", [this] { PasteSearchQuery(); });
+    search_clear_button_ = MakeTextButton("Clear", [this] { ClearSearchQuery(); });
 
     ftxui::InputOption masks_option;
     masks_option.multiline = false;
@@ -118,7 +125,8 @@ SearchFilesModalContent::SearchFilesModalContent(
     filter_option.entries_option.transform = [this](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
-        ftxui::Element row = ftxui::text(state.label);
+        ftxui::Element row = ftxui::text(TrimForDisplay(state.label, 42)) |
+            ftxui::size(ftxui::WIDTH, ftxui::LESS_THAN, 43);
         if (state.focused || state.active) {
             return row |
             ftxui::bgcolor(theme.modal_selected_item_bg) |
@@ -202,6 +210,7 @@ SearchFilesModalContent::SearchFilesModalContent(
     none_directories_button_ = MakeTextButton("None", [this] { ClearDirectorySelection(); });
 
     open_button_ = MakeTextButton("Open", [this] { OpenSelectedMatch(); });
+    copy_paths_button_ = MakeTextButton("Copy paths", [this] { CopyResultPaths(); });
 
     ftxui::MenuOption result_option = ftxui::MenuOption::Vertical();
         result_option.entries_option.transform = [this](const ftxui::EntryState& state) {
@@ -232,7 +241,13 @@ SearchFilesModalContent::SearchFilesModalContent(
         });
 
     search_tab_container_ = ftxui::Container::Vertical({
-        query_input_,
+        ftxui::Container::Horizontal({
+            query_input_,
+            ftxui::Container::Vertical({
+                search_paste_button_,
+                search_clear_button_,
+            }),
+        }),
         masks_input_,
         ftxui::Container::Horizontal({
             start_mask_button_,
@@ -252,6 +267,7 @@ SearchFilesModalContent::SearchFilesModalContent(
     results_tab_container_ = ftxui::Container::Vertical({
         ftxui::Container::Horizontal({
             open_button_,
+            copy_paths_button_,
         }),
         result_list_component_,
     });
@@ -344,6 +360,7 @@ void SearchFilesModalContent::Open() {
     last_directory_click_time_ = {};
 
     BuildDirectoryChoices();
+    RestoreSelectedDirectoriesForCurrentRoot();
     RefreshDirectoryLabels();
 
     if (query_input_) {
@@ -405,6 +422,7 @@ void SearchFilesModalContent::BuildDirectoryChoices() {
     directories_.clear();
     directory_labels_.clear();
     selected_directory_ = 0;
+    current_root_path_.clear();
 
     std::vector<FileSearchRoot> roots;
     if (root_provider_) {
@@ -424,6 +442,10 @@ void SearchFilesModalContent::BuildDirectoryChoices() {
         std::error_code status_error;
         if (!std::filesystem::is_directory(absolute_root, status_error)) {
             continue;
+        }
+
+        if (current_root_path_.empty()) {
+            current_root_path_ = absolute_root;
         }
 
         std::filesystem::directory_iterator iterator(
@@ -461,14 +483,24 @@ void SearchFilesModalContent::BuildDirectoryChoices() {
                 if (fallback.label.empty()) {
                     fallback.label = RootLabelForPath(absolute_root);
                 }
+                if (current_root_path_.empty()) {
+                    current_root_path_ = absolute_root;
+                }
                 AddDirectoryChoice(fallback, true, &seen_paths);
             }
         }
     }
 
     if (directories_.empty()) {
+        std::error_code current_error;
+        std::filesystem::path current =
+            std::filesystem::absolute(std::filesystem::current_path(), current_error).lexically_normal();
+        if (current_error || current.empty()) {
+            current = std::filesystem::current_path();
+        }
+        current_root_path_ = current;
         directories_.push_back({
-            FileSearchRoot{std::filesystem::current_path(), "."},
+            FileSearchRoot{current, "."},
             true
         });
     }
@@ -614,6 +646,8 @@ void SearchFilesModalContent::UseNextMaskSet() {
 }
 
 void SearchFilesModalContent::ExecuteSearch() {
+    SaveSelectedDirectoriesForCurrentRoot();
+
     FileSearchOptions options;
     options.roots = SelectedRoots();
     options.query = query_;
@@ -671,6 +705,74 @@ void SearchFilesModalContent::OpenSelectedMatch() {
     if (on_close_) {
         on_close_();
     }
+}
+
+
+void SearchFilesModalContent::PasteSearchQuery() {
+    if (!read_clipboard_) {
+        status_ = "Clipboard read is not configured.";
+        return;
+    }
+
+    const std::string text = read_clipboard_();
+    if (text.empty()) {
+        status_ = "Clipboard is empty.";
+        return;
+    }
+
+    query_ = text;
+    query_cursor_position_ = static_cast<int>(query_.size());
+    status_ = "Search text pasted.";
+
+    if (query_input_) {
+        query_input_->TakeFocus();
+    }
+}
+
+void SearchFilesModalContent::ClearSearchQuery() {
+    query_.clear();
+    query_cursor_position_ = 0;
+    status_ = "Search text cleared.";
+
+    if (query_input_) {
+        query_input_->TakeFocus();
+    }
+}
+
+void SearchFilesModalContent::CopyResultPaths() {
+    if (!write_clipboard_) {
+        status_ = "Clipboard write is not configured.";
+        return;
+    }
+
+    std::vector<std::string> paths;
+    paths.reserve(summary_.matches.size());
+
+    for (const FileSearchMatch& match : summary_.matches) {
+        const std::string path = match.path.lexically_normal().generic_string();
+        if (path.empty()) {
+            continue;
+        }
+        if (std::find(paths.begin(), paths.end(), path) == paths.end()) {
+            paths.push_back(path);
+        }
+    }
+
+    if (paths.empty()) {
+        status_ = "No result paths to copy.";
+        return;
+    }
+
+    std::ostringstream stream;
+    for (size_t index = 0; index < paths.size(); ++index) {
+        if (index > 0) {
+            stream << '\n';
+        }
+        stream << paths[index];
+    }
+
+    write_clipboard_(stream.str());
+    status_ = "Copied " + std::to_string(paths.size()) + " path(s).";
 }
 
 void SearchFilesModalContent::MoveResultSelection(int delta) {
@@ -736,6 +838,10 @@ ftxui::Element SearchFilesModalContent::RenderSearchTab() {
             ftxui::bgcolor(theme.modal_input_bg) |
             ftxui::color(theme.modal_input_fg) |
             ftxui::xflex,
+        ftxui::text("  "),
+        search_paste_button_->Render(),
+        ftxui::text(" "),
+        search_clear_button_->Render(),
     }),
 
     ftxui::text(""),
@@ -793,6 +899,8 @@ ftxui::Element SearchFilesModalContent::RenderResultsTab() {
             ftxui::text(StatusText()) | ftxui::color(theme.modal_text_color),
             ftxui::filler(),
             open_button_->Render(),
+            ftxui::text(" "),
+            copy_paths_button_->Render(),
         }),
         ftxui::separator() | ftxui::color(theme.modal_border),
         RenderResultList() | ftxui::yflex,
@@ -989,6 +1097,226 @@ std::string SearchFilesModalContent::TrimForDisplay(
     return text.substr(0, max_size - 3) + "...";
 }
 
+std::filesystem::path SearchFilesModalContent::CurrentRootPath() const {
+    if (!current_root_path_.empty()) {
+        return current_root_path_.lexically_normal();
+    }
+
+    if (root_provider_) {
+        const std::vector<FileSearchRoot> roots = root_provider_();
+        for (const FileSearchRoot& root : roots) {
+            std::error_code error;
+            std::filesystem::path normalized =
+                std::filesystem::absolute(root.path, error).lexically_normal();
+            if (!error && !normalized.empty()) {
+                return normalized;
+            }
+        }
+    }
+
+    std::error_code error;
+    std::filesystem::path current =
+        std::filesystem::absolute(std::filesystem::current_path(), error).lexically_normal();
+    return error ? std::filesystem::current_path() : current;
+}
+
+void SearchFilesModalContent::SelectMaskByValue(const std::string& value) {
+    if (value.empty()) {
+        return;
+    }
+
+    masks_ = value;
+    for (size_t index = 0; index < mask_sets_.size(); ++index) {
+        if (mask_sets_[index].value == value) {
+            selected_mask_set_ = index;
+            selected_filter_ = static_cast<int>(index);
+            SyncFilterInputsFromSelection();
+            return;
+        }
+    }
+}
+
+void SearchFilesModalContent::RestoreSelectedDirectoriesForCurrentRoot() {
+    const std::filesystem::path root_path = CurrentRootPath();
+    const std::string root_key = root_path.generic_string();
+    if (root_key.empty()) {
+        return;
+    }
+
+    Json config = LoadFilterConfig();
+    auto selected_dirs = config.find("selected_dirs");
+    if (selected_dirs == config.end() || !selected_dirs->is_array()) {
+        return;
+    }
+
+    Json* matching_entry = nullptr;
+    for (Json& entry : *selected_dirs) {
+        if (!entry.is_object()) {
+            continue;
+        }
+        if (JsonString(entry, "root") == root_key) {
+            matching_entry = &entry;
+            break;
+        }
+    }
+
+    if (!matching_entry) {
+        return;
+    }
+
+    const std::string active_mask = JsonString(*matching_entry, "active_mask");
+    SelectMaskByValue(active_mask);
+
+    std::vector<std::filesystem::path> selected_paths;
+    auto directories = matching_entry->find("directories");
+    if (directories != matching_entry->end() && directories->is_array()) {
+        for (const Json& item : *directories) {
+            if (!item.is_string()) {
+                continue;
+            }
+
+            const std::string relative_string = item.get<std::string>();
+            if (relative_string.empty()) {
+                continue;
+            }
+
+            std::filesystem::path relative_path(relative_string);
+            if (relative_path.is_absolute()) {
+                continue;
+            }
+
+            std::filesystem::path absolute_path =
+                (root_path / relative_path).lexically_normal();
+            std::error_code status_error;
+            if (!std::filesystem::is_directory(absolute_path, status_error)) {
+                continue;
+            }
+
+            selected_paths.push_back(absolute_path);
+        }
+    }
+
+    for (DirectoryChoice& directory : directories_) {
+        directory.selected = false;
+    }
+
+    std::vector<std::string> seen_paths;
+    for (const std::filesystem::path& selected_path : selected_paths) {
+        const std::string selected_key = selected_path.generic_string();
+        bool found = false;
+        for (DirectoryChoice& directory : directories_) {
+            if (directory.root.path.lexically_normal().generic_string() == selected_key) {
+                directory.selected = true;
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            const std::filesystem::path relative = selected_path.lexically_relative(root_path);
+            FileSearchRoot extra_root;
+            extra_root.path = selected_path;
+            extra_root.label = relative.empty()
+                ? RootLabelForPath(selected_path)
+                : relative.generic_string();
+            AddDirectoryChoice(extra_root, true, &seen_paths);
+        }
+    }
+
+    Json cleaned_directories = Json::array();
+    for (size_t index = 0; index < selected_paths.size() && index < 100; ++index) {
+        const std::filesystem::path relative =
+            selected_paths[index].lexically_relative(root_path);
+        if (!relative.empty()) {
+            cleaned_directories.push_back(relative.generic_string());
+        }
+    }
+
+    const bool removed_missing =
+        directories != matching_entry->end() &&
+        directories->is_array() &&
+        cleaned_directories.size() != directories->size();
+
+    (*matching_entry)["directories"] = cleaned_directories;
+    (*matching_entry)["active_mask"] = masks_;
+
+    if (removed_missing) {
+        SaveFilterConfig(config);
+    }
+}
+
+void SearchFilesModalContent::SaveSelectedDirectoriesForCurrentRoot() {
+    const std::filesystem::path root_path = CurrentRootPath();
+    const std::string root_key = root_path.generic_string();
+    if (root_key.empty()) {
+        return;
+    }
+
+    Json config = LoadFilterConfig();
+    if (!config.is_object()) {
+        config = Json::object();
+    }
+
+    Json existing_entries = Json::array();
+    auto existing = config.find("selected_dirs");
+    if (existing != config.end() && existing->is_array()) {
+        existing_entries = *existing;
+    }
+
+    Json new_entry = Json::object();
+    new_entry["root"] = root_key;
+    new_entry["active_mask"] = masks_;
+    new_entry["directories"] = Json::array();
+
+    size_t stored_directories = 0;
+    for (const DirectoryChoice& directory : directories_) {
+        if (!directory.selected || stored_directories >= 100) {
+            continue;
+        }
+
+        std::error_code status_error;
+        if (!std::filesystem::is_directory(directory.root.path, status_error)) {
+            continue;
+        }
+
+        const std::filesystem::path relative =
+            directory.root.path.lexically_normal().lexically_relative(root_path);
+        if (relative.empty()) {
+            continue;
+        }
+
+        auto iter = relative.begin();
+        if (iter != relative.end() && *iter == "..") {
+            continue;
+        }
+
+        new_entry["directories"].push_back(relative.generic_string());
+        ++stored_directories;
+    }
+
+    Json selected_dirs = Json::array();
+    selected_dirs.push_back(new_entry);
+
+    for (const Json& entry : existing_entries) {
+        if (!entry.is_object()) {
+            continue;
+        }
+        if (JsonString(entry, "root") == root_key) {
+            continue;
+        }
+        if (selected_dirs.size() >= 100) {
+            break;
+        }
+        selected_dirs.push_back(entry);
+    }
+
+    config["selected_dirs"] = std::move(selected_dirs);
+
+    if (!SaveFilterConfig(config)) {
+        status_ = "Unable to save selected directories.";
+    }
+}
+
 std::filesystem::path SearchFilesModalContent::FilterConfigPath() const {
     #ifdef _WIN32
     const char* app_data = std::getenv("APPDATA");
@@ -1020,31 +1348,30 @@ std::filesystem::path SearchFilesModalContent::FilterConfigPath() const {
     #endif
 }
 
+Json SearchFilesModalContent::LoadFilterConfig() const {
+    return LoadJsonObject(FilterConfigPath());
+}
+
+bool SearchFilesModalContent::SaveFilterConfig(const Json& root) const {
+    return WriteJsonAtomically(FilterConfigPath(), root);
+}
+
 void SearchFilesModalContent::LoadFilters() {
     std::vector<FileSearchMaskSet> loaded;
 
-    const std::filesystem::path path = FilterConfigPath();
-    std::error_code exists_error;
-    if (std::filesystem::exists(path, exists_error)) {
-        std::ifstream file(path, std::ios::binary);
-        if (file) {
-            const Json root = Json::parse(file, nullptr, false);
-            if (!root.is_discarded() && root.is_object()) {
-                const auto filters = root.find("filters");
-                if (filters != root.end() && filters->is_array()) {
-                    for (const Json& item : *filters) {
-                        if (!item.is_object()) {
-                            continue;
-                        }
+    const Json root = LoadFilterConfig();
+    const auto filters = root.find("filters");
+    if (filters != root.end() && filters->is_array()) {
+        for (const Json& item : *filters) {
+            if (!item.is_object()) {
+                continue;
+            }
 
-                        const std::string name = JsonString(item, "name");
-                        const std::string value = JsonString(item, "value");
+            const std::string name = JsonString(item, "name");
+            const std::string value = JsonString(item, "value");
 
-                        if (!name.empty() && !value.empty()) {
-                            loaded.push_back({name, value});
-                        }
-                    }
-                }
+            if (!name.empty() && !value.empty()) {
+                loaded.push_back({name, value});
             }
         }
     }
@@ -1070,10 +1397,7 @@ void SearchFilesModalContent::SaveFilters() {
 
     const std::filesystem::path path = FilterConfigPath();
 
-    std::error_code directory_error;
-    std::filesystem::create_directories(path.parent_path(), directory_error);
-
-    Json root = Json::object();
+    Json root = LoadFilterConfig();
     root["filters"] = Json::array();
 
     for (const FileSearchMaskSet& filter : mask_sets_) {
@@ -1083,7 +1407,7 @@ void SearchFilesModalContent::SaveFilters() {
         root["filters"].push_back(item);
     }
 
-    if (WriteJsonAtomically(path, root)) {
+    if (SaveFilterConfig(root)) {
         status_ = "Filters saved: " + path.string();
     } else {
         status_ = "Unable to save filters: " + path.string();
@@ -1102,7 +1426,7 @@ void SearchFilesModalContent::RebuildFilterLabels() {
 
     for (const FileSearchMaskSet& filter : mask_sets_) {
         filter_labels_.push_back(
-            filter.name + " — " + TrimForDisplay(filter.value, 90));
+            filter.name + " — " + TrimForDisplay(filter.value, 34));
     }
 
     if (selected_filter_ < 0) {
@@ -1288,12 +1612,16 @@ ftxui::Element SearchFilesModalContent::RenderFiltersTab() {
 SearchFilesModal::SearchFilesModal(
     const Theme* theme,
     RootProvider root_provider,
-    OpenMatchCallback on_open)
+    OpenMatchCallback on_open,
+    SearchFilesModalContent::ReadClipboardCallback read_clipboard,
+    SearchFilesModalContent::WriteClipboardCallback write_clipboard)
     : theme_(theme) {
         content_ = std::make_shared<SearchFilesModalContent>(
             theme_,
             std::move(root_provider),
             std::move(on_open),
+            std::move(read_clipboard),
+            std::move(write_clipboard),
             [this] { Close(); });
 
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
@@ -1302,11 +1630,6 @@ SearchFilesModal::SearchFilesModal(
         {"Search", [this] {
             if (content_) {
                 content_->ExecuteSearchFromFooter();
-            }
-        }},
-        {"Save", [this] {
-            if (content_) {
-                content_->SaveFiltersFromFooter();
             }
         }},
         {"Close", [this] { Close(); }},
@@ -1367,6 +1690,32 @@ bool SearchFilesModal::OnEvent(ftxui::Event event) {
 
 bool SearchFilesModalContent::HandleEvent(ftxui::Event event) {
     if (selected_tab_ == 0) {
+        const std::string input = event.input();
+        if (query_input_ && query_input_->Focused() &&
+            (input == "Ctrl+V" || input == "Ctrl+Shift+V" ||
+             event == ftxui::Event::Special("Ctrl+V") ||
+             event == ftxui::Event::Special("Ctrl+Shift+V"))) {
+            PasteSearchQuery();
+            return true;
+        }
+
+        if (event.is_mouse() && query_input_ && query_input_->Focused()) {
+            const ftxui::Mouse& mouse = event.mouse();
+            if (mouse.button == ftxui::Mouse::Left &&
+                mouse.motion == ftxui::Mouse::Pressed) {
+                const auto now = std::chrono::steady_clock::now();
+                const auto elapsed_ms =
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        now - last_query_click_time_).count();
+                last_query_click_time_ = now;
+
+                if (elapsed_ms >= 0 && elapsed_ms <= 500) {
+                    query_input_->OnEvent(ftxui::Event::Special("Ctrl+A"));
+                    return true;
+                }
+            }
+        }
+
         return HandleDirectoryMouseEvent(event);
     }
 
