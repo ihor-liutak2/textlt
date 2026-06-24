@@ -148,6 +148,7 @@ private:
     void ReplaceAll();
     void PasteIntoFindPanelInput();
     void ClearFindPanelFields();
+    bool HandleTerminalBracketedPaste(ftxui::Event event);
     std::string FindMatchStatus() const;
     std::vector<std::string> CurrentProjectPathCandidates() const;
     bool ResolveProjectRelativePath(
@@ -209,8 +210,10 @@ private:
     bool pending_sidebar_chord_ = false;
     bool show_goto_line_bar_ = false;
     bool exit_after_save_as_ = false;
+    bool terminal_bracketed_paste_active_ = false;
     SearchMode current_search_mode_ = SearchMode::None;
     SearchPanelInput active_search_panel_input_ = SearchPanelInput::Find;
+    std::string terminal_bracketed_paste_buffer_;
     std::shared_ptr<MenuBarComponent> menu_bar_;
     ftxui::Component body_container_;
     ftxui::Component main_container_;

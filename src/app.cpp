@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <functional>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -18,6 +19,17 @@
 namespace textlt {
 
 namespace {
+
+class BracketedPasteModeGuard {
+public:
+    BracketedPasteModeGuard() {
+        std::cout << "\x1B[?2004h" << std::flush;
+    }
+
+    ~BracketedPasteModeGuard() {
+        std::cout << "\x1B[?2004l" << std::flush;
+    }
+};
 
 ftxui::ButtonOption MakeFindPanelTextButtonOption(
     std::string label,
@@ -296,6 +308,7 @@ TextltApp::TextltApp(const std::vector<std::string>& files_to_open)
 
 void TextltApp::Run() {
     screen_.ForceHandleCtrlC(false);
+    BracketedPasteModeGuard bracketed_paste_mode_guard;
     screen_.Loop(global_shortcuts_);
     PersistOpenedDocuments();
 }

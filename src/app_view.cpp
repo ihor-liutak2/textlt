@@ -623,6 +623,10 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
 
     // Editor-specific direct manipulation shortcuts (only if editor is focused)
     if (editor_is_focused) {
+        if (HandleTerminalBracketedPaste(event)) {
+            return true;
+        }
+
         if (IsLineManipulationShortcut(event)) {
             if (text_editor_->OnEvent(event)) {
                 screen_.PostEvent(ftxui::Event::Custom);
