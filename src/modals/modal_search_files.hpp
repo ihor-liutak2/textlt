@@ -74,6 +74,7 @@ private:
     void ToggleSelectedDirectory();
     void SelectAllDirectories();
     void ClearDirectorySelection();
+    bool HandleDirectoryMouseEvent(ftxui::Event event);
 
     std::vector<FileSearchRoot> SelectedRoots() const;
 
@@ -143,6 +144,9 @@ private:
     std::chrono::steady_clock::time_point last_result_click_time_{};
     int last_clicked_result_ = -1;
 
+    std::chrono::steady_clock::time_point last_directory_click_time_{};
+    int last_clicked_directory_ = -1;
+
     ftxui::Component search_tab_button_;
     ftxui::Component results_tab_button_;
     ftxui::Component filters_tab_button_;
@@ -172,6 +176,7 @@ private:
     ftxui::Component next_mask_button_;
 
     ftxui::Component directory_menu_;
+    ftxui::Component directory_list_component_;
     ftxui::Component toggle_directory_button_;
     ftxui::Component all_directories_button_;
     ftxui::Component none_directories_button_;

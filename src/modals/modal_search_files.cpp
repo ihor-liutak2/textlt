@@ -184,6 +184,19 @@ SearchFilesModalContent::SearchFilesModalContent(
     directory_menu_ =
         ftxui::Menu(&directory_labels_, &selected_directory_, directory_option);
 
+        directory_list_component_ = ftxui::CatchEvent(
+            directory_menu_,
+            [this](ftxui::Event event) {
+                if (event == ftxui::Event::Character(" ") &&
+                    directory_menu_ &&
+                    directory_menu_->Focused()) {
+                    ToggleSelectedDirectory();
+                return true;
+                    }
+
+                    return false;
+            });
+
     toggle_directory_button_ = MakeTextButton("Toggle", [this] { ToggleSelectedDirectory(); });
     all_directories_button_ = MakeTextButton("All", [this] { SelectAllDirectories(); });
     none_directories_button_ = MakeTextButton("None", [this] { ClearDirectorySelection(); });
@@ -233,7 +246,7 @@ SearchFilesModalContent::SearchFilesModalContent(
             all_directories_button_,
             none_directories_button_,
         }),
-        directory_menu_,
+            directory_list_component_,
     });
 
     results_tab_container_ = ftxui::Container::Vertical({
@@ -326,6 +339,9 @@ void SearchFilesModalContent::Open() {
     selected_tab_ = 0;
     selected_result_ = 0;
     status_.clear();
+
+    last_clicked_directory_ = -1;
+    last_directory_click_time_ = {};
 
     BuildDirectoryChoices();
     RefreshDirectoryLabels();
@@ -792,7 +808,7 @@ ftxui::Element SearchFilesModalContent::RenderDirectoryList() const {
         return ftxui::text("No directories.") | ftxui::color(theme.modal_text_color);
     }
 
-    return directory_menu_->Render() |
+    return directory_list_component_->Render() |
         ftxui::vscroll_indicator |
         ftxui::frame;
 }
@@ -1333,9 +1349,11 @@ bool SearchFilesModal::OnEvent(ftxui::Event event) {
 
     if (content_ && event.is_mouse()) {
         const bool modal_handled = modal_->OnEvent(event);
+
         if (content_->HandleEvent(std::move(event))) {
             return true;
         }
+
         return modal_handled;
     }
 
@@ -1348,6 +1366,10 @@ bool SearchFilesModal::OnEvent(ftxui::Event event) {
 
 
 bool SearchFilesModalContent::HandleEvent(ftxui::Event event) {
+    if (selected_tab_ == 0) {
+        return HandleDirectoryMouseEvent(event);
+    }
+
     if (selected_tab_ != 1) {
         return false;
     }
@@ -1423,6 +1445,58 @@ bool SearchFilesModalContent::HandleResultsMouseEvent(ftxui::Event event) {
         }
 
         return false;
+}
+
+bool SearchFilesModalContent::HandleDirectoryMouseEvent(ftxui::Event event) {
+    if (!event.is_mouse() || selected_tab_ != 0) {
+        return false;
+    }
+
+    if (!directory_menu_ || !directory_menu_->Focused()) {
+        return false;
+    }
+
+    const ftxui::Mouse& mouse = event.mouse();
+
+    if (mouse.button != ftxui::Mouse::Left ||
+        mouse.motion != ftxui::Mouse::Pressed) {
+        return false;
+        }
+
+        if (directories_.empty()) {
+            return false;
+        }
+
+        if (selected_directory_ < 0) {
+            selected_directory_ = 0;
+        }
+
+        if (selected_directory_ >= static_cast<int>(directories_.size())) {
+            selected_directory_ = static_cast<int>(directories_.size() - 1);
+        }
+
+        const int clicked_directory = selected_directory_;
+
+        const auto now = std::chrono::steady_clock::now();
+        const auto elapsed_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - last_directory_click_time_).count();
+
+            const bool is_double_click =
+            last_clicked_directory_ == clicked_directory &&
+            elapsed_ms >= 0 &&
+            elapsed_ms <= 500;
+
+            last_directory_click_time_ = now;
+            last_clicked_directory_ = clicked_directory;
+
+            if (is_double_click) {
+                ToggleSelectedDirectory();
+                last_clicked_directory_ = -1;
+                return true;
+            }
+
+            return false;
 }
 
 } // namespace textlt
