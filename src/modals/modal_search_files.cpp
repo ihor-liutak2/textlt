@@ -74,11 +74,13 @@ bool IsIgnoredDirectoryName(const std::string& name) {
 SearchFilesModalContent::SearchFilesModalContent(
     const Theme* theme,
     RootProvider root_provider,
-    OpenMatchCallback on_open)
+    OpenMatchCallback on_open,
+    CloseCallback on_close)
     : theme_(theme),
-      root_provider_(std::move(root_provider)),
-      on_open_(std::move(on_open)),
-      mask_sets_(FileSearchEngine::DefaultMaskSets()) {
+        root_provider_(std::move(root_provider)),
+        on_open_(std::move(on_open)),
+        on_close_(std::move(on_close)),
+        mask_sets_(FileSearchEngine::DefaultMaskSets()) {
           LoadFilters();
 
     if (mask_sets_.empty()) {
@@ -212,8 +214,8 @@ SearchFilesModalContent::SearchFilesModalContent(
                 OpenSelectedMatch();
                 return true;
             }
-    
-            return HandleResultsMouseEvent(event);
+
+            return false;
         });
 
     search_tab_container_ = ftxui::Container::Vertical({
@@ -643,10 +645,15 @@ void SearchFilesModalContent::OpenSelectedMatch() {
 
     std::string error;
     const FileSearchMatch& match =
-        summary_.matches[static_cast<size_t>(selected_result_)];
+    summary_.matches[static_cast<size_t>(selected_result_)];
 
     if (!on_open_(match, error)) {
         status_ = error.empty() ? "Unable to open selected result." : error;
+        return;
+    }
+
+    if (on_close_) {
+        on_close_();
     }
 }
 
@@ -1267,10 +1274,11 @@ SearchFilesModal::SearchFilesModal(
     RootProvider root_provider,
     OpenMatchCallback on_open)
     : theme_(theme) {
-    content_ = std::make_shared<SearchFilesModalContent>(
-        theme_,
-        std::move(root_provider),
-        std::move(on_open));
+        content_ = std::make_shared<SearchFilesModalContent>(
+            theme_,
+            std::move(root_provider),
+            std::move(on_open),
+            [this] { Close(); });
 
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
 
@@ -1321,6 +1329,14 @@ bool SearchFilesModal::IsOpen() const {
 bool SearchFilesModal::OnEvent(ftxui::Event event) {
     if (!open_ || !modal_) {
         return false;
+    }
+
+    if (content_ && event.is_mouse()) {
+        const bool modal_handled = modal_->OnEvent(event);
+        if (content_->HandleEvent(std::move(event))) {
+            return true;
+        }
+        return modal_handled;
     }
 
     if (content_ && content_->HandleEvent(event)) {
@@ -1384,27 +1400,29 @@ bool SearchFilesModalContent::HandleResultsMouseEvent(ftxui::Event event) {
     if (mouse.button != ftxui::Mouse::Left ||
         mouse.motion != ftxui::Mouse::Pressed) {
         return false;
-    }
+        }
+
+        const int clicked_result = selected_result_;
 
     const auto now = std::chrono::steady_clock::now();
     const auto elapsed_ms =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            now - last_result_click_time_).count();
+    std::chrono::duration_cast<std::chrono::milliseconds>(
+        now - last_result_click_time_).count();
 
-    const bool same_position =
-        mouse.x == last_result_click_x_ &&
-        mouse.y == last_result_click_y_;
+        const bool is_double_click =
+        last_clicked_result_ == clicked_result &&
+        elapsed_ms >= 0 &&
+        elapsed_ms <= 500;
 
-    last_result_click_time_ = now;
-    last_result_click_x_ = mouse.x;
-    last_result_click_y_ = mouse.y;
+        last_result_click_time_ = now;
+        last_clicked_result_ = clicked_result;
 
-    if (same_position && elapsed_ms >= 0 && elapsed_ms <= 500) {
-        OpenSelectedMatch();
-        return true;
-    }
+        if (is_double_click) {
+            OpenSelectedMatch();
+            return true;
+        }
 
-    return false;
+        return false;
 }
 
 } // namespace textlt

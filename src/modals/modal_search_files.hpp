@@ -22,11 +22,13 @@ class SearchFilesModalContent : public IModalContent {
 public:
     using RootProvider = std::function<std::vector<FileSearchRoot>()>;
     using OpenMatchCallback = std::function<bool(const FileSearchMatch& match, std::string& error)>;
+    using CloseCallback = std::function<void()>;
 
     SearchFilesModalContent(
         const Theme* theme,
         RootProvider root_provider,
-        OpenMatchCallback on_open);
+        OpenMatchCallback on_open,
+        CloseCallback on_close);
 
     ftxui::Element Render() override;
     ftxui::Component GetMainComponent() override { return container_; }
@@ -112,6 +114,7 @@ private:
     const Theme* theme_ = nullptr;
     RootProvider root_provider_;
     OpenMatchCallback on_open_;
+    CloseCallback on_close_;
 
     FileSearchEngine engine_;
     FileSearchSummary summary_;
@@ -138,8 +141,7 @@ private:
     ftxui::Component result_list_component_;
     
     std::chrono::steady_clock::time_point last_result_click_time_{};
-    int last_result_click_x_ = -1;
-    int last_result_click_y_ = -1;
+    int last_clicked_result_ = -1;
 
     ftxui::Component search_tab_button_;
     ftxui::Component results_tab_button_;
