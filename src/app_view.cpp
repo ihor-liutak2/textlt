@@ -256,6 +256,7 @@ ftxui::Element TextltApp::RenderFindPanel() {
     using namespace ftxui;
 
     Element input_column = emptyElement();
+    Element utility_column = emptyElement();
     Element action_column = emptyElement();
     std::string mode = "Find";
     if (current_search_mode_ == SearchMode::Replace) {
@@ -265,10 +266,15 @@ ftxui::Element TextltApp::RenderFindPanel() {
                 text(" Find:    "),
                 replace_find_input_->Render() | size(WIDTH, GREATER_THAN, 34) | xflex,
             }),
+            emptyElement(),
             hbox({
                 text(" Replace: "),
                 replace_input_->Render() | size(WIDTH, GREATER_THAN, 34) | xflex,
             }),
+        });
+        utility_column = vbox({
+            replace_paste_button_->Render(),
+            replace_clear_button_->Render(),
         });
         action_column = vbox({
             replace_next_button_->Render(),
@@ -280,6 +286,10 @@ ftxui::Element TextltApp::RenderFindPanel() {
                 text(" Find:    "),
                 find_input_->Render() | size(WIDTH, GREATER_THAN, 42) | xflex,
             }),
+        });
+        utility_column = vbox({
+            find_paste_button_->Render(),
+            find_clear_button_->Render(),
         });
         action_column = vbox({
             find_next_button_->Render(),
@@ -302,10 +312,11 @@ ftxui::Element TextltApp::RenderFindPanel() {
             filler(),
             text(" Esc closes ") | dim | color(current_theme_.foreground),
         }),
-        separator(),
         hbox({
             input_column | xflex,
             separator(),
+            utility_column | size(WIDTH, GREATER_THAN, 9),
+            text(" "),
             action_column | size(WIDTH, GREATER_THAN, 16),
             separator(),
             filter_column | size(WIDTH, GREATER_THAN, 18),
@@ -487,13 +498,36 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     // 7. Find/Replace Panel
     if (current_search_mode_ != SearchMode::None) {
         // Events are dispatched to focused input or buttons within the panel.
-        if (find_input_->OnEvent(event)) return true;
-        if (replace_find_input_->OnEvent(event)) return true;
-        if (replace_input_->OnEvent(event)) return true;
-        if (find_next_button_->OnEvent(event)) return true;
-        if (find_previous_button_->OnEvent(event)) return true;
-        if (replace_next_button_->OnEvent(event)) return true;
-        if (replace_all_button_->OnEvent(event)) return true;
+        if (find_input_->Focused() || replace_find_input_->Focused()) {
+            active_search_panel_input_ = SearchPanelInput::Find;
+        } else if (replace_input_->Focused()) {
+            active_search_panel_input_ = SearchPanelInput::Replace;
+        }
+        if (current_search_mode_ == SearchMode::Find) {
+            if ((find_input_->Focused() || event.is_mouse()) && find_input_->OnEvent(event)) {
+                active_search_panel_input_ = SearchPanelInput::Find;
+                return true;
+            }
+            if (find_paste_button_->OnEvent(event)) return true;
+            if (find_clear_button_->OnEvent(event)) return true;
+            if (find_next_button_->OnEvent(event)) return true;
+            if (find_previous_button_->OnEvent(event)) return true;
+        } else if (current_search_mode_ == SearchMode::Replace) {
+            if ((replace_find_input_->Focused() || event.is_mouse()) &&
+                replace_find_input_->OnEvent(event)) {
+                active_search_panel_input_ = SearchPanelInput::Find;
+                return true;
+            }
+            if ((replace_input_->Focused() || event.is_mouse()) &&
+                replace_input_->OnEvent(event)) {
+                active_search_panel_input_ = SearchPanelInput::Replace;
+                return true;
+            }
+            if (replace_paste_button_->OnEvent(event)) return true;
+            if (replace_clear_button_->OnEvent(event)) return true;
+            if (replace_next_button_->OnEvent(event)) return true;
+            if (replace_all_button_->OnEvent(event)) return true;
+        }
         if (search_match_case_checkbox_->OnEvent(event)) return true;
         if (search_whole_word_checkbox_->OnEvent(event)) return true;
 

@@ -44,6 +44,11 @@ private:
         Replace,
     };
 
+    enum class SearchPanelInput {
+        Find,
+        Replace,
+    };
+
     void CloseDropdown();
     void OpenDropdown();
     void CloseFileDialog();
@@ -141,6 +146,8 @@ private:
     void FindPrevious();
     void ReplaceNext();
     void ReplaceAll();
+    void PasteIntoFindPanelInput();
+    void ClearFindPanelFields();
     std::string FindMatchStatus() const;
     std::vector<std::string> CurrentProjectPathCandidates() const;
     bool ResolveProjectRelativePath(
@@ -195,11 +202,15 @@ private:
 
     int focused_layer_ = 0;
     int search_panel_tab_index_ = 0;
+    int find_input_cursor_position_ = 0;
+    int replace_find_input_cursor_position_ = 0;
+    int replace_input_cursor_position_ = 0;
     bool sidebar_has_focus_ = false;
     bool pending_sidebar_chord_ = false;
     bool show_goto_line_bar_ = false;
     bool exit_after_save_as_ = false;
     SearchMode current_search_mode_ = SearchMode::None;
+    SearchPanelInput active_search_panel_input_ = SearchPanelInput::Find;
     std::shared_ptr<MenuBarComponent> menu_bar_;
     ftxui::Component body_container_;
     ftxui::Component main_container_;
@@ -207,6 +218,10 @@ private:
     ftxui::Component find_input_;
     ftxui::Component replace_find_input_;
     ftxui::Component replace_input_;
+    ftxui::Component find_paste_button_;
+    ftxui::Component find_clear_button_;
+    ftxui::Component replace_paste_button_;
+    ftxui::Component replace_clear_button_;
     ftxui::Component find_next_button_;
     ftxui::Component find_previous_button_;
     ftxui::Component replace_next_button_;

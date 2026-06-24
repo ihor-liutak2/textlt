@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <functional>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -16,6 +17,31 @@
 
 namespace textlt {
 
+namespace {
+
+ftxui::ButtonOption MakeFindPanelTextButtonOption(
+    std::string label,
+    std::function<void()> on_click,
+    const Theme* theme) {
+    ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
+    option.label = std::move(label);
+    option.on_click = std::move(on_click);
+    option.transform = [theme](const ftxui::EntryState& state) {
+        ftxui::Element button = ftxui::text("[" + state.label + "]");
+        if (theme && (state.focused || state.active)) {
+            return button |
+                ftxui::bgcolor(theme->menu_foreground) |
+                ftxui::color(theme->menu_background);
+        }
+        if (theme) {
+            return button | ftxui::color(theme->menu_foreground);
+        }
+        return button;
+    };
+    return option;
+}
+
+} // namespace
 
 TextltApp::TextltApp()
     : config_manager_("config.json"),
@@ -124,12 +150,17 @@ TextltApp::TextltApp()
     find_input_option.multiline = false;
     find_input_option.on_change = [this] { RefreshFindMatches(); };
     find_input_option.on_enter = [this] { FindNext(); };
+    find_input_option.cursor_position = &find_input_cursor_position_;
     find_input_ = ftxui::Input(&find_query_, "find text", find_input_option);
-    replace_find_input_ = ftxui::Input(&find_query_, "find text", find_input_option);
+
+    ftxui::InputOption replace_find_input_option = find_input_option;
+    replace_find_input_option.cursor_position = &replace_find_input_cursor_position_;
+    replace_find_input_ = ftxui::Input(&find_query_, "find text", replace_find_input_option);
 
     ftxui::InputOption replace_input_option;
     replace_input_option.multiline = false;
     replace_input_option.on_enter = [this] { FindNext(); };
+    replace_input_option.cursor_position = &replace_input_cursor_position_;
     replace_input_ = ftxui::Input(&replace_text_, "replacement", replace_input_option);
 
     ftxui::InputOption goto_line_input_option;
@@ -138,10 +169,22 @@ TextltApp::TextltApp()
     goto_line_input_component_ = ftxui::Input(
         &goto_line_input_, "line number", goto_line_input_option);
 
-    find_next_button_ = ftxui::Button("Find Next", [this] { FindNext(); });
-    find_previous_button_ = ftxui::Button("Find Prev", [this] { FindPrevious(); });
-    replace_next_button_ = ftxui::Button("Replace Next", [this] { ReplaceNext(); });
-    replace_all_button_ = ftxui::Button("Replace All", [this] { ReplaceAll(); });
+    find_paste_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
+        "Paste", [this] { PasteIntoFindPanelInput(); }, &current_theme_));
+    find_clear_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
+        "Clear", [this] { ClearFindPanelFields(); }, &current_theme_));
+    replace_paste_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
+        "Paste", [this] { PasteIntoFindPanelInput(); }, &current_theme_));
+    replace_clear_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
+        "Clear", [this] { ClearFindPanelFields(); }, &current_theme_));
+    find_next_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
+        "Find Next", [this] { FindNext(); }, &current_theme_));
+    find_previous_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
+        "Find Prev", [this] { FindPrevious(); }, &current_theme_));
+    replace_next_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
+        "Replace Next", [this] { ReplaceNext(); }, &current_theme_));
+    replace_all_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
+        "Replace All", [this] { ReplaceAll(); }, &current_theme_));
 
     auto search_filter_transform = [this](const ftxui::EntryState& state) {
         ftxui::Element item = ftxui::text(
@@ -183,14 +226,26 @@ TextltApp::TextltApp()
 
     find_panel_find_container_ = ftxui::Container::Horizontal({
         find_input_,
-        find_next_button_,
-        find_previous_button_,
+        ftxui::Container::Vertical({
+            find_paste_button_,
+            find_clear_button_,
+        }),
+        ftxui::Container::Vertical({
+            find_next_button_,
+            find_previous_button_,
+        }),
     });
     find_panel_replace_container_ = ftxui::Container::Horizontal({
         replace_find_input_,
         replace_input_,
-        replace_next_button_,
-        replace_all_button_,
+        ftxui::Container::Vertical({
+            replace_paste_button_,
+            replace_clear_button_,
+        }),
+        ftxui::Container::Vertical({
+            replace_next_button_,
+            replace_all_button_,
+        }),
     });
     find_panel_fields_container_ = ftxui::Container::Tab({
         find_panel_find_container_,
