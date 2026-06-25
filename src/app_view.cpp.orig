@@ -233,9 +233,6 @@ ftxui::Element TextltApp::Render() {
     if (search_files_modal_.IsOpen()) {
         layers.push_back(search_files_modal_.View()->Render() | clear_under | center);
     }
-    if (git_modal_.IsOpen()) {
-        layers.push_back(git_modal_.View()->Render() | clear_under | center);
-    }
     if (theme_dialog_.IsOpen()) {
         layers.push_back(theme_dialog_.View()->Render() | clear_under | center);
     }
@@ -391,16 +388,6 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     if (search_files_modal_.IsOpen()) {
         if (search_files_modal_.OnEvent(event)) {
             if (!search_files_modal_.IsOpen()) {
-                FocusEditor();
-            }
-            return true;
-        }
-        return true;
-    }
-
-    if (git_modal_.IsOpen()) {
-        if (git_modal_.OnEvent(event)) {
-            if (!git_modal_.IsOpen()) {
                 FocusEditor();
             }
             return true;

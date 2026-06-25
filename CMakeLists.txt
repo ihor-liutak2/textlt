@@ -95,6 +95,7 @@ add_executable(textlt
   src/modals/assistant_modals_tts.cpp
   src/modals/help_dialog.cpp
   src/modals/modal_ai.cpp
+  src/modals/modal_git.cpp
   src/modals/modal_recent_files.cpp
   src/modals/modal_tts.cpp
   src/modals/modal_window.cpp

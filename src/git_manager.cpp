@@ -1,5 +1,6 @@
 #include "git_manager.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdio>
 #include <sstream>
@@ -34,6 +35,14 @@ std::string StderrToNull() {
 #endif
 }
 
+std::string StderrToStdout() {
+#ifdef _WIN32
+    return "2>&1";
+#else
+    return "2>&1";
+#endif
+}
+
 } // namespace
 
 void GitManager::SetWorkingDirectory(const std::filesystem::path& directory) {
@@ -49,6 +58,20 @@ void GitManager::Invalidate() {
     last_refresh_ = {};
 }
 
+void GitManager::RefreshNow() {
+    if (pending_refresh_.valid()) {
+        pending_refresh_.wait();
+        ConsumeFinishedRefresh();
+    }
+
+    Snapshot snapshot = CollectSnapshot(working_directory_);
+    cached_branch_ = std::move(snapshot.branch);
+    cached_statuses_ = std::move(snapshot.statuses);
+    cached_status_entries_ = std::move(snapshot.status_entries);
+    cached_repository_root_ = std::move(snapshot.repository_root);
+    last_refresh_ = std::chrono::steady_clock::now();
+}
+
 std::string GitManager::GetCurrentBranch() {
     RefreshIfNeeded();
     return cached_branch_;
@@ -59,9 +82,98 @@ std::map<std::string, char> GitManager::GetFileStatuses() {
     return cached_statuses_;
 }
 
+std::vector<GitManager::StatusEntry> GitManager::GetStatusEntries() {
+    RefreshIfNeeded();
+    return cached_status_entries_;
+}
+
 std::filesystem::path GitManager::RepositoryRoot() {
     RefreshIfNeeded();
     return cached_repository_root_;
+}
+
+GitManager::CommandResult GitManager::StageFile(const std::string& path) {
+    return RunGitCommand({"add", "--", path});
+}
+
+GitManager::CommandResult GitManager::UnstageFile(const std::string& path) {
+    return RunGitCommand({"restore", "--staged", "--", path});
+}
+
+GitManager::CommandResult GitManager::DiffFile(const std::string& path, bool staged) {
+    if (staged) {
+        return RunGitCommand({"diff", "--cached", "--", path});
+    }
+    return RunGitCommand({"diff", "--", path});
+}
+
+GitManager::CommandResult GitManager::Commit(const std::string& message) {
+    return RunGitCommand({"commit", "-m", message});
+}
+
+std::vector<std::string> GitManager::GetLocalBranches(std::string* current_branch) {
+    std::vector<std::string> branches;
+    CommandResult result = RunGitCommand({"branch", "--format=%(refname:short)"});
+    if (!result.success()) {
+        return branches;
+    }
+
+    std::istringstream stream(result.output);
+    std::string line;
+    while (std::getline(stream, line)) {
+        line = Trim(line);
+        if (!line.empty()) {
+            branches.push_back(line);
+        }
+    }
+
+    std::string current = Trim(RunGitCommand({"branch", "--show-current"}).output);
+    if (current_branch) {
+        *current_branch = current;
+    }
+
+    if (!current.empty()) {
+        auto position = std::find(branches.begin(), branches.end(), current);
+        if (position != branches.end() && position != branches.begin()) {
+            std::rotate(branches.begin(), position, position + 1);
+        }
+    }
+
+    return branches;
+}
+
+GitManager::CommandResult GitManager::CheckoutBranch(const std::string& branch) {
+    return RunGitCommand({"checkout", branch});
+}
+
+GitManager::CommandResult GitManager::MergeBranch(const std::string& branch) {
+    return RunGitCommand({"merge", branch});
+}
+
+GitManager::CommandResult GitManager::RenameBranch(
+    const std::string& old_name,
+    const std::string& new_name) {
+    const std::string current = Trim(RunGitCommand({"branch", "--show-current"}).output);
+    if (!current.empty() && current == old_name) {
+        return RunGitCommand({"branch", "-m", new_name});
+    }
+    return RunGitCommand({"branch", "-m", old_name, new_name});
+}
+
+GitManager::CommandResult GitManager::PullFastForward() {
+    return RunGitCommand({"pull", "--ff-only"});
+}
+
+GitManager::CommandResult GitManager::CheckOriginConnection() {
+    return RunGitCommand({"ls-remote", "--heads", "origin"});
+}
+
+GitManager::CommandResult GitManager::FetchAllPrune() {
+    return RunGitCommand({"fetch", "--all", "--prune"});
+}
+
+GitManager::CommandResult GitManager::Push() {
+    return RunGitCommand({"push"});
 }
 
 void GitManager::RefreshIfNeeded() {
@@ -101,27 +213,31 @@ void GitManager::ConsumeFinishedRefresh() {
 
     cached_branch_ = std::move(snapshot.branch);
     cached_statuses_ = std::move(snapshot.statuses);
+    cached_status_entries_ = std::move(snapshot.status_entries);
     cached_repository_root_ = std::move(snapshot.repository_root);
 }
 
 std::string GitManager::ExecuteCommand(const std::string& command) {
+    CommandResult result = ExecuteCommandWithStatus(command);
+    return result.success() ? result.output : "";
+}
+
+GitManager::CommandResult GitManager::ExecuteCommandWithStatus(const std::string& command) {
     std::array<char, 256> buffer{};
-    std::string output;
+    CommandResult result;
 
     FILE* pipe = OpenPipe(command, "r");
     if (!pipe) {
-        return "";
+        result.exit_code = -1;
+        return result;
     }
 
     while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr) {
-        output += buffer.data();
+        result.output += buffer.data();
     }
 
-    const int status = ClosePipe(pipe);
-    if (status != 0) {
-        return "";
-    }
-    return output;
+    result.exit_code = ClosePipe(pipe);
+    return result;
 }
 
 GitManager::Snapshot GitManager::CollectSnapshot(std::filesystem::path working_directory) {
@@ -133,12 +249,16 @@ GitManager::Snapshot GitManager::CollectSnapshot(std::filesystem::path working_d
     snapshot.branch = Trim(ExecuteCommand(git_prefix + "branch --show-current " + StderrToNull()));
     snapshot.repository_root = Trim(ExecuteCommand(
         git_prefix + "rev-parse --show-toplevel " + StderrToNull()));
-    snapshot.statuses = ParseStatusOutput(
-        ExecuteCommand(git_prefix + "status --porcelain " + StderrToNull()));
+
+    const std::string status_output = ExecuteCommand(
+        git_prefix + "status --porcelain " + StderrToNull());
+    snapshot.statuses = ParseStatusOutput(status_output);
+    snapshot.status_entries = ParseStatusEntries(status_output);
 
     if (snapshot.repository_root.empty()) {
         snapshot.branch.clear();
         snapshot.statuses.clear();
+        snapshot.status_entries.clear();
     }
 
     return snapshot;
@@ -188,6 +308,17 @@ std::string GitManager::Trim(std::string value) {
 
 std::map<std::string, char> GitManager::ParseStatusOutput(const std::string& output) {
     std::map<std::string, char> statuses;
+    for (const StatusEntry& entry : ParseStatusEntries(output)) {
+        const char status = entry.index_status != ' ' && entry.index_status != '?'
+            ? entry.index_status
+            : entry.worktree_status;
+        statuses[entry.path] = status;
+    }
+    return statuses;
+}
+
+std::vector<GitManager::StatusEntry> GitManager::ParseStatusEntries(const std::string& output) {
+    std::vector<StatusEntry> entries;
     std::istringstream stream(output);
     std::string line;
 
@@ -196,24 +327,42 @@ std::map<std::string, char> GitManager::ParseStatusOutput(const std::string& out
             continue;
         }
 
-        const char index_status = line[0];
-        const char worktree_status = line[1];
-        const char status = index_status != ' ' ? index_status : worktree_status;
-        std::string path = line.substr(3);
+        StatusEntry entry;
+        entry.index_status = line[0];
+        entry.worktree_status = line[1];
+        entry.path = line.substr(3);
 
-        // Rename entries use "old -> new"; color the current path in the tree.
         const std::string rename_separator = " -> ";
-        const size_t rename_position = path.find(rename_separator);
+        const size_t rename_position = entry.path.find(rename_separator);
         if (rename_position != std::string::npos) {
-            path = path.substr(rename_position + rename_separator.size());
+            entry.path = entry.path.substr(rename_position + rename_separator.size());
         }
 
-        if (!path.empty()) {
-            statuses[path] = status;
+        if (!entry.path.empty()) {
+            entries.push_back(std::move(entry));
         }
     }
 
-    return statuses;
+    return entries;
+}
+
+GitManager::CommandResult GitManager::RunGitCommand(const std::vector<std::string>& args) {
+    std::string command = GitCommandPrefix();
+    for (const std::string& arg : args) {
+        command += " " + ShellQuote(arg);
+    }
+    command += " " + StderrToStdout();
+
+    CommandResult result = ExecuteCommandWithStatus(command);
+    Invalidate();
+    return result;
+}
+
+std::string GitManager::GitCommandPrefix() {
+    const std::filesystem::path directory = cached_repository_root_.empty()
+        ? working_directory_
+        : cached_repository_root_;
+    return "git -C " + ShellQuote(directory.string());
 }
 
 } // namespace textlt

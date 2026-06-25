@@ -17,6 +17,7 @@
 #include "modals/assistant_modals.hpp"
 #include "modals/help_dialog.hpp"
 #include "modals/modal_ai.hpp"
+#include "modals/modal_git.hpp"
 #include "modals/modal_recent_files.hpp"
 #include "modals/modal_tts.hpp"
 #include "modals/modal_search_files.hpp"
@@ -58,6 +59,8 @@ private:
 
     void OpenSearchFilesModal();
     void CloseSearchFilesModal();
+    void OpenGitModal();
+    void CloseGitModal();
 
     std::vector<FileSearchRoot> CurrentSearchFileRoots() const;
     bool OpenSearchFileMatch(const FileSearchMatch& match, std::string& error);
@@ -164,6 +167,7 @@ private:
     void HandleEditMenu(int item);
     void HandleOptionsMenu(int item);
     void HandleAiMenu(int item);
+    void HandleGitMenu(int item);
     
     // Platform-specific clipboard abstraction utilities
     std::string ReadSystemClipboard();
@@ -185,6 +189,7 @@ private:
     RecentFilesModal recent_files_modal_;
 
     SearchFilesModal search_files_modal_;
+    GitModal git_modal_;
 
     CloudTtsPipeline cloud_tts_pipeline_;
     TtsModal tts_modal_;

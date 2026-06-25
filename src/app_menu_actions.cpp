@@ -126,13 +126,16 @@ void TextltApp::RunDropdownAction(int menu_index, int item_index) {
             HandleAiMenu(item_index);
             return;
         case 4:
+            HandleGitMenu(item_index);
+            return;
+        case 5:
             if (item_index == 0) {
                 OpenAboutDialog();
             } else {
                 OpenHelpDialog();
             }
             return;
-        case 5: if (item_index == 0) RequestExit(); return;
+        case 6: if (item_index == 0) RequestExit(); return;
         default: CloseDropdown();                            return;
     }
 }
@@ -338,6 +341,16 @@ void TextltApp::HandleAiMenu(int item) {
             CloseDropdown();
             return;
     }
+}
+
+
+void TextltApp::HandleGitMenu(int item) {
+    if (item == 0) {
+        OpenGitModal();
+        return;
+    }
+
+    CloseDropdown();
 }
 
 

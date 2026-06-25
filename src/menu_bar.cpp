@@ -21,6 +21,7 @@ MenuBarComponent::MenuBarComponent(
           " Edit ",
           " Options ",
           " AI ",
+          " Git ",
           " Help ",
           " Exit ",
       }),
@@ -72,6 +73,9 @@ MenuBarComponent::MenuBarComponent(
               " TTS                 (Alt+H) ",
               " AI Actions          (Alt+J) ",
               " Assistant Settings  (Alt+S) ",
+          },
+          {
+              " Git... ",
           },
           {" About textlt ", " Keyboard Shortcuts "},
           {" Exit "},

@@ -107,7 +107,21 @@ TextltApp::TextltApp()
               [this](const std::string& text) {
                   WriteSystemClipboard(text);
               }),
-              tts_modal_(
+      git_modal_(
+          &current_theme_,
+          &git_manager_,
+          [this](const std::filesystem::path& path, std::string& error) {
+              const bool opened = OpenFile(path.string(), error);
+              if (opened) {
+                  FocusEditor();
+                  screen_.PostEvent(ftxui::Event::Custom);
+              }
+              return opened;
+          },
+          [this](const std::string& text) {
+              WriteSystemClipboard(text);
+          }),
+      tts_modal_(
           &current_theme_,
           &cloud_tts_pipeline_,
           [this] { QueueTtsBookPreparationFromCursor(); }),
@@ -147,6 +161,7 @@ TextltApp::TextltApp()
             !help_dialog_.IsOpen() &&
             !recent_files_modal_.IsOpen() &&
             !search_files_modal_.IsOpen() &&
+            !git_modal_.IsOpen() &&
             !tts_modal_.IsOpen() &&
             !ai_actions_modal_.IsOpen() &&
             !assistant_settings_modal_.IsOpen() &&

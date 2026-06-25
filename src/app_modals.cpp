@@ -250,6 +250,26 @@ void TextltApp::CloseSearchFilesModal() {
 }
 
 
+void TextltApp::OpenGitModal() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+
+    git_manager_.RefreshNow();
+    git_modal_.Open();
+    active_action_ = "Opened Git";
+    focused_layer_ = 0;
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CloseGitModal() {
+    git_modal_.Close();
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
 std::vector<FileSearchRoot> TextltApp::CurrentSearchFileRoots() const {
     const std::filesystem::path root = CurrentSidebarDirectory();
 
