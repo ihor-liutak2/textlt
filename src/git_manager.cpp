@@ -150,6 +150,14 @@ GitManager::CommandResult GitManager::MergeBranch(const std::string& branch) {
     return RunGitCommand({"merge", branch});
 }
 
+GitManager::CommandResult GitManager::RebaseBranch(const std::string& branch) {
+    return RunGitCommand({"rebase", branch});
+}
+
+GitManager::CommandResult GitManager::DeleteLocalBranch(const std::string& branch) {
+    return RunGitCommand({"branch", "-d", branch});
+}
+
 GitManager::CommandResult GitManager::RenameBranch(
     const std::string& old_name,
     const std::string& new_name) {
@@ -164,6 +172,85 @@ GitManager::CommandResult GitManager::PullFastForward() {
     return RunGitCommand({"pull", "--ff-only"});
 }
 
+std::vector<std::string> GitManager::GetRemoteBranches() {
+    std::vector<std::string> branches;
+    CommandResult result = RunGitCommand({"branch", "-r", "--format=%(refname:short)"});
+    if (!result.success()) {
+        return branches;
+    }
+
+    std::istringstream stream(result.output);
+    std::string line;
+    while (std::getline(stream, line)) {
+        line = Trim(line);
+        if (line.empty() || line.find("HEAD") != std::string::npos) {
+            continue;
+        }
+        branches.push_back(line);
+    }
+    return branches;
+}
+
+GitManager::CommandResult GitManager::CheckoutRemoteBranch(const std::string& remote_branch) {
+    return RunGitCommand({"checkout", "--track", remote_branch});
+}
+
+GitManager::CommandResult GitManager::DeleteRemoteBranch(const std::string& remote_branch) {
+    const size_t slash = remote_branch.find('/');
+    if (slash == std::string::npos || slash == 0 || slash + 1 >= remote_branch.size()) {
+        CommandResult result;
+        result.exit_code = 1;
+        result.output = "Remote branch must have the form remote/name.";
+        return result;
+    }
+    const std::string remote = remote_branch.substr(0, slash);
+    const std::string branch = remote_branch.substr(slash + 1);
+    return RunGitCommand({"push", remote, "--delete", branch});
+}
+
+std::vector<std::string> GitManager::GetTags() {
+    std::vector<std::string> tags;
+    CommandResult result = RunGitCommand({"tag", "--list"});
+    if (!result.success()) {
+        return tags;
+    }
+
+    std::istringstream stream(result.output);
+    std::string line;
+    while (std::getline(stream, line)) {
+        line = Trim(line);
+        if (!line.empty()) {
+            tags.push_back(line);
+        }
+    }
+    return tags;
+}
+
+GitManager::CommandResult GitManager::CreateTag(
+    const std::string& tag_name,
+    const std::string& message) {
+    if (Trim(message).empty()) {
+        return RunGitCommand({"tag", tag_name});
+    }
+    return RunGitCommand({"tag", "-a", tag_name, "-m", message});
+}
+
+GitManager::CommandResult GitManager::DeleteTag(const std::string& tag_name) {
+    return RunGitCommand({"tag", "-d", tag_name});
+}
+
+GitManager::CommandResult GitManager::PushTag(const std::string& tag_name) {
+    return RunGitCommand({"push", "origin", tag_name});
+}
+
+GitManager::CommandResult GitManager::PushAllTags() {
+    return RunGitCommand({"push", "origin", "--tags"});
+}
+
+GitManager::CommandResult GitManager::FetchTags() {
+    return RunGitCommand({"fetch", "--tags", "--prune"});
+}
+
 GitManager::CommandResult GitManager::CheckOriginConnection() {
     return RunGitCommand({"ls-remote", "--heads", "origin"});
 }
@@ -174,6 +261,10 @@ GitManager::CommandResult GitManager::FetchAllPrune() {
 
 GitManager::CommandResult GitManager::Push() {
     return RunGitCommand({"push"});
+}
+
+GitManager::CommandResult GitManager::ForcePushWithLease() {
+    return RunGitCommand({"push", "--force-with-lease"});
 }
 
 void GitManager::RefreshIfNeeded() {

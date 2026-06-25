@@ -49,7 +49,9 @@ private:
         Diff = 1,
         Commit = 2,
         Branches = 3,
-        Server = 4,
+        Remote = 4,
+        Tags = 5,
+        Server = 6,
     };
 
     ftxui::Component MakeTextButton(std::string label, std::function<void()> on_click);
@@ -74,10 +76,35 @@ private:
     void MergeSelectedBranch();
     void RenameSelectedBranch();
     void UpdateSelectedBranch();
+    void RebaseSelectedBranch();
+    void DeleteSelectedBranch();
+
+    void RefreshRemoteBranches();
+    void CheckoutSelectedRemoteBranch();
+    void DeleteSelectedRemoteBranch();
+
+    void RefreshTags();
+    void CreateTag();
+    void DeleteSelectedTag();
+    void PushSelectedTag();
+    void PushAllTags();
+    void FetchTags();
 
     void CheckConnection();
     void FetchServer();
     void PushServer();
+    void ForcePushWithLease();
+
+    void RequestConfirm(
+        const std::string& title,
+        const std::string& message,
+        const std::string& command_preview,
+        std::function<void()> on_confirm,
+        const std::string& required_text = "");
+    void ConfirmPendingAction();
+    void CancelPendingAction();
+    bool HandleConfirmEvent(ftxui::Event event);
+    ftxui::Element RenderConfirmOverlay();
 
     void RunAndRefresh(const std::string& action, const GitManager::CommandResult& result);
     bool HasUncommittedChanges() const;
@@ -88,6 +115,8 @@ private:
 
     void RebuildStatusLabels();
     void RebuildBranchLabels();
+    void RebuildRemoteBranchLabels();
+    void RebuildTagLabels();
     void RebuildCommitLabels();
     void SplitOutputLines(const std::string& output, std::vector<std::string>* lines) const;
     std::string TrimForDisplay(const std::string& text, size_t max_size) const;
@@ -97,8 +126,13 @@ private:
     ftxui::Element RenderDiffTab();
     ftxui::Element RenderCommitTab();
     ftxui::Element RenderBranchesTab();
+    ftxui::Element RenderRemoteTab();
+    ftxui::Element RenderTagsTab();
     ftxui::Element RenderServerTab();
-    ftxui::Element RenderTextLines(const std::vector<std::string>& lines, const std::string& empty_text) const;
+    ftxui::Element RenderTextLines(
+        const std::vector<std::string>& lines,
+        const std::string& empty_text,
+        int scroll_offset = 0) const;
 
     const Theme* theme_ = nullptr;
     GitManager* git_manager_ = nullptr;
@@ -117,6 +151,8 @@ private:
 
     std::string diff_text_;
     std::vector<std::string> diff_lines_;
+    bool diff_staged_ = false;
+    int diff_scroll_offset_ = 0;
 
     std::vector<std::string> commit_files_;
     std::vector<std::string> commit_labels_;
@@ -128,13 +164,38 @@ private:
     int selected_branch_ = 0;
     std::string rename_branch_input_;
 
+    std::vector<std::string> remote_branches_;
+    std::vector<std::string> filtered_remote_branches_;
+    std::vector<std::string> remote_branch_labels_;
+    int selected_remote_branch_ = 0;
+    std::string remote_branch_filter_;
+
+    std::vector<std::string> tags_;
+    std::vector<std::string> filtered_tags_;
+    std::vector<std::string> tag_labels_;
+    int selected_tag_ = 0;
+    std::string tag_filter_;
+    std::string tag_name_input_;
+    std::string tag_message_input_;
+
     std::string server_output_;
     std::vector<std::string> server_output_lines_;
+    int server_output_scroll_offset_ = 0;
+
+    bool confirm_active_ = false;
+    std::string confirm_title_;
+    std::string confirm_message_;
+    std::string confirm_command_preview_;
+    std::string confirm_required_text_;
+    std::string confirm_typed_text_;
+    std::function<void()> confirm_action_;
 
     ftxui::Component status_tab_button_;
     ftxui::Component diff_tab_button_;
     ftxui::Component commit_tab_button_;
     ftxui::Component branches_tab_button_;
+    ftxui::Component remote_tab_button_;
+    ftxui::Component tags_tab_button_;
     ftxui::Component server_tab_button_;
     ftxui::Component tab_buttons_;
 
@@ -146,6 +207,8 @@ private:
     ftxui::Component unstage_all_button_;
     ftxui::Component copy_paths_button_;
 
+    ftxui::Component working_diff_button_;
+    ftxui::Component staged_diff_button_;
     ftxui::Component refresh_diff_button_;
     ftxui::Component copy_diff_button_;
 
@@ -156,18 +219,44 @@ private:
     ftxui::Component branch_menu_;
     ftxui::Component checkout_button_;
     ftxui::Component merge_button_;
+    ftxui::Component rebase_button_;
     ftxui::Component rename_button_;
+    ftxui::Component delete_branch_button_;
     ftxui::Component update_button_;
     ftxui::Component rename_branch_input_component_;
+
+    ftxui::Component remote_filter_input_component_;
+    ftxui::Component remote_branch_menu_;
+    ftxui::Component refresh_remote_button_;
+    ftxui::Component checkout_remote_button_;
+    ftxui::Component delete_remote_button_;
+
+    ftxui::Component tag_filter_input_component_;
+    ftxui::Component tag_menu_;
+    ftxui::Component tag_name_input_component_;
+    ftxui::Component tag_message_input_component_;
+    ftxui::Component create_tag_button_;
+    ftxui::Component delete_tag_button_;
+    ftxui::Component push_tag_button_;
+    ftxui::Component push_all_tags_button_;
+    ftxui::Component fetch_tags_button_;
+
+    ftxui::Component confirm_input_component_;
+    ftxui::Component confirm_confirm_button_;
+    ftxui::Component confirm_cancel_button_;
+    ftxui::Component confirm_container_;
 
     ftxui::Component check_connection_button_;
     ftxui::Component fetch_button_;
     ftxui::Component push_button_;
+    ftxui::Component force_push_button_;
 
     ftxui::Component status_tab_container_;
     ftxui::Component diff_tab_container_;
     ftxui::Component commit_tab_container_;
     ftxui::Component branches_tab_container_;
+    ftxui::Component remote_tab_container_;
+    ftxui::Component tags_tab_container_;
     ftxui::Component server_tab_container_;
     ftxui::Component tab_body_container_;
     ftxui::Component container_;

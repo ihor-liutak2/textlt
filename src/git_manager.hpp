@@ -45,12 +45,26 @@ public:
     std::vector<std::string> GetLocalBranches(std::string* current_branch = nullptr);
     CommandResult CheckoutBranch(const std::string& branch);
     CommandResult MergeBranch(const std::string& branch);
+    CommandResult RebaseBranch(const std::string& branch);
+    CommandResult DeleteLocalBranch(const std::string& branch);
     CommandResult RenameBranch(const std::string& old_name, const std::string& new_name);
     CommandResult PullFastForward();
+
+    std::vector<std::string> GetRemoteBranches();
+    CommandResult CheckoutRemoteBranch(const std::string& remote_branch);
+    CommandResult DeleteRemoteBranch(const std::string& remote_branch);
+
+    std::vector<std::string> GetTags();
+    CommandResult CreateTag(const std::string& tag_name, const std::string& message);
+    CommandResult DeleteTag(const std::string& tag_name);
+    CommandResult PushTag(const std::string& tag_name);
+    CommandResult PushAllTags();
+    CommandResult FetchTags();
 
     CommandResult CheckOriginConnection();
     CommandResult FetchAllPrune();
     CommandResult Push();
+    CommandResult ForcePushWithLease();
 
 private:
     struct Snapshot {

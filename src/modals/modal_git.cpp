@@ -1,5 +1,6 @@
 #include "modals/modal_git.hpp"
 
+#include <algorithm>
 #include <utility>
 
 #include "ftxui/component/component_options.hpp"
@@ -29,6 +30,8 @@ GitModalContent::GitModalContent(
     diff_tab_button_ = MakeTabButton("Diff", static_cast<int>(Tab::Diff));
     commit_tab_button_ = MakeTabButton("Commit", static_cast<int>(Tab::Commit));
     branches_tab_button_ = MakeTabButton("Branches", static_cast<int>(Tab::Branches));
+    remote_tab_button_ = MakeTabButton("Remote", static_cast<int>(Tab::Remote));
+    tags_tab_button_ = MakeTabButton("Tags", static_cast<int>(Tab::Tags));
     server_tab_button_ = MakeTabButton("Server", static_cast<int>(Tab::Server));
 
     tab_buttons_ = ftxui::Container::Horizontal({
@@ -36,6 +39,8 @@ GitModalContent::GitModalContent(
         diff_tab_button_,
         commit_tab_button_,
         branches_tab_button_,
+        remote_tab_button_,
+        tags_tab_button_,
         server_tab_button_,
     });
 
@@ -72,6 +77,16 @@ GitModalContent::GitModalContent(
     unstage_all_button_ = MakeTextButton("Unstage all", [this] { UnstageAllShownFiles(); });
     copy_paths_button_ = MakeTextButton("Copy paths", [this] { CopyStatusPaths(); });
 
+    working_diff_button_ = MakeTextButton("Working", [this] {
+        diff_staged_ = false;
+        diff_scroll_offset_ = 0;
+        RefreshDiff();
+    });
+    staged_diff_button_ = MakeTextButton("Staged", [this] {
+        diff_staged_ = true;
+        diff_scroll_offset_ = 0;
+        RefreshDiff();
+    });
     refresh_diff_button_ = MakeTextButton("Refresh diff", [this] { RefreshDiff(); });
     copy_diff_button_ = MakeTextButton("Copy diff", [this] { CopyDiff(); });
 
@@ -112,7 +127,9 @@ GitModalContent::GitModalContent(
     branch_menu_ = ftxui::Menu(&branch_labels_, &selected_branch_, branch_menu_option);
     checkout_button_ = MakeTextButton("Checkout", [this] { CheckoutSelectedBranch(); });
     merge_button_ = MakeTextButton("Merge", [this] { MergeSelectedBranch(); });
+    rebase_button_ = MakeTextButton("Rebase", [this] { RebaseSelectedBranch(); });
     rename_button_ = MakeTextButton("Rename", [this] { RenameSelectedBranch(); });
+    delete_branch_button_ = MakeTextButton("Delete", [this] { DeleteSelectedBranch(); });
     update_button_ = MakeTextButton("Update", [this] { UpdateSelectedBranch(); });
 
     ftxui::InputOption rename_branch_option;
@@ -120,9 +137,95 @@ GitModalContent::GitModalContent(
     rename_branch_input_component_ =
         ftxui::Input(&rename_branch_input_, "new branch name", rename_branch_option);
 
+    ftxui::InputOption remote_filter_option;
+    remote_filter_option.multiline = false;
+    auto remote_filter_input =
+        ftxui::Input(&remote_branch_filter_, "filter remote branches", remote_filter_option);
+    remote_filter_input_component_ = ftxui::CatchEvent(
+        remote_filter_input,
+        [this, remote_filter_input](ftxui::Event event) {
+            const bool handled = remote_filter_input->OnEvent(event);
+            if (handled) {
+                RebuildRemoteBranchLabels();
+            }
+            return handled;
+        });
+
+    ftxui::MenuOption remote_menu_option = ftxui::MenuOption::Vertical();
+    remote_menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        ftxui::Element row = ftxui::text(state.label);
+        if (state.focused || state.active) {
+            return row |
+                ftxui::bgcolor(theme.modal_selected_item_bg) |
+                ftxui::color(theme.modal_selected_item_fg) |
+                ftxui::bold;
+        }
+        return row | ftxui::color(theme.modal_text_color);
+    };
+    remote_branch_menu_ = ftxui::Menu(&remote_branch_labels_, &selected_remote_branch_, remote_menu_option);
+    refresh_remote_button_ = MakeTextButton("Refresh remote", [this] { RefreshRemoteBranches(); });
+    checkout_remote_button_ = MakeTextButton("Checkout remote", [this] { CheckoutSelectedRemoteBranch(); });
+    delete_remote_button_ = MakeTextButton("Delete remote", [this] { DeleteSelectedRemoteBranch(); });
+
+    ftxui::InputOption tag_filter_option;
+    tag_filter_option.multiline = false;
+    auto tag_filter_input = ftxui::Input(&tag_filter_, "filter tags", tag_filter_option);
+    tag_filter_input_component_ = ftxui::CatchEvent(
+        tag_filter_input,
+        [this, tag_filter_input](ftxui::Event event) {
+            const bool handled = tag_filter_input->OnEvent(event);
+            if (handled) {
+                RebuildTagLabels();
+            }
+            return handled;
+        });
+
+    ftxui::MenuOption tag_menu_option = ftxui::MenuOption::Vertical();
+    tag_menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        ftxui::Element row = ftxui::text(state.label);
+        if (state.focused || state.active) {
+            return row |
+                ftxui::bgcolor(theme.modal_selected_item_bg) |
+                ftxui::color(theme.modal_selected_item_fg) |
+                ftxui::bold;
+        }
+        return row | ftxui::color(theme.modal_text_color);
+    };
+    tag_menu_ = ftxui::Menu(&tag_labels_, &selected_tag_, tag_menu_option);
+
+    ftxui::InputOption tag_name_option;
+    tag_name_option.multiline = false;
+    tag_name_input_component_ = ftxui::Input(&tag_name_input_, "tag name", tag_name_option);
+
+    ftxui::InputOption tag_message_option;
+    tag_message_option.multiline = false;
+    tag_message_input_component_ = ftxui::Input(&tag_message_input_, "optional message", tag_message_option);
+
+    create_tag_button_ = MakeTextButton("Create tag", [this] { CreateTag(); });
+    delete_tag_button_ = MakeTextButton("Delete tag", [this] { DeleteSelectedTag(); });
+    push_tag_button_ = MakeTextButton("Push tag", [this] { PushSelectedTag(); });
+    push_all_tags_button_ = MakeTextButton("Push all tags", [this] { PushAllTags(); });
+    fetch_tags_button_ = MakeTextButton("Fetch tags", [this] { FetchTags(); });
+
+    ftxui::InputOption confirm_input_option;
+    confirm_input_option.multiline = false;
+    confirm_input_component_ = ftxui::Input(&confirm_typed_text_, "confirmation", confirm_input_option);
+    confirm_confirm_button_ = MakeTextButton("Confirm", [this] { ConfirmPendingAction(); });
+    confirm_cancel_button_ = MakeTextButton("Cancel", [this] { CancelPendingAction(); });
+    confirm_container_ = ftxui::Container::Vertical({
+        confirm_input_component_,
+        ftxui::Container::Horizontal({
+            confirm_confirm_button_,
+            confirm_cancel_button_,
+        }),
+    });
+
     check_connection_button_ = MakeTextButton("Check connection", [this] { CheckConnection(); });
     fetch_button_ = MakeTextButton("Fetch", [this] { FetchServer(); });
     push_button_ = MakeTextButton("Push", [this] { PushServer(); });
+    force_push_button_ = MakeTextButton("Force push lease", [this] { ForcePushWithLease(); });
 
     status_tab_container_ = ftxui::Container::Vertical({
         ftxui::Container::Horizontal({
@@ -137,6 +240,8 @@ GitModalContent::GitModalContent(
 
     diff_tab_container_ = ftxui::Container::Vertical({
         ftxui::Container::Horizontal({
+            working_diff_button_,
+            staged_diff_button_,
             refresh_diff_button_,
             copy_diff_button_,
         }),
@@ -154,8 +259,34 @@ GitModalContent::GitModalContent(
         ftxui::Container::Horizontal({
             checkout_button_,
             merge_button_,
+            rebase_button_,
             rename_button_,
+            delete_branch_button_,
             update_button_,
+        }),
+    });
+
+    remote_tab_container_ = ftxui::Container::Vertical({
+        remote_filter_input_component_,
+        remote_branch_menu_,
+        ftxui::Container::Horizontal({
+            refresh_remote_button_,
+            checkout_remote_button_,
+            delete_remote_button_,
+        }),
+    });
+
+    tags_tab_container_ = ftxui::Container::Vertical({
+        tag_filter_input_component_,
+        tag_menu_,
+        tag_name_input_component_,
+        tag_message_input_component_,
+        ftxui::Container::Horizontal({
+            create_tag_button_,
+            delete_tag_button_,
+            push_tag_button_,
+            push_all_tags_button_,
+            fetch_tags_button_,
         }),
     });
 
@@ -164,6 +295,7 @@ GitModalContent::GitModalContent(
             check_connection_button_,
             fetch_button_,
             push_button_,
+            force_push_button_,
         }),
     });
 
@@ -172,6 +304,8 @@ GitModalContent::GitModalContent(
         diff_tab_container_,
         commit_tab_container_,
         branches_tab_container_,
+        remote_tab_container_,
+        tags_tab_container_,
         server_tab_container_,
     }, &selected_tab_);
 
@@ -211,6 +345,10 @@ ftxui::Component GitModalContent::MakeTabButton(std::string label, int tab_index
             branch_menu_->TakeFocus();
         } else if (selected_tab_ == static_cast<int>(Tab::Commit) && commit_file_menu_) {
             commit_file_menu_->TakeFocus();
+        } else if (selected_tab_ == static_cast<int>(Tab::Remote) && remote_filter_input_component_) {
+            remote_filter_input_component_->TakeFocus();
+        } else if (selected_tab_ == static_cast<int>(Tab::Tags) && tag_filter_input_component_) {
+            tag_filter_input_component_->TakeFocus();
         }
     };
     option.transform = [this, tab_index](const ftxui::EntryState& state) {
@@ -233,6 +371,8 @@ void GitModalContent::Open() {
     server_output_.clear();
     server_output_lines_.clear();
     RefreshAll();
+    RefreshRemoteBranches();
+    RefreshTags();
     if (status_list_component_) {
         status_list_component_->TakeFocus();
     }
@@ -251,6 +391,10 @@ ftxui::Element GitModalContent::RenderTitle() {
         ftxui::text(" "),
         branches_tab_button_->Render(),
         ftxui::text(" "),
+        remote_tab_button_->Render(),
+        ftxui::text(" "),
+        tags_tab_button_->Render(),
+        ftxui::text(" "),
         server_tab_button_->Render(),
     });
 }
@@ -267,13 +411,34 @@ ftxui::Element GitModalContent::Render() {
         body = RenderCommitTab();
     } else if (selected_tab_ == static_cast<int>(Tab::Branches)) {
         body = RenderBranchesTab();
+    } else if (selected_tab_ == static_cast<int>(Tab::Remote)) {
+        body = RenderRemoteTab();
+    } else if (selected_tab_ == static_cast<int>(Tab::Tags)) {
+        body = RenderTagsTab();
     } else {
         body = RenderServerTab();
     }
 
-    return body |
+    body = body |
         ftxui::bgcolor(theme.modal_background) |
         ftxui::color(theme.modal_foreground);
+
+    if (!confirm_active_) {
+        return body;
+    }
+
+    return ftxui::dbox({
+        body,
+        ftxui::vbox({
+            ftxui::filler(),
+            ftxui::hbox({
+                ftxui::filler(),
+                RenderConfirmOverlay(),
+                ftxui::filler(),
+            }),
+            ftxui::filler(),
+        }),
+    });
 }
 
 std::string GitModalContent::GetFooterText() const {
@@ -281,11 +446,42 @@ std::string GitModalContent::GetFooterText() const {
 }
 
 bool GitModalContent::HandleEvent(ftxui::Event event) {
+    if (confirm_active_) {
+        return HandleConfirmEvent(event);
+    }
+
     if (event == ftxui::Event::Escape) {
         if (on_close_) {
             on_close_();
         }
         return true;
+    }
+
+
+    if (selected_tab_ == static_cast<int>(Tab::Diff)) {
+        const bool wheel_down = event.is_mouse() && event.mouse().button == ftxui::Mouse::WheelDown;
+        const bool wheel_up = event.is_mouse() && event.mouse().button == ftxui::Mouse::WheelUp;
+        if (event == ftxui::Event::ArrowDown || event == ftxui::Event::PageDown || wheel_down) {
+            diff_scroll_offset_ += event == ftxui::Event::PageDown ? 10 : 3;
+            return true;
+        }
+        if (event == ftxui::Event::ArrowUp || event == ftxui::Event::PageUp || wheel_up) {
+            diff_scroll_offset_ = std::max(0, diff_scroll_offset_ - (event == ftxui::Event::PageUp ? 10 : 3));
+            return true;
+        }
+    }
+
+    if (selected_tab_ == static_cast<int>(Tab::Server)) {
+        const bool wheel_down = event.is_mouse() && event.mouse().button == ftxui::Mouse::WheelDown;
+        const bool wheel_up = event.is_mouse() && event.mouse().button == ftxui::Mouse::WheelUp;
+        if (event == ftxui::Event::ArrowDown || event == ftxui::Event::PageDown || wheel_down) {
+            server_output_scroll_offset_ += event == ftxui::Event::PageDown ? 10 : 3;
+            return true;
+        }
+        if (event == ftxui::Event::ArrowUp || event == ftxui::Event::PageUp || wheel_up) {
+            server_output_scroll_offset_ = std::max(0, server_output_scroll_offset_ - (event == ftxui::Event::PageUp ? 10 : 3));
+            return true;
+        }
     }
 
     if (event == ftxui::Event::Character(" ") &&

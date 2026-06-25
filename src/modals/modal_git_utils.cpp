@@ -10,6 +10,12 @@ namespace textlt {
 void GitModalContent::RefreshAll() {
     RefreshStatus();
     RefreshBranches();
+    if (selected_tab_ == static_cast<int>(Tab::Remote)) {
+        RefreshRemoteBranches();
+    }
+    if (selected_tab_ == static_cast<int>(Tab::Tags)) {
+        RefreshTags();
+    }
     if (selected_tab_ == static_cast<int>(Tab::Diff)) {
         RefreshDiff();
     }
@@ -97,15 +103,19 @@ std::string GitModalContent::TrimForDisplay(const std::string& text, size_t max_
 
 ftxui::Element GitModalContent::RenderTextLines(
     const std::vector<std::string>& lines,
-    const std::string& empty_text) const {
+    const std::string& empty_text,
+    int scroll_offset) const {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     if (lines.empty()) {
         return ftxui::text(empty_text) | ftxui::color(theme.modal_text_color) | ftxui::frame;
     }
 
     ftxui::Elements rows;
-    for (const std::string& line : lines) {
-        rows.push_back(ftxui::text(line) | ftxui::color(theme.modal_text_color));
+    const size_t start = static_cast<size_t>(std::max(0, std::min(
+        scroll_offset,
+        static_cast<int>(lines.size()) - 1)));
+    for (size_t index = start; index < lines.size(); ++index) {
+        rows.push_back(ftxui::text(lines[index]) | ftxui::color(theme.modal_text_color));
     }
     return ftxui::vbox(std::move(rows)) | ftxui::vscroll_indicator | ftxui::frame;
 }

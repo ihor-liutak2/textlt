@@ -51,7 +51,13 @@ void GitModalContent::CheckoutSelectedBranch() {
         status_ = "No branch selected.";
         return;
     }
-    RunAndRefresh("Checkout", git_manager_->CheckoutBranch(branch));
+    RequestConfirm(
+        "Confirm checkout",
+        "Checkout selected local branch.",
+        "git checkout " + branch,
+        [this, branch] {
+            RunAndRefresh("Checkout", git_manager_->CheckoutBranch(branch));
+        });
 }
 
 void GitModalContent::MergeSelectedBranch() {
@@ -67,11 +73,17 @@ void GitModalContent::MergeSelectedBranch() {
         status_ = "Select another branch to merge.";
         return;
     }
-    GitManager::CommandResult result = git_manager_->MergeBranch(branch);
-    RunAndRefresh("Merge", result);
-    if (!result.success() && result.output.find("CONFLICT") != std::string::npos) {
-        status_ = "Merge has conflicts. Fix conflicted files manually.";
-    }
+    RequestConfirm(
+        "Confirm merge",
+        "Merge selected branch into the active branch.",
+        "git merge " + branch,
+        [this, branch] {
+            GitManager::CommandResult result = git_manager_->MergeBranch(branch);
+            RunAndRefresh("Merge", result);
+            if (!result.success() && result.output.find("CONFLICT") != std::string::npos) {
+                status_ = "Merge has conflicts. Fix conflicted files manually.";
+            }
+        });
 }
 
 void GitModalContent::RenameSelectedBranch() {
@@ -92,7 +104,13 @@ void GitModalContent::RenameSelectedBranch() {
         status_ = "Branch name did not change.";
         return;
     }
-    RunAndRefresh("Rename", git_manager_->RenameBranch(old_name, new_name));
+    RequestConfirm(
+        "Confirm rename",
+        "Rename selected branch.",
+        "git branch -m " + old_name + " " + new_name,
+        [this, old_name, new_name] {
+            RunAndRefresh("Rename", git_manager_->RenameBranch(old_name, new_name));
+        });
 }
 
 void GitModalContent::UpdateSelectedBranch() {
@@ -112,7 +130,62 @@ void GitModalContent::UpdateSelectedBranch() {
         status_ = "Update only works for the active branch.";
         return;
     }
-    RunAndRefresh("Update", git_manager_->PullFastForward());
+    RequestConfirm(
+        "Confirm update",
+        "Update active branch with fast-forward only pull.",
+        "git pull --ff-only",
+        [this] {
+            RunAndRefresh("Update", git_manager_->PullFastForward());
+        });
+}
+
+void GitModalContent::RebaseSelectedBranch() {
+    if (!git_manager_) {
+        return;
+    }
+    if (HasUncommittedChanges()) {
+        status_ = "Cannot rebase: repository has uncommitted changes.";
+        return;
+    }
+    const std::string branch = SelectedBranchName();
+    if (branch.empty() || branch == branch_) {
+        status_ = "Select another branch to rebase onto.";
+        return;
+    }
+    RequestConfirm(
+        "Confirm rebase",
+        "Rebase active branch onto the selected branch.",
+        "git rebase " + branch,
+        [this, branch] {
+            RunAndRefresh("Rebase", git_manager_->RebaseBranch(branch));
+        });
+}
+
+void GitModalContent::DeleteSelectedBranch() {
+    if (!git_manager_) {
+        return;
+    }
+    if (HasUncommittedChanges()) {
+        status_ = "Cannot delete branch: repository has uncommitted changes.";
+        return;
+    }
+    const std::string branch = SelectedBranchName();
+    if (branch.empty()) {
+        status_ = "No branch selected.";
+        return;
+    }
+    if (branch == branch_) {
+        status_ = "Cannot delete the active branch.";
+        return;
+    }
+    RequestConfirm(
+        "Confirm branch delete",
+        "Delete selected local branch.",
+        "git branch -d " + branch,
+        [this, branch] {
+            RunAndRefresh("Delete branch", git_manager_->DeleteLocalBranch(branch));
+        },
+        "DELETE");
 }
 
 void GitModalContent::CheckConnection() {
@@ -121,6 +194,7 @@ void GitModalContent::CheckConnection() {
     }
     GitManager::CommandResult result = git_manager_->CheckOriginConnection();
     server_output_ = result.output;
+    server_output_scroll_offset_ = 0;
     SplitOutputLines(server_output_, &server_output_lines_);
     status_ = result.success() ? "Connection OK." : "Connection check failed.";
 }
@@ -131,6 +205,7 @@ void GitModalContent::FetchServer() {
     }
     GitManager::CommandResult result = git_manager_->FetchAllPrune();
     server_output_ = result.output;
+    server_output_scroll_offset_ = 0;
     SplitOutputLines(server_output_, &server_output_lines_);
     RunAndRefresh("Fetch", result);
 }
@@ -139,10 +214,35 @@ void GitModalContent::PushServer() {
     if (!git_manager_) {
         return;
     }
-    GitManager::CommandResult result = git_manager_->Push();
-    server_output_ = result.output;
-    SplitOutputLines(server_output_, &server_output_lines_);
-    RunAndRefresh("Push", result);
+    RequestConfirm(
+        "Confirm push",
+        "Push current branch to the configured upstream.",
+        "git push",
+        [this] {
+            GitManager::CommandResult result = git_manager_->Push();
+            server_output_ = result.output;
+            server_output_scroll_offset_ = 0;
+            SplitOutputLines(server_output_, &server_output_lines_);
+            RunAndRefresh("Push", result);
+        });
+}
+
+void GitModalContent::ForcePushWithLease() {
+    if (!git_manager_) {
+        return;
+    }
+    RequestConfirm(
+        "Confirm force push",
+        "Force push with lease. This can rewrite remote history.",
+        "git push --force-with-lease",
+        [this] {
+            GitManager::CommandResult result = git_manager_->ForcePushWithLease();
+            server_output_ = result.output;
+            server_output_scroll_offset_ = 0;
+            SplitOutputLines(server_output_, &server_output_lines_);
+            RunAndRefresh("Force push with lease", result);
+        },
+        "PUSH");
 }
 
 void GitModalContent::RebuildBranchLabels() {
@@ -170,7 +270,11 @@ ftxui::Element GitModalContent::RenderBranchesTab() {
             ftxui::text(" "),
             merge_button_->Render(),
             ftxui::text(" "),
+            rebase_button_->Render(),
+            ftxui::text(" "),
             rename_button_->Render(),
+            ftxui::text(" "),
+            delete_branch_button_->Render(),
             ftxui::text(" "),
             update_button_->Render(),
         }),
@@ -198,11 +302,13 @@ ftxui::Element GitModalContent::RenderServerTab() {
             fetch_button_->Render(),
             ftxui::text(" "),
             push_button_->Render(),
+            ftxui::text(" "),
+            force_push_button_->Render(),
             ftxui::filler(),
             ftxui::text("origin") | ftxui::dim | ftxui::color(theme.modal_text_color),
         }),
         ftxui::separator() | ftxui::color(theme.modal_border),
-        RenderTextLines(server_output_lines_, "No server command output yet.") | ftxui::yflex,
+        RenderTextLines(server_output_lines_, "No server command output yet.", server_output_scroll_offset_) | ftxui::yflex,
     });
 }
 

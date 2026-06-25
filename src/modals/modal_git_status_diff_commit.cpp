@@ -73,17 +73,10 @@ void GitModalContent::RefreshDiff() {
         return;
     }
 
-    bool staged = false;
-    if (selected_status_ >= 0 && selected_status_ < static_cast<int>(status_entries_.size())) {
-        staged = status_entries_[static_cast<size_t>(selected_status_)].IsStaged();
-    }
-
-    GitManager::CommandResult result = git_manager_->DiffFile(path, staged);
-    if (staged && result.output.empty()) {
-        result = git_manager_->DiffFile(path, false);
-    }
+    GitManager::CommandResult result = git_manager_->DiffFile(path, diff_staged_);
 
     diff_text_ = result.output;
+    diff_scroll_offset_ = 0;
     SplitOutputLines(diff_text_, &diff_lines_);
     status_ = result.success()
         ? "Diff refreshed."
@@ -241,11 +234,18 @@ void GitModalContent::CommitStagedFiles() {
         return;
     }
 
-    GitManager::CommandResult result = git_manager_->Commit(commit_message_);
-    RunAndRefresh("Commit", result);
-    if (result.success()) {
-        commit_message_.clear();
-    }
+    const std::string message = commit_message_;
+    RequestConfirm(
+        "Confirm commit",
+        "Commit staged files with the current commit message.",
+        "git commit -m "" + TrimForDisplay(message, 80) + """,
+        [this, message] {
+            GitManager::CommandResult result = git_manager_->Commit(message);
+            RunAndRefresh("Commit", result);
+            if (result.success()) {
+                commit_message_.clear();
+            }
+        });
 }
 
 
@@ -327,13 +327,19 @@ ftxui::Element GitModalContent::RenderDiffTab() {
         ftxui::hbox({
             ftxui::text("File: " + (file.empty() ? "-" : file)) |
                 ftxui::color(theme.modal_text_color),
+            ftxui::text("  Mode: " + std::string(diff_staged_ ? "Staged" : "Working")) |
+                ftxui::color(theme.modal_text_color) | ftxui::dim,
             ftxui::filler(),
+            working_diff_button_->Render(),
+            ftxui::text(" "),
+            staged_diff_button_->Render(),
+            ftxui::text(" "),
             refresh_diff_button_->Render(),
             ftxui::text(" "),
             copy_diff_button_->Render(),
         }),
         ftxui::separator() | ftxui::color(theme.modal_border),
-        RenderTextLines(diff_lines_, "No diff loaded.") | ftxui::yflex,
+        RenderTextLines(diff_lines_, "No diff loaded.", diff_scroll_offset_) | ftxui::yflex,
     });
 }
 
