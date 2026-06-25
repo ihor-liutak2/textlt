@@ -18,6 +18,7 @@
 #include "modals/help_dialog.hpp"
 #include "modals/modal_ai.hpp"
 #include "modals/modal_git.hpp"
+#include "modals/modal_git_settings.hpp"
 #include "modals/modal_recent_files.hpp"
 #include "modals/modal_tts.hpp"
 #include "modals/modal_search_files.hpp"
@@ -61,6 +62,8 @@ private:
     void CloseSearchFilesModal();
     void OpenGitModal();
     void CloseGitModal();
+    void OpenGitSettingsModal();
+    void CloseGitSettingsModal();
 
     std::vector<FileSearchRoot> CurrentSearchFileRoots() const;
     bool OpenSearchFileMatch(const FileSearchMatch& match, std::string& error);
@@ -190,6 +193,7 @@ private:
 
     SearchFilesModal search_files_modal_;
     GitModal git_modal_;
+    GitSettingsModal git_settings_modal_;
 
     CloudTtsPipeline cloud_tts_pipeline_;
     TtsModal tts_modal_;

@@ -76,6 +76,7 @@ MenuBarComponent::MenuBarComponent(
           },
           {
               " Git... ",
+              " Git Settings... ",
           },
           {" About textlt ", " Keyboard Shortcuts "},
           {" Exit "},

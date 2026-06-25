@@ -162,6 +162,7 @@ TextltApp::TextltApp()
             !recent_files_modal_.IsOpen() &&
             !search_files_modal_.IsOpen() &&
             !git_modal_.IsOpen() &&
+            !git_settings_modal_.IsOpen() &&
             !tts_modal_.IsOpen() &&
             !ai_actions_modal_.IsOpen() &&
             !assistant_settings_modal_.IsOpen() &&

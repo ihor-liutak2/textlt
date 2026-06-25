@@ -267,6 +267,135 @@ GitManager::CommandResult GitManager::ForcePushWithLease() {
     return RunGitCommand({"push", "--force-with-lease"});
 }
 
+
+std::vector<GitManager::RemoteEntry> GitManager::GetRemotes() {
+    std::vector<RemoteEntry> remotes;
+    CommandResult result = RunGitCommand({"remote", "-v"});
+    if (!result.success()) {
+        return remotes;
+    }
+
+    std::map<std::string, RemoteEntry> by_name;
+    std::istringstream stream(result.output);
+    std::string line;
+    while (std::getline(stream, line)) {
+        line = Trim(line);
+        if (line.empty()) {
+            continue;
+        }
+
+        std::istringstream line_stream(line);
+        std::string name;
+        std::string url;
+        std::string kind;
+        line_stream >> name >> url >> kind;
+        if (name.empty() || url.empty()) {
+            continue;
+        }
+
+        RemoteEntry& entry = by_name[name];
+        entry.name = name;
+        if (kind.find("push") != std::string::npos) {
+            entry.push_url = url;
+        } else {
+            entry.fetch_url = url;
+        }
+    }
+
+    for (auto& item : by_name) {
+        if (item.second.push_url.empty()) {
+            item.second.push_url = item.second.fetch_url;
+        }
+        if (item.second.fetch_url.empty()) {
+            item.second.fetch_url = item.second.push_url;
+        }
+        remotes.push_back(std::move(item.second));
+    }
+    return remotes;
+}
+
+GitManager::CommandResult GitManager::AddRemote(const std::string& name, const std::string& url) {
+    return RunGitCommand({"remote", "add", name, url});
+}
+
+GitManager::CommandResult GitManager::SetRemoteUrl(const std::string& name, const std::string& url) {
+    return RunGitCommand({"remote", "set-url", name, url});
+}
+
+GitManager::CommandResult GitManager::RenameRemote(const std::string& old_name, const std::string& new_name) {
+    return RunGitCommand({"remote", "rename", old_name, new_name});
+}
+
+GitManager::CommandResult GitManager::RemoveRemote(const std::string& name) {
+    return RunGitCommand({"remote", "remove", name});
+}
+
+GitManager::CommandResult GitManager::TestRemote(const std::string& name) {
+    return RunGitCommand({"ls-remote", "--heads", name});
+}
+
+GitManager::GitIdentity GitManager::GetIdentity() {
+    GitIdentity identity;
+    identity.effective_name = Trim(RunGitCommand({"config", "--get", "user.name"}).output);
+    identity.effective_email = Trim(RunGitCommand({"config", "--get", "user.email"}).output);
+    identity.local_name = Trim(RunGitCommand({"config", "--local", "--get", "user.name"}).output);
+    identity.local_email = Trim(RunGitCommand({"config", "--local", "--get", "user.email"}).output);
+    identity.global_name = Trim(RunGitCommand({"config", "--global", "--get", "user.name"}).output);
+    identity.global_email = Trim(RunGitCommand({"config", "--global", "--get", "user.email"}).output);
+    return identity;
+}
+
+GitManager::CommandResult GitManager::SaveLocalIdentity(
+    const std::string& name,
+    const std::string& email) {
+    CommandResult name_result = RunGitCommand({"config", "--local", "user.name", name});
+    CommandResult email_result = RunGitCommand({"config", "--local", "user.email", email});
+    CommandResult result;
+    result.exit_code = name_result.success() && email_result.success() ? 0 : 1;
+    result.output = name_result.output + email_result.output;
+    return result;
+}
+
+GitManager::CommandResult GitManager::SaveGlobalIdentity(
+    const std::string& name,
+    const std::string& email) {
+    CommandResult name_result = RunGitCommand({"config", "--global", "user.name", name});
+    CommandResult email_result = RunGitCommand({"config", "--global", "user.email", email});
+    CommandResult result;
+    result.exit_code = name_result.success() && email_result.success() ? 0 : 1;
+    result.output = name_result.output + email_result.output;
+    return result;
+}
+
+GitManager::CommandResult GitManager::ClearLocalIdentity() {
+    CommandResult name_result = RunGitCommand({"config", "--unset", "--local", "user.name"});
+    CommandResult email_result = RunGitCommand({"config", "--unset", "--local", "user.email"});
+    CommandResult result;
+    result.exit_code = 0;
+    result.output = name_result.output + email_result.output;
+    return result;
+}
+
+std::vector<std::string> GitManager::GetConfigList(bool global_scope) {
+    std::vector<std::string> lines;
+    CommandResult result = global_scope
+        ? RunGitCommand({"config", "--global", "--list"})
+        : RunGitCommand({"config", "--local", "--list"});
+    if (!result.success()) {
+        return lines;
+    }
+
+    std::istringstream stream(result.output);
+    std::string line;
+    while (std::getline(stream, line)) {
+        line = Trim(line);
+        if (!line.empty()) {
+            lines.push_back(line);
+        }
+    }
+    return lines;
+}
+
 void GitManager::RefreshIfNeeded() {
     ConsumeFinishedRefresh();
 

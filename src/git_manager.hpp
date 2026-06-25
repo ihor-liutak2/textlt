@@ -28,6 +28,21 @@ public:
         }
     };
 
+    struct RemoteEntry {
+        std::string name;
+        std::string fetch_url;
+        std::string push_url;
+    };
+
+    struct GitIdentity {
+        std::string effective_name;
+        std::string effective_email;
+        std::string local_name;
+        std::string local_email;
+        std::string global_name;
+        std::string global_email;
+    };
+
     void SetWorkingDirectory(const std::filesystem::path& directory);
     void Invalidate();
     void RefreshNow();
@@ -65,6 +80,20 @@ public:
     CommandResult FetchAllPrune();
     CommandResult Push();
     CommandResult ForcePushWithLease();
+
+    std::vector<RemoteEntry> GetRemotes();
+    CommandResult AddRemote(const std::string& name, const std::string& url);
+    CommandResult SetRemoteUrl(const std::string& name, const std::string& url);
+    CommandResult RenameRemote(const std::string& old_name, const std::string& new_name);
+    CommandResult RemoveRemote(const std::string& name);
+    CommandResult TestRemote(const std::string& name);
+
+    GitIdentity GetIdentity();
+    CommandResult SaveLocalIdentity(const std::string& name, const std::string& email);
+    CommandResult SaveGlobalIdentity(const std::string& name, const std::string& email);
+    CommandResult ClearLocalIdentity();
+
+    std::vector<std::string> GetConfigList(bool global_scope);
 
 private:
     struct Snapshot {

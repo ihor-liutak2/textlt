@@ -96,6 +96,7 @@ add_executable(textlt
   src/modals/help_dialog.cpp
   src/modals/modal_ai.cpp
   src/modals/modal_git.cpp
+  src/modals/modal_git_settings.cpp
   src/modals/modal_git_status_diff_commit.cpp
   src/modals/modal_git_branches_server.cpp
   src/modals/modal_git_remote_tags.cpp

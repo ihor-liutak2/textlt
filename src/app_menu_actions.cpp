@@ -349,6 +349,10 @@ void TextltApp::HandleGitMenu(int item) {
         OpenGitModal();
         return;
     }
+    if (item == 1) {
+        OpenGitSettingsModal();
+        return;
+    }
 
     CloseDropdown();
 }

@@ -270,6 +270,32 @@ void TextltApp::CloseGitModal() {
 }
 
 
+void TextltApp::OpenGitSettingsModal() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+
+    git_settings_modal_.Configure(
+        &current_theme_,
+        &git_manager_,
+        [this](const std::string& text) {
+            WriteSystemClipboard(text);
+        },
+        [this] { CloseGitSettingsModal(); });
+    git_settings_modal_.Open();
+    active_action_ = "Opened Git Settings";
+    focused_layer_ = 0;
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CloseGitSettingsModal() {
+    git_settings_modal_.Close();
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
 std::vector<FileSearchRoot> TextltApp::CurrentSearchFileRoots() const {
     const std::filesystem::path root = CurrentSidebarDirectory();
 
