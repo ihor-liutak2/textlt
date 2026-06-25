@@ -120,6 +120,7 @@ private:
 
     std::vector<std::string> commit_files_;
     std::vector<std::string> commit_labels_;
+    int selected_commit_file_ = 0;
     std::string commit_message_;
 
     std::vector<std::string> branches_;
@@ -148,6 +149,7 @@ private:
     ftxui::Component refresh_diff_button_;
     ftxui::Component copy_diff_button_;
 
+    ftxui::Component commit_file_menu_;
     ftxui::Component commit_message_input_;
     ftxui::Component commit_button_;
 

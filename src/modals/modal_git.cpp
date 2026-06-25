@@ -102,6 +102,20 @@ GitModalContent::GitModalContent(
     refresh_diff_button_ = MakeTextButton("Refresh diff", [this] { RefreshDiff(); });
     copy_diff_button_ = MakeTextButton("Copy diff", [this] { CopyDiff(); });
 
+    ftxui::MenuOption commit_file_menu_option = ftxui::MenuOption::Vertical();
+    commit_file_menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        ftxui::Element row = ftxui::text(state.label);
+        if (state.focused || state.active) {
+            return row |
+                ftxui::bgcolor(theme.modal_selected_item_bg) |
+                ftxui::color(theme.modal_selected_item_fg) |
+                ftxui::bold;
+        }
+        return row | ftxui::color(theme.modal_text_color);
+    };
+    commit_file_menu_ = ftxui::Menu(&commit_labels_, &selected_commit_file_, commit_file_menu_option);
+
     ftxui::InputOption commit_message_option;
     commit_message_option.multiline = true;
     commit_message_input_ = ftxui::Input(&commit_message_, "commit message", commit_message_option);
@@ -156,6 +170,7 @@ GitModalContent::GitModalContent(
     });
 
     commit_tab_container_ = ftxui::Container::Vertical({
+        commit_file_menu_,
         commit_message_input_,
         commit_button_,
     });
@@ -221,8 +236,8 @@ ftxui::Component GitModalContent::MakeTabButton(std::string label, int tab_index
             status_list_component_->TakeFocus();
         } else if (selected_tab_ == static_cast<int>(Tab::Branches) && branch_menu_) {
             branch_menu_->TakeFocus();
-        } else if (selected_tab_ == static_cast<int>(Tab::Commit) && commit_message_input_) {
-            commit_message_input_->TakeFocus();
+        } else if (selected_tab_ == static_cast<int>(Tab::Commit) && commit_file_menu_) {
+            commit_file_menu_->TakeFocus();
         }
     };
     option.transform = [this, tab_index](const ftxui::EntryState& state) {
@@ -389,6 +404,13 @@ void GitModalContent::RefreshCommitFiles() {
         }
     }
     RebuildCommitLabels();
+
+    if (selected_commit_file_ >= static_cast<int>(commit_labels_.size())) {
+        selected_commit_file_ = static_cast<int>(commit_labels_.size()) - 1;
+    }
+    if (selected_commit_file_ < 0) {
+        selected_commit_file_ = 0;
+    }
 }
 
 void GitModalContent::RefreshAll() {
@@ -849,12 +871,17 @@ ftxui::Element GitModalContent::RenderCommitTab() {
         }
     }
 
+    ftxui::Element staged_files_view = commit_labels_.empty()
+        ? (ftxui::vbox(std::move(file_rows)) | ftxui::frame)
+        : (commit_file_menu_->Render() |
+           ftxui::vscroll_indicator |
+           ftxui::frame);
+
     return ftxui::vbox({
         ftxui::text("Files to commit:") | ftxui::bold | ftxui::color(theme.modal_accent),
-        ftxui::vbox(std::move(file_rows)) |
-            ftxui::vscroll_indicator |
-            ftxui::frame |
-            ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, 8),
+        staged_files_view |
+            ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, 14) |
+            ftxui::yflex,
         ftxui::text(""),
         ftxui::text("Commit message:") | ftxui::bold | ftxui::color(theme.modal_accent),
         commit_message_input_->Render() |
