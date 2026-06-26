@@ -31,6 +31,7 @@ struct TextParserDefinition {
   std::string description;
   std::filesystem::path script_path;
   int repeat_default = 1;
+  bool pinned = false;
   std::vector<TextParserParam> params;
 };
 
@@ -54,6 +55,10 @@ class TextParserManager {
 
   const std::vector<TextParserDefinition>& GetParsers() const;
   const TextParserDefinition* FindParser(const std::string& parser_id) const;
+  bool SetParserPinnedInUserConfiguration(
+      const std::string& parser_id,
+      bool pinned,
+      std::string& error) const;
 
   TextParserApplyResult ApplyParser(
       const std::string& parser_id,

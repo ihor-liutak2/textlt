@@ -74,6 +74,33 @@ std::string GetOptionalString(const nlohmann::json& object, const char* key,
   return object.at(key).get<std::string>();
 }
 
+bool GetOptionalBool(const nlohmann::json& object, const char* key,
+                    bool default_value) {
+  if (!object.contains(key)) {
+    return default_value;
+  }
+
+  const auto& value = object.at(key);
+  if (value.is_boolean()) {
+    return value.get<bool>();
+  }
+
+  if (value.is_string()) {
+    std::string lower = value.get<std::string>();
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) {
+      return static_cast<char>(std::tolower(ch));
+    });
+    if (lower == "true" || lower == "1" || lower == "yes" || lower == "on") {
+      return true;
+    }
+    if (lower == "false" || lower == "0" || lower == "no" || lower == "off") {
+      return false;
+    }
+  }
+
+  return default_value;
+}
+
 int GetOptionalInt(const nlohmann::json& object, const char* key,
                    int default_value) {
   if (!object.contains(key)) {
@@ -289,6 +316,7 @@ bool TextParserManager::LoadFromFile(const fs::path& config_path, std::string& e
     definition.description = GetOptionalString(parser_json, "description", "");
     definition.repeat_default =
         std::max(1, GetOptionalInt(parser_json, "repeat_default", 1));
+    definition.pinned = GetOptionalBool(parser_json, "pinned", false);
 
     const std::string script = GetRequiredString(parser_json, "script", error);
     if (!error.empty()) {
@@ -346,6 +374,64 @@ const TextParserDefinition* TextParserManager::FindParser(
     }
   }
   return nullptr;
+}
+
+
+bool TextParserManager::SetParserPinnedInUserConfiguration(
+    const std::string& parser_id, bool pinned, std::string& error) const {
+  error.clear();
+
+  const fs::path config_path = UserConfigFilePath();
+  const std::string content = ReadTextFile(config_path, error);
+  if (!error.empty()) {
+    return false;
+  }
+
+  nlohmann::json root;
+  try {
+    root = nlohmann::json::parse(content);
+  } catch (const std::exception& ex) {
+    error = std::string("Cannot parse text parser config: ") + ex.what();
+    return false;
+  }
+
+  if (!root.contains("parsers") || !root.at("parsers").is_array()) {
+    error = "Text parser config must contain parsers array.";
+    return false;
+  }
+
+  bool found = false;
+  for (auto& parser_json : root.at("parsers")) {
+    if (!parser_json.is_object() || !parser_json.contains("id") ||
+        !parser_json.at("id").is_string()) {
+      continue;
+    }
+
+    if (parser_json.at("id").get<std::string>() == parser_id) {
+      parser_json["pinned"] = pinned;
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    error = "Text processor not found: " + parser_id;
+    return false;
+  }
+
+  std::ofstream output(config_path, std::ios::binary | std::ios::trunc);
+  if (!output.is_open()) {
+    error = "Cannot write text parser config: " + config_path.string();
+    return false;
+  }
+
+  output << root.dump(2) << '\n';
+  if (!output.good()) {
+    error = "Cannot save text parser config: " + config_path.string();
+    return false;
+  }
+
+  return true;
 }
 
 TextParserApplyResult TextParserManager::ApplyParser(

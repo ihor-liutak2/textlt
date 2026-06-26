@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <functional>
 #include <memory>
 #include <string>
@@ -9,6 +10,7 @@
 #include "ftxui/component/component.hpp"
 #include "ftxui/component/event.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "ftxui/screen/box.hpp"
 
 #include "modal_interface.hpp"
 #include "modal_window.hpp"
@@ -61,6 +63,7 @@ private:
     void SetScope(TextParserScope scope);
     TextParserScope CurrentScope() const;
     void RebuildParserList();
+    void RebuildParserListKeepingSelection(const std::string& parser_id);
     void SyncParamsFromSelection();
     const TextParserDefinition* SelectedParser() const;
     bool ValidateCurrentInputs(
@@ -76,7 +79,8 @@ private:
     ftxui::Element RenderSelectedParserInfo() const;
     ftxui::Element RenderParameterFields() const;
     ftxui::Element RenderProcessorGrid() const;
-    ftxui::Element RenderProcessorCell(int parser_index, int width) const;
+    ftxui::Element RenderProcessorColumn(bool right_column, int visible_rows) const;
+    ftxui::Element RenderProcessorCell(int parser_index, int width, int cell_slot) const;
     ftxui::Element RenderStatusLine() const;
 
     std::vector<std::string> WrapText(const std::string& text, size_t width) const;
@@ -98,7 +102,6 @@ private:
     int parser_list_top_row_ = 0;
 
     bool whole_document_ = false;
-    bool pinned_ = false;
     std::string repeat_count_ = "1";
     int repeat_cursor_ = 1;
     std::vector<std::string> param_values_ = {"", "", "", ""};
@@ -114,6 +117,11 @@ private:
     ftxui::Component repeat_input_;
     ftxui::Component whole_document_checkbox_;
     ftxui::Component container_;
+
+    static constexpr int kMaxVisibleProcessorCells = 64;
+    mutable std::array<ftxui::Box, kMaxVisibleProcessorCells> processor_cell_boxes_{};
+    mutable std::array<int, kMaxVisibleProcessorCells> processor_cell_indices_{};
+    mutable int processor_cell_count_ = 0;
 };
 
 class TextProcessorsModal {

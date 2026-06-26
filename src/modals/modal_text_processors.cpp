@@ -1,6 +1,7 @@
 #include "modal_text_processors.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <filesystem>
 #include <sstream>
@@ -13,9 +14,7 @@
 namespace textlt {
 namespace {
 
-constexpr int kProcessorListVisibleRows = 9;
-constexpr int kProcessorColumnWidth = 46;
-
+constexpr int kProcessorListVisibleRows = 17;
 std::string BracketLabel(const std::string& label) {
     return "[" + label + "]";
 }
@@ -247,16 +246,42 @@ void TextProcessorsModalContent::ApplySelected() {
         (whole_document_ ? "whole document." : "selected text.");
     status_is_error_ = false;
 
-    if (!pinned_ && on_close_) {
+    if (on_close_) {
         on_close_();
     }
 }
 
 void TextProcessorsModalContent::TogglePinned() {
-    pinned_ = !pinned_;
-    status_ = pinned_
-        ? "Pin enabled. Apply keeps this modal open."
-        : "Pin disabled. Apply closes this modal after success.";
+    const TextParserDefinition* parser = SelectedParser();
+    if (!parser) {
+        status_ = "No text processor selected.";
+        status_is_error_ = true;
+        return;
+    }
+
+    const std::string parser_id = parser->id;
+    const std::string parser_name = parser->name;
+    const bool next_pinned_state = !parser->pinned;
+
+    std::string error;
+    if (!manager_.SetParserPinnedInUserConfiguration(
+            parser_id,
+            next_pinned_state,
+            error)) {
+        status_ = error.empty() ? "Cannot update pinned state." : error;
+        status_is_error_ = true;
+        return;
+    }
+
+    if (!manager_.LoadFromUserConfiguration(error)) {
+        status_ = error.empty() ? "Cannot reload text processors." : error;
+        status_is_error_ = true;
+        return;
+    }
+
+    RebuildParserListKeepingSelection(parser_id);
+    status_ = std::string(next_pinned_state ? "Pinned " : "Unpinned ") +
+        parser_name + ".";
     status_is_error_ = false;
 }
 
@@ -268,10 +293,6 @@ bool TextProcessorsModalContent::HandleEvent(ftxui::Event event) {
     }
 
     if (input_focused && !event.is_mouse()) {
-        if (event.input() == "p" || event.input() == "P") {
-            TogglePinned();
-            return true;
-        }
         return false;
     }
 
@@ -315,11 +336,6 @@ bool TextProcessorsModalContent::HandleEvent(ftxui::Event event) {
         return true;
     }
 
-    if (event.input() == "p" || event.input() == "P") {
-        TogglePinned();
-        return true;
-    }
-
     if (IsBackspaceEvent(event)) {
         processor_grid_component_->TakeFocus();
         return true;
@@ -334,6 +350,17 @@ bool TextProcessorsModalContent::HandleEvent(ftxui::Event event) {
         if (mouse.button == ftxui::Mouse::WheelUp) {
             MoveParserSelection(-3);
             return true;
+        }
+        if (mouse.button == ftxui::Mouse::Left &&
+            mouse.motion == ftxui::Mouse::Pressed) {
+            for (int index = 0; index < processor_cell_count_; ++index) {
+                if (processor_cell_indices_[index] >= 0 &&
+                    processor_cell_boxes_[index].Contain(mouse.x, mouse.y)) {
+                    MoveParserSelectionToIndex(processor_cell_indices_[index]);
+                    processor_grid_component_->TakeFocus();
+                    return true;
+                }
+            }
         }
     }
 
@@ -367,12 +394,36 @@ void TextProcessorsModalContent::RebuildParserList() {
         filtered_parsers_.push_back(&parser);
     }
 
+    std::stable_sort(filtered_parsers_.begin(), filtered_parsers_.end(),
+        [](const TextParserDefinition* left, const TextParserDefinition* right) {
+            if (!left || !right) {
+                return left != nullptr;
+            }
+            return left->pinned && !right->pinned;
+        });
+
     selected_parser_ = std::clamp(
         selected_parser_,
         0,
         std::max(0, static_cast<int>(filtered_parsers_.size()) - 1));
     EnsureSelectionVisible();
     SyncParamsFromSelection();
+}
+
+void TextProcessorsModalContent::RebuildParserListKeepingSelection(
+    const std::string& parser_id) {
+    RebuildParserList();
+    if (parser_id.empty()) {
+        return;
+    }
+
+    for (size_t index = 0; index < filtered_parsers_.size(); ++index) {
+        const TextParserDefinition* parser = filtered_parsers_[index];
+        if (parser && parser->id == parser_id) {
+            MoveParserSelectionToIndex(static_cast<int>(index));
+            return;
+        }
+    }
 }
 
 void TextProcessorsModalContent::SyncParamsFromSelection() {
@@ -617,12 +668,6 @@ ftxui::Element TextProcessorsModalContent::RenderSelectedParserInfo() const {
         }
     }
 
-    rows.push_back(text(""));
-    rows.push_back(hbox({
-        text("Scope: ") | bold | color(theme.modal_accent),
-        text(ScopeDisplay(parser->scope)) | color(theme.modal_text_color),
-    }));
-
     return vbox(std::move(rows));
 }
 
@@ -682,45 +727,63 @@ ftxui::Element TextProcessorsModalContent::RenderProcessorGrid() const {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
     if (filtered_parsers_.empty()) {
+        processor_cell_count_ = 0;
         return text("No processors for " + ScopeLabel(active_scope_) + ".") |
             color(theme.modal_text_color) |
             frame;
     }
 
-    Elements rows;
-    const int total_rows = (static_cast<int>(filtered_parsers_.size()) + 1) / 2;
-    const int last_row = std::min(total_rows, parser_list_top_row_ + kProcessorListVisibleRows);
+    const int visible_rows = kProcessorListVisibleRows;
+    processor_cell_count_ = 0;
 
-    for (int row = parser_list_top_row_; row < last_row; ++row) {
-        const int left_index = row * 2;
-        const int right_index = left_index + 1;
-        rows.push_back(hbox({
-            RenderProcessorCell(left_index, kProcessorColumnWidth),
-            separator() | color(theme.modal_border),
-            RenderProcessorCell(right_index, kProcessorColumnWidth),
-        }));
-    }
-
-    while (static_cast<int>(rows.size()) < kProcessorListVisibleRows) {
-        rows.push_back(hbox({
-            text(" ") | size(WIDTH, EQUAL, kProcessorColumnWidth),
-            separator() | color(theme.modal_border),
-            text(" ") | size(WIDTH, EQUAL, kProcessorColumnWidth),
-        }));
-    }
-
-    return vbox(std::move(rows)) |
+    return hbox({
+        RenderProcessorColumn(false, visible_rows) |
+            size(WIDTH, EQUAL, 49) |
+            flex,
+        separator() | color(theme.modal_border),
+        RenderProcessorColumn(true, visible_rows) |
+            size(WIDTH, EQUAL, 50) |
+            flex,
+    }) |
         vscroll_indicator |
-        frame |
-        size(HEIGHT, EQUAL, kProcessorListVisibleRows + 2);
+        size(HEIGHT, EQUAL, kProcessorListVisibleRows);
 }
 
-ftxui::Element TextProcessorsModalContent::RenderProcessorCell(int parser_index, int width) const {
+ftxui::Element TextProcessorsModalContent::RenderProcessorColumn(
+    bool right_column,
+    int visible_rows) const {
+    using namespace ftxui;
+
+    Elements rows;
+    for (int row = parser_list_top_row_; row < parser_list_top_row_ + visible_rows; ++row) {
+        const int parser_index = row * 2 + (right_column ? 1 : 0);
+        const int slot = processor_cell_count_ < kMaxVisibleProcessorCells
+            ? processor_cell_count_++
+            : kMaxVisibleProcessorCells - 1;
+        rows.push_back(RenderProcessorCell(parser_index, right_column ? 50 : 49, slot));
+    }
+
+    return vbox(std::move(rows)) | flex;
+}
+
+ftxui::Element TextProcessorsModalContent::RenderProcessorCell(
+    int parser_index,
+    int width,
+    int cell_slot) const {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
+    if (cell_slot >= 0 && cell_slot < kMaxVisibleProcessorCells) {
+        processor_cell_indices_[cell_slot] = parser_index;
+    }
+
     if (parser_index < 0 || parser_index >= static_cast<int>(filtered_parsers_.size())) {
-        return text(" ") | size(WIDTH, EQUAL, width);
+        if (cell_slot >= 0 && cell_slot < kMaxVisibleProcessorCells) {
+            processor_cell_indices_[cell_slot] = -1;
+        }
+        return text(" ") |
+            size(WIDTH, EQUAL, width) |
+            reflect(processor_cell_boxes_[cell_slot]);
     }
 
     const TextParserDefinition* parser = filtered_parsers_[static_cast<size_t>(parser_index)];
@@ -728,15 +791,25 @@ ftxui::Element TextProcessorsModalContent::RenderProcessorCell(int parser_index,
     if (label.empty() && parser) {
         label = parser->script_path.filename().string();
     }
+    if (parser && parser->pinned) {
+        label = "* " + label;
+    } else {
+        label = "  " + label;
+    }
 
     ftxui::Element row = text(" " + TrimForDisplay(label, static_cast<size_t>(width - 2)) + " ") |
-        size(WIDTH, EQUAL, width);
+        size(WIDTH, EQUAL, width) |
+        reflect(processor_cell_boxes_[cell_slot]);
 
     if (parser_index == selected_parser_) {
         return row |
             bgcolor(theme.modal_selected_item_bg) |
             color(theme.modal_selected_item_fg) |
             bold;
+    }
+
+    if (parser && parser->pinned) {
+        return row | color(theme.modal_accent);
     }
 
     return row | color(theme.modal_text_color);
@@ -747,12 +820,9 @@ ftxui::Element TextProcessorsModalContent::RenderStatusLine() const {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     const std::string prefix = status_is_error_ ? "Error: " : "Status: ";
     return hbox({
-        text(" " + prefix + TrimForDisplay(status_, 94) + " ") |
+        text(" " + prefix + TrimForDisplay(status_, 100) + " ") |
             color(status_is_error_ ? theme.modal_accent : theme.modal_text_color),
         filler(),
-        text(pinned_ ? "Pinned " : "") |
-            dim |
-            color(theme.modal_text_color),
     });
 }
 
