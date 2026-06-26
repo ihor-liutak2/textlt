@@ -28,19 +28,16 @@ MenuBarComponent::MenuBarComponent(
       dropdown_entries_({
           {
               " New ",
-              " Create Folder... ",
-              " Delete Folder... ",
-              " Delete File... ",
-              " Rename... ",
-              " Move... ",
-              " Open               (Ctrl+O) ",
-              " Import Text... ",
+              " Files... ",
+              " Open...            (Ctrl+O) ",
+              " Save As... ",
+              " Import... ",
+              " Export... ",
               " Recent Files ",
               " Close              (Alt+W) ",
               " Close All ",
               " Save               (Ctrl+S) ",
               " Save All ",
-              " Save As ",
               " [ ] Add to Favorites ",
               " Exit               (Ctrl+Q) ",
           },
@@ -275,11 +272,11 @@ bool MenuBarComponent::OnEvent(ftxui::Event event) {
     
     
 void MenuBarComponent::SetFileFavoriteLabel(bool is_favorite) {
-    if (dropdown_entries_.empty() || dropdown_entries_[0].size() <= 14) {
+    if (dropdown_entries_.empty() || dropdown_entries_[0].size() <= 11) {
         return;
     }
 
-    dropdown_entries_[0][14] = is_favorite
+    dropdown_entries_[0][11] = is_favorite
         ? " [X] Remove from Favorites "
         : " [ ] Add to Favorites ";
     RefreshCurrentDropdownEntries();

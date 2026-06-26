@@ -142,6 +142,15 @@ void TextltApp::ClosePathOperationDialog() {
 
 
 void TextltApp::OpenFileDialog(FilePromptMode mode) {
+    if (mode == FilePromptMode::Open) {
+        OpenFilesModal(FilesModalMode::Open);
+        return;
+    }
+    if (mode == FilePromptMode::SaveAs) {
+        OpenFilesModal(FilesModalMode::SaveAs);
+        return;
+    }
+
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
@@ -265,6 +274,46 @@ void TextltApp::OpenImportTextModal() {
 
 void TextltApp::CloseImportTextModal() {
     import_text_modal_.Close();
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::OpenFilesModal(FilesModalMode mode) {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+
+    std::filesystem::path start_path = CurrentSidebarDirectory();
+    std::string suggested_file_name;
+    if (mode == FilesModalMode::SaveAs || mode == FilesModalMode::Export) {
+        const std::string current_path =
+            std::static_pointer_cast<EditorComponent>(text_editor_)->CurrentFilePath();
+        if (!current_path.empty() &&
+            current_path != "Untitled" &&
+            current_path != "untitled.txt") {
+            const std::filesystem::path current_file_path(current_path);
+            suggested_file_name = current_file_path.filename().string();
+            if (!current_file_path.parent_path().empty()) {
+                start_path = current_file_path.parent_path();
+            }
+        }
+    }
+
+    files_modal_.Open(mode, start_path, suggested_file_name);
+    active_action_ = "Opened " +
+        std::string(mode == FilesModalMode::Open ? "Open" :
+            mode == FilesModalMode::SaveAs ? "Save As" :
+            mode == FilesModalMode::Import ? "Import" :
+            mode == FilesModalMode::Export ? "Export" : "Files") +
+        " modal";
+    focused_layer_ = 0;
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CloseFilesModal() {
+    files_modal_.Close();
     FocusEditor();
     screen_.PostEvent(ftxui::Event::Custom);
 }

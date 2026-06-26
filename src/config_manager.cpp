@@ -117,6 +117,13 @@ EditorConfig ConfigManager::Load() const {
             }
         }
     }
+
+    for (const std::string& path : ExtractStringArray(root, "file_modal_directories")) {
+        const std::string normalized_path = EditorConfig::NormalizeDirectoryPath(path);
+        if (!normalized_path.empty() && !config.IsFileModalDirectory(normalized_path)) {
+            config.file_modal_directories_.push_back(normalized_path);
+        }
+    }
     return config;
 }
 

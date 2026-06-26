@@ -1,8 +1,10 @@
 #include "editor_config.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <system_error>
+#include <utility>
 
 #include "json_utils.hpp"
 
@@ -46,6 +48,25 @@ std::filesystem::path UserHomeDirectory() {
 #endif
 }
 
+std::string Lowercase(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
+        return static_cast<char>(std::tolower(character));
+    });
+    return value;
+}
+
+std::string PathComparisonKey(const std::string& path) {
+#ifdef _WIN32
+    return Lowercase(path);
+#else
+    return path;
+#endif
+}
+
+bool PathsEqual(const std::string& left, const std::string& right) {
+    return PathComparisonKey(left) == PathComparisonKey(right);
+}
+
 bool WriteConfigAtomically(const std::filesystem::path& path, const EditorConfig& config) {
     Json root = {
         {"show_line_numbers", config.show_line_numbers},
@@ -59,6 +80,7 @@ bool WriteConfigAtomically(const std::filesystem::path& path, const EditorConfig
         {"tab_size", config.tab_size},
         {"active_theme_name", config.active_theme_name},
         {"favorites_", Json::array()},
+        {"file_modal_directories", Json::array()},
     };
     for (const FavoriteEntry& favorite : config.favorites_) {
         root["favorites_"].push_back({
@@ -66,6 +88,9 @@ bool WriteConfigAtomically(const std::filesystem::path& path, const EditorConfig
             {"row", favorite.row},
             {"column", favorite.column},
         });
+    }
+    for (const std::string& directory : config.file_modal_directories_) {
+        root["file_modal_directories"].push_back(directory);
     }
     return WriteJsonAtomically(path, root);
 }
@@ -95,7 +120,7 @@ bool EditorConfig::RemoveFavorite(const std::string& path) {
             favorites_.begin(),
             favorites_.end(),
             [&](const FavoriteEntry& favorite) {
-                return favorite.path == normalized_path;
+                return PathsEqual(favorite.path, normalized_path);
             }),
         favorites_.end());
     if (favorites_.size() == old_size) {
@@ -124,7 +149,7 @@ const FavoriteEntry* EditorConfig::FindFavorite(const std::string& path) const {
         favorites_.begin(),
         favorites_.end(),
         [&](const FavoriteEntry& favorite) {
-            return favorite.path == normalized_path;
+            return PathsEqual(favorite.path, normalized_path);
         });
     return iter == favorites_.end() ? nullptr : &*iter;
 }
@@ -139,7 +164,7 @@ bool EditorConfig::UpdateFavoriteCursor(const std::string& path, size_t row, siz
         favorites_.begin(),
         favorites_.end(),
         [&](const FavoriteEntry& favorite) {
-            return favorite.path == normalized_path;
+            return PathsEqual(favorite.path, normalized_path);
         });
     if (iter == favorites_.end()) {
         return false;
@@ -157,6 +182,53 @@ bool EditorConfig::SetActiveThemeName(const std::string& name) {
 
     active_theme_name = name;
     return Persist();
+}
+
+bool EditorConfig::AddFileModalDirectory(const std::string& path) {
+    const std::string normalized_path = NormalizeDirectoryPath(path);
+    if (normalized_path.empty() || IsFileModalDirectory(normalized_path)) {
+        return false;
+    }
+
+    file_modal_directories_.push_back(normalized_path);
+    Persist();
+    return true;
+}
+
+bool EditorConfig::RemoveFileModalDirectory(const std::string& path) {
+    const std::string normalized_path = NormalizeDirectoryPath(path);
+    if (normalized_path.empty()) {
+        return false;
+    }
+
+    const size_t old_size = file_modal_directories_.size();
+    file_modal_directories_.erase(
+        std::remove_if(
+            file_modal_directories_.begin(),
+            file_modal_directories_.end(),
+            [&](const std::string& directory) {
+                return PathsEqual(directory, normalized_path);
+            }),
+        file_modal_directories_.end());
+    if (file_modal_directories_.size() == old_size) {
+        return false;
+    }
+
+    Persist();
+    return true;
+}
+
+bool EditorConfig::IsFileModalDirectory(const std::string& path) const {
+    const std::string normalized_path = NormalizeDirectoryPath(path);
+    if (normalized_path.empty()) {
+        return false;
+    }
+    return std::find_if(
+        file_modal_directories_.begin(),
+        file_modal_directories_.end(),
+        [&](const std::string& directory) {
+            return PathsEqual(directory, normalized_path);
+        }) != file_modal_directories_.end();
 }
 
 void EditorConfig::SetConfigPath(std::filesystem::path path) {
@@ -195,6 +267,25 @@ std::filesystem::path EditorConfig::FallbackConfigPath() {
 
 std::string EditorConfig::NormalizeFavoritePath(const std::string& path) {
     if (path.empty() || path == "Untitled" || path == "untitled.txt") {
+        return {};
+    }
+
+    std::error_code error;
+    std::filesystem::path normalized_path =
+        std::filesystem::absolute(std::filesystem::path(path), error);
+    if (error) {
+        return {};
+    }
+
+    normalized_path = std::filesystem::weakly_canonical(normalized_path, error);
+    if (error) {
+        normalized_path = normalized_path.lexically_normal();
+    }
+    return normalized_path.string();
+}
+
+std::string EditorConfig::NormalizeDirectoryPath(const std::string& path) {
+    if (path.empty()) {
         return {};
     }
 

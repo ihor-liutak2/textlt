@@ -61,6 +61,7 @@ TextltApp::TextltApp()
       themes_(LoadThemesFromConfiguredLocations()),
       current_theme_(FindThemeByName(themes_, editor_config_.active_theme_name)),
       screen_(ftxui::ScreenInteractive::Fullscreen()),
+      file_manager_(),
       text_editor_(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_)),
       sidebar_panel_(ftxui::Make<SidebarPanel>(
           [this](const std::filesystem::path& path) { OpenSidebarFile(path); },
@@ -117,6 +118,24 @@ TextltApp::TextltApp()
               const std::string& text,
               std::string& error) {
               return InsertImportedText(path, text, error);
+          }),
+      files_modal_(
+          &current_theme_,
+          &file_manager_,
+          [this] {
+              return CurrentSidebarDirectory();
+          },
+          [this] {
+              return FileModalFavoriteDirectories();
+          },
+          [this](const std::filesystem::path& directory, std::string& error) {
+              return AddFileModalDirectory(directory, error);
+          },
+          [this](const std::string& text) {
+              CopyFileModalPathText(text);
+          },
+          [this](FilesModalMode mode, const std::filesystem::path& path, std::string& error) {
+              return ConfirmFilesModalAction(mode, path, error);
           }),
       text_processors_modal_(
           &current_theme_,
@@ -187,6 +206,7 @@ TextltApp::TextltApp()
             !recent_files_modal_.IsOpen() &&
             !search_files_modal_.IsOpen() &&
             !import_text_modal_.IsOpen() &&
+            !files_modal_.IsOpen() &&
             !text_processors_modal_.IsOpen() &&
             !git_modal_.IsOpen() &&
             !git_settings_modal_.IsOpen() &&

@@ -156,21 +156,18 @@ void TextltApp::RunDropdownAction(int menu_index, int item_index) {
                 screen_.PostEvent(ftxui::Event::Custom);
                 break;
 
-            case 1: OpenFileDialog(FilePromptMode::CreateFolder); return;
-            case 2: OpenFileDialog(FilePromptMode::DeleteFolder); return;
-            case 3: OpenFileDialog(FilePromptMode::DeleteFile); return;
-            case 4: OpenPathOperationDialog(PathOperationMode::Rename); return;
-            case 5: OpenPathOperationDialog(PathOperationMode::Move); return;
-            case 6: OpenFileDialog(FilePromptMode::Open); return;
-            case 7: OpenImportTextModal(); return;
-            case 8: OpenRecentFilesModal(); return;
-            case 9: CloseCurrentFile(); return;
-            case 10: CloseAllOpenedFiles(); return;
-            case 11: SaveCurrentFile(); return;
-            case 12: SaveAllOpenedFiles(); return;
-            case 13: OpenFileDialog(FilePromptMode::SaveAs); return;
-            case 14: ToggleActiveFavorite(); return;
-            case 15: RequestExit(); return;
+            case 1: OpenFilesModal(FilesModalMode::Manage); return;
+            case 2: OpenFilesModal(FilesModalMode::Open); return;
+            case 3: OpenFilesModal(FilesModalMode::SaveAs); return;
+            case 4: OpenFilesModal(FilesModalMode::Import); return;
+            case 5: OpenFilesModal(FilesModalMode::Export); return;
+            case 6: OpenRecentFilesModal(); return;
+            case 7: CloseCurrentFile(); return;
+            case 8: CloseAllOpenedFiles(); return;
+            case 9: SaveCurrentFile(); return;
+            case 10: SaveAllOpenedFiles(); return;
+            case 11: ToggleActiveFavorite(); return;
+            case 12: RequestExit(); return;
 
             default:
                 CloseDropdown();

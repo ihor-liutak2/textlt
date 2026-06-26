@@ -25,6 +25,7 @@ struct EditorConfig {
     int tab_size = 4;
     std::string active_theme_name = "Blueprint";
     std::vector<FavoriteEntry> favorites_;
+    std::vector<std::string> file_modal_directories_;
 
     bool AddFavorite(const std::string& path);
     bool RemoveFavorite(const std::string& path);
@@ -33,12 +34,17 @@ struct EditorConfig {
     bool UpdateFavoriteCursor(const std::string& path, size_t row, size_t column);
     bool SetActiveThemeName(const std::string& name);
 
+    bool AddFileModalDirectory(const std::string& path);
+    bool RemoveFileModalDirectory(const std::string& path);
+    bool IsFileModalDirectory(const std::string& path) const;
+
     void SetConfigPath(std::filesystem::path path);
     bool Persist() const;
 
     static std::filesystem::path DefaultConfigPath();
     static std::filesystem::path FallbackConfigPath();
     static std::string NormalizeFavoritePath(const std::string& path);
+    static std::string NormalizeDirectoryPath(const std::string& path);
 
 private:
     std::filesystem::path config_path_;

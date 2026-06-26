@@ -168,6 +168,7 @@ add_executable(textlt
   src/modals/unsaved_changes_dialog.cpp
   src/modals/modal_search_files.cpp
   src/modals/modal_import_text.cpp
+  src/modals/modal_files.cpp
   src/modals/modal_text_processors.cpp
   src/opened_config.cpp
   src/recent_files.cpp
@@ -208,6 +209,10 @@ target_link_libraries(textlt PRIVATE
   lua54
   Threads::Threads
 )
+
+if(WIN32)
+  target_link_libraries(textlt PRIVATE shell32 ole32)
+endif()
 
 add_executable(textlt_document_navigation_test
   tests/document_navigation_test.cpp

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -9,6 +10,7 @@
 #include <vector>
 
 #include "document.hpp"
+#include "text_importer.hpp"
 #include "ftxui/component/event.hpp"
 
 namespace textlt {
@@ -215,6 +217,113 @@ bool TextltApp::ConfirmFileDialog(
         screen_.Exit();
     }
     return success;
+}
+
+
+bool TextltApp::ConfirmFilesModalAction(
+    FilesModalMode mode,
+    const std::filesystem::path& path,
+    std::string& error) {
+    bool success = false;
+
+    if (mode == FilesModalMode::Open) {
+        success = OpenFile(path.string(), error);
+    } else if (mode == FilesModalMode::SaveAs) {
+        success = SaveFile(path.string(), error);
+    } else if (mode == FilesModalMode::Import) {
+        TextImporter importer;
+        TextImportResult result = importer.ImportFile(path);
+        if (!result.success) {
+            error = result.error.empty() ? "Import failed." : result.error;
+            active_action_ = error;
+            return false;
+        }
+        success = InsertImportedText(path, result.text, error);
+    } else if (mode == FilesModalMode::Export) {
+        const auto doc = ActiveDocument();
+        if (!doc) {
+            error = "No active document.";
+            active_action_ = error;
+            return false;
+        }
+
+        std::ofstream file(path, std::ios::binary);
+        if (!file) {
+            error = "Unable to open export file: " + path.string();
+            active_action_ = error;
+            return false;
+        }
+        file << doc->ToContent();
+        if (!file) {
+            error = "Unable to write export file: " + path.string();
+            active_action_ = error;
+            return false;
+        }
+        active_action_ = "Exported " + path.string();
+        success = true;
+    } else {
+        error = "No file action selected.";
+        return false;
+    }
+
+    if (success && mode == FilesModalMode::SaveAs && exit_after_save_as_) {
+        exit_after_save_as_ = false;
+        PersistActiveFavoriteCursor();
+        screen_.Exit();
+    }
+
+    if (success) {
+        RefreshProjectSidebar();
+        git_manager_.Invalidate();
+        screen_.PostEvent(ftxui::Event::Custom);
+    }
+    return success;
+}
+
+
+std::vector<std::filesystem::path> TextltApp::FileModalFavoriteDirectories() const {
+    std::vector<std::filesystem::path> directories;
+    directories.reserve(editor_config_.file_modal_directories_.size());
+    for (const std::string& path : editor_config_.file_modal_directories_) {
+        if (!path.empty()) {
+            directories.emplace_back(path);
+        }
+    }
+    return directories;
+}
+
+
+bool TextltApp::AddFileModalDirectory(
+    const std::filesystem::path& directory,
+    std::string& error) {
+    const std::string normalized_path =
+        EditorConfig::NormalizeDirectoryPath(directory.string());
+    if (normalized_path.empty()) {
+        error = "Directory path is empty.";
+        return false;
+    }
+
+    std::error_code status_error;
+    if (!std::filesystem::is_directory(normalized_path, status_error)) {
+        error = "Directory does not exist.";
+        return false;
+    }
+
+    if (!editor_config_.IsFileModalDirectory(normalized_path)) {
+        editor_config_.file_modal_directories_.push_back(normalized_path);
+        SaveConfig();
+    }
+
+    active_action_ = "Added file modal directory " + normalized_path;
+    screen_.PostEvent(ftxui::Event::Custom);
+    return true;
+}
+
+
+void TextltApp::CopyFileModalPathText(const std::string& text) {
+    WriteSystemClipboard(text);
+    active_action_ = "Copied path";
+    screen_.PostEvent(ftxui::Event::Custom);
 }
 
 

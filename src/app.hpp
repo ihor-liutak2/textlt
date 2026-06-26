@@ -23,6 +23,7 @@
 #include "modals/modal_tts.hpp"
 #include "modals/modal_search_files.hpp"
 #include "modals/modal_import_text.hpp"
+#include "modals/modal_files.hpp"
 #include "modals/modal_text_processors.hpp"
 #include "menu_bar.hpp"
 #include "opened_config.hpp"
@@ -64,6 +65,8 @@ private:
     void CloseSearchFilesModal();
     void OpenImportTextModal();
     void CloseImportTextModal();
+    void OpenFilesModal(FilesModalMode mode);
+    void CloseFilesModal();
     void OpenTextProcessorsModal();
     void CloseTextProcessorsModal();
     void OpenGitModal();
@@ -77,6 +80,15 @@ private:
         const std::filesystem::path& path,
         const std::string& text,
         std::string& error);
+    bool ConfirmFilesModalAction(
+        FilesModalMode mode,
+        const std::filesystem::path& path,
+        std::string& error);
+    std::vector<std::filesystem::path> FileModalFavoriteDirectories() const;
+    bool AddFileModalDirectory(
+        const std::filesystem::path& directory,
+        std::string& error);
+    void CopyFileModalPathText(const std::string& text);
     bool GetTextProcessorTargetText(
         bool whole_document,
         std::string& text,
@@ -201,6 +213,7 @@ private:
     Theme current_theme_;
     ftxui::ScreenInteractive screen_;
     GitManager git_manager_;
+    FileManager file_manager_;
     ftxui::Component text_editor_;
     ftxui::Component sidebar_panel_;
     FileDialog file_dialog_;
@@ -211,6 +224,7 @@ private:
 
     SearchFilesModal search_files_modal_;
     ImportTextModal import_text_modal_;
+    FilesModal files_modal_;
     TextProcessorsModal text_processors_modal_;
     GitModal git_modal_;
     GitSettingsModal git_settings_modal_;
@@ -221,7 +235,6 @@ private:
     AssistantSettingsModal assistant_settings_modal_;
     ThemeDialog theme_dialog_;
     UnsavedChangesDialog unsaved_changes_dialog_;
-    FileManager file_manager_;
     std::vector<std::shared_ptr<Document>> open_documents_;
     size_t active_document_index_ = 0;
 
