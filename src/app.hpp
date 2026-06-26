@@ -12,7 +12,6 @@
 #include "config_manager.hpp"
 #include "editor_component.hpp"
 #include "editor_config.hpp"
-#include "modals/file_dialog.hpp"
 #include "git_manager.hpp"
 #include "modals/assistant_modals.hpp"
 #include "modals/help_dialog.hpp"
@@ -22,13 +21,11 @@
 #include "modals/modal_recent_files.hpp"
 #include "modals/modal_tts.hpp"
 #include "modals/modal_search_files.hpp"
-#include "modals/modal_import_text.hpp"
 #include "modals/modal_files.hpp"
 #include "modals/modal_text_processors.hpp"
 #include "menu_bar.hpp"
 #include "opened_config.hpp"
 #include "recent_files.hpp"
-#include "modals/path_operation_dialog.hpp"
 #include "sidebar_component.hpp"
 #include "modals/theme_dialog.hpp"
 #include "modals/unsaved_changes_dialog.hpp"
@@ -56,15 +53,11 @@ private:
 
     void CloseDropdown();
     void OpenDropdown();
-    void CloseFileDialog();
-    void OpenFileDialog(FilePromptMode mode);
     void OpenRecentFilesModal();
     void CloseRecentFilesModal();
 
     void OpenSearchFilesModal();
     void CloseSearchFilesModal();
-    void OpenImportTextModal();
-    void CloseImportTextModal();
     void OpenFilesModal(FilesModalMode mode);
     void CloseFilesModal();
     void OpenTextProcessorsModal();
@@ -98,11 +91,7 @@ private:
         const std::string& text,
         std::string& error);
 
-    void ClosePathOperationDialog();
-    void OpenPathOperationDialog(PathOperationMode mode);
     std::filesystem::path CurrentSidebarDirectory() const;
-    std::string SelectedSidebarFileName() const;
-    std::string SelectedSidebarPathName() const;
     void OpenAboutDialog();
     void OpenHelpDialog();
     void CloseHelpDialog();
@@ -125,14 +114,6 @@ private:
     void FocusSidebar();
     bool SaveFile(const std::string& path, std::string& error);
     bool OpenFile(const std::string& path, std::string& error);
-    bool CreateFolderInCurrentDirectory(const std::string& name, std::string& error);
-    bool DeleteFolderInCurrentDirectory(const std::string& name, std::string& error);
-    bool DeleteFileInCurrentDirectory(const std::string& name, std::string& error);
-    bool ConfirmPathOperation(
-        PathOperationMode mode,
-        const std::string& from,
-        const std::string& to,
-        std::string& error);
     void ActivateOpenDocument(size_t index);
     int FindOpenDocument(const std::filesystem::path& path) const;
     void AddOpenDocument(std::shared_ptr<Document> doc);
@@ -150,7 +131,6 @@ private:
     void OpenSidebarFile(const std::filesystem::path& path);
     void SaveCurrentFile();
     void SaveAllOpenedFiles();
-    bool ConfirmFileDialog(FilePromptMode mode, const std::string& path, std::string& error);
     void PersistActiveFavoriteCursor();
     void RestoreFavoriteCursor(const std::string& path);
     void QueueTtsBookPreparationFromCursor();
@@ -186,14 +166,6 @@ private:
     void ClearFindPanelFields();
     bool HandleTerminalBracketedPaste(ftxui::Event event);
     std::string FindMatchStatus() const;
-    std::vector<std::string> CurrentProjectPathCandidates() const;
-    bool ResolveProjectRelativePath(
-        const std::string& path,
-        std::filesystem::path* resolved,
-        std::string& error) const;
-    void UpdateOpenDocumentPathsAfterMove(
-        const std::filesystem::path& from,
-        const std::filesystem::path& to);
     
     // Sub-routers for handling dropdown actions by category
     void HandleFileMenu(int item);
@@ -216,14 +188,11 @@ private:
     FileManager file_manager_;
     ftxui::Component text_editor_;
     ftxui::Component sidebar_panel_;
-    FileDialog file_dialog_;
-    PathOperationDialog path_operation_dialog_;
     HelpDialog help_dialog_;
     RecentFilesHistory recent_files_history_;
     RecentFilesModal recent_files_modal_;
 
     SearchFilesModal search_files_modal_;
-    ImportTextModal import_text_modal_;
     FilesModal files_modal_;
     TextProcessorsModal text_processors_modal_;
     GitModal git_modal_;

@@ -218,12 +218,6 @@ ftxui::Element TextltApp::Render() {
         layers.push_back(menu_bar_->RenderDropdown());
     }
 
-    if (file_dialog_.IsOpen()) {
-        layers.push_back(file_dialog_.View()->Render() | clear_under | center);
-    }
-    if (path_operation_dialog_.IsOpen()) {
-        layers.push_back(path_operation_dialog_.View()->Render() | clear_under | center);
-    }
     if (help_dialog_.IsOpen()) {
         layers.push_back(help_dialog_.View()->Render() | clear_under | center);
     }
@@ -232,9 +226,6 @@ ftxui::Element TextltApp::Render() {
     }
     if (search_files_modal_.IsOpen()) {
         layers.push_back(search_files_modal_.View()->Render() | clear_under | center);
-    }
-    if (import_text_modal_.IsOpen()) {
-        layers.push_back(import_text_modal_.View()->Render() | clear_under | center);
     }
     if (files_modal_.IsOpen()) {
         layers.push_back(files_modal_.View()->Render() | clear_under | center);
@@ -410,16 +401,6 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         return true;
     }
 
-    if (import_text_modal_.IsOpen()) {
-        if (import_text_modal_.OnEvent(event)) {
-            if (!import_text_modal_.IsOpen()) {
-                FocusEditor();
-            }
-            return true;
-        }
-        return true;
-    }
-
     if (files_modal_.IsOpen()) {
         if (files_modal_.OnEvent(event)) {
             if (!files_modal_.IsOpen()) {
@@ -522,29 +503,6 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
             return true;
         }
         return true; // Consume all other events.
-    }
-
-    // 4. File Dialog
-    if (file_dialog_.IsOpen()) {
-        if (file_dialog_.View()->OnEvent(event)) { // Pass event to the dialog's root component
-            return true;
-        }
-        if (event == ftxui::Event::Escape) {
-            CloseFileDialog();
-            return true;
-        }
-        return true; // Consume all other events.
-    }
-
-    if (path_operation_dialog_.IsOpen()) {
-        if (path_operation_dialog_.View()->OnEvent(event)) {
-            return true;
-        }
-        if (event == ftxui::Event::Escape) {
-            ClosePathOperationDialog();
-            return true;
-        }
-        return true;
     }
 
     // 5. Menu Bar: keyboard events belong here only while a dropdown is open.
@@ -754,7 +712,7 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         return true;
     }
     if (event.input() == "\x0F") { // Ctrl+O
-        OpenFileDialog(FilePromptMode::Open);
+        OpenFilesModal(FilesModalMode::Open);
         return true;
     }
 

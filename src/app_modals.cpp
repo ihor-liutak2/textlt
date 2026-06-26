@@ -14,17 +14,6 @@
 namespace textlt {
 namespace {
 
-std::string WithTrailingSeparator(std::filesystem::path path) {
-    std::string value = path.lexically_normal().string();
-    if (value.empty()) {
-        value = std::filesystem::current_path().string();
-    }
-    if (!value.empty() && value.back() != '/' && value.back() != '\\') {
-        value += std::filesystem::path::preferred_separator;
-    }
-    return value;
-}
-
 std::vector<std::string> BuiltInHelpLines() {
     return {
         "textlt Help",
@@ -126,68 +115,6 @@ std::vector<std::string> BuiltInHelpLines() {
 } // namespace
 
 
-void TextltApp::CloseFileDialog() {
-    file_dialog_.Close();
-    exit_after_save_as_ = false;
-    focused_layer_ = 0;
-    FocusEditor();
-}
-
-
-void TextltApp::ClosePathOperationDialog() {
-    path_operation_dialog_.Close();
-    focused_layer_ = 0;
-    FocusEditor();
-}
-
-
-void TextltApp::OpenFileDialog(FilePromptMode mode) {
-    if (mode == FilePromptMode::Open) {
-        OpenFilesModal(FilesModalMode::Open);
-        return;
-    }
-    if (mode == FilePromptMode::SaveAs) {
-        OpenFilesModal(FilesModalMode::SaveAs);
-        return;
-    }
-
-    if (menu_bar_) {
-        menu_bar_->CloseDropdown();
-    }
-    focused_layer_ = 1;
-
-    std::string default_path = WithTrailingSeparator(CurrentSidebarDirectory());
-    if (mode == FilePromptMode::SaveAs) {
-        const std::string current_path =
-            std::static_pointer_cast<EditorComponent>(text_editor_)->CurrentFilePath();
-        if (!current_path.empty() &&
-            current_path != "Untitled" &&
-            current_path != "untitled.txt") {
-            const std::string filename = std::filesystem::path(current_path).filename().string();
-            if (!filename.empty()) {
-                default_path += filename;
-            }
-        }
-    } else if (mode == FilePromptMode::DeleteFile) {
-        default_path = SelectedSidebarFileName();
-    }
-
-    file_dialog_.Open(mode, default_path);
-}
-
-
-void TextltApp::OpenPathOperationDialog(PathOperationMode mode) {
-    if (menu_bar_) {
-        menu_bar_->CloseDropdown();
-    }
-    focused_layer_ = 2;
-    path_operation_dialog_.Open(
-        mode,
-        SelectedSidebarPathName(),
-        CurrentProjectPathCandidates());
-}
-
-
 void TextltApp::OpenAboutDialog() {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
@@ -255,25 +182,6 @@ void TextltApp::OpenSearchFilesModal() {
 
 void TextltApp::CloseSearchFilesModal() {
     search_files_modal_.Close();
-    FocusEditor();
-    screen_.PostEvent(ftxui::Event::Custom);
-}
-
-
-void TextltApp::OpenImportTextModal() {
-    if (menu_bar_) {
-        menu_bar_->CloseDropdown();
-    }
-
-    import_text_modal_.Open();
-    active_action_ = "Opened Import Text";
-    focused_layer_ = 0;
-    screen_.PostEvent(ftxui::Event::Custom);
-}
-
-
-void TextltApp::CloseImportTextModal() {
-    import_text_modal_.Close();
     FocusEditor();
     screen_.PostEvent(ftxui::Event::Custom);
 }
@@ -638,7 +546,7 @@ void TextltApp::SaveAndExit() {
     if (current_path.empty() || current_path == "Untitled" || current_path == "untitled.txt") {
         unsaved_changes_dialog_.Close();
         exit_after_save_as_ = true;
-        OpenFileDialog(FilePromptMode::SaveAs);
+        OpenFilesModal(FilesModalMode::SaveAs);
         return;
     }
 

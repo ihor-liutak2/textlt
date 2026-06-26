@@ -147,7 +147,6 @@ add_executable(textlt
   src/lexers/web_lexer.cpp
   src/main.cpp
   src/menu_bar.cpp
-  src/modals/file_dialog.cpp
   src/modals/assistant_modals.cpp
   src/modals/assistant_modals_ai.cpp
   src/modals/assistant_modals_tts.cpp
@@ -163,11 +162,9 @@ add_executable(textlt
   src/modals/modal_recent_files.cpp
   src/modals/modal_tts.cpp
   src/modals/modal_window.cpp
-  src/modals/path_operation_dialog.cpp
   src/modals/theme_dialog.cpp
   src/modals/unsaved_changes_dialog.cpp
   src/modals/modal_search_files.cpp
-  src/modals/modal_import_text.cpp
   src/modals/modal_files.cpp
   src/modals/modal_text_processors.cpp
   src/opened_config.cpp

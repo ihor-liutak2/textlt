@@ -69,19 +69,6 @@ TextltApp::TextltApp()
           &current_theme_,
           &git_manager_,
           &editor_config_)),
-      file_dialog_(&current_theme_, [this](
-          FilePromptMode mode,
-          const std::string& path,
-          std::string& error) {
-          return ConfirmFileDialog(mode, path, error);
-      }),
-      path_operation_dialog_(&current_theme_, [this](
-          PathOperationMode mode,
-          const std::string& from,
-          const std::string& to,
-          std::string& error) {
-          return ConfirmPathOperation(mode, from, to, error);
-      }),
       help_dialog_(&current_theme_),
       recent_files_modal_(
           &current_theme_,
@@ -108,17 +95,6 @@ TextltApp::TextltApp()
               [this](const std::string& text) {
                   WriteSystemClipboard(text);
               }),
-      import_text_modal_(
-          &current_theme_,
-          [this] {
-              return CurrentSidebarDirectory();
-          },
-          [this](
-              const std::filesystem::path& path,
-              const std::string& text,
-              std::string& error) {
-              return InsertImportedText(path, text, error);
-          }),
       files_modal_(
           &current_theme_,
           &file_manager_,
@@ -201,11 +177,9 @@ TextltApp::TextltApp()
         if (event == ftxui::Event::Tab &&
             focused_layer_ == 0 &&
             (!menu_bar_ || !menu_bar_->IsDropdownOpen()) &&
-            !file_dialog_.IsOpen() &&
             !help_dialog_.IsOpen() &&
             !recent_files_modal_.IsOpen() &&
             !search_files_modal_.IsOpen() &&
-            !import_text_modal_.IsOpen() &&
             !files_modal_.IsOpen() &&
             !text_processors_modal_.IsOpen() &&
             !git_modal_.IsOpen() &&
@@ -343,8 +317,6 @@ TextltApp::TextltApp()
 
     root_container_ = ftxui::Container::Tab({
         main_container_,
-        file_dialog_.View(),
-        path_operation_dialog_.View(),
         help_dialog_.View(),
         theme_dialog_.View(),
         find_panel_container_,
