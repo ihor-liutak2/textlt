@@ -22,6 +22,7 @@
 #include "modals/modal_recent_files.hpp"
 #include "modals/modal_tts.hpp"
 #include "modals/modal_search_files.hpp"
+#include "modals/modal_import_text.hpp"
 #include "menu_bar.hpp"
 #include "opened_config.hpp"
 #include "recent_files.hpp"
@@ -60,6 +61,8 @@ private:
 
     void OpenSearchFilesModal();
     void CloseSearchFilesModal();
+    void OpenImportTextModal();
+    void CloseImportTextModal();
     void OpenGitModal();
     void CloseGitModal();
     void OpenGitSettingsModal();
@@ -67,6 +70,10 @@ private:
 
     std::vector<FileSearchRoot> CurrentSearchFileRoots() const;
     bool OpenSearchFileMatch(const FileSearchMatch& match, std::string& error);
+    bool InsertImportedText(
+        const std::filesystem::path& path,
+        const std::string& text,
+        std::string& error);
 
     void ClosePathOperationDialog();
     void OpenPathOperationDialog(PathOperationMode mode);
@@ -192,6 +199,7 @@ private:
     RecentFilesModal recent_files_modal_;
 
     SearchFilesModal search_files_modal_;
+    ImportTextModal import_text_modal_;
     GitModal git_modal_;
     GitSettingsModal git_settings_modal_;
 

@@ -162,14 +162,15 @@ void TextltApp::RunDropdownAction(int menu_index, int item_index) {
             case 4: OpenPathOperationDialog(PathOperationMode::Rename); return;
             case 5: OpenPathOperationDialog(PathOperationMode::Move); return;
             case 6: OpenFileDialog(FilePromptMode::Open); return;
-            case 7: OpenRecentFilesModal(); return;
-            case 8: CloseCurrentFile(); return;
-            case 9: CloseAllOpenedFiles(); return;
-            case 10: SaveCurrentFile(); return;
-            case 11: SaveAllOpenedFiles(); return;
-            case 12: OpenFileDialog(FilePromptMode::SaveAs); return;
-            case 13: ToggleActiveFavorite(); return;
-            case 14: RequestExit(); return;
+            case 7: OpenImportTextModal(); return;
+            case 8: OpenRecentFilesModal(); return;
+            case 9: CloseCurrentFile(); return;
+            case 10: CloseAllOpenedFiles(); return;
+            case 11: SaveCurrentFile(); return;
+            case 12: SaveAllOpenedFiles(); return;
+            case 13: OpenFileDialog(FilePromptMode::SaveAs); return;
+            case 14: ToggleActiveFavorite(); return;
+            case 15: RequestExit(); return;
 
             default:
                 CloseDropdown();

@@ -1,4 +1,4 @@
-﻿#include "menu_bar.hpp"
+#include "menu_bar.hpp"
 
 #include <algorithm>
 #include <utility>
@@ -34,6 +34,7 @@ MenuBarComponent::MenuBarComponent(
               " Rename... ",
               " Move... ",
               " Open               (Ctrl+O) ",
+              " Import Text... ",
               " Recent Files ",
               " Close              (Alt+W) ",
               " Close All ",
@@ -273,11 +274,11 @@ bool MenuBarComponent::OnEvent(ftxui::Event event) {
     
     
 void MenuBarComponent::SetFileFavoriteLabel(bool is_favorite) {
-    if (dropdown_entries_.empty() || dropdown_entries_[0].size() <= 13) {
+    if (dropdown_entries_.empty() || dropdown_entries_[0].size() <= 14) {
         return;
     }
 
-    dropdown_entries_[0][13] = is_favorite
+    dropdown_entries_[0][14] = is_favorite
         ? " [X] Remove from Favorites "
         : " [ ] Add to Favorites ";
     RefreshCurrentDropdownEntries();

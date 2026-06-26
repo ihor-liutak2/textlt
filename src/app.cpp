@@ -107,6 +107,17 @@ TextltApp::TextltApp()
               [this](const std::string& text) {
                   WriteSystemClipboard(text);
               }),
+      import_text_modal_(
+          &current_theme_,
+          [this] {
+              return CurrentSidebarDirectory();
+          },
+          [this](
+              const std::filesystem::path& path,
+              const std::string& text,
+              std::string& error) {
+              return InsertImportedText(path, text, error);
+          }),
       git_modal_(
           &current_theme_,
           &git_manager_,
@@ -161,6 +172,7 @@ TextltApp::TextltApp()
             !help_dialog_.IsOpen() &&
             !recent_files_modal_.IsOpen() &&
             !search_files_modal_.IsOpen() &&
+            !import_text_modal_.IsOpen() &&
             !git_modal_.IsOpen() &&
             !git_settings_modal_.IsOpen() &&
             !tts_modal_.IsOpen() &&

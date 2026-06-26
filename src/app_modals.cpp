@@ -250,6 +250,50 @@ void TextltApp::CloseSearchFilesModal() {
 }
 
 
+void TextltApp::OpenImportTextModal() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+
+    import_text_modal_.Open();
+    active_action_ = "Opened Import Text";
+    focused_layer_ = 0;
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CloseImportTextModal() {
+    import_text_modal_.Close();
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+bool TextltApp::InsertImportedText(
+    const std::filesystem::path& path,
+    const std::string& text,
+    std::string& error) {
+    if (text.empty()) {
+        error = "Imported file does not contain plain text.";
+        active_action_ = error;
+        screen_.PostEvent(ftxui::Event::Custom);
+        return false;
+    }
+
+    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    editor_ptr->InsertText(text);
+
+    const std::string filename = path.filename().string();
+    active_action_ = filename.empty()
+        ? "Imported text"
+        : "Imported text from " + filename;
+
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
+    return true;
+}
+
+
 void TextltApp::OpenGitModal() {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
