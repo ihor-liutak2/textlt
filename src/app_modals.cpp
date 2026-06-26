@@ -114,6 +114,7 @@ std::vector<std::string> BuiltInHelpLines() {
         "  XML             .xml, .xsd, .xsl, .xslt",
         "  CSS             .css",
         "  JSON            .json",
+        "  Lua             .lua",
         "  INI             .ini, .conf",
         "  Environment     .env, .env.local, .env.*",
         "  YAML            .yaml, .yml",

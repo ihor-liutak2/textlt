@@ -28,6 +28,7 @@ enum class Language {
     Javascript,
     Jsx,
     Json,
+    Lua,
     Go,
     Markdown,
     Php,
@@ -121,6 +122,9 @@ Language LanguageFromPath(const std::string& path) {
     }
     if (extension == ".json") {
         return Language::Json;
+    }
+    if (extension == ".lua") {
+        return Language::Lua;
     }
     if (extension == ".md" || extension == ".markdown") {
         return Language::Markdown;
@@ -219,6 +223,8 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             return lexers::TokenizeJavascript(line);
         case Language::Json:
             return lexers::TokenizeJson(line);
+        case Language::Lua:
+            return lexers::TokenizeLua(line);
         case Language::Jsx:
             return lexers::TokenizeJsx(line, false);
         case Language::Markdown:

@@ -190,6 +190,79 @@ const std::unordered_set<std::string>& RubyKeywords() {
     return keywords;
 }
 
+const std::unordered_set<std::string>& LuaKeywords() {
+    static const std::unordered_set<std::string> keywords = {
+        "and",
+        "break",
+        "do",
+        "else",
+        "elseif",
+        "end",
+        "for",
+        "function",
+        "goto",
+        "if",
+        "in",
+        "local",
+        "not",
+        "or",
+        "repeat",
+        "return",
+        "then",
+        "until",
+        "while",
+    };
+    return keywords;
+}
+
+const std::unordered_set<std::string>& LuaTypes() {
+    static const std::unordered_set<std::string> types = {
+        "_ENV",
+        "_G",
+        "arg",
+        "assert",
+        "coroutine",
+        "debug",
+        "false",
+        "io",
+        "ipairs",
+        "math",
+        "nil",
+        "os",
+        "pairs",
+        "pcall",
+        "print",
+        "require",
+        "self",
+        "string",
+        "table",
+        "tonumber",
+        "tostring",
+        "true",
+        "type",
+        "utf8",
+    };
+    return types;
+}
+
+size_t ParseLuaLongBracketClose(const std::string& line, size_t index) {
+    if (index >= line.size() || line[index] != '[') {
+        return index;
+    }
+
+    size_t equals = index + 1;
+    while (equals < line.size() && line[equals] == '=') {
+        ++equals;
+    }
+    if (equals >= line.size() || line[equals] != '[') {
+        return index;
+    }
+
+    const std::string close_marker = "]" + std::string(equals - index - 1, '=') + "]";
+    const size_t close = line.find(close_marker, equals + 1);
+    return close == std::string::npos ? line.size() : close + close_marker.size();
+}
+
 size_t ParseBashCommandSubstitutionEnd(const std::string& line, size_t index) {
     size_t current = index + 2;
     size_t depth = 1;
@@ -540,6 +613,69 @@ std::vector<SyntaxHighlighter::Token> TokenizeRuby(const std::string& line) {
                 RubyKeywords().find(word) != RubyKeywords().end()
                     ? SyntaxHighlighter::Style::Keyword
                     : SyntaxHighlighter::Style::Normal;
+            PushToken(tokens, start, index, style);
+            continue;
+        }
+
+        PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+        ++index;
+    }
+
+    return tokens;
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizeLua(const std::string& line) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    size_t index = 0;
+    while (index < line.size()) {
+        if (StartsWith(line, index, "--")) {
+            const size_t long_comment_end = ParseLuaLongBracketClose(line, index + 2);
+            const size_t end = long_comment_end > index + 2
+                ? long_comment_end
+                : line.size();
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::Comment);
+            index = end;
+            continue;
+        }
+
+        if (line[index] == '"' || line[index] == '\'') {
+            const size_t end = ParseQuotedStringEnd(line, index);
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+            index = end;
+            continue;
+        }
+
+        if (line[index] == '[') {
+            const size_t end = ParseLuaLongBracketClose(line, index);
+            if (end > index) {
+                PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+                index = end;
+                continue;
+            }
+        }
+
+        if (IsNumberStart(line, index)) {
+            const size_t start = index;
+            index = ParseNumberEnd(line, index);
+            PushToken(tokens, start, index, SyntaxHighlighter::Style::Number);
+            continue;
+        }
+
+        if (IsIdentifierStart(line[index])) {
+            const size_t start = index;
+            while (index < line.size() && IsIdentifierBody(line[index])) {
+                ++index;
+            }
+
+            const std::string word = line.substr(start, index - start);
+            SyntaxHighlighter::Style style = SyntaxHighlighter::Style::Normal;
+            if (LuaKeywords().find(word) != LuaKeywords().end()) {
+                style = SyntaxHighlighter::Style::Keyword;
+            } else if (LuaTypes().find(word) != LuaTypes().end()) {
+                style = SyntaxHighlighter::Style::Type;
+            }
             PushToken(tokens, start, index, style);
             continue;
         }
