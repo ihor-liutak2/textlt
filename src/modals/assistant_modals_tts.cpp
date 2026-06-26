@@ -1,12 +1,9 @@
 #include "assistant_modals.hpp"
 
-#include <cstdio>
 #include <filesystem>
 #include <map>
 #include <algorithm>
 #include <utility>
-
-#include <curl/curl.h>
 
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/event.hpp"
@@ -127,11 +124,6 @@ std::vector<Json> SelectedInstalledPiperVoices(const std::string& selected_langu
     return selected;
 }
 
-size_t WriteFileCallback(char* data, size_t size, size_t count, void* user_data) {
-    FILE* file = static_cast<FILE*>(user_data);
-    return std::fwrite(data, size, count, file);
-}
-
 struct PiperDownloadContext {
     std::atomic_bool* cancel = nullptr;
     std::mutex* mutex = nullptr;
@@ -141,17 +133,14 @@ struct PiperDownloadContext {
     std::function<void()>* request_redraw = nullptr;
 };
 
-int PiperProgressCallback(void* client,
-                          curl_off_t total,
-                          curl_off_t downloaded,
-                          curl_off_t,
-                          curl_off_t) {
-    auto* context = static_cast<PiperDownloadContext*>(client);
+bool UpdatePiperProgress(PiperDownloadContext* context,
+                         unsigned long long total,
+                         unsigned long long downloaded) {
     if (!context || !context->cancel || !context->mutex) {
-        return 0;
+        return true;
     }
     if (*context->cancel) {
-        return 1;
+        return false;
     }
 
     {
@@ -173,7 +162,7 @@ int PiperProgressCallback(void* client,
     if (context->request_redraw && *context->request_redraw) {
         (*context->request_redraw)();
     }
-    return 0;
+    return true;
 }
 
 bool DownloadPiperFile(const std::string& url,
@@ -209,20 +198,6 @@ bool DownloadPiperFile(const std::string& url,
         request_redraw();
     }
 
-    FILE* file = std::fopen(part_path.string().c_str(), "wb");
-    if (!file) {
-        *error_message = "Could not create .part file";
-        return false;
-    }
-
-    CURL* curl = curl_easy_init();
-    if (!curl) {
-        std::fclose(file);
-        std::filesystem::remove(part_path, error);
-        *error_message = "Could not initialize download";
-        return false;
-    }
-
     PiperDownloadContext context{
         &cancel,
         &state_mutex,
@@ -231,21 +206,14 @@ bool DownloadPiperFile(const std::string& url,
         &progress_ratio,
         &request_redraw,
     };
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteFileCallback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "textlt/1.0");
-    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, PiperProgressCallback);
-    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &context);
+    const bool download_ok = CurlManager::DownloadToFile(
+        url,
+        part_path,
+        [&context](unsigned long long total, unsigned long long downloaded) {
+            return UpdatePiperProgress(&context, total, downloaded);
+        });
 
-    const CURLcode result = curl_easy_perform(curl);
-    curl_easy_cleanup(curl);
-    const bool close_ok = std::fclose(file) == 0;
-
-    if (result != CURLE_OK || !close_ok) {
+    if (!download_ok) {
         std::filesystem::remove(part_path, error);
         *error_message = cancel.load()
             ? "Download cancelled"

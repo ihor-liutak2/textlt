@@ -130,6 +130,7 @@ add_executable(textlt
   src/app_view.cpp
   src/cloud_tts_pipeline.cpp
   src/config_manager.cpp
+  src/curl_manager.cpp
   src/editor_config.cpp
   src/editor_component.cpp
   src/editor_events.cpp

@@ -2,7 +2,6 @@
 
 #include <cstdio>
 #include <cstdlib>
-#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -10,7 +9,6 @@
 
 #include <archive.h>
 #include <archive_entry.h>
-#include <curl/curl.h>
 
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/event.hpp"
@@ -123,17 +121,6 @@ std::string BracketLabel(const std::string& label) {
 
 namespace {
 
-size_t WriteFileCallback(char* data, size_t size, size_t count, void* user_data) {
-    FILE* file = static_cast<FILE*>(user_data);
-    return std::fwrite(data, size, count, file);
-}
-
-size_t WriteStringCallback(char* data, size_t size, size_t count, void* user_data) {
-    auto* output = static_cast<std::string*>(user_data);
-    output->append(data, size * count);
-    return size * count;
-}
-
 bool IsValidJsonFile(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary);
     if (!file) {
@@ -213,28 +200,12 @@ bool ReplaceFileFromFile(const std::filesystem::path& source,
 }
 
 bool FetchJsonUrl(const char* url, Json* root) {
-    std::string response;
-    CURL* curl = curl_easy_init();
-    if (!curl) {
+    const CurlManager::Response response = CurlManager::Get(url);
+    if (!response.ok || response.body.empty()) {
         return false;
     }
 
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteStringCallback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "textlt/1.0");
-
-    const CURLcode result = curl_easy_perform(curl);
-    long response_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
-    curl_easy_cleanup(curl);
-    if (result != CURLE_OK || response_code >= 400 || response.empty()) {
-        return false;
-    }
-
-    Json parsed = Json::parse(response, nullptr, false);
+    Json parsed = Json::parse(response.body, nullptr, false);
     if (parsed.is_discarded() || !parsed.is_object()) {
         return false;
     }
@@ -355,14 +326,11 @@ struct RuntimeDownloadContext {
     std::function<void()>* request_redraw = nullptr;
 };
 
-int RuntimeProgressCallback(void* client,
-                            curl_off_t total,
-                            curl_off_t downloaded,
-                            curl_off_t,
-                            curl_off_t) {
-    auto* context = static_cast<RuntimeDownloadContext*>(client);
+bool UpdateRuntimeProgress(RuntimeDownloadContext* context,
+                           unsigned long long total,
+                           unsigned long long downloaded) {
     if (!context || !context->mutex || !context->progress) {
-        return 0;
+        return true;
     }
     {
         std::lock_guard<std::mutex> lock(*context->mutex);
@@ -380,7 +348,7 @@ int RuntimeProgressCallback(void* client,
     if (context->request_redraw && *context->request_redraw) {
         (*context->request_redraw)();
     }
-    return 0;
+    return true;
 }
 
 bool DownloadRuntimeArchive(const std::string& url,
@@ -397,18 +365,6 @@ bool DownloadRuntimeArchive(const std::string& url,
     std::error_code error;
     std::filesystem::remove(part_path, error);
 
-    FILE* file = std::fopen(part_path.string().c_str(), "wb");
-    if (!file) {
-        return false;
-    }
-
-    CURL* curl = curl_easy_init();
-    if (!curl) {
-        std::fclose(file);
-        std::filesystem::remove(part_path, error);
-        return false;
-    }
-
     RuntimeDownloadContext context{
         &state_mutex,
         &progress,
@@ -416,23 +372,14 @@ bool DownloadRuntimeArchive(const std::string& url,
         &total_bytes,
         &request_redraw,
     };
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteFileCallback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "textlt/1.0");
-    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, RuntimeProgressCallback);
-    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &context);
+    const bool download_ok = CurlManager::DownloadToFile(
+        url,
+        part_path,
+        [&context](unsigned long long total, unsigned long long downloaded) {
+            return UpdateRuntimeProgress(&context, total, downloaded);
+        });
 
-    const CURLcode result = curl_easy_perform(curl);
-    long response_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
-    curl_easy_cleanup(curl);
-    const bool close_ok = std::fclose(file) == 0;
-
-    if (result != CURLE_OK || !close_ok || response_code >= 400) {
+    if (!download_ok) {
         std::filesystem::remove(part_path, error);
         return false;
     }
@@ -465,18 +412,6 @@ bool DownloadAiModelFile(const std::string& url,
     std::error_code error;
     std::filesystem::remove(part_path, error);
 
-    FILE* file = std::fopen(part_path.string().c_str(), "wb");
-    if (!file) {
-        return false;
-    }
-
-    CURL* curl = curl_easy_init();
-    if (!curl) {
-        std::fclose(file);
-        std::filesystem::remove(part_path, error);
-        return false;
-    }
-
     RuntimeDownloadContext context{
         &state_mutex,
         &progress,
@@ -484,23 +419,14 @@ bool DownloadAiModelFile(const std::string& url,
         &total_bytes,
         &request_redraw,
     };
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteFileCallback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "textlt/1.0");
-    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, RuntimeProgressCallback);
-    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &context);
+    const bool download_ok = CurlManager::DownloadToFile(
+        url,
+        part_path,
+        [&context](unsigned long long total, unsigned long long downloaded) {
+            return UpdateRuntimeProgress(&context, total, downloaded);
+        });
 
-    const CURLcode result = curl_easy_perform(curl);
-    long response_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
-    curl_easy_cleanup(curl);
-    const bool close_ok = std::fclose(file) == 0;
-
-    if (result != CURLE_OK || !close_ok || response_code >= 400) {
+    if (!download_ok) {
         std::filesystem::remove(part_path, error);
         return false;
     }
@@ -642,50 +568,24 @@ RegistryDownloadResult DownloadRegistry(const char* url, const char* filename) {
     CreateDirectory(registry_directory);
 
     const std::filesystem::path final_path = registry_directory / filename;
-    std::string response;
-    CURL* curl = curl_easy_init();
-    if (!curl) {
+    CurlManager::RequestOptions options;
+    options.no_cache = true;
+    options.fresh_connect = true;
+    const CurlManager::Response response =
+        CurlManager::Get(CurlManager::WithCacheBust(url), options);
+    if (!response.ok) {
         return RegistryDownloadResult::Failed;
     }
 
-    const auto cache_bust =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch())
-            .count();
-    const std::string request_url =
-        std::string(url) + (std::string(url).find('?') == std::string::npos ? "?" : "&") +
-        "_textlt_cache_bust=" + std::to_string(cache_bust);
-    curl_slist* headers = nullptr;
-    headers = curl_slist_append(headers, "Cache-Control: no-cache");
-    headers = curl_slist_append(headers, "Pragma: no-cache");
-
-    curl_easy_setopt(curl, CURLOPT_URL, request_url.c_str());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteStringCallback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "textlt/1.0");
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(curl, CURLOPT_FRESH_CONNECT, 1L);
-
-    const CURLcode result = curl_easy_perform(curl);
-    long response_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
-    curl_easy_cleanup(curl);
-    curl_slist_free_all(headers);
-
-    if (result != CURLE_OK || response_code >= 400) {
-        return RegistryDownloadResult::Failed;
-    }
-
-    if (response.empty()) {
+    if (response.body.empty()) {
         return RegistryDownloadResult::Empty;
     }
 
-    Json parsed = Json::parse(response, nullptr, false);
+    std::string body = response.body;
+    Json parsed = Json::parse(body, nullptr, false);
     if (parsed.is_discarded() || !parsed.is_object()) {
-        response = EscapeRawNewlinesInJsonStrings(response);
-        parsed = Json::parse(response, nullptr, false);
+        body = EscapeRawNewlinesInJsonStrings(body);
+        parsed = Json::parse(body, nullptr, false);
     }
     if (parsed.is_discarded() || !parsed.is_object()) {
         return RegistryDownloadResult::InvalidJson;
@@ -894,9 +794,9 @@ void AssistantSettingsModalContent::FetchRegistries() {
     }
 
     const RegistryDownloadResult piper_download_result =
-        DownloadRegistry(kPiperRegistryUrl, RegistryFilename(RegistryKind::Piper));
+        DownloadRegistry(CurlManager::kPiperRegistryUrl, RegistryFilename(RegistryKind::Piper));
     const RegistryDownloadResult ai_download_result =
-        DownloadRegistry(kAiRegistryUrl, RegistryFilename(RegistryKind::Ai));
+        DownloadRegistry(CurlManager::kAiRegistryUrl, RegistryFilename(RegistryKind::Ai));
 
     LoadPiperRegistry();
     LoadAiRegistry();
@@ -981,9 +881,7 @@ bool AssistantSettingsModalContent::ResolveAiRuntimeDownload() {
     }
 
     Json release;
-    if (!FetchJsonUrl(
-            "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest",
-            &release)) {
+    if (!FetchJsonUrl(CurlManager::kLlamaCppLatestReleaseUrl, &release)) {
         ai_status_ = "Runtime asset not found";
         return false;
     }

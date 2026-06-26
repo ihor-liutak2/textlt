@@ -11,6 +11,7 @@
 
 #include "ftxui/component/component.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "curl_manager.hpp"
 #include "json_utils.hpp"
 #include "modal_interface.hpp"
 #include "modal_window.hpp"
@@ -20,10 +21,6 @@ namespace textlt {
 
 namespace assistant_modal_detail {
 
-constexpr const char* kPiperRegistryUrl =
-    "https://ihor-liutak2.github.io/textlt/registries/piper_voices_index.json";
-constexpr const char* kAiRegistryUrl =
-    "https://ihor-liutak2.github.io/textlt/registries/ollama_models_index.json";
 constexpr const char* kPiperRegistryFile = "piper_voices_index.json";
 constexpr const char* kAiRegistryFile = "ollama_models_index.json";
 
