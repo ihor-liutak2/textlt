@@ -39,17 +39,18 @@ public:
     ftxui::Component GetMainComponent() override { return container_; }
     std::string GetTitle() override { return "Text Processors"; }
     ftxui::Element RenderTitle() override;
-    ModalSizePreference GetModalSizePreference() const override { return {96, 30}; }
+    ModalSizePreference GetModalSizePreference() const override { return {104, 34}; }
     ModalFrameStyle GetModalFrameStyle() const override {
         return ModalFrameStyle::TitleInBorder;
     }
-    std::string GetFooterText() const override { return status_; }
+    std::string GetFooterText() const override { return ""; }
 
     void SetTheme(const Theme* theme) { theme_ = theme; }
     void Open();
     void Close();
     void Reload();
     void ApplySelected();
+    void TogglePinned();
     bool HandleEvent(ftxui::Event event);
 
 private:
@@ -62,18 +63,28 @@ private:
     void RebuildParserList();
     void SyncParamsFromSelection();
     const TextParserDefinition* SelectedParser() const;
-    std::unordered_map<std::string, std::string> CurrentParams() const;
-    int RepeatCount() const;
+    bool ValidateCurrentInputs(
+        std::unordered_map<std::string, std::string>& params,
+        int& repeat_count,
+        std::string& error) const;
+    int RepeatCountOrDefault() const;
+    void MoveParserSelection(int row_delta, int column_delta = 0);
+    void MoveParserSelectionToIndex(int index);
+    void EnsureSelectionVisible();
 
     ftxui::Element RenderScopeTabs() const;
-    ftxui::Element RenderParserList() const;
     ftxui::Element RenderSelectedParserInfo() const;
     ftxui::Element RenderParameterFields() const;
-    ftxui::Element RenderActionRow() const;
-    ftxui::Element RenderHelpLine() const;
+    ftxui::Element RenderProcessorGrid() const;
+    ftxui::Element RenderProcessorCell(int parser_index, int width) const;
+    ftxui::Element RenderStatusLine() const;
 
+    std::vector<std::string> WrapText(const std::string& text, size_t width) const;
     std::string TrimForDisplay(const std::string& text, size_t max_size) const;
     std::string ScopeLabel(TextParserScope scope) const;
+    std::string ScopeDisplay(TextParserScope scope) const;
+    std::string NormalizedParamType(const std::string& type) const;
+    std::string ParamHintText() const;
 
     const Theme* theme_ = nullptr;
     TargetTextProvider target_text_provider_;
@@ -83,26 +94,25 @@ private:
     TextParserManager manager_;
     TextParserScope active_scope_ = TextParserScope::Text;
     std::vector<const TextParserDefinition*> filtered_parsers_;
-    std::vector<std::string> parser_labels_;
     int selected_parser_ = 0;
+    int parser_list_top_row_ = 0;
 
     bool whole_document_ = false;
+    bool pinned_ = false;
     std::string repeat_count_ = "1";
     int repeat_cursor_ = 1;
     std::vector<std::string> param_values_ = {"", "", "", ""};
     std::vector<int> param_cursors_ = {0, 0, 0, 0};
     std::string status_ = "Select a text processor.";
+    bool status_is_error_ = false;
 
     ftxui::Component text_tab_button_;
     ftxui::Component paragraph_tab_button_;
-    ftxui::Component parser_menu_;
-    ftxui::Component parser_list_component_;
+    ftxui::Component code_tab_button_;
+    ftxui::Component processor_grid_component_;
     std::vector<ftxui::Component> param_inputs_;
     ftxui::Component repeat_input_;
     ftxui::Component whole_document_checkbox_;
-    ftxui::Component apply_button_;
-    ftxui::Component reload_button_;
-    ftxui::Component close_button_;
     ftxui::Component container_;
 };
 

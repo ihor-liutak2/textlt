@@ -30,8 +30,9 @@
         {
           "id": "min_line_length",
           "label": "Min line length",
-          "type": "int",
-          "default": "20"
+          "type": "integer",
+          "default": "20",
+          "description": "Minimum line length used when deciding whether a line is part of a wrapped paragraph."
         }
       ]
     },
@@ -46,22 +47,34 @@
         {
           "id": "left_width",
           "label": "Left width",
-          "type": "int",
-          "default": "30"
+          "type": "integer",
+          "default": "30",
+          "description": "Number of characters in the left column."
         },
         {
           "id": "gap_width",
           "label": "Gap width",
-          "type": "int",
-          "default": "4"
+          "type": "integer",
+          "default": "4",
+          "description": "Number of characters between the left and right columns."
         },
         {
           "id": "right_width",
           "label": "Right width",
-          "type": "int",
-          "default": "30"
+          "type": "integer",
+          "default": "30",
+          "description": "Number of characters in the right column."
         }
       ]
+    },
+    {
+      "id": "trim_trailing_spaces",
+      "name": "Trim trailing spaces",
+      "scope": "code",
+      "script": "text_parsers/trim_trailing_spaces.lua",
+      "description": "Removes spaces and tabs from the end of each code line without changing indentation.",
+      "repeat_default": 1,
+      "params": []
     }
   ]
 }

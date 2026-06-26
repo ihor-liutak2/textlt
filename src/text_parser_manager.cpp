@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -96,8 +97,15 @@ int GetOptionalInt(const nlohmann::json& object, const char* key,
 }
 
 TextParserScope ParseScope(const std::string& value) {
-  if (value == "paragraph") {
+  std::string lower = value;
+  std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  if (lower == "paragraph") {
     return TextParserScope::Paragraph;
+  }
+  if (lower == "code") {
+    return TextParserScope::Code;
   }
   return TextParserScope::Text;
 }
@@ -307,8 +315,10 @@ bool TextParserManager::LoadFromFile(const fs::path& config_path, std::string& e
         }
 
         param.label = GetOptionalString(param_json, "label", param.id);
-        param.type = GetOptionalString(param_json, "type", "string");
+        param.type = GetOptionalString(param_json, "type", "text");
         param.default_value = GetOptionalString(param_json, "default", "");
+        param.description = GetOptionalString(param_json, "description", "");
+        param.decimal_separator = GetOptionalString(param_json, "decimal_separator", ".");
         definition.params.push_back(param);
       }
     }
@@ -377,7 +387,8 @@ TextParserApplyResult TextParserManager::ApplyDefinition(
   std::string current_text = input_text;
 
   for (int i = 0; i < repeats; ++i) {
-    if (definition.scope == TextParserScope::Text) {
+    if (definition.scope == TextParserScope::Text ||
+        definition.scope == TextParserScope::Code) {
       LuaParserRunResult lua_result =
           lua_engine_.RunScript(script_text, current_text, merged_params, limits);
       if (!lua_result.success) {

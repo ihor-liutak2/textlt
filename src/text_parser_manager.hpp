@@ -12,6 +12,7 @@ namespace textlt {
 enum class TextParserScope {
   Text,
   Paragraph,
+  Code,
 };
 
 struct TextParserParam {
@@ -19,6 +20,8 @@ struct TextParserParam {
   std::string label;
   std::string type;
   std::string default_value;
+  std::string description;
+  std::string decimal_separator = ".";
 };
 
 struct TextParserDefinition {

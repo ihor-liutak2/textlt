@@ -7,7 +7,7 @@ namespace textlt {
 
 namespace {
 
-constexpr size_t kMaximumFooterButtons = 3;
+constexpr size_t kMaximumFooterButtons = 4;
 
 } // namespace
 
