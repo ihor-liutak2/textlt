@@ -236,6 +236,9 @@ ftxui::Element TextltApp::Render() {
     if (import_text_modal_.IsOpen()) {
         layers.push_back(import_text_modal_.View()->Render() | clear_under | center);
     }
+    if (text_processors_modal_.IsOpen()) {
+        layers.push_back(text_processors_modal_.View()->Render() | clear_under | center);
+    }
     if (git_modal_.IsOpen()) {
         layers.push_back(git_modal_.View()->Render() | clear_under | center);
     }
@@ -407,6 +410,16 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     if (import_text_modal_.IsOpen()) {
         if (import_text_modal_.OnEvent(event)) {
             if (!import_text_modal_.IsOpen()) {
+                FocusEditor();
+            }
+            return true;
+        }
+        return true;
+    }
+
+    if (text_processors_modal_.IsOpen()) {
+        if (text_processors_modal_.OnEvent(event)) {
+            if (!text_processors_modal_.IsOpen()) {
                 FocusEditor();
             }
             return true;

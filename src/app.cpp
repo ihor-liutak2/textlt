@@ -118,6 +118,20 @@ TextltApp::TextltApp()
               std::string& error) {
               return InsertImportedText(path, text, error);
           }),
+      text_processors_modal_(
+          &current_theme_,
+          [this](
+              bool whole_document,
+              std::string& text,
+              std::string& error) {
+              return GetTextProcessorTargetText(whole_document, text, error);
+          },
+          [this](
+              bool whole_document,
+              const std::string& text,
+              std::string& error) {
+              return ReplaceTextProcessorTargetText(whole_document, text, error);
+          }),
       git_modal_(
           &current_theme_,
           &git_manager_,
@@ -173,6 +187,7 @@ TextltApp::TextltApp()
             !recent_files_modal_.IsOpen() &&
             !search_files_modal_.IsOpen() &&
             !import_text_modal_.IsOpen() &&
+            !text_processors_modal_.IsOpen() &&
             !git_modal_.IsOpen() &&
             !git_settings_modal_.IsOpen() &&
             !tts_modal_.IsOpen() &&

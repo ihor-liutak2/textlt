@@ -58,6 +58,7 @@ MenuBarComponent::MenuBarComponent(
               " Find...            (Ctrl+F) ",
               " Replace...         (Ctrl+R) ",
               " Search in Files...",
+              " Text Processors...",
           },
           {
               " Toggle Line Numbers ",

@@ -323,6 +323,13 @@ void TextltApp::HandleEditMenu(int item) {
         return;
     }
 
+    if (item == 13) { // Text Processors...
+        CloseDropdown();
+        OpenTextProcessorsModal();
+        active_action_ = "Text Processors";
+        return;
+    }
+
     CloseDropdown();
 }
 

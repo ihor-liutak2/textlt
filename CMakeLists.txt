@@ -167,6 +167,7 @@ add_executable(textlt
   src/modals/unsaved_changes_dialog.cpp
   src/modals/modal_search_files.cpp
   src/modals/modal_import_text.cpp
+  src/modals/modal_text_processors.cpp
   src/opened_config.cpp
   src/recent_files.cpp
   src/sidebar_component.cpp

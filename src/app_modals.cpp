@@ -269,6 +269,78 @@ void TextltApp::CloseImportTextModal() {
 }
 
 
+void TextltApp::OpenTextProcessorsModal() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+
+    text_processors_modal_.Open();
+    active_action_ = "Opened Text Processors";
+    focused_layer_ = 0;
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CloseTextProcessorsModal() {
+    text_processors_modal_.Close();
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+bool TextltApp::GetTextProcessorTargetText(
+    bool whole_document,
+    std::string& text,
+    std::string& error) {
+    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+
+    if (whole_document) {
+        text = editor_ptr->GetAllText();
+        return true;
+    }
+
+    if (!editor_ptr->HasSelection()) {
+        error = "No selected text. Select text or enable Whole document.";
+        active_action_ = error;
+        screen_.PostEvent(ftxui::Event::Custom);
+        return false;
+    }
+
+    text = editor_ptr->GetSelectedText();
+    return true;
+}
+
+
+bool TextltApp::ReplaceTextProcessorTargetText(
+    bool whole_document,
+    const std::string& text,
+    std::string& error) {
+    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+
+    if (whole_document) {
+        editor_ptr->SelectAll();
+    } else if (!editor_ptr->HasSelection()) {
+        error = "No selected text. Select text or enable Whole document.";
+        active_action_ = error;
+        screen_.PostEvent(ftxui::Event::Custom);
+        return false;
+    }
+
+    if (text.empty()) {
+        editor_ptr->DeleteSelection();
+    } else {
+        editor_ptr->InsertText(text);
+    }
+
+    active_action_ = whole_document
+        ? "Applied text processor to whole document"
+        : "Applied text processor to selected text";
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
+    return true;
+}
+
+
 bool TextltApp::InsertImportedText(
     const std::filesystem::path& path,
     const std::string& text,
