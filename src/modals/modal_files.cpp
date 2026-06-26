@@ -11,7 +11,7 @@
 namespace textlt {
 namespace {
 
-constexpr int kVisibleEntryRows = 14;
+constexpr int kVisibleEntryRows = 16;
 constexpr int kEntryNameWidth = 72;
 constexpr int kEntrySizeWidth = 12;
 constexpr int kMinDoubleClickMs = 80;
@@ -110,25 +110,25 @@ void FilesModalContent::RebuildComponents() {
     });
 
     create_dir_button_ = MakeTextButton("Create Dir", [this] {
-        SetStatus("Create Dir will be enabled in the file operation patch.");
+        StartCreateDirectoryOperation();
     });
     create_file_button_ = MakeTextButton("Create File", [this] {
-        SetStatus("Create File will be enabled in the file operation patch.");
+        StartCreateFileOperation();
     });
     delete_button_ = MakeTextButton("Delete", [this] {
-        SetStatus("Delete will be enabled in the file operation patch.");
+        StartDeleteOperation();
     });
     rename_button_ = MakeTextButton("Rename", [this] {
-        SetStatus("Rename will be enabled in the file operation patch.");
+        StartRenameOperation();
     });
     copy_button_ = MakeTextButton("Copy", [this] {
-        SetStatus("File copy will be enabled in the file operation patch.");
+        StartCopyOperation();
     });
     cut_button_ = MakeTextButton("Cut", [this] {
-        SetStatus("File cut will be enabled in the file operation patch.");
+        StartCutOperation();
     });
     paste_button_ = MakeTextButton("Paste", [this] {
-        SetStatus("Paste will be enabled in the file operation patch.");
+        StartPasteOperation();
     });
 
     ftxui::InputOption path_option;
@@ -147,6 +147,27 @@ void FilesModalContent::RebuildComponents() {
     file_option.cursor_position = &file_name_input_cursor_;
     file_option.on_enter = [this] { ConfirmSelected(); };
     file_name_input_ = ftxui::Input(&file_name_input_value_, "file name", file_option);
+
+    ftxui::InputOption operation_option;
+    operation_option.multiline = false;
+    operation_option.cursor_position = &pending_operation_input_cursor_;
+    operation_option.on_enter = [this] { ConfirmPendingOperation(); };
+    operation_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return state.element |
+            ftxui::bgcolor(theme.modal_input_bg) |
+            ftxui::color(theme.modal_input_fg);
+    };
+    operation_input_ = ftxui::Input(
+        &pending_operation_input_value_,
+        "name",
+        operation_option);
+    confirm_yes_button_ = MakeTextButton("Yes", [this] {
+        ConfirmPendingOperation();
+    });
+    confirm_cancel_button_ = MakeTextButton("Cancel", [this] {
+        CancelPendingOperation();
+    });
 
     entry_list_component_ = ftxui::CatchEvent(
         ftxui::Renderer([this] { return RenderEntryList(); }),
@@ -173,6 +194,11 @@ void FilesModalContent::RebuildComponents() {
             cut_button_,
             paste_button_,
         }),
+        ftxui::Container::Horizontal({
+            operation_input_,
+            confirm_yes_button_,
+            confirm_cancel_button_,
+        }),
         entry_list_component_,
     });
 }
@@ -184,6 +210,8 @@ void FilesModalContent::Open(
     mode_ = mode;
     status_is_error_ = false;
     status_ = "Ready.";
+    CancelPendingOperation();
+    ClearSelectionMarks();
     file_name_input_value_ = std::move(suggested_file_name);
     file_name_input_cursor_ = static_cast<int>(file_name_input_value_.size());
     RefreshFavorites();
@@ -221,6 +249,8 @@ void FilesModalContent::Close() {
     entries_.clear();
     favorite_boxes_.clear();
     entry_boxes_.clear();
+    ClearSelectionMarks();
+    CancelPendingOperation();
     last_clicked_entry_ = -1;
 }
 
@@ -276,6 +306,7 @@ void FilesModalContent::LoadDirectory(const std::filesystem::path& directory) {
 
     current_directory_ = target.lexically_normal();
     entries_.clear();
+    ClearSelectionMarks();
 
     const std::filesystem::path parent = current_directory_.parent_path();
     if (!parent.empty() && parent != current_directory_) {
@@ -374,15 +405,10 @@ void FilesModalContent::AddCurrentDirectoryToFavorites() {
 }
 
 void FilesModalContent::CopySelectedPathText() {
-    std::vector<std::filesystem::path> paths;
-    if (!entries_.empty()) {
-        ClampSelection();
-        const FileEntry& entry = entries_[static_cast<size_t>(selected_entry_)];
-        if (!IsParentEntry(entry)) {
-            paths.push_back(entry.path);
-        }
-    }
-    if (paths.empty() && !current_directory_.empty()) {
+    std::string error;
+    std::vector<std::filesystem::path> paths = SelectedOperationPaths(error);
+    if (!error.empty() && !current_directory_.empty()) {
+        paths.clear();
         paths.push_back(current_directory_);
     }
 
@@ -395,6 +421,380 @@ void FilesModalContent::CopySelectedPathText() {
         on_copy_path_(text);
     }
     SetStatus("Copied path text.");
+}
+
+void FilesModalContent::StartCreateDirectoryOperation() {
+    StartNameOperation(
+        PendingFileOperation::CreateDirectory,
+        "Directory name",
+        "New Folder",
+        "Create directory in current directory?");
+}
+
+void FilesModalContent::StartCreateFileOperation() {
+    StartNameOperation(
+        PendingFileOperation::CreateFile,
+        "File name",
+        "new_file.txt",
+        "Create empty file in current directory?");
+}
+
+void FilesModalContent::StartDeleteOperation() {
+    std::string error;
+    const std::vector<std::filesystem::path> paths = SelectedOperationPaths(error);
+    if (!error.empty()) {
+        SetStatus(error, true);
+        return;
+    }
+    StartConfirmOperation(
+        PendingFileOperation::DeleteItems,
+        "Delete " + std::to_string(paths.size()) + " selected item(s)?");
+    pending_operation_paths_ = paths;
+}
+
+void FilesModalContent::StartRenameOperation() {
+    std::string error;
+    const std::vector<std::filesystem::path> paths = SelectedOperationPaths(error);
+    if (!error.empty()) {
+        SetStatus(error, true);
+        return;
+    }
+    if (paths.size() != 1) {
+        SetStatus("Rename works with exactly one selected item.", true);
+        return;
+    }
+
+    StartNameOperation(
+        PendingFileOperation::RenameItem,
+        "New name",
+        paths.front().filename().string(),
+        "Rename selected item?");
+    pending_operation_paths_ = paths;
+}
+
+void FilesModalContent::StartCopyOperation() {
+    if (!file_manager_) {
+        SetStatus("File manager is not available.", true);
+        return;
+    }
+    std::string error;
+    const std::vector<std::filesystem::path> paths = SelectedOperationPaths(error);
+    if (!error.empty()) {
+        SetStatus(error, true);
+        return;
+    }
+    if (!file_manager_->CopyItems(paths, error)) {
+        SetStatus(error.empty() ? "Copy failed." : error, true);
+        return;
+    }
+    CancelPendingOperation();
+    SetStatus("Copied " + std::to_string(paths.size()) + " item(s) to file clipboard.");
+}
+
+void FilesModalContent::StartCutOperation() {
+    if (!file_manager_) {
+        SetStatus("File manager is not available.", true);
+        return;
+    }
+    std::string error;
+    const std::vector<std::filesystem::path> paths = SelectedOperationPaths(error);
+    if (!error.empty()) {
+        SetStatus(error, true);
+        return;
+    }
+    if (!file_manager_->CutItems(paths, error)) {
+        SetStatus(error.empty() ? "Cut failed." : error, true);
+        return;
+    }
+    CancelPendingOperation();
+    SetStatus("Cut " + std::to_string(paths.size()) + " item(s) to file clipboard.");
+}
+
+void FilesModalContent::StartPasteOperation() {
+    if (!file_manager_) {
+        SetStatus("File manager is not available.", true);
+        return;
+    }
+    if (!file_manager_->CanPaste()) {
+        SetStatus("File clipboard is empty.", true);
+        return;
+    }
+    const size_t count = file_manager_->ClipboardSources().size();
+    StartConfirmOperation(
+        PendingFileOperation::PasteItems,
+        "Paste " + std::to_string(count) + " item(s) into current directory?");
+}
+
+void FilesModalContent::StartNameOperation(
+    PendingFileOperation operation,
+    std::string label,
+    std::string default_value,
+    std::string message) {
+    pending_operation_ = operation;
+    pending_operation_input_label_ = std::move(label);
+    pending_operation_input_value_ = std::move(default_value);
+    pending_operation_input_cursor_ = static_cast<int>(pending_operation_input_value_.size());
+    pending_operation_paths_.clear();
+    pending_operation_message_ = std::move(message);
+    status_is_error_ = false;
+    status_ = "Confirm operation or cancel.";
+    if (operation_input_) {
+        operation_input_->TakeFocus();
+    }
+}
+
+void FilesModalContent::StartConfirmOperation(
+    PendingFileOperation operation,
+    std::string message) {
+    pending_operation_ = operation;
+    pending_operation_input_label_.clear();
+    pending_operation_input_value_.clear();
+    pending_operation_input_cursor_ = 0;
+    pending_operation_paths_.clear();
+    pending_operation_message_ = std::move(message);
+    status_is_error_ = false;
+    status_ = "Confirm operation or cancel.";
+    if (confirm_yes_button_) {
+        confirm_yes_button_->TakeFocus();
+    }
+}
+
+void FilesModalContent::CancelPendingOperation() {
+    pending_operation_ = PendingFileOperation::None;
+    pending_operation_message_.clear();
+    pending_operation_input_label_.clear();
+    pending_operation_input_value_.clear();
+    pending_operation_input_cursor_ = 0;
+    pending_operation_paths_.clear();
+    if (entry_list_component_) {
+        entry_list_component_->TakeFocus();
+    }
+}
+
+void FilesModalContent::ConfirmPendingOperation() {
+    if (!HasPendingOperation()) {
+        return;
+    }
+    if (!file_manager_) {
+        SetStatus("File manager is not available.", true);
+        return;
+    }
+
+    std::string error;
+    switch (pending_operation_) {
+        case PendingFileOperation::CreateDirectory: {
+            if (!FileManager::IsPlainName(pending_operation_input_value_)) {
+                SetStatus("Enter only a directory name.", true);
+                return;
+            }
+            const std::filesystem::path target = current_directory_ / pending_operation_input_value_;
+            if (!file_manager_->CreateDirectory(target, error)) {
+                SetStatus(error.empty() ? "Create directory failed." : error, true);
+                return;
+            }
+            CancelPendingOperation();
+            Refresh();
+            SetStatus("Directory created: " + target.filename().string());
+            break;
+        }
+        case PendingFileOperation::CreateFile: {
+            if (!FileManager::IsPlainName(pending_operation_input_value_)) {
+                SetStatus("Enter only a file name.", true);
+                return;
+            }
+            const std::filesystem::path target = current_directory_ / pending_operation_input_value_;
+            if (!file_manager_->CreateEmptyFile(target, error)) {
+                SetStatus(error.empty() ? "Create file failed." : error, true);
+                return;
+            }
+            CancelPendingOperation();
+            Refresh();
+            SetStatus("File created: " + target.filename().string());
+            break;
+        }
+        case PendingFileOperation::DeleteItems: {
+            std::vector<std::filesystem::path> paths = pending_operation_paths_;
+            if (paths.empty()) {
+                paths = SelectedOperationPaths(error);
+            }
+            if (!error.empty()) {
+                SetStatus(error, true);
+                return;
+            }
+            if (!file_manager_->DeleteItems(paths, true, error)) {
+                SetStatus(error.empty() ? "Delete failed." : error, true);
+                return;
+            }
+            const size_t count = paths.size();
+            CancelPendingOperation();
+            Refresh();
+            SetStatus("Deleted " + std::to_string(count) + " item(s).");
+            break;
+        }
+        case PendingFileOperation::RenameItem: {
+            std::vector<std::filesystem::path> paths = pending_operation_paths_;
+            if (paths.empty()) {
+                paths = SelectedOperationPaths(error);
+            }
+            if (!error.empty()) {
+                SetStatus(error, true);
+                return;
+            }
+            if (paths.size() != 1) {
+                SetStatus("Rename works with exactly one selected item.", true);
+                return;
+            }
+            std::filesystem::path destination;
+            if (!file_manager_->RenameItem(
+                    paths.front(),
+                    pending_operation_input_value_,
+                    destination,
+                    error)) {
+                SetStatus(error.empty() ? "Rename failed." : error, true);
+                return;
+            }
+            CancelPendingOperation();
+            Refresh();
+            SetStatus("Renamed to: " + destination.filename().string());
+            break;
+        }
+        case PendingFileOperation::PasteItems: {
+            std::vector<std::filesystem::path> pasted_paths;
+            if (!file_manager_->PasteItems(current_directory_, pasted_paths, error)) {
+                SetStatus(error.empty() ? "Paste failed." : error, true);
+                return;
+            }
+            const size_t count = pasted_paths.size();
+            CancelPendingOperation();
+            Refresh();
+            SetStatus("Pasted " + std::to_string(count) + " item(s).");
+            break;
+        }
+        case PendingFileOperation::None:
+            break;
+    }
+}
+
+bool FilesModalContent::HasPendingOperation() const {
+    return pending_operation_ != PendingFileOperation::None;
+}
+
+bool FilesModalContent::PendingOperationNeedsInput() const {
+    return pending_operation_ == PendingFileOperation::CreateDirectory ||
+        pending_operation_ == PendingFileOperation::CreateFile ||
+        pending_operation_ == PendingFileOperation::RenameItem;
+}
+
+std::string FilesModalContent::PendingOperationActionLabel() const {
+    switch (pending_operation_) {
+        case PendingFileOperation::CreateDirectory:
+            return "Create Dir";
+        case PendingFileOperation::CreateFile:
+            return "Create File";
+        case PendingFileOperation::DeleteItems:
+            return "Delete";
+        case PendingFileOperation::RenameItem:
+            return "Rename";
+        case PendingFileOperation::PasteItems:
+            return "Paste";
+        case PendingFileOperation::None:
+            break;
+    }
+    return "Confirm";
+}
+
+std::vector<std::filesystem::path> FilesModalContent::SelectedOperationPaths(
+    std::string& error) const {
+    std::vector<std::filesystem::path> paths;
+    const std::vector<int> indices = SortedSelectedIndices();
+    if (!indices.empty()) {
+        for (int index : indices) {
+            if (index < 0 || index >= static_cast<int>(entries_.size())) {
+                continue;
+            }
+            const FileEntry& entry = entries_[static_cast<size_t>(index)];
+            if (!IsParentEntry(entry)) {
+                paths.push_back(entry.path);
+            }
+        }
+        if (!paths.empty()) {
+            return paths;
+        }
+    }
+
+    std::filesystem::path path;
+    if (!SelectedPath(path, error)) {
+        return {};
+    }
+    paths.push_back(path);
+    error.clear();
+    return paths;
+}
+
+std::vector<int> FilesModalContent::SortedSelectedIndices() const {
+    std::vector<int> indices;
+    indices.reserve(selected_indices_.size());
+    for (int index : selected_indices_) {
+        if (index >= 0 && index < static_cast<int>(entries_.size())) {
+            indices.push_back(index);
+        }
+    }
+    return indices;
+}
+
+void FilesModalContent::ClearSelectionMarks() {
+    selected_indices_.clear();
+    selection_anchor_ = -1;
+}
+
+void FilesModalContent::ToggleEntrySelection(int index) {
+    if (index < 0 || index >= static_cast<int>(entries_.size())) {
+        return;
+    }
+    if (IsParentEntry(entries_[static_cast<size_t>(index)])) {
+        return;
+    }
+    if (selected_indices_.count(index) > 0) {
+        selected_indices_.erase(index);
+    } else {
+        selected_indices_.insert(index);
+    }
+    selection_anchor_ = index;
+    SelectEntry(index);
+}
+
+void FilesModalContent::SelectRangeTo(int index) {
+    if (entries_.empty()) {
+        return;
+    }
+    index = std::clamp(index, 0, static_cast<int>(entries_.size()) - 1);
+    if (selection_anchor_ < 0 || selection_anchor_ >= static_cast<int>(entries_.size())) {
+        selection_anchor_ = selected_entry_;
+    }
+    const int begin = std::min(selection_anchor_, index);
+    const int end = std::max(selection_anchor_, index);
+    selected_indices_.clear();
+    for (int current = begin; current <= end; ++current) {
+        if (!IsParentEntry(entries_[static_cast<size_t>(current)])) {
+            selected_indices_.insert(current);
+        }
+    }
+    SelectEntry(index);
+}
+
+bool FilesModalContent::IsEntryMarkedSelected(int index) const {
+    return selected_indices_.count(index) > 0;
+}
+
+void FilesModalContent::MoveSelectionWithRange(int delta) {
+    if (entries_.empty()) {
+        return;
+    }
+    const int target = std::clamp(
+        selected_entry_ + delta,
+        0,
+        static_cast<int>(entries_.size()) - 1);
+    SelectRangeTo(target);
 }
 
 void FilesModalContent::ConfirmSelected() {
@@ -594,6 +994,19 @@ bool FilesModalContent::IsSaveLikeMode() const {
 }
 
 bool FilesModalContent::HandleEvent(ftxui::Event event) {
+    if (operation_input_ && operation_input_->Focused()) {
+        if (event == ftxui::Event::Return || event.input() == "\x0A") {
+            ConfirmPendingOperation();
+            return true;
+        }
+        if (IsEscapeEvent(event)) {
+            CancelPendingOperation();
+            SetStatus("Operation canceled.");
+            return true;
+        }
+        return false;
+    }
+
     if (path_input_ && path_input_->Focused()) {
         if (event == ftxui::Event::Return || event.input() == "\x0A") {
             LoadPathFromInput();
@@ -610,6 +1023,26 @@ bool FilesModalContent::HandleEvent(ftxui::Event event) {
         return false;
     }
 
+    if (HasPendingOperation()) {
+        if (event == ftxui::Event::Return || event.input() == "\x0A") {
+            ConfirmPendingOperation();
+            return true;
+        }
+        if (IsEscapeEvent(event)) {
+            CancelPendingOperation();
+            SetStatus("Operation canceled.");
+            return true;
+        }
+    }
+
+    if (IsShiftArrowDownEvent(event)) {
+        MoveSelectionWithRange(1);
+        return true;
+    }
+    if (IsShiftArrowUpEvent(event)) {
+        MoveSelectionWithRange(-1);
+        return true;
+    }
     if (event == ftxui::Event::ArrowDown) {
         MoveSelection(1);
         return true;
@@ -624,6 +1057,10 @@ bool FilesModalContent::HandleEvent(ftxui::Event event) {
     }
     if (event == ftxui::Event::PageUp) {
         MoveSelection(-kVisibleEntryRows);
+        return true;
+    }
+    if (event.input() == " ") {
+        ToggleEntrySelection(selected_entry_);
         return true;
     }
     if (event == ftxui::Event::Return || event.input() == "\x0A") {
@@ -674,7 +1111,21 @@ bool FilesModalContent::HandleEntryMouseEvent(ftxui::Event event) {
             return false;
         }
 
+        if (mouse.shift) {
+            SelectRangeTo(entry_index);
+            last_clicked_entry_ = -1;
+            return true;
+        }
+        if (mouse.control) {
+            ToggleEntrySelection(entry_index);
+            last_clicked_entry_ = -1;
+            return true;
+        }
+
+        ClearSelectionMarks();
         SelectEntry(entry_index);
+        selection_anchor_ = entry_index;
+
         const auto now = std::chrono::steady_clock::now();
         const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             now - last_entry_click_time_).count();
@@ -719,6 +1170,20 @@ bool FilesModalContent::HandleFavoriteMouseEvent(ftxui::Event event) {
 bool FilesModalContent::IsBackspaceEvent(const ftxui::Event& event) const {
     const std::string input = event.input();
     return event == ftxui::Event::Backspace || input == "\x7f" || input == "\b";
+}
+
+bool FilesModalContent::IsEscapeEvent(const ftxui::Event& event) const {
+    return event.input() == "\x1B";
+}
+
+bool FilesModalContent::IsShiftArrowUpEvent(const ftxui::Event& event) const {
+    const std::string input = event.input();
+    return input == "\x1B[1;2A" || input == "\x1B[1;6A";
+}
+
+bool FilesModalContent::IsShiftArrowDownEvent(const ftxui::Event& event) const {
+    const std::string input = event.input();
+    return input == "\x1B[1;2B" || input == "\x1B[1;6B";
 }
 
 ftxui::Element FilesModalContent::RenderTopButtons() {
@@ -808,10 +1273,37 @@ ftxui::Element FilesModalContent::RenderOperationButtons() {
     });
 }
 
-ftxui::Element FilesModalContent::RenderConfirmRow() const {
+ftxui::Element FilesModalContent::RenderConfirmRow() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    return text(" ") | color(theme.modal_text_color);
+    if (!HasPendingOperation()) {
+        return text(" ") | color(theme.modal_text_color);
+    }
+
+    Elements row;
+    row.push_back(
+        text(" " + PendingOperationActionLabel() + ": ") |
+        bold |
+        color(theme.modal_accent));
+    row.push_back(
+        text(TrimForDisplay(pending_operation_message_, 36)) |
+        color(theme.modal_text_color));
+
+    if (PendingOperationNeedsInput()) {
+        row.push_back(text(" ") | color(theme.modal_text_color));
+        row.push_back(
+            text(pending_operation_input_label_ + ": ") |
+            color(theme.modal_accent));
+        row.push_back(operation_input_->Render() |
+            size(WIDTH, EQUAL, 28) |
+            bgcolor(theme.modal_input_bg));
+    }
+
+    row.push_back(text(" "));
+    row.push_back(confirm_yes_button_->Render());
+    row.push_back(text(" "));
+    row.push_back(confirm_cancel_button_->Render());
+    return hbox(std::move(row));
 }
 
 ftxui::Element FilesModalContent::RenderEntryList() {
@@ -839,18 +1331,34 @@ ftxui::Element FilesModalContent::RenderEntryList() {
         for (int index = scroll_offset_; index < end; ++index) {
             const FileEntry& entry = entries_[static_cast<size_t>(index)];
             const size_t visible_index = static_cast<size_t>(index - scroll_offset_);
+            const bool cursor_here = index == selected_entry_;
+            const bool marked = IsEntryMarkedSelected(index);
+            std::string marker = "  ";
+            if (cursor_here && marked) {
+                marker = ">*";
+            } else if (cursor_here) {
+                marker = "> ";
+            } else if (marked) {
+                marker = " *";
+            }
+
             Element row = hbox({
-                text(index == selected_entry_ ? "> " : "  "),
+                text(marker),
                 text(FileTypeLabel(entry.type)) | size(WIDTH, EQUAL, 6),
                 text(FormatEntryName(entry, kEntryNameWidth)) |
                     size(WIDTH, EQUAL, kEntryNameWidth),
                 text(FormatSize(entry)) | size(WIDTH, EQUAL, kEntrySizeWidth),
             }) | reflect(entry_boxes_[visible_index]);
 
-            if (index == selected_entry_) {
+            if (cursor_here) {
                 row = row |
                     bgcolor(theme.modal_selected_item_bg) |
                     color(theme.modal_selected_item_fg) |
+                    bold;
+            } else if (marked) {
+                row = row |
+                    bgcolor(theme.modal_input_bg) |
+                    color(theme.modal_text_color) |
                     bold;
             } else {
                 row = row | color(theme.modal_text_color);
@@ -878,13 +1386,19 @@ ftxui::Element FilesModalContent::RenderSelectionSummary() const {
             0,
             static_cast<int>(entries_.size()) - 1);
         const FileEntry& entry = entries_[static_cast<size_t>(safe_index)];
-        text_value = "Selected: " + entry.path.string();
+        const size_t marked_count = SortedSelectedIndices().size();
+        if (marked_count > 0) {
+            text_value = "Selected " + std::to_string(marked_count) +
+                " item(s), cursor: " + entry.path.string();
+        } else {
+            text_value = "Selected: " + entry.path.string();
+        }
     }
     const std::string range = entries_.empty()
         ? "0/0"
         : std::to_string(selected_entry_ + 1) + "/" + std::to_string(entries_.size());
     return hbox({
-        text(" " + TrimForDisplay(text_value, 82)) |
+        text(" " + TrimForDisplay(text_value, 92)) |
             dim |
             color(theme.modal_text_color),
         filler(),
@@ -892,6 +1406,19 @@ ftxui::Element FilesModalContent::RenderSelectionSummary() const {
             dim |
             color(theme.modal_text_color),
     });
+}
+
+ftxui::Element FilesModalContent::RenderStatusSummary() const {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    const std::string prefix = status_is_error_ ? "Error: " : "Status: ";
+    Element line = text(" " + TrimForDisplay(prefix + status_, 104));
+    if (status_is_error_) {
+        line = line | color(Color::Red) | bold;
+    } else {
+        line = line | dim | color(theme.modal_text_color);
+    }
+    return line;
 }
 
 ftxui::Element FilesModalContent::Render() {
@@ -907,16 +1434,13 @@ ftxui::Element FilesModalContent::Render() {
     }
     rows.push_back(separator() | color(theme.modal_border));
     rows.push_back(RenderOperationButtons());
+    rows.push_back(text(" "));
     rows.push_back(RenderConfirmRow());
     rows.push_back(separator() | color(theme.modal_border));
     rows.push_back(RenderEntryList());
+    rows.push_back(separator() | color(theme.modal_border));
     rows.push_back(RenderSelectionSummary());
-
-    if (status_is_error_) {
-        rows.push_back(text(" Error: " + status_) | color(Color::Red));
-    } else {
-        rows.push_back(text(" Status: " + status_) | color(theme.modal_text_color));
-    }
+    rows.push_back(RenderStatusSummary());
 
     return vbox(std::move(rows)) |
         bgcolor(theme.modal_background) |

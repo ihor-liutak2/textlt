@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -75,6 +76,15 @@ public:
     bool HandleEvent(ftxui::Event event);
 
 private:
+    enum class PendingFileOperation {
+        None,
+        CreateDirectory,
+        CreateFile,
+        DeleteItems,
+        RenameItem,
+        PasteItems,
+    };
+
     ftxui::Component MakeTextButton(
         std::string label,
         std::function<void()> on_click);
@@ -86,6 +96,31 @@ private:
     void LoadBuiltInDirectory(const std::filesystem::path& directory);
     void AddCurrentDirectoryToFavorites();
     void CopySelectedPathText();
+    void StartCreateDirectoryOperation();
+    void StartCreateFileOperation();
+    void StartDeleteOperation();
+    void StartRenameOperation();
+    void StartCopyOperation();
+    void StartCutOperation();
+    void StartPasteOperation();
+    void StartNameOperation(
+        PendingFileOperation operation,
+        std::string label,
+        std::string default_value,
+        std::string message);
+    void StartConfirmOperation(PendingFileOperation operation, std::string message);
+    void CancelPendingOperation();
+    void ConfirmPendingOperation();
+    bool HasPendingOperation() const;
+    bool PendingOperationNeedsInput() const;
+    std::string PendingOperationActionLabel() const;
+    std::vector<std::filesystem::path> SelectedOperationPaths(std::string& error) const;
+    std::vector<int> SortedSelectedIndices() const;
+    void ClearSelectionMarks();
+    void ToggleEntrySelection(int index);
+    void SelectRangeTo(int index);
+    bool IsEntryMarkedSelected(int index) const;
+    void MoveSelectionWithRange(int delta);
     void ActivateSelected(bool double_click);
     void SelectEntry(int index);
     void MoveSelection(int delta);
@@ -101,6 +136,9 @@ private:
     bool HandleEntryMouseEvent(ftxui::Event event);
     bool HandleFavoriteMouseEvent(ftxui::Event event);
     bool IsBackspaceEvent(const ftxui::Event& event) const;
+    bool IsEscapeEvent(const ftxui::Event& event) const;
+    bool IsShiftArrowUpEvent(const ftxui::Event& event) const;
+    bool IsShiftArrowDownEvent(const ftxui::Event& event) const;
 
     ftxui::Element RenderTopButtons();
     ftxui::Element RenderFavoriteDirectories();
@@ -109,7 +147,8 @@ private:
     ftxui::Element RenderEntryList();
     ftxui::Element RenderFileNameInput();
     ftxui::Element RenderSelectionSummary() const;
-    ftxui::Element RenderConfirmRow() const;
+    ftxui::Element RenderStatusSummary() const;
+    ftxui::Element RenderConfirmRow();
 
     std::string ModeTitle() const;
     std::string FooterActionLabel() const;
@@ -136,12 +175,20 @@ private:
     std::vector<ftxui::Box> favorite_boxes_;
     int selected_entry_ = 0;
     int scroll_offset_ = 0;
+    std::set<int> selected_indices_;
+    int selection_anchor_ = -1;
     std::string path_input_value_;
     int path_input_cursor_ = 0;
     std::string file_name_input_value_;
     int file_name_input_cursor_ = 0;
     std::string status_ = "Ready.";
     bool status_is_error_ = false;
+    PendingFileOperation pending_operation_ = PendingFileOperation::None;
+    std::string pending_operation_message_;
+    std::string pending_operation_input_label_;
+    std::string pending_operation_input_value_;
+    int pending_operation_input_cursor_ = 0;
+    std::vector<std::filesystem::path> pending_operation_paths_;
 
     std::chrono::steady_clock::time_point last_entry_click_time_{};
     int last_clicked_entry_ = -1;
@@ -162,6 +209,9 @@ private:
     ftxui::Component paste_button_;
     ftxui::Component path_input_;
     ftxui::Component file_name_input_;
+    ftxui::Component operation_input_;
+    ftxui::Component confirm_yes_button_;
+    ftxui::Component confirm_cancel_button_;
     ftxui::Component entry_list_component_;
     ftxui::Component container_;
 };
