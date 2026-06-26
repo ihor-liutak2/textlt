@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <utility>
 
 namespace textlt::transform {
@@ -37,17 +38,208 @@ std::pair<Position, Position> OrderedSelection(Position anchor,
     return {anchor, cursor};
 }
 
-bool IsWordCharacter(char character) {
-    return std::isalnum(static_cast<unsigned char>(character)) || character == '_';
+bool DecodeUtf8At(const std::string& value,
+                  size_t offset,
+                  std::uint32_t& codepoint,
+                  size_t& length) {
+    if (offset >= value.size()) {
+        return false;
+    }
+
+    const unsigned char first = static_cast<unsigned char>(value[offset]);
+    if (first < 0x80) {
+        codepoint = first;
+        length = 1;
+        return true;
+    }
+
+    size_t expected = 0;
+    if ((first & 0xE0) == 0xC0) {
+        codepoint = first & 0x1F;
+        expected = 2;
+    } else if ((first & 0xF0) == 0xE0) {
+        codepoint = first & 0x0F;
+        expected = 3;
+    } else if ((first & 0xF8) == 0xF0) {
+        codepoint = first & 0x07;
+        expected = 4;
+    } else {
+        codepoint = first;
+        length = 1;
+        return false;
+    }
+
+    if (offset + expected > value.size()) {
+        codepoint = first;
+        length = 1;
+        return false;
+    }
+
+    for (size_t index = 1; index < expected; ++index) {
+        const unsigned char next = static_cast<unsigned char>(value[offset + index]);
+        if ((next & 0xC0) != 0x80) {
+            codepoint = first;
+            length = 1;
+            return false;
+        }
+        codepoint = (codepoint << 6) | (next & 0x3F);
+    }
+
+    length = expected;
+    return true;
 }
 
-void ToggleCharacterCase(char& character) {
-    const unsigned char value = static_cast<unsigned char>(character);
-    if (std::islower(value)) {
-        character = static_cast<char>(std::toupper(value));
-    } else if (std::isupper(value)) {
-        character = static_cast<char>(std::tolower(value));
+std::string EncodeUtf8(std::uint32_t codepoint) {
+    std::string output;
+    if (codepoint <= 0x7F) {
+        output.push_back(static_cast<char>(codepoint));
+    } else if (codepoint <= 0x7FF) {
+        output.push_back(static_cast<char>(0xC0 | ((codepoint >> 6) & 0x1F)));
+        output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+    } else if (codepoint <= 0xFFFF) {
+        output.push_back(static_cast<char>(0xE0 | ((codepoint >> 12) & 0x0F)));
+        output.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+        output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+    } else {
+        output.push_back(static_cast<char>(0xF0 | ((codepoint >> 18) & 0x07)));
+        output.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
+        output.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+        output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
     }
+    return output;
+}
+
+bool IsAsciiLower(std::uint32_t codepoint) {
+    return codepoint >= 'a' && codepoint <= 'z';
+}
+
+bool IsAsciiUpper(std::uint32_t codepoint) {
+    return codepoint >= 'A' && codepoint <= 'Z';
+}
+
+bool IsCyrillicLower(std::uint32_t codepoint) {
+    return (codepoint >= 0x0430 && codepoint <= 0x044F) ||
+           codepoint == 0x0451 || codepoint == 0x0454 ||
+           codepoint == 0x0456 || codepoint == 0x0457 ||
+           codepoint == 0x0491;
+}
+
+bool IsCyrillicUpper(std::uint32_t codepoint) {
+    return (codepoint >= 0x0410 && codepoint <= 0x042F) ||
+           codepoint == 0x0401 || codepoint == 0x0404 ||
+           codepoint == 0x0406 || codepoint == 0x0407 ||
+           codepoint == 0x0490;
+}
+
+bool IsUnicodeWordCharacter(std::uint32_t codepoint) {
+    return codepoint == '_' ||
+           (codepoint >= '0' && codepoint <= '9') ||
+           IsAsciiLower(codepoint) || IsAsciiUpper(codepoint) ||
+           IsCyrillicLower(codepoint) || IsCyrillicUpper(codepoint);
+}
+
+std::uint32_t ToLowerCodepoint(std::uint32_t codepoint) {
+    if (IsAsciiUpper(codepoint)) {
+        return codepoint + 32;
+    }
+    if (codepoint >= 0x0410 && codepoint <= 0x042F) {
+        return codepoint + 32;
+    }
+
+    switch (codepoint) {
+        case 0x0401: return 0x0451;  // Ё -> ё
+        case 0x0404: return 0x0454;  // Є -> є
+        case 0x0406: return 0x0456;  // І -> і
+        case 0x0407: return 0x0457;  // Ї -> ї
+        case 0x0490: return 0x0491;  // Ґ -> ґ
+        default: return codepoint;
+    }
+}
+
+std::uint32_t ToUpperCodepoint(std::uint32_t codepoint) {
+    if (IsAsciiLower(codepoint)) {
+        return codepoint - 32;
+    }
+    if (codepoint >= 0x0430 && codepoint <= 0x044F) {
+        return codepoint - 32;
+    }
+
+    switch (codepoint) {
+        case 0x0451: return 0x0401;  // ё -> Ё
+        case 0x0454: return 0x0404;  // є -> Є
+        case 0x0456: return 0x0406;  // і -> І
+        case 0x0457: return 0x0407;  // ї -> Ї
+        case 0x0491: return 0x0490;  // ґ -> Ґ
+        default: return codepoint;
+    }
+}
+
+std::uint32_t ToggleCodepointCase(std::uint32_t codepoint) {
+    if (IsAsciiLower(codepoint) || IsCyrillicLower(codepoint)) {
+        return ToUpperCodepoint(codepoint);
+    }
+    if (IsAsciiUpper(codepoint) || IsCyrillicUpper(codepoint)) {
+        return ToLowerCodepoint(codepoint);
+    }
+    return codepoint;
+}
+
+size_t CodepointStartAtOrBefore(const std::string& value, size_t offset) {
+    if (value.empty()) {
+        return 0;
+    }
+
+    offset = std::min(offset, value.size() - 1);
+    while (offset > 0 &&
+           (static_cast<unsigned char>(value[offset]) & 0xC0) == 0x80) {
+        --offset;
+    }
+    return offset;
+}
+
+size_t PreviousCodepointStart(const std::string& value, size_t offset) {
+    if (offset == 0 || value.empty()) {
+        return 0;
+    }
+
+    --offset;
+    while (offset > 0 &&
+           (static_cast<unsigned char>(value[offset]) & 0xC0) == 0x80) {
+        --offset;
+    }
+    return offset;
+}
+
+bool IsWordCharacterAt(const std::string& value, size_t offset) {
+    std::uint32_t codepoint = 0;
+    size_t length = 0;
+    if (!DecodeUtf8At(value, offset, codepoint, length)) {
+        return false;
+    }
+    return IsUnicodeWordCharacter(codepoint);
+}
+
+bool ToggleCaseInByteRange(std::string& line, size_t start, size_t end) {
+    bool changed = false;
+    start = std::min(start, line.size());
+    end = std::min(end, line.size());
+
+    for (size_t offset = start; offset < end;) {
+        std::uint32_t codepoint = 0;
+        size_t length = 0;
+        DecodeUtf8At(line, offset, codepoint, length);
+        const std::uint32_t mapped = ToggleCodepointCase(codepoint);
+        if (mapped != codepoint) {
+            const std::string replacement = EncodeUtf8(mapped);
+            line.replace(offset, length, replacement);
+            end = end - length + replacement.size();
+            offset += replacement.size();
+            changed = true;
+        } else {
+            offset += std::max<size_t>(length, 1);
+        }
+    }
+    return changed;
 }
 
 TransformResult ConvertLeadingIndent(std::vector<std::string>& lines,
@@ -263,11 +455,10 @@ TransformResult ToggleCase(std::vector<std::string>& lines,
             {result.cursor.x, result.cursor.y},
             lines);
 
-        for (size_t y = start.y; y <= end.y; ++y) {
+        for (size_t y = start.y; y <= end.y && y < lines.size(); ++y) {
             const size_t x_start = y == start.y ? start.x : 0;
             const size_t x_end = y == end.y ? end.x : lines[y].size();
-            for (size_t x = x_start; x < x_end && x < lines[y].size(); ++x) {
-                ToggleCharacterCase(lines[y][x]);
+            if (ToggleCaseInByteRange(lines[y], x_start, x_end)) {
                 result.changed = true;
             }
         }
@@ -279,25 +470,38 @@ TransformResult ToggleCase(std::vector<std::string>& lines,
         return result;
     }
 
-    size_t target = result.cursor.x;
-    if (target >= line.size() || !IsWordCharacter(line[target])) {
-        if (target == 0 || !IsWordCharacter(line[target - 1])) {
+    size_t target = CodepointStartAtOrBefore(line, result.cursor.x);
+    if (!IsWordCharacterAt(line, target)) {
+        if (target == 0) {
             return result;
         }
-        --target;
+        target = PreviousCodepointStart(line, target);
+        if (!IsWordCharacterAt(line, target)) {
+            return result;
+        }
     }
 
     size_t start = target;
-    while (start > 0 && IsWordCharacter(line[start - 1])) {
-        --start;
-    }
-    size_t end = target;
-    while (end < line.size() && IsWordCharacter(line[end])) {
-        ++end;
+    while (start > 0) {
+        const size_t previous = PreviousCodepointStart(line, start);
+        if (!IsWordCharacterAt(line, previous)) {
+            break;
+        }
+        start = previous;
     }
 
-    for (size_t x = start; x < end; ++x) {
-        ToggleCharacterCase(line[x]);
+    size_t end = target;
+    while (end < line.size()) {
+        std::uint32_t codepoint = 0;
+        size_t length = 0;
+        if (!DecodeUtf8At(line, end, codepoint, length) ||
+            !IsUnicodeWordCharacter(codepoint)) {
+            break;
+        }
+        end += std::max<size_t>(length, 1);
+    }
+
+    if (ToggleCaseInByteRange(line, start, end)) {
         result.changed = true;
     }
     return result;
