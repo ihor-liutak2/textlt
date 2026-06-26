@@ -20,6 +20,12 @@ FetchContent_Declare(ftxui
 )
 FetchContent_MakeAvailable(ftxui)
 
+FetchContent_Declare(pugixml
+  GIT_REPOSITORY https://github.com/zeux/pugixml.git
+  GIT_TAG v1.16
+)
+FetchContent_MakeAvailable(pugixml)
+
 # Download support.
 find_package(CURL QUIET)
 
@@ -115,6 +121,7 @@ add_executable(textlt
   src/syntax_highlighter.cpp
   src/terminal_flow_control_guard.cpp
   src/text_transformer.cpp
+  src/text_importer.cpp
   src/theme.cpp
   src/document.hpp
   src/document.cpp
@@ -139,6 +146,7 @@ target_link_libraries(textlt PRIVATE
   ftxui::screen
   ftxui::dom
   ftxui::component
+  pugixml::pugixml
   CURL::libcurl
   ${LibArchive_LIBRARIES}
   Threads::Threads
