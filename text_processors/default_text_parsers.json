@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "parsers": [
+    {
+      "id": "remove_invisible_chars",
+      "name": "Remove invisible characters",
+      "scope": "text",
+      "script": "text_parsers/remove_invisible_chars.lua",
+      "description": "Removes zero-width and most control characters while keeping new lines and tabs.",
+      "repeat_default": 1,
+      "params": []
+    },
+    {
+      "id": "normalize_spaces",
+      "name": "Normalize spaces",
+      "scope": "text",
+      "script": "text_parsers/normalize_spaces.lua",
+      "description": "Replaces non-breaking spaces and repeated spaces with normal spaces, then trims each line.",
+      "repeat_default": 1,
+      "params": []
+    },
+    {
+      "id": "unwrap_lines",
+      "name": "Unwrap broken lines",
+      "scope": "text",
+      "script": "text_parsers/unwrap_lines.lua",
+      "description": "Joins wrapped imported lines into paragraphs and joins hyphenated words.",
+      "repeat_default": 1,
+      "params": [
+        {
+          "id": "min_line_length",
+          "label": "Min line length",
+          "type": "int",
+          "default": "20"
+        }
+      ]
+    },
+    {
+      "id": "two_fixed_columns",
+      "name": "Two fixed columns",
+      "scope": "text",
+      "script": "text_parsers/two_fixed_columns.lua",
+      "description": "Splits fixed-width two-column text into one text flow.",
+      "repeat_default": 1,
+      "params": [
+        {
+          "id": "left_width",
+          "label": "Left width",
+          "type": "int",
+          "default": "30"
+        },
+        {
+          "id": "gap_width",
+          "label": "Gap width",
+          "type": "int",
+          "default": "4"
+        },
+        {
+          "id": "right_width",
+          "label": "Right width",
+          "type": "int",
+          "default": "30"
+        }
+      ]
+    }
+  ]
+}

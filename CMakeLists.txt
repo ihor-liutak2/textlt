@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(textlt VERSION 0.1.0 LANGUAGES CXX)
+project(textlt VERSION 0.1.0 LANGUAGES C CXX)
 
 enable_testing()
 
@@ -53,6 +53,57 @@ else()
     "  sudo apt install libarchive-dev\n"
   )
 endif()
+
+# Portable Lua runtime for configurable text processors.
+# Keep Lua embedded in the build so users do not need system Lua dev packages.
+FetchContent_Declare(lua54
+  URL https://www.lua.org/ftp/lua-5.4.8.tar.gz
+  URL_HASH SHA256=4f18ddae154e793e46eeab727c59ef1c0c0c2b744e7b94219710d76f530629ae
+)
+
+FetchContent_GetProperties(lua54)
+if(NOT lua54_POPULATED)
+  FetchContent_Populate(lua54)
+endif()
+
+set(LUA54_SRC_DIR ${lua54_SOURCE_DIR}/src)
+
+add_library(lua54 STATIC
+  ${LUA54_SRC_DIR}/lapi.c
+  ${LUA54_SRC_DIR}/lauxlib.c
+  ${LUA54_SRC_DIR}/lbaselib.c
+  ${LUA54_SRC_DIR}/lcode.c
+  ${LUA54_SRC_DIR}/lctype.c
+  ${LUA54_SRC_DIR}/ldebug.c
+  ${LUA54_SRC_DIR}/ldo.c
+  ${LUA54_SRC_DIR}/ldump.c
+  ${LUA54_SRC_DIR}/lfunc.c
+  ${LUA54_SRC_DIR}/lgc.c
+  ${LUA54_SRC_DIR}/llex.c
+  ${LUA54_SRC_DIR}/lmathlib.c
+  ${LUA54_SRC_DIR}/lmem.c
+  ${LUA54_SRC_DIR}/lobject.c
+  ${LUA54_SRC_DIR}/lopcodes.c
+  ${LUA54_SRC_DIR}/lparser.c
+  ${LUA54_SRC_DIR}/lstate.c
+  ${LUA54_SRC_DIR}/lstring.c
+  ${LUA54_SRC_DIR}/lstrlib.c
+  ${LUA54_SRC_DIR}/ltable.c
+  ${LUA54_SRC_DIR}/ltablib.c
+  ${LUA54_SRC_DIR}/ltm.c
+  ${LUA54_SRC_DIR}/lundump.c
+  ${LUA54_SRC_DIR}/lutf8lib.c
+  ${LUA54_SRC_DIR}/lvm.c
+  ${LUA54_SRC_DIR}/lzio.c
+)
+
+target_include_directories(lua54 PUBLIC ${LUA54_SRC_DIR})
+
+if(UNIX)
+  target_link_libraries(lua54 PUBLIC m)
+endif()
+
+message(STATUS "TextLT: embedded Lua 5.4.8 enabled")
 
 # Thread support.
 find_package(Threads QUIET)
@@ -123,6 +174,8 @@ add_executable(textlt
   src/terminal_flow_control_guard.cpp
   src/text_transformer.cpp
   src/text_importer.cpp
+  src/text_parser_lua_engine.cpp
+  src/text_parser_manager.cpp
   src/theme.cpp
   src/document.hpp
   src/document.cpp
@@ -150,6 +203,7 @@ target_link_libraries(textlt PRIVATE
   pugixml::pugixml
   CURL::libcurl
   ${LibArchive_LIBRARIES}
+  lua54
   Threads::Threads
 )
 
