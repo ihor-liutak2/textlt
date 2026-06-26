@@ -656,6 +656,14 @@ ftxui::Element TextProcessorsModalContent::RenderSelectedParserInfo() const {
     Elements rows;
     rows.push_back(text("Name") | bold | color(theme.modal_accent));
     rows.push_back(text(parser->name) | color(theme.modal_text_color));
+    rows.push_back(hbox({
+        text("Engine: ") | bold | color(theme.modal_accent),
+        text(parser->engine == TextParserEngine::Builtin ? "Built-in" : "Lua") |
+            color(theme.modal_text_color),
+        parser->locked
+            ? text("  locked") | dim | color(theme.modal_text_color)
+            : text("") | color(theme.modal_text_color),
+    }));
     rows.push_back(text(""));
     rows.push_back(text("Description") | bold | color(theme.modal_accent));
 
@@ -791,10 +799,12 @@ ftxui::Element TextProcessorsModalContent::RenderProcessorCell(
     if (label.empty() && parser) {
         label = parser->script_path.filename().string();
     }
+    const std::string engine_marker =
+        parser && parser->engine == TextParserEngine::Builtin ? "[B] " : "[L] ";
     if (parser && parser->pinned) {
-        label = "* " + label;
+        label = "* " + engine_marker + label;
     } else {
-        label = "  " + label;
+        label = "  " + engine_marker + label;
     }
 
     ftxui::Element row = text(" " + TrimForDisplay(label, static_cast<size_t>(width - 2)) + " ") |

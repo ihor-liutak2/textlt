@@ -1,5 +1,7 @@
 #include "text_parser_manager.hpp"
 
+#include "builtin_text_processors.hpp"
+
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -135,6 +137,45 @@ TextParserScope ParseScope(const std::string& value) {
     return TextParserScope::Code;
   }
   return TextParserScope::Text;
+}
+
+TextParserEngine ParseEngine(const std::string& value) {
+  std::string lower = value;
+  std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  if (lower == "builtin" || lower == "native") {
+    return TextParserEngine::Builtin;
+  }
+  return TextParserEngine::Lua;
+}
+
+bool HasParserId(const std::vector<TextParserDefinition>& parsers,
+                 const std::string& parser_id) {
+  return std::any_of(parsers.begin(), parsers.end(), [&](const TextParserDefinition& parser) {
+    return parser.id == parser_id;
+  });
+}
+
+void AppendBuiltinProcessors(
+    const nlohmann::json& root,
+    std::vector<TextParserDefinition>& parsers) {
+  const nlohmann::json* builtin_pins = nullptr;
+  if (root.contains("builtin_pins") && root.at("builtin_pins").is_object()) {
+    builtin_pins = &root.at("builtin_pins");
+  }
+
+  for (TextParserDefinition definition : CreateBuiltinTextProcessors()) {
+    if (HasParserId(parsers, definition.id)) {
+      continue;
+    }
+
+    if (builtin_pins != nullptr && builtin_pins->contains(definition.id)) {
+      definition.pinned = GetOptionalBool(*builtin_pins, definition.id.c_str(), false);
+    }
+
+    parsers.push_back(std::move(definition));
+  }
 }
 
 bool IsBlankLine(const std::string& line) {
@@ -318,11 +359,19 @@ bool TextParserManager::LoadFromFile(const fs::path& config_path, std::string& e
         std::max(1, GetOptionalInt(parser_json, "repeat_default", 1));
     definition.pinned = GetOptionalBool(parser_json, "pinned", false);
 
-    const std::string script = GetRequiredString(parser_json, "script", error);
-    if (!error.empty()) {
-      return false;
+    definition.engine = ParseEngine(GetOptionalString(parser_json, "engine", "lua"));
+    definition.locked = GetOptionalBool(parser_json, "locked", false);
+
+    if (definition.engine == TextParserEngine::Builtin) {
+      definition.builtin_id = GetOptionalString(parser_json, "builtin_id", definition.id);
+      definition.locked = true;
+    } else {
+      const std::string script = GetRequiredString(parser_json, "script", error);
+      if (!error.empty()) {
+        return false;
+      }
+      definition.script_path = fs::path(script);
     }
-    definition.script_path = fs::path(script);
 
     if (parser_json.contains("params")) {
       if (!parser_json.at("params").is_array()) {
@@ -359,6 +408,7 @@ bool TextParserManager::LoadFromFile(const fs::path& config_path, std::string& e
     parsers_.push_back(definition);
   }
 
+  AppendBuiltinProcessors(root, parsers_);
   return true;
 }
 
@@ -415,8 +465,16 @@ bool TextParserManager::SetParserPinnedInUserConfiguration(
   }
 
   if (!found) {
-    error = "Text processor not found: " + parser_id;
-    return false;
+    if (!IsBuiltinTextProcessor(parser_id)) {
+      error = "Text processor not found: " + parser_id;
+      return false;
+    }
+
+    if (!root.contains("builtin_pins") || !root.at("builtin_pins").is_object()) {
+      root["builtin_pins"] = nlohmann::json::object();
+    }
+    root["builtin_pins"][parser_id] = pinned;
+    found = true;
   }
 
   std::ofstream output(config_path, std::ios::binary | std::ios::trunc);
@@ -455,6 +513,27 @@ TextParserApplyResult TextParserManager::ApplyDefinition(
   TextParserApplyResult result;
   std::string error;
 
+  const auto merged_params = MergeParams(definition, params);
+  const int requested_repeats = repeat_count > 0 ? repeat_count : definition.repeat_default;
+  const int repeats = std::max(1, std::min(requested_repeats, 50));
+
+  if (definition.engine == TextParserEngine::Builtin) {
+    std::string current_text = input_text;
+    for (int i = 0; i < repeats; ++i) {
+      BuiltinTextProcessorResult builtin_result =
+          ApplyBuiltinTextProcessor(definition, current_text, merged_params);
+      if (!builtin_result.success) {
+        result.error = builtin_result.error;
+        return result;
+      }
+      current_text = std::move(builtin_result.text);
+    }
+
+    result.success = true;
+    result.text = std::move(current_text);
+    return result;
+  }
+
   fs::path script_path = definition.script_path;
   if (script_path.is_relative()) {
     script_path = config_base_directory_ / script_path;
@@ -465,10 +544,6 @@ TextParserApplyResult TextParserManager::ApplyDefinition(
     result.error = error;
     return result;
   }
-
-  const auto merged_params = MergeParams(definition, params);
-  const int requested_repeats = repeat_count > 0 ? repeat_count : definition.repeat_default;
-  const int repeats = std::max(1, std::min(requested_repeats, 50));
 
   std::string current_text = input_text;
 

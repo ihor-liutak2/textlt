@@ -15,6 +15,11 @@ enum class TextParserScope {
   Code,
 };
 
+enum class TextParserEngine {
+  Lua,
+  Builtin,
+};
+
 struct TextParserParam {
   std::string id;
   std::string label;
@@ -29,9 +34,12 @@ struct TextParserDefinition {
   std::string name;
   TextParserScope scope = TextParserScope::Text;
   std::string description;
+  TextParserEngine engine = TextParserEngine::Lua;
   std::filesystem::path script_path;
+  std::string builtin_id;
   int repeat_default = 1;
   bool pinned = false;
+  bool locked = false;
   std::vector<TextParserParam> params;
 };
 
