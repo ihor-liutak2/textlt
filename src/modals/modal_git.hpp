@@ -183,6 +183,7 @@ private:
     int server_output_scroll_offset_ = 0;
 
     bool confirm_active_ = false;
+    int confirm_layer_index_ = 0;
     std::string confirm_title_;
     std::string confirm_message_;
     std::string confirm_command_preview_;

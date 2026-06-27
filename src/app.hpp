@@ -51,6 +51,31 @@ private:
         Replace,
     };
 
+    // Keep application layer selection type-safe. FTXUI's Container::Tab API
+    // requires an int pointer, so active_layer_index_ is only an adapter at
+    // that boundary.
+    enum class UiLayer {
+        Main,
+        Help,
+        Theme,
+        Find,
+        GoToLine,
+        UnsavedChanges,
+        RecentFiles,
+        SearchFiles,
+        Files,
+        TextProcessors,
+        Git,
+        GitSettings,
+        Tts,
+        AiActions,
+        AssistantSettings,
+    };
+
+    void SetActiveLayer(UiLayer layer);
+    UiLayer ActiveLayer() const;
+    bool ActiveModalIsOpen() const;
+
     void CloseDropdown();
     void OpenDropdown();
     void OpenRecentFilesModal();
@@ -212,7 +237,8 @@ private:
     std::string goto_line_input_;
     std::string active_action_ = "Ready";
 
-    int focused_layer_ = 0;
+    UiLayer active_layer_ = UiLayer::Main;
+    int active_layer_index_ = static_cast<int>(UiLayer::Main);
     int search_panel_tab_index_ = 0;
     int find_input_cursor_position_ = 0;
     int replace_find_input_cursor_position_ = 0;

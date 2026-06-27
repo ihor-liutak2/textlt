@@ -4,6 +4,11 @@
 #include <filesystem>
 #include <string>
 #include <system_error>
+#include <vector>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "editor_config.hpp"
 
@@ -119,7 +124,70 @@ void EnsureAssistantDataDirectories() {
     EnsureDirectoryExists(data_directory / "ai" / "models");
 }
 
+std::filesystem::path ExecutableDirectory() {
+#ifdef _WIN32
+    std::wstring buffer(32768, L'\0');
+    const DWORD length = GetModuleFileNameW(
+        nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+    if (length == 0 || length >= buffer.size()) {
+        return {};
+    }
+    buffer.resize(length);
+    return std::filesystem::path(buffer).parent_path();
+#else
+    std::error_code error;
+    const std::filesystem::path executable =
+        std::filesystem::read_symlink("/proc/self/exe", error);
+    return error ? std::filesystem::path{} : executable.parent_path();
+#endif
+}
+
+bool IsTextProcessorsDirectory(const std::filesystem::path& path) {
+    if (path.empty()) {
+        return false;
+    }
+    std::error_code error;
+    return std::filesystem::is_regular_file(
+        path / "default_text_parsers.json", error);
+}
+
 } // namespace
+
+std::filesystem::path FindTextProcessorsDirectory() {
+    std::vector<std::filesystem::path> candidates;
+
+    if (const char* data_directory = std::getenv("TEXTLT_DATA_DIR")) {
+        if (*data_directory != '\0') {
+            const std::filesystem::path root(data_directory);
+            candidates.push_back(root / "text_processors");
+            candidates.push_back(root);
+        }
+    }
+
+    if (const char* appdir = std::getenv("APPDIR")) {
+        if (*appdir != '\0') {
+            candidates.emplace_back(
+                std::filesystem::path(appdir) / "usr" / "share" / "textlt" /
+                "text_processors");
+        }
+    }
+
+    const std::filesystem::path executable_directory = ExecutableDirectory();
+    if (!executable_directory.empty()) {
+        candidates.push_back(executable_directory / "text_processors");
+        candidates.push_back(
+            executable_directory.parent_path() / "share" / "textlt" /
+            "text_processors");
+    }
+    candidates.push_back(std::filesystem::current_path() / "text_processors");
+
+    for (const auto& candidate : candidates) {
+        if (IsTextProcessorsDirectory(candidate)) {
+            return candidate;
+        }
+    }
+    return {};
+}
 
 void EnsureStartupResources() {
     const std::filesystem::path config_directory = UserConfigDirectory();

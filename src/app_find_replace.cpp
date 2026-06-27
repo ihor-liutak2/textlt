@@ -12,7 +12,7 @@ namespace textlt {
         }
         current_search_mode_ = replace_mode ? SearchMode::Replace : SearchMode::Find;
         search_panel_tab_index_ = replace_mode ? 1 : 0;
-        focused_layer_ = 5;
+        SetActiveLayer(UiLayer::Find);
         RefreshFindMatches();
         if (replace_mode) {
             active_search_panel_input_ = SearchPanelInput::Find;

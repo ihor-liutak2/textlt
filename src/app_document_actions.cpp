@@ -25,14 +25,14 @@ void TextltApp::SwitchEditorFocus() {
 
 void TextltApp::FocusEditor() {
     sidebar_has_focus_ = false;
-    focused_layer_ = 0;
+    SetActiveLayer(UiLayer::Main);
     text_editor_->TakeFocus();
 }
 
 
 void TextltApp::FocusSidebar() {
     sidebar_has_focus_ = true;
-    focused_layer_ = 0;
+    SetActiveLayer(UiLayer::Main);
     std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->FocusMenu();
 }
 

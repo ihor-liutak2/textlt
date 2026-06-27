@@ -146,13 +146,22 @@ GitSettingsModalContent::GitSettingsModalContent(
     confirm_input_component_ = ftxui::Input(&confirm_typed_text_, "confirmation", confirm_input_option);
     confirm_confirm_button_ = MakeTextButton("Confirm", [this] { ConfirmPendingAction(); });
     confirm_cancel_button_ = MakeTextButton("Cancel", [this] { CancelPendingAction(); });
-    confirm_container_ = ftxui::Container::Vertical({
+    auto confirm_controls = ftxui::Container::Vertical({
         confirm_input_component_,
         ftxui::Container::Horizontal({
             confirm_confirm_button_,
             confirm_cancel_button_,
         }),
     });
+    confirm_container_ = ftxui::CatchEvent(
+        confirm_controls,
+        [this](ftxui::Event event) {
+            if (event == ftxui::Event::Escape) {
+                CancelPendingAction();
+                return true;
+            }
+            return false;
+        });
 
     remotes_tab_container_ = ftxui::Container::Vertical({
         remote_menu_,
@@ -198,10 +207,15 @@ GitSettingsModalContent::GitSettingsModalContent(
         config_tab_container_,
     }, &selected_tab_);
 
-    container_ = ftxui::Container::Vertical({
+    auto primary_container = ftxui::Container::Vertical({
         tab_buttons_,
         tab_body_container_,
     });
+    primary_container = ftxui::CatchEvent(
+        primary_container,
+        [this](ftxui::Event event) { return HandleEvent(std::move(event)); });
+    container_ = ftxui::Container::Tab(
+        {primary_container, confirm_container_}, &confirm_layer_index_);
 }
 
 ftxui::Component GitSettingsModalContent::MakeTextButton(
@@ -251,6 +265,8 @@ ftxui::Component GitSettingsModalContent::MakeTabButton(std::string label, int t
 }
 
 void GitSettingsModalContent::Open() {
+    confirm_active_ = false;
+    confirm_layer_index_ = 0;
     selected_tab_ = static_cast<int>(Tab::Remotes);
     status_ = "Ready";
     remote_output_.clear();
@@ -263,6 +279,8 @@ void GitSettingsModalContent::Open() {
 }
 
 void GitSettingsModalContent::Close() {
+    confirm_active_ = false;
+    confirm_layer_index_ = 0;
 }
 
 ftxui::Element GitSettingsModalContent::RenderTitle() {
@@ -586,6 +604,7 @@ void GitSettingsModalContent::RequestConfirm(
     confirm_required_text_ = required_text;
     confirm_typed_text_.clear();
     confirm_active_ = true;
+    confirm_layer_index_ = 1;
     if (confirm_required_text_.empty()) {
         confirm_confirm_button_->TakeFocus();
     } else {
@@ -603,6 +622,7 @@ void GitSettingsModalContent::ConfirmPendingAction() {
     }
     auto action = std::move(confirm_action_);
     confirm_active_ = false;
+    confirm_layer_index_ = 0;
     confirm_action_ = nullptr;
     if (action) {
         action();
@@ -611,6 +631,7 @@ void GitSettingsModalContent::ConfirmPendingAction() {
 
 void GitSettingsModalContent::CancelPendingAction() {
     confirm_active_ = false;
+    confirm_layer_index_ = 0;
     confirm_action_ = nullptr;
     confirm_typed_text_.clear();
     status_ = "Action cancelled.";

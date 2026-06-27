@@ -69,7 +69,7 @@ void TextltApp::CloseDropdown() {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
-    focused_layer_ = 0;
+    SetActiveLayer(UiLayer::Main);
     FocusEditor();
 }
 
@@ -79,7 +79,7 @@ void TextltApp::OpenDropdown() {
     if (menu_bar_) {
         menu_bar_->OpenDropdown(0);
     }
-    focused_layer_ = 0;
+    SetActiveLayer(UiLayer::Main);
 }
 
 

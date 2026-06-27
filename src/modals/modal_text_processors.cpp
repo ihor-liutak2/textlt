@@ -1,5 +1,7 @@
 #include "modal_text_processors.hpp"
 
+#include "app_resources.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -199,7 +201,15 @@ void TextProcessorsModalContent::Reload() {
     report_text_.clear();
     std::string error;
     const std::filesystem::path default_processors_directory =
-        std::filesystem::current_path() / "text_processors";
+        FindTextProcessorsDirectory();
+
+    if (default_processors_directory.empty()) {
+        status_ = "Text processor resources were not found. Reinstall TextLT "
+            "or set TEXTLT_DATA_DIR.";
+        status_is_error_ = true;
+        filtered_parsers_.clear();
+        return;
+    }
 
     if (!manager_.EnsureUserConfiguration(default_processors_directory, error)) {
         status_ = error;

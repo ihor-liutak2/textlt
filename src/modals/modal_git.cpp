@@ -214,13 +214,26 @@ GitModalContent::GitModalContent(
     confirm_input_component_ = ftxui::Input(&confirm_typed_text_, "confirmation", confirm_input_option);
     confirm_confirm_button_ = MakeTextButton("Confirm", [this] { ConfirmPendingAction(); });
     confirm_cancel_button_ = MakeTextButton("Cancel", [this] { CancelPendingAction(); });
-    confirm_container_ = ftxui::Container::Vertical({
+    auto confirm_controls = ftxui::Container::Vertical({
         confirm_input_component_,
         ftxui::Container::Horizontal({
             confirm_confirm_button_,
             confirm_cancel_button_,
         }),
     });
+    confirm_container_ = ftxui::CatchEvent(
+        confirm_controls,
+        [this](ftxui::Event event) {
+            if (event == ftxui::Event::Escape) {
+                CancelPendingAction();
+                return true;
+            }
+            if (event == ftxui::Event::Return && confirm_required_text_.empty()) {
+                ConfirmPendingAction();
+                return true;
+            }
+            return false;
+        });
 
     check_connection_button_ = MakeTextButton("Check connection", [this] { CheckConnection(); });
     fetch_button_ = MakeTextButton("Fetch", [this] { FetchServer(); });
@@ -309,10 +322,15 @@ GitModalContent::GitModalContent(
         server_tab_container_,
     }, &selected_tab_);
 
-    container_ = ftxui::Container::Vertical({
+    auto primary_container = ftxui::Container::Vertical({
         tab_buttons_,
         tab_body_container_,
     });
+    primary_container = ftxui::CatchEvent(
+        primary_container,
+        [this](ftxui::Event event) { return HandleEvent(std::move(event)); });
+    container_ = ftxui::Container::Tab(
+        {primary_container, confirm_container_}, &confirm_layer_index_);
 }
 
 ftxui::Component GitModalContent::MakeTextButton(
@@ -366,6 +384,8 @@ ftxui::Component GitModalContent::MakeTabButton(std::string label, int tab_index
 }
 
 void GitModalContent::Open() {
+    confirm_active_ = false;
+    confirm_layer_index_ = 0;
     selected_tab_ = static_cast<int>(Tab::Status);
     status_ = "Ready";
     server_output_.clear();
@@ -379,6 +399,8 @@ void GitModalContent::Open() {
 }
 
 void GitModalContent::Close() {
+    confirm_active_ = false;
+    confirm_layer_index_ = 0;
 }
 
 ftxui::Element GitModalContent::RenderTitle() {

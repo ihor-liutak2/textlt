@@ -320,217 +320,61 @@ ftxui::Element TextltApp::RenderGoToLinePanel() {
         color(current_theme_.menu_foreground);
 }
 
+void TextltApp::SetActiveLayer(UiLayer layer) {
+    active_layer_ = layer;
+    active_layer_index_ = static_cast<int>(layer);
+}
+
+TextltApp::UiLayer TextltApp::ActiveLayer() const {
+    return active_layer_;
+}
+
+bool TextltApp::ActiveModalIsOpen() const {
+    switch (ActiveLayer()) {
+        case UiLayer::Main: return true;
+        case UiLayer::Help: return help_dialog_.IsOpen();
+        case UiLayer::Theme: return theme_dialog_.IsOpen();
+        case UiLayer::Find: return current_search_mode_ != SearchMode::None;
+        case UiLayer::GoToLine: return show_goto_line_bar_;
+        case UiLayer::UnsavedChanges: return unsaved_changes_dialog_.IsOpen();
+        case UiLayer::RecentFiles: return recent_files_modal_.IsOpen();
+        case UiLayer::SearchFiles: return search_files_modal_.IsOpen();
+        case UiLayer::Files: return files_modal_.IsOpen();
+        case UiLayer::TextProcessors: return text_processors_modal_.IsOpen();
+        case UiLayer::Git: return git_modal_.IsOpen();
+        case UiLayer::GitSettings: return git_settings_modal_.IsOpen();
+        case UiLayer::Tts: return tts_modal_.IsOpen();
+        case UiLayer::AiActions: return ai_actions_modal_.IsOpen();
+        case UiLayer::AssistantSettings: return assistant_settings_modal_.IsOpen();
+    }
+    return false;
+}
+
 bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     const std::string& input = event.input();
 
-    // --- Global Event Filter: Modals and Overlays (highest layer first) ---
-
-    // 1. Exit Confirmation Dialog
-    if (unsaved_changes_dialog_.IsOpen()) {
-        if (unsaved_changes_dialog_.View()->OnEvent(event)) {
-            return true;
-        }
-        if (event == ftxui::Event::Escape) {
-            CloseExitConfirmationDialog();
-            return true;
-        }
-        return true; // Consume all other events when exit confirmation is open.
+    // Modal content is selected by Container::Tab and receives keyboard,
+    // focus and mouse events through the FTXUI component tree. If a modal
+    // closed itself from one of its controls, restore the main layer before
+    // handling the next event.
+    if (ActiveLayer() != UiLayer::Main && !ActiveModalIsOpen()) {
+        FocusEditor();
     }
 
-    // 2. Theme Dialog
-    if (theme_dialog_.IsOpen()) {
-        // focused_layer_ selects ThemeDialog in root_container_; returning
-        // false lets FTXUI deliver the event through that container exactly once.
-        return false;
-    }
-
-    if (recent_files_modal_.IsOpen()) {
-        if (recent_files_modal_.OnEvent(event)) {
-            if (!recent_files_modal_.IsOpen()) {
-                FocusEditor();
-            }
-            return true;
-        }
-        if (event == ftxui::Event::Escape) {
-            CloseRecentFilesModal();
-            return true;
-        }
-        return true;
-    }
-
-    if (search_files_modal_.IsOpen()) {
-        if (search_files_modal_.OnEvent(event)) {
-            if (!search_files_modal_.IsOpen()) {
-                FocusEditor();
-            }
-            return true;
-        }
-        return true;
-    }
-
-    if (files_modal_.IsOpen()) {
-        if (files_modal_.OnEvent(event)) {
-            if (!files_modal_.IsOpen()) {
-                FocusEditor();
-            }
-            return true;
-        }
-        if (event == ftxui::Event::Escape) {
-            CloseFilesModal();
-            return true;
-        }
-        return true;
-    }
-
-    if (text_processors_modal_.IsOpen()) {
-        if (text_processors_modal_.OnEvent(event)) {
-            if (!text_processors_modal_.IsOpen()) {
-                FocusEditor();
-            }
-            return true;
-        }
-        return true;
-    }
-
-    if (git_modal_.IsOpen()) {
-        if (git_modal_.OnEvent(event)) {
-            if (!git_modal_.IsOpen()) {
-                FocusEditor();
-            }
-            return true;
-        }
-        return true;
-    }
-
-
-    if (git_settings_modal_.IsOpen()) {
-        if (git_settings_modal_.OnEvent(event)) {
-            if (!git_settings_modal_.IsOpen()) {
-                FocusEditor();
-            }
-            return true;
-        }
-        if (event == ftxui::Event::Escape) {
-            CloseGitSettingsModal();
-            return true;
-        }
-        return true;
-    }
-
-    // 3. Assistant Modals
-    if (assistant_settings_modal_.IsOpen()) {
-        if (assistant_settings_modal_.OnEvent(event)) {
-            if (!assistant_settings_modal_.IsOpen()) {
-                FocusEditor();
-            }
-            return true;
-        }
-        if (event == ftxui::Event::Escape) {
-            CloseAssistantSettingsModal();
-            return true;
-        }
-        return true;
-    }
-
-    if (ai_actions_modal_.IsOpen()) {
-        if (ai_actions_modal_.OnEvent(event)) {
-            if (!ai_actions_modal_.IsOpen()) {
-                FocusEditor();
-            }
-            return true;
-        }
-        if (event == ftxui::Event::Escape) {
-            CloseAiActionsModal();
-            return true;
-        }
-        return true;
-    }
-
-    if (tts_modal_.IsOpen()) {
-        if (tts_modal_.OnEvent(event)) {
-            if (!tts_modal_.IsOpen()) {
-                FocusEditor();
-            }
-            return true;
-        }
-        if (event == ftxui::Event::Escape) {
-            CloseTtsModal();
-            return true;
-        }
-        return true;
-    }
-
-    // 3. Help Dialog
-    if (help_dialog_.IsOpen()) {
-        if (help_dialog_.OnEvent(event)) { // HelpDialog has its own OnEvent
-            return true;
-        }
-        if (event == ftxui::Event::Escape) {
-            CloseHelpDialog();
-            return true;
-        }
-        return true; // Consume all other events.
-    }
-
-    // Let FTXUI route menu events through the component tree. Calling
-    // MenuBarComponent::OnEvent directly from this outer CatchEvent changes
-    // layers in the middle of a mouse sequence when an item opens a modal.
-    if (menu_bar_->IsDropdownOpen()) {
-        return event.is_mouse() ? false : menu_bar_->OnEvent(event);
-    }
-
-    // 6. Go-to-Line Panel
-    if (show_goto_line_bar_) {
-        if (goto_line_input_component_->OnEvent(event)) {
-            return true;
-        }
+    if (ActiveLayer() == UiLayer::GoToLine) {
         if (event == ftxui::Event::Escape) {
             CloseGoToLinePanel();
             return true;
         }
-        if (event == ftxui::Event::Return) {
-            SubmitGoToLine();
-            return true;
-        }
-        return true; // Consume all other events.
+        return false;
     }
 
-    // 7. Find/Replace Panel
-    if (current_search_mode_ != SearchMode::None) {
-        // Events are dispatched to focused input or buttons within the panel.
+    if (ActiveLayer() == UiLayer::Find) {
         if (find_input_->Focused() || replace_find_input_->Focused()) {
             active_search_panel_input_ = SearchPanelInput::Find;
         } else if (replace_input_->Focused()) {
             active_search_panel_input_ = SearchPanelInput::Replace;
         }
-        if (current_search_mode_ == SearchMode::Find) {
-            if ((find_input_->Focused() || event.is_mouse()) && find_input_->OnEvent(event)) {
-                active_search_panel_input_ = SearchPanelInput::Find;
-                return true;
-            }
-            if (find_paste_button_->OnEvent(event)) return true;
-            if (find_clear_button_->OnEvent(event)) return true;
-            if (find_next_button_->OnEvent(event)) return true;
-            if (find_previous_button_->OnEvent(event)) return true;
-        } else if (current_search_mode_ == SearchMode::Replace) {
-            if ((replace_find_input_->Focused() || event.is_mouse()) &&
-                replace_find_input_->OnEvent(event)) {
-                active_search_panel_input_ = SearchPanelInput::Find;
-                return true;
-            }
-            if ((replace_input_->Focused() || event.is_mouse()) &&
-                replace_input_->OnEvent(event)) {
-                active_search_panel_input_ = SearchPanelInput::Replace;
-                return true;
-            }
-            if (replace_paste_button_->OnEvent(event)) return true;
-            if (replace_clear_button_->OnEvent(event)) return true;
-            if (replace_next_button_->OnEvent(event)) return true;
-            if (replace_all_button_->OnEvent(event)) return true;
-        }
-        if (search_match_case_checkbox_->OnEvent(event)) return true;
-        if (search_whole_word_checkbox_->OnEvent(event)) return true;
-
         if (event == ftxui::Event::Escape) {
             CloseFindPanel();
             return true;
@@ -539,15 +383,23 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
             FindNext();
             return true;
         }
-        if (input == "\x1B[13;2u" || input == "\x1B[27;2;13~") { // Shift+F3
+        if (input == "\x1B[13;2u" || input == "\x1B[27;2;13~") {
             FindPrevious();
             return true;
         }
-        return true; // Consume all other events.
+        return false;
     }
 
-    // --- End Global Event Filter ---
-    // Events reaching this point are not consumed by any active modal or overlay.
+    if (ActiveLayer() != UiLayer::Main) {
+        return false;
+    }
+
+    // Let FTXUI route menu events through the component tree. Calling
+    // MenuBarComponent::OnEvent directly from this outer CatchEvent changes
+    // layers in the middle of a mouse sequence when an item opens a modal.
+    if (menu_bar_->IsDropdownOpen()) {
+        return event.is_mouse() ? false : menu_bar_->OnEvent(event);
+    }
 
     // Mouse input on the main screen is routed exclusively by FTXUI through
     // root_container_. Manual dispatch here competes with Container hit-testing
@@ -591,7 +443,7 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         return true;
     }
 
-    const bool sidebar_is_focused = focused_layer_ == 0 && sidebar_has_focus_;
+    const bool sidebar_is_focused = ActiveLayer() == UiLayer::Main && sidebar_has_focus_;
     if (sidebar_is_focused) {
         if (event == ftxui::Event::Escape) {
             FocusEditor();
@@ -615,7 +467,7 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         return true;
     }
 
-    const bool editor_is_focused = focused_layer_ == 0 && !sidebar_has_focus_;
+    const bool editor_is_focused = ActiveLayer() == UiLayer::Main && !sidebar_has_focus_;
 
     // Editor-specific direct manipulation shortcuts (only if editor is focused)
     if (editor_is_focused) {
@@ -721,17 +573,17 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     }
     if (event == ftxui::Event::F2) {
         menu_bar_->OpenDropdown(0);
-        focused_layer_ = 0;
+        SetActiveLayer(UiLayer::Main);
         return true;
     }
     if (event == ftxui::Event::F3) {
         menu_bar_->OpenDropdown(1);
-        focused_layer_ = 0;
+        SetActiveLayer(UiLayer::Main);
         return true;
     }
     if (event == ftxui::Event::F4) {
         menu_bar_->OpenDropdown(2);
-        focused_layer_ = 0;
+        SetActiveLayer(UiLayer::Main);
         return true;
     }
     

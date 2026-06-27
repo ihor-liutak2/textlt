@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.14)
 project(textlt VERSION 0.1.0 LANGUAGES C CXX)
 
+include(GNUInstallDirs)
+
 enable_testing()
 
 # Use the C++17 language standard.
@@ -221,6 +223,10 @@ target_link_libraries(textlt PRIVATE
   lua54
   Threads::Threads
 )
+
+install(TARGETS textlt RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(DIRECTORY themes DESTINATION ${CMAKE_INSTALL_DATADIR}/textlt)
+install(DIRECTORY text_processors DESTINATION ${CMAKE_INSTALL_DATADIR}/textlt)
 
 if(WIN32)
   target_compile_definitions(textlt PRIVATE

@@ -176,7 +176,7 @@ TextltApp::TextltApp()
     });
     body_container_ = ftxui::CatchEvent(body_content, [this](ftxui::Event event) {
         if (event == ftxui::Event::Tab &&
-            focused_layer_ == 0 &&
+            ActiveLayer() == UiLayer::Main &&
             (!menu_bar_ || !menu_bar_->IsDropdownOpen()) &&
             !help_dialog_.IsOpen() &&
             !recent_files_modal_.IsOpen() &&
@@ -280,6 +280,14 @@ TextltApp::TextltApp()
     search_whole_word_checkbox_ = ftxui::Checkbox(
         "Whole Word", &editor_config_.search_whole_word, whole_word_option);
 
+    // GitSettingsModal used to create its component lazily in Open(). Every
+    // entry passed to Container::Tab must already be a valid, stable component.
+    git_settings_modal_.Configure(
+        &current_theme_,
+        &git_manager_,
+        [this](const std::string& text) { WriteSystemClipboard(text); },
+        [this] { CloseGitSettingsModal(); });
+
     find_panel_find_container_ = ftxui::Container::Horizontal({
         find_input_,
         ftxui::Container::Vertical({
@@ -323,10 +331,16 @@ TextltApp::TextltApp()
         find_panel_container_,
         goto_line_input_component_,
         unsaved_changes_dialog_.View(),
+        recent_files_modal_.View(),
+        search_files_modal_.View(),
+        files_modal_.View(),
+        text_processors_modal_.View(),
+        git_modal_.View(),
+        git_settings_modal_.View(),
         tts_modal_.View(),
         ai_actions_modal_.View(),
         assistant_settings_modal_.View(),
-    }, &focused_layer_);
+    }, &active_layer_index_);
 
     renderer_ = ftxui::Renderer(root_container_, [this] { return Render(); });
     global_shortcuts_ = ftxui::CatchEvent(

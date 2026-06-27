@@ -131,7 +131,7 @@ void TextltApp::OpenAboutDialog() {
         "License: MIT License (c) 2026",
     }, true);
     active_action_ = "Opened About";
-    focused_layer_ = 3;
+    SetActiveLayer(UiLayer::Help);
 }
 
 
@@ -141,13 +141,13 @@ void TextltApp::OpenHelpDialog() {
     }
     help_dialog_.OpenContent("Help", BuiltInHelpLines(), false);
     active_action_ = "Opened Help";
-    focused_layer_ = 3;
+    SetActiveLayer(UiLayer::Help);
 }
 
 
 void TextltApp::CloseHelpDialog() {
     help_dialog_.Close();
-    focused_layer_ = 0;
+    SetActiveLayer(UiLayer::Main);
     FocusEditor();
 }
 
@@ -158,7 +158,7 @@ void TextltApp::OpenRecentFilesModal() {
     }
     recent_files_modal_.Open();
     active_action_ = "Opened Recent Files";
-    focused_layer_ = 8;
+    SetActiveLayer(UiLayer::RecentFiles);
 }
 
 
@@ -175,7 +175,7 @@ void TextltApp::OpenSearchFilesModal() {
 
     search_files_modal_.Open();
     active_action_ = "Opened Search in Files";
-    focused_layer_ = 0;
+    SetActiveLayer(UiLayer::SearchFiles);
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
@@ -215,7 +215,7 @@ void TextltApp::OpenFilesModal(FilesModalMode mode) {
             mode == FilesModalMode::Import ? "Import" :
             mode == FilesModalMode::Export ? "Export" : "Files") +
         " modal";
-    focused_layer_ = 0;
+    SetActiveLayer(UiLayer::Files);
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
@@ -234,7 +234,7 @@ void TextltApp::OpenTextProcessorsModal() {
 
     text_processors_modal_.Open();
     active_action_ = "Opened Text Processors";
-    focused_layer_ = 0;
+    SetActiveLayer(UiLayer::TextProcessors);
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
@@ -332,7 +332,7 @@ void TextltApp::OpenGitModal() {
     git_manager_.RefreshNow();
     git_modal_.Open();
     active_action_ = "Opened Git";
-    focused_layer_ = 0;
+    SetActiveLayer(UiLayer::Git);
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
@@ -349,16 +349,9 @@ void TextltApp::OpenGitSettingsModal() {
         menu_bar_->CloseDropdown();
     }
 
-    git_settings_modal_.Configure(
-        &current_theme_,
-        &git_manager_,
-        [this](const std::string& text) {
-            WriteSystemClipboard(text);
-        },
-        [this] { CloseGitSettingsModal(); });
     git_settings_modal_.Open();
     active_action_ = "Opened Git Settings";
-    focused_layer_ = 0;
+    SetActiveLayer(UiLayer::GitSettings);
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
@@ -413,7 +406,7 @@ void TextltApp::OpenTtsModal() {
     }
     tts_modal_.Open();
     active_action_ = "Opened Text-to-Speech";
-    focused_layer_ = 9;
+    SetActiveLayer(UiLayer::Tts);
 }
 
 
@@ -429,7 +422,7 @@ void TextltApp::OpenAiActionsModal() {
     }
     ai_actions_modal_.Open();
     active_action_ = "Opened AI Actions";
-    focused_layer_ = 10;
+    SetActiveLayer(UiLayer::AiActions);
 }
 
 
@@ -446,7 +439,7 @@ void TextltApp::OpenAssistantSettingsModal() {
     EnsureAssistantResources();
     assistant_settings_modal_.Open();
     active_action_ = "Opened Assistant Settings";
-    focused_layer_ = 11;
+    SetActiveLayer(UiLayer::AssistantSettings);
 }
 
 
@@ -460,15 +453,14 @@ void TextltApp::OpenThemeDialog() {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
-    // root_container_: 0 main, 1 help, 2 theme, 3 find, 4 go-to-line.
-    focused_layer_ = 2;
+    SetActiveLayer(UiLayer::Theme);
     theme_dialog_.Open(themes_, editor_config_.active_theme_name);
 }
 
 
 void TextltApp::CloseThemeDialog() {
     theme_dialog_.Close();
-    focused_layer_ = 0;
+    SetActiveLayer(UiLayer::Main);
     FocusEditor();
 }
 
@@ -506,7 +498,7 @@ void TextltApp::ShowExitConfirmationDialog() {
     const std::string display_name = filename.empty() ? file_path : filename;
 
     unsaved_changes_dialog_.Open(display_name);
-    focused_layer_ = 7;
+    SetActiveLayer(UiLayer::UnsavedChanges);
     active_action_ = "Unsaved changes";
     screen_.PostEvent(ftxui::Event::Custom);
 }
@@ -577,7 +569,7 @@ void TextltApp::OpenGoToLinePanel() {
     std::static_pointer_cast<EditorComponent>(text_editor_)->ClearSearchHighlights();
     show_goto_line_bar_ = true;
     goto_line_input_.clear();
-    focused_layer_ = 6;
+    SetActiveLayer(UiLayer::GoToLine);
     goto_line_input_component_->TakeFocus();
     active_action_ = "Go to line";
 }

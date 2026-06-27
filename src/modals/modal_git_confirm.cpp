@@ -13,6 +13,7 @@ void GitModalContent::RequestConfirm(
     std::function<void()> on_confirm,
     const std::string& required_text) {
     confirm_active_ = true;
+    confirm_layer_index_ = 1;
     confirm_title_ = title;
     confirm_message_ = message;
     confirm_command_preview_ = command_preview;
@@ -38,6 +39,7 @@ void GitModalContent::ConfirmPendingAction() {
 
     auto action = std::move(confirm_action_);
     confirm_active_ = false;
+    confirm_layer_index_ = 0;
     confirm_title_.clear();
     confirm_message_.clear();
     confirm_command_preview_.clear();
@@ -51,6 +53,7 @@ void GitModalContent::ConfirmPendingAction() {
 
 void GitModalContent::CancelPendingAction() {
     confirm_active_ = false;
+    confirm_layer_index_ = 0;
     confirm_action_ = nullptr;
     confirm_title_.clear();
     confirm_message_.clear();

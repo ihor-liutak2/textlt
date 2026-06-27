@@ -42,6 +42,10 @@ jobs:
           mkdir -p package/textlt
           cp build/textlt package/textlt/
           cp -R themes package/textlt/themes
+          cp -R text_processors package/textlt/text_processors
+          test -f package/textlt/text_processors/default_text_parsers.json
+          test -f package/textlt/text_processors/text_parsers/normalize_spaces.lua
+          test -f package/textlt/text_processors/text_parsers/trim_trailing_spaces.lua
 
           if [ -d docs/registries ]; then
             mkdir -p package/textlt/resources
@@ -59,6 +63,8 @@ jobs:
 
           cp build/textlt AppDir/usr/bin/textlt
           cp -R themes AppDir/usr/share/textlt/themes
+          cp -R text_processors AppDir/usr/share/textlt/text_processors
+          test -f AppDir/usr/share/textlt/text_processors/default_text_parsers.json
 
           if [ -d docs/registries ]; then
             mkdir -p AppDir/usr/share/textlt/resources
@@ -143,6 +149,11 @@ jobs:
 
           Copy-Item build/Release/textlt.exe package/textlt/
           Copy-Item themes package/textlt/themes -Recurse
+          Copy-Item text_processors package/textlt/text_processors -Recurse
+
+          if (-not (Test-Path package/textlt/text_processors/default_text_parsers.json)) {
+            throw "Text processor configuration is missing from the release package"
+          }
 
           if (Test-Path docs/registries) {
             New-Item -ItemType Directory -Force package/textlt/resources | Out-Null
