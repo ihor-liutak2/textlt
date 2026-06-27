@@ -980,7 +980,7 @@ FileFilter FilesModalContent::FilterForMode() const {
     filter.show_hidden = true;
     switch (mode_) {
         case FilesModalMode::Import:
-            filter.extensions = {".docx", ".fb2"};
+            filter.extensions = {".docx", ".fb2", ".fb2.zip"};
             break;
         case FilesModalMode::Export:
             filter.extensions = {".txt", ".md"};

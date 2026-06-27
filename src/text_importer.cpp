@@ -197,6 +197,55 @@ std::string ReadArchiveEntry(
     throw std::runtime_error("Archive entry not found: " + entry_name);
 }
 
+std::string ReadFirstFb2ArchiveEntry(const std::filesystem::path& archive_path) {
+    ArchiveReadPtr archive_reader(archive_read_new());
+    if (!archive_reader) {
+        throw std::runtime_error("Unable to create archive reader.");
+    }
+
+    archive_read_support_filter_all(archive_reader.get());
+    archive_read_support_format_all(archive_reader.get());
+
+    if (archive_read_open_filename(
+            archive_reader.get(), archive_path.string().c_str(), 10240) != ARCHIVE_OK) {
+        throw std::runtime_error(
+            "Unable to open archive: " + archive_path.string() + ". " +
+            ArchiveError(archive_reader.get()));
+    }
+
+    struct archive_entry* entry = nullptr;
+    while (archive_read_next_header(archive_reader.get(), &entry) == ARCHIVE_OK) {
+        const char* pathname = archive_entry_pathname(entry);
+        const std::filesystem::path entry_path = pathname ? pathname : "";
+        if (archive_entry_filetype(entry) != AE_IFREG ||
+            ToLowerAscii(entry_path.extension().string()) != ".fb2") {
+            archive_read_data_skip(archive_reader.get());
+            continue;
+        }
+
+        std::string content;
+        const void* block = nullptr;
+        size_t block_size = 0;
+        la_int64_t block_offset = 0;
+        while (true) {
+            const int read_result = archive_read_data_block(
+                archive_reader.get(), &block, &block_size, &block_offset);
+            if (read_result == ARCHIVE_EOF) {
+                return content;
+            }
+            if (read_result != ARCHIVE_OK) {
+                throw std::runtime_error(
+                    "Unable to read FB2 archive entry: " + entry_path.string() + ". " +
+                    ArchiveError(archive_reader.get()));
+            }
+            content.append(static_cast<const char*>(block), block_size);
+        }
+    }
+
+    throw std::runtime_error(
+        "Archive does not contain an .fb2 file: " + archive_path.string());
+}
+
 std::string ExtractXmlEncoding(const std::string& xml) {
     const size_t declaration_begin = xml.find("<?xml");
     if (declaration_begin == std::string::npos || declaration_begin > 8) {
@@ -695,6 +744,9 @@ TextImportResult TextImporter::ImportFile(const std::filesystem::path& path) con
         if (format == TextImportFormat::Fb2) {
             return ImportFb2File(path);
         }
+        if (format == TextImportFormat::Fb2Zip) {
+            return ImportFb2ZipFile(path);
+        }
         if (format == TextImportFormat::Docx) {
             return ImportDocxFile(path);
         }
@@ -774,6 +826,12 @@ std::vector<TextImportEntry> TextImporter::ListDirectory(
 }
 
 TextImportFormat TextImporter::DetectFormat(const std::filesystem::path& path) {
+    const std::string filename = ToLowerAscii(path.filename().string());
+    if (filename.size() >= 8 &&
+        filename.compare(filename.size() - 8, 8, ".fb2.zip") == 0) {
+        return TextImportFormat::Fb2Zip;
+    }
+
     const std::string extension = ToLowerAscii(path.extension().string());
     if (extension == ".fb2") {
         return TextImportFormat::Fb2;
@@ -792,6 +850,14 @@ TextImportResult TextImporter::ImportFb2File(const std::filesystem::path& path) 
     try {
         const std::string content = ReadWholeFile(path);
         return {true, ParseFb2Xml(content), ""};
+    } catch (const std::exception& e) {
+        return {false, "", e.what()};
+    }
+}
+
+TextImportResult TextImporter::ImportFb2ZipFile(const std::filesystem::path& path) const {
+    try {
+        return {true, ParseFb2Xml(ReadFirstFb2ArchiveEntry(path)), ""};
     } catch (const std::exception& e) {
         return {false, "", e.what()};
     }

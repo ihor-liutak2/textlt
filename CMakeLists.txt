@@ -234,6 +234,21 @@ add_executable(textlt_document_navigation_test
   src/history_manager.cpp
 )
 
+add_executable(textlt_text_importer_test
+  tests/text_importer_test.cpp
+  src/text_importer.cpp
+)
+
+target_include_directories(textlt_text_importer_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${LibArchive_INCLUDE_DIRS}
+)
+
+target_link_libraries(textlt_text_importer_test PRIVATE
+  pugixml::pugixml
+  ${LibArchive_LIBRARIES}
+)
+
 target_include_directories(textlt_document_navigation_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -241,3 +256,4 @@ target_include_directories(textlt_document_navigation_test PRIVATE
 target_link_libraries(textlt_document_navigation_test PRIVATE ftxui::screen)
 
 add_test(NAME textlt_document_navigation_test COMMAND textlt_document_navigation_test)
+add_test(NAME textlt_text_importer_test COMMAND textlt_text_importer_test)

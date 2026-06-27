@@ -9,6 +9,7 @@ namespace textlt {
 enum class TextImportFormat {
     Unsupported,
     Fb2,
+    Fb2Zip,
     Docx,
 };
 
@@ -44,6 +45,7 @@ public:
 
 private:
     TextImportResult ImportFb2File(const std::filesystem::path& path) const;
+    TextImportResult ImportFb2ZipFile(const std::filesystem::path& path) const;
     TextImportResult ImportDocxFile(const std::filesystem::path& path) const;
 };
 

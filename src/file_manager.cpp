@@ -239,13 +239,14 @@ bool HasExtensionAllowed(const std::filesystem::path& path, const FileFilter& fi
         return true;
     }
 
-    const std::string extension = Lowercase(PathToUtf8Text(path.extension()));
+    const std::string filename = Lowercase(PathToUtf8Text(path.filename()));
     for (std::string allowed : filter.extensions) {
         allowed = Lowercase(std::move(allowed));
         if (!allowed.empty() && allowed[0] != '.') {
             allowed.insert(allowed.begin(), '.');
         }
-        if (extension == allowed) {
+        if (filename.size() >= allowed.size() &&
+            filename.compare(filename.size() - allowed.size(), allowed.size(), allowed) == 0) {
             return true;
         }
     }
