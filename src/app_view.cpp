@@ -359,14 +359,9 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
 
     // 2. Theme Dialog
     if (theme_dialog_.IsOpen()) {
-        if (theme_dialog_.View()->OnEvent(event)) { // Pass event to the dialog's root component
-            return true;
-        }
-        if (event == ftxui::Event::Escape) {
-            CloseThemeDialog();
-            return true;
-        }
-        return true; // Consume all other events.
+        // focused_layer_ selects ThemeDialog in root_container_; returning
+        // false lets FTXUI deliver the event through that container exactly once.
+        return false;
     }
 
     if (recent_files_modal_.IsOpen()) {
@@ -497,10 +492,11 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         return true; // Consume all other events.
     }
 
-    // 5. Menu Bar: keyboard events belong here only while a dropdown is open.
-    // Mouse events still go to the menu bar so top-level menu clicks work.
-    if ((menu_bar_->IsDropdownOpen() || event.is_mouse()) && menu_bar_->OnEvent(event)) {
-        return true;
+    // Let FTXUI route menu events through the component tree. Calling
+    // MenuBarComponent::OnEvent directly from this outer CatchEvent changes
+    // layers in the middle of a mouse sequence when an item opens a modal.
+    if (menu_bar_->IsDropdownOpen()) {
+        return event.is_mouse() ? false : menu_bar_->OnEvent(event);
     }
 
     // 6. Go-to-Line Panel
@@ -573,6 +569,13 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     // --- End Global Event Filter ---
     // Events reaching this point are not consumed by any active modal or overlay.
 
+    // Mouse input on the main screen is routed exclusively by FTXUI through
+    // root_container_. Manual dispatch here competes with Container hit-testing
+    // and can consume a menu click before it reaches MenuBarComponent.
+    if (event.is_mouse()) {
+        return false;
+    }
+
     if (IsAltJShortcut(event)) {
         OpenAiActionsModal();
         return true;
@@ -607,15 +610,6 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     if (IsCtrlBShortcut(event)) {
         pending_sidebar_chord_ = true;
         HandleCtrlBFileExplorer();
-        return true;
-    }
-
-    if (editor_config_.show_file_explorer &&
-        event.is_mouse() &&
-        sidebar_panel_->OnEvent(event)) {
-        sidebar_has_focus_ = true;
-        focused_layer_ = 0;
-        screen_.PostEvent(ftxui::Event::Custom);
         return true;
     }
 

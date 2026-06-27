@@ -43,9 +43,8 @@ private:
     void ActivateTopMenu();
     void HandleDropdownAction();
     void RefreshCurrentDropdownEntries();
+    void RebuildDropdownComponents();
     int DropdownX() const;
-    int MenuIndexAt(int x, int y) const;
-    int DropdownItemAt(int x, int y) const;
 
     std::vector<std::string> menu_entries_;
     std::vector<std::vector<std::string>> dropdown_entries_;
@@ -61,6 +60,8 @@ private:
     std::vector<ftxui::Box> dropdown_boxes_;
     ftxui::Component top_menu_;
     ftxui::Component dropdown_menu_;
+    ftxui::Component menu_container_;
+    std::vector<ftxui::Component> dropdown_buttons_;
 };
 
 } // namespace textlt

@@ -104,30 +104,44 @@ MenuBarComponent::MenuBarComponent(
     };
     top_menu_ = ftxui::Menu(&menu_entries_, &selected_menu_item_, top_menu_option);
 
-    // Configure the vertical dropdown menu
-    ftxui::MenuOption dropdown_option = ftxui::MenuOption::Vertical();
-    dropdown_option.on_enter = [this] { HandleDropdownAction(); };
-    
-    // Custom styling for dropdown items
-    dropdown_option.entries_option.transform = [this](const ftxui::EntryState& state) {
-        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        ftxui::Element item = ftxui::text(state.label);
-        if (state.focused || state.active) {
-            return item |
-                ftxui::bgcolor(theme.menu_foreground) |
-                ftxui::color(theme.menu_background);
-        }
-        return item | ftxui::color(theme.menu_foreground);
-    };
-    dropdown_menu_ =
-        ftxui::Menu(&current_dropdown_entries_, &selected_dropdown_item_, dropdown_option);
-          
-   auto container = ftxui::Container::Vertical({
+    RebuildDropdownComponents();
+    menu_container_ = ftxui::Container::Vertical({
         top_menu_,
         dropdown_menu_,
     });
-          
-     Add(container);
+    Add(menu_container_);
+}
+
+void MenuBarComponent::RebuildDropdownComponents() {
+    dropdown_buttons_.clear();
+    dropdown_buttons_.reserve(current_dropdown_entries_.size());
+
+    for (size_t index = 0; index < current_dropdown_entries_.size(); ++index) {
+        ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
+        option.label = current_dropdown_entries_[index];
+        option.on_click = [this, index] {
+            selected_dropdown_item_ = static_cast<int>(index);
+            HandleDropdownAction();
+        };
+        option.transform = [this](const ftxui::EntryState& state) {
+            const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+            ftxui::Element item = ftxui::text(state.label);
+            if (state.focused || state.active) {
+                return item |
+                    ftxui::bgcolor(theme.menu_foreground) |
+                    ftxui::color(theme.menu_background);
+            }
+            return item | ftxui::color(theme.menu_foreground);
+        };
+        dropdown_buttons_.push_back(ftxui::Button(std::move(option)));
+    }
+
+    dropdown_menu_ = ftxui::Container::Vertical(dropdown_buttons_, &selected_dropdown_item_);
+    if (menu_container_) {
+        menu_container_->DetachAllChildren();
+        menu_container_->Add(top_menu_);
+        menu_container_->Add(dropdown_menu_);
+    }
 }
 
 ftxui::Element MenuBarComponent::Render() {
@@ -191,29 +205,17 @@ ftxui::Element MenuBarComponent::RenderDropdown() {
  * 4. Fallback to the top menu component for remaining events.
  */
 bool MenuBarComponent::OnEvent(ftxui::Event event) {
-    // 1. ESC handling: Immediately close any active dropdown menu.
     if (event == ftxui::Event::Escape && active_dropdown_ >= 0) {
         CloseDropdown();
         return true;
     }
 
-    // 2. Keyboard handling: Process navigation events when a dropdown is open.
-    // By placing this before mouse handling, we ensure arrow keys are not 
-    // inadvertently blocked or consumed by mouse logic.
-    // 2. Keyboard handling: Process navigation events
     if (active_dropdown_ >= 0) {
-        // Vertical navigation and selection for the dropdown menu.
-        if (event == ftxui::Event::ArrowUp || 
-            event == ftxui::Event::ArrowDown || 
+        if (event == ftxui::Event::ArrowUp ||
+            event == ftxui::Event::ArrowDown ||
             event == ftxui::Event::Return) {
-            
-            bool processed = dropdown_menu_->OnEvent(event);
-            return processed;
+            return dropdown_menu_->OnEvent(event);
         }
-        
-        // Horizontal navigation: Switch between main top menu items.
-        // We close the current dropdown, shift focus back to the top menu, 
-        // and let the top menu process the left/right arrow.
         if (event == ftxui::Event::ArrowLeft || event == ftxui::Event::ArrowRight) {
             CloseDropdown();
             top_menu_->TakeFocus();
@@ -221,53 +223,47 @@ bool MenuBarComponent::OnEvent(ftxui::Event event) {
         }
     }
 
-    // 3. Mouse event handling.
-    if (event.is_mouse()) {
-        const auto& mouse = event.mouse();
-        
-        // Handle logic while a dropdown is active.
-        if (active_dropdown_ >= 0) {
-            int item_index = DropdownItemAt(mouse.x, mouse.y);
-
-            // A. Item selection: Trigger only on button release to prevent accidental triggers.
-            if (item_index >= 0 && mouse.button == ftxui::Mouse::Left && mouse.motion == ftxui::Mouse::Released) {
-                selected_dropdown_item_ = item_index;
-                HandleDropdownAction();
-                return true;
-            }
-
-            // B. Navigation/Closing: If left button is pressed.
-            if (mouse.button == ftxui::Mouse::Left && mouse.motion == ftxui::Mouse::Pressed) {
-                int new_menu = MenuIndexAt(mouse.x, mouse.y);
-                
-                // Switch to another top menu header if clicked.
-                if (new_menu >= 0 && new_menu != active_dropdown_) {
-                    OpenDropdown(new_menu);
-                    return true;
-                } 
-                
-                // Close the dropdown if clicking outside both the dropdown and the top menu bar.
-                bool in_top_menu = (!menu_boxes_.empty() && menu_boxes_[0].Contain(mouse.x, mouse.y));
-                if (item_index < 0 && !in_top_menu) {
-                    CloseDropdown();
-                }
-            }
-            // Consume mouse events to maintain isolation of the dropdown interface.
-            return true; 
-        }
-
-        // C. Default: Handle opening a menu if no dropdown is active.
-        if (mouse.button == ftxui::Mouse::Left && mouse.motion == ftxui::Mouse::Pressed) {
-            int menu_index = MenuIndexAt(mouse.x, mouse.y);
-            if (menu_index >= 0) {
-                OpenDropdown(menu_index);
-                return true;
-            }
-        }
+    if (!event.is_mouse()) {
+        return top_menu_->OnEvent(event);
     }
-    
-    // 4. Fallback: Delegate unhandled events to the top horizontal menu.
-    return top_menu_->OnEvent(event);
+
+    const auto& mouse = event.mouse();
+    if (active_dropdown_ >= 0) {
+        if (dropdown_menu_->OnEvent(event)) {
+            return true;
+        }
+
+        if (top_menu_->OnEvent(event)) {
+            if (mouse.button == ftxui::Mouse::Left &&
+                mouse.motion == ftxui::Mouse::Released) {
+                OpenDropdown(selected_menu_item_);
+            }
+            return true;
+        }
+
+        if (mouse.button == ftxui::Mouse::Left &&
+            mouse.motion == ftxui::Mouse::Pressed) {
+            const bool in_top_menu =
+                !menu_boxes_.empty() && menu_boxes_[0].Contain(mouse.x, mouse.y);
+            const bool in_dropdown =
+                active_dropdown_ < static_cast<int>(dropdown_boxes_.size()) &&
+                dropdown_boxes_[active_dropdown_].Contain(mouse.x, mouse.y);
+            if (!in_top_menu && !in_dropdown) {
+                CloseDropdown();
+            }
+        }
+        return true;
+    }
+
+    if (!top_menu_->OnEvent(event)) {
+        return false;
+    }
+    if (mouse.button == ftxui::Mouse::Left &&
+        mouse.motion == ftxui::Mouse::Released &&
+        active_dropdown_ < 0) {
+        OpenDropdown(selected_menu_item_);
+    }
+    return true;
 }
     
     
@@ -353,9 +349,16 @@ void MenuBarComponent::RefreshCurrentDropdownEntries() {
         active_dropdown_ >= 0 ? active_dropdown_ : selected_menu_item_,
         0,
         static_cast<int>(dropdown_entries_.size()) - 1);
-    current_dropdown_entries_ = dropdown_entries_[menu_index];
+    const std::vector<std::string>& next_entries = dropdown_entries_[menu_index];
+    if (current_dropdown_entries_ == next_entries) {
+        return;
+    }
+    current_dropdown_entries_ = next_entries;
     if (selected_dropdown_item_ >= static_cast<int>(current_dropdown_entries_.size())) {
         selected_dropdown_item_ = 0;
+    }
+    if (dropdown_menu_) {
+        RebuildDropdownComponents();
     }
 }
 
@@ -371,75 +374,6 @@ int MenuBarComponent::DropdownX() const {
         dropdown_x += static_cast<int>(menu_entries_[i].size()) + 1;
     }
     return dropdown_x;
-}
-
-
-/**
- * Determines the index of the main menu item under the mouse cursor.
- * Uses strict vertical (Y) row checking to ensure the cursor does not 
- * trigger main menu switching while inside a dropdown menu.
- */
-int MenuBarComponent::MenuIndexAt(int x, int y) const {
-    // 1. Safety check to ensure coordinate boxes are initialized
-    if (menu_boxes_.empty()) {
-        return -1;
-    }
-
-    const auto& box = menu_boxes_[0];
-
-    // 2. STRICT VERTICAL BOUNDARY CHECK:
-    // The main menu headers exist only on the single row 'box.y_min'.
-    // If y is not equal to this row, the mouse is either inside a dropdown 
-    // or elsewhere on the screen, so it cannot be a click on a header.
-    bool within_header_row = (y == box.y_min); 
-    
-    if (!within_header_row) {
-        return -1;
-    }
-
-    // 3. Search for the menu index along the horizontal (X) axis
-    int item_x = box.x_min;
-    for (size_t i = 0; i < menu_entries_.size(); ++i) {
-        // Calculate the width of the current menu item
-        const int item_width = static_cast<int>(menu_entries_[i].size());
-        
-        // Check if the cursor is within the bounds of this specific menu item
-        if (x >= item_x && x < item_x + item_width) {
-            return static_cast<int>(i);
-        }
-        
-        // Move to the next item (adding 1 for the spacing between menu entries)
-        item_x += item_width + 1;
-    }
-    
-    // If we are in the correct row but clicked between items
-    return -1;
-}
-
-int MenuBarComponent::DropdownItemAt(int x, int y) const {
-    // 1. Basic safety check
-    if (active_dropdown_ < 0 || active_dropdown_ >= static_cast<int>(dropdown_boxes_.size())) {
-        return -1;
-    }
-
-    const auto& box = dropdown_boxes_[active_dropdown_];
-    
-    // 2. Capture boundary state
-    bool inside = box.Contain(x, y);
-
-    if (inside) {
-        // The border is 1 unit thick, so the first item is at y_min + 1
-        int item_index = y - box.y_min - 1;
-        
-        // 4. Validate index
-        bool valid_index = (item_index >= 0 && item_index < static_cast<int>(current_dropdown_entries_.size()));
-        
-        if (valid_index) {
-            return item_index;
-        } 
-    } 
-    
-    return -1;
 }
 
 } // namespace textlt

@@ -460,7 +460,8 @@ void TextltApp::OpenThemeDialog() {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
-    focused_layer_ = 4;
+    // root_container_: 0 main, 1 help, 2 theme, 3 find, 4 go-to-line.
+    focused_layer_ = 2;
     theme_dialog_.Open(themes_, editor_config_.active_theme_name);
 }
 

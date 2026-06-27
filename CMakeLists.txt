@@ -17,15 +17,21 @@ FetchContent_Declare(ftxui
     ${CMAKE_COMMAND}
       -DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/patches/ftxui-v5-shortcuts.patch
       -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_patch_once.cmake
+    COMMAND
+      ${CMAKE_COMMAND}
+      -DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/patches/ftxui-v5-hidden-cursor.patch
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_patch_once.cmake
 )
 
-# FTXUI 5 enables a legacy Microsoft Terminal fallback on Windows which keeps
-# the native terminal cursor visible. TextLT renders its editor cursor itself,
-# so that fallback leaves a second blinking cursor at stale frame positions in
-# PowerShell and Windows Terminal. Current terminals support the standard ANSI
-# cursor visibility sequences used by FTXUI's normal rendering path.
-set(FTXUI_MICROSOFT_TERMINAL_FALLBACK OFF CACHE BOOL
-    "Use FTXUI's standard cursor handling on Windows" FORCE)
+# Keep FTXUI's Windows workaround for cursor-position reports. Without it,
+# cursor replies can be interleaved with mouse events in Microsoft terminals,
+# corrupting clicks and leaking response text into the editor. The small FTXUI
+# patch above initializes the native cursor as hidden without disabling this
+# workaround; focused text inputs still opt into a visible cursor explicitly.
+if(WIN32)
+  set(FTXUI_MICROSOFT_TERMINAL_FALLBACK ON CACHE BOOL
+      "Use FTXUI's Microsoft Terminal compatibility path" FORCE)
+endif()
 FetchContent_MakeAvailable(ftxui)
 
 FetchContent_Declare(pugixml
