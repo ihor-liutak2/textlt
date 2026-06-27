@@ -13,72 +13,6 @@ namespace {
 
 constexpr size_t kScrollbarColumns = 2;
 
-struct WrapSegment {
-    size_t start = 0;
-    size_t end = 0;
-};
-
-bool IsSoftWrapBoundary(const std::string& line, size_t position) {
-    if (position == 0 || position >= line.size()) {
-        return true;
-    }
-
-    const char left = line[position - 1];
-    const char right = line[position];
-    return std::isspace(static_cast<unsigned char>(left)) ||
-        std::isspace(static_cast<unsigned char>(right)) ||
-        !(utils::IsWordCharacter(left) && utils::IsWordCharacter(right));
-}
-
-size_t FindSmartWrapEnd(const std::string& line, size_t start, size_t width) {
-    const size_t hard_end = std::min(line.size(), start + width);
-    if (hard_end >= line.size()) {
-        return line.size();
-    }
-
-    // Prefer whitespace breaks first because they keep words and identifiers
-    // visually intact without introducing leading punctuation on the next row.
-    for (size_t position = hard_end; position > start + 1; --position) {
-        if (std::isspace(static_cast<unsigned char>(line[position - 1]))) {
-            return position;
-        }
-    }
-
-    // Fall back to non-word boundaries, such as operators or punctuation. This
-    // prevents common identifiers and keywords from being split mid-token.
-    for (size_t position = hard_end; position > start + 1; --position) {
-        if (IsSoftWrapBoundary(line, position)) {
-            return position;
-        }
-    }
-
-    // Very long standalone tokens must still make progress, so the viewport
-    // hard-wraps only when no safe boundary exists inside the visible width.
-    return hard_end;
-}
-
-std::vector<WrapSegment> BuildWrapSegments(const std::string& line, size_t width) {
-    std::vector<WrapSegment> segments;
-    width = std::max<size_t>(1, width);
-
-    if (line.empty()) {
-        segments.push_back({});
-        return segments;
-    }
-
-    size_t start = 0;
-    while (start < line.size()) {
-        size_t end = FindSmartWrapEnd(line, start, width);
-        if (end <= start) {
-            end = std::min(line.size(), start + width);
-        }
-        segments.push_back({start, end});
-        start = end;
-    }
-
-    return segments;
-}
-
 } // namespace
 
 ftxui::Element EditorComponent::RenderViewport() {
@@ -136,7 +70,7 @@ ftxui::Element EditorComponent::RenderViewport() {
         return ftxui::text("│ ") | ftxui::color(theme.gutter) | ftxui::dim;
     };
 
-    auto render_line_segment = [&](size_t line_index, WrapSegment segment, size_t viewport_y,
+    auto render_line_segment = [&](size_t line_index, utils::Utf8WrapSegment segment, size_t viewport_y,
                                    const std::vector<SyntaxHighlighter::Token>* syntax_tokens) {
         const std::string& line_content = doc_->lines[line_index];
         ftxui::Element line_number = show_line_numbers
@@ -149,7 +83,7 @@ ftxui::Element EditorComponent::RenderViewport() {
         const size_t render_start = smart_word_wrap ? segment.start : scroll_x_;
         const size_t render_end = smart_word_wrap
         ? segment.end
-        : std::min(line_content.size(), scroll_x_ + visible_width);
+        : utils::Utf8ByteIndexAtDisplayColumn(line_content, scroll_x_, visible_width);
 
         size_t syntax_token_index = 0;
         if (syntax_tokens) {
@@ -226,11 +160,14 @@ ftxui::Element EditorComponent::RenderViewport() {
                     syntax_token_ptr = &syntax_tokens;
                 }
 
-                const std::vector<WrapSegment> segments = smart_word_wrap
-                ? BuildWrapSegments(doc_->lines[line_index], visible_width)
-                : std::vector<WrapSegment>{WrapSegment{scroll_x_, std::min(doc_->lines[line_index].size(), scroll_x_ + visible_width)}};
+                const std::vector<utils::Utf8WrapSegment> segments = smart_word_wrap
+                ? utils::BuildUtf8WrapSegments(doc_->lines[line_index], visible_width)
+                : std::vector<utils::Utf8WrapSegment>{utils::Utf8WrapSegment{
+                    scroll_x_,
+                    utils::Utf8ByteIndexAtDisplayColumn(
+                        doc_->lines[line_index], scroll_x_, visible_width)}};
 
-                for (const WrapSegment& segment : segments) {
+                for (const utils::Utf8WrapSegment& segment : segments) {
                     if (lines_elements.size() >= visible_height) break;
                     lines_elements.push_back(render_line_segment(line_index, segment, lines_elements.size(), syntax_token_ptr));
                 }
@@ -256,11 +193,7 @@ size_t EditorComponent::VisibleHeight() const {
 
     const size_t total_height =
     static_cast<size_t>(editor_box_.y_max - editor_box_.y_min + 1);
-    if (bottom_overlay_rows_ >= total_height) {
-        return 1;
-    }
-
-    return total_height - bottom_overlay_rows_;
+    return total_height;
 }
 
 size_t EditorComponent::VisibleTextWidth() const {
@@ -303,19 +236,18 @@ void EditorComponent::UpdateScroll() {
         return;
     }
 
-    if (doc_->cursor_col >= scroll_x_ + visible_width) {
-        scroll_x_ = doc_->cursor_col - visible_width + 1;
-    }
     if (doc_->cursor_col < scroll_x_) {
         scroll_x_ = doc_->cursor_col;
     }
 
-    const size_t current_line_size = doc_->lines[doc_->cursor_row].size();
-    if (current_line_size < visible_width) {
+    const std::string& current_line = doc_->lines[doc_->cursor_row];
+    while (scroll_x_ < doc_->cursor_col &&
+           utils::Utf8DisplayWidth(current_line, scroll_x_, doc_->cursor_col) >= visible_width) {
+        scroll_x_ = utils::NextUtf8CodepointStart(current_line, scroll_x_);
+    }
+
+    if (utils::Utf8DisplayWidth(current_line) < visible_width) {
         scroll_x_ = 0;
-    } else {
-        const size_t max_scroll_x = current_line_size - visible_width + 1;
-        scroll_x_ = std::min(scroll_x_, max_scroll_x);
     }
 }
 

@@ -225,4 +225,6 @@ target_include_directories(textlt_document_navigation_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+target_link_libraries(textlt_document_navigation_test PRIVATE ftxui::screen)
+
 add_test(NAME textlt_document_navigation_test COMMAND textlt_document_navigation_test)

@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cctype>
 
+#include "ftxui/screen/string.hpp"
+
 namespace textlt::utils {
 
 bool PositionLess(const Position& left, const Position& right) {
@@ -88,6 +90,88 @@ size_t NextUtf8CodepointStart(const std::string& text, size_t index) {
         ++index;
     }
     return index;
+}
+
+size_t Utf8DisplayWidth(const std::string& text, size_t start, size_t end) {
+    start = std::min(start, text.size());
+    while (start < text.size() && IsUtf8ContinuationByte(text[start])) {
+        ++start;
+    }
+    end = std::min(end, text.size());
+    while (end > start && end < text.size() && IsUtf8ContinuationByte(text[end])) {
+        --end;
+    }
+    return static_cast<size_t>(std::max(0, ftxui::string_width(text.substr(start, end - start))));
+}
+
+size_t Utf8ByteIndexAtDisplayColumn(
+    const std::string& text,
+    size_t start,
+    size_t display_columns) {
+    start = std::min(start, text.size());
+    while (start < text.size() && IsUtf8ContinuationByte(text[start])) {
+        ++start;
+    }
+
+    size_t index = start;
+    size_t width = 0;
+    while (index < text.size()) {
+        const size_t next = NextUtf8CodepointStart(text, index);
+        const size_t glyph_width = Utf8DisplayWidth(text, index, next);
+        if (width + glyph_width > display_columns) {
+            break;
+        }
+        width += glyph_width;
+        index = next;
+    }
+    return index;
+}
+
+std::vector<Utf8WrapSegment> BuildUtf8WrapSegments(
+    const std::string& line,
+    size_t width) {
+    std::vector<Utf8WrapSegment> segments;
+    width = std::max<size_t>(1, width);
+    if (line.empty()) {
+        segments.push_back({});
+        return segments;
+    }
+
+    size_t start = 0;
+    while (start < line.size()) {
+        const size_t hard_end = Utf8ByteIndexAtDisplayColumn(line, start, width);
+        size_t end = hard_end;
+        if (hard_end < line.size()) {
+            bool found_whitespace = false;
+            for (size_t position = hard_end; position > start;) {
+                if (std::isspace(static_cast<unsigned char>(line[position - 1]))) {
+                    end = position;
+                    found_whitespace = true;
+                    break;
+                }
+                position = PreviousUtf8CodepointStart(line, position);
+            }
+            if (!found_whitespace) {
+                for (size_t position = hard_end; position > start;) {
+                    const char left = line[position - 1];
+                    const char right = line[position];
+                    if (std::isspace(static_cast<unsigned char>(left)) ||
+                        std::isspace(static_cast<unsigned char>(right)) ||
+                        !(IsWordCharacter(left) && IsWordCharacter(right))) {
+                        end = position;
+                        break;
+                    }
+                    position = PreviousUtf8CodepointStart(line, position);
+                }
+            }
+        }
+        if (end <= start) {
+            end = NextUtf8CodepointStart(line, start);
+        }
+        segments.push_back({start, end});
+        start = end;
+    }
+    return segments;
 }
 
 namespace {

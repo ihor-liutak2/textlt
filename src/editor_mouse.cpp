@@ -1,5 +1,7 @@
 #include "editor_component.hpp"
 
+#include "editor_utils.hpp"
+
 #include <algorithm>
 
 #include "ftxui/component/event.hpp"
@@ -169,13 +171,37 @@ bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
         : 0;
         const int relative_x = mouse.x - editor_box_.x_min - line_number_gutter_width;
 
-        const size_t max_row = doc_->lines.size() - 1;
-        const int raw_clicked_row = static_cast<int>(scroll_y_) + relative_y;
-        const size_t clicked_row = std::clamp(static_cast<size_t>(std::max(0, raw_clicked_row)), (size_t)0, max_row);
+        size_t clicked_row = scroll_y_;
+        size_t segment_start = scroll_x_;
+        size_t segment_end = doc_->lines[clicked_row].size();
+        if (config_ && config_->smart_word_wrap) {
+            size_t visual_row = 0;
+            const size_t target_visual_row = static_cast<size_t>(std::max(0, relative_y));
+            for (size_t row = scroll_y_; row < doc_->lines.size(); ++row) {
+                const auto segments =
+                    utils::BuildUtf8WrapSegments(doc_->lines[row], VisibleTextWidth());
+                if (target_visual_row < visual_row + segments.size()) {
+                    clicked_row = row;
+                    segment_start = segments[target_visual_row - visual_row].start;
+                    segment_end = segments[target_visual_row - visual_row].end;
+                    break;
+                }
+                visual_row += segments.size();
+                clicked_row = row;
+                segment_start = segments.back().start;
+                segment_end = segments.back().end;
+            }
+        } else {
+            const size_t max_row = doc_->lines.size() - 1;
+            const int raw_clicked_row = static_cast<int>(scroll_y_) + relative_y;
+            clicked_row = std::clamp(
+                static_cast<size_t>(std::max(0, raw_clicked_row)), size_t{0}, max_row);
+        }
 
-        const size_t max_col = doc_->lines[clicked_row].size();
-        const int raw_clicked_col = static_cast<int>(scroll_x_) + relative_x;
-        const size_t clicked_col = std::clamp(static_cast<size_t>(std::max(0, raw_clicked_col)), (size_t)0, max_col);
+        const size_t clicked_col = std::min(segment_end, relative_x <= 0
+            ? segment_start
+            : utils::Utf8ByteIndexAtDisplayColumn(
+                doc_->lines[clicked_row], segment_start, static_cast<size_t>(relative_x)));
 
         const bool extend_selection = mouse_selecting_ || mouse.shift;
         if (!extend_selection) {

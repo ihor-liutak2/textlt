@@ -78,16 +78,22 @@ void Document::MoveCursorRight() {
 void Document::MoveCursorUp() {
     ClampCursor();
     if (cursor_row > 0) {
+        const size_t display_column =
+            utils::Utf8DisplayWidth(lines[cursor_row], 0, cursor_col);
         --cursor_row;
-        cursor_col = std::min(cursor_col, lines[cursor_row].size());
+        cursor_col = utils::Utf8ByteIndexAtDisplayColumn(
+            lines[cursor_row], 0, display_column);
     }
 }
 
 void Document::MoveCursorDown() {
     ClampCursor();
     if (cursor_row + 1 < lines.size()) {
+        const size_t display_column =
+            utils::Utf8DisplayWidth(lines[cursor_row], 0, cursor_col);
         ++cursor_row;
-        cursor_col = std::min(cursor_col, lines[cursor_row].size());
+        cursor_col = utils::Utf8ByteIndexAtDisplayColumn(
+            lines[cursor_row], 0, display_column);
     }
 }
 

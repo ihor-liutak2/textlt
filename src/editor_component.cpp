@@ -242,10 +242,6 @@ namespace textlt {
         return doc_ ? doc_->ToContent() : "";
     }
 
-    void EditorComponent::SetBottomOverlayRows(size_t rows) {
-        bottom_overlay_rows_ = rows;
-    }
-
     void EditorComponent::JumpToLine(size_t line_number) {
         if (!doc_) return;
 
@@ -838,11 +834,85 @@ namespace textlt {
     }
 
     void EditorComponent::MoveCursorUp() {
-        if (doc_) doc_->MoveCursorUp();
+        if (!doc_) return;
+        if (!config_ || !config_->smart_word_wrap) {
+            doc_->MoveCursorUp();
+            return;
+        }
+
+        doc_->ClampCursor();
+        const size_t width = VisibleTextWidth();
+        const auto current_segments =
+            utils::BuildUtf8WrapSegments(doc_->lines[doc_->cursor_row], width);
+        size_t segment_index = current_segments.size() - 1;
+        for (size_t index = 0; index < current_segments.size(); ++index) {
+            if (doc_->cursor_col < current_segments[index].end ||
+                index + 1 == current_segments.size()) {
+                segment_index = index;
+                break;
+            }
+        }
+
+        const size_t display_column = utils::Utf8DisplayWidth(
+            doc_->lines[doc_->cursor_row],
+            current_segments[segment_index].start,
+            doc_->cursor_col);
+
+        utils::Utf8WrapSegment target;
+        if (segment_index > 0) {
+            target = current_segments[segment_index - 1];
+        } else {
+            if (doc_->cursor_row == 0) return;
+            --doc_->cursor_row;
+            const auto target_segments =
+                utils::BuildUtf8WrapSegments(doc_->lines[doc_->cursor_row], width);
+            target = target_segments.back();
+        }
+        doc_->cursor_col = std::min(
+            target.end,
+            utils::Utf8ByteIndexAtDisplayColumn(
+                doc_->lines[doc_->cursor_row], target.start, display_column));
     }
 
     void EditorComponent::MoveCursorDown() {
-        if (doc_) doc_->MoveCursorDown();
+        if (!doc_) return;
+        if (!config_ || !config_->smart_word_wrap) {
+            doc_->MoveCursorDown();
+            return;
+        }
+
+        doc_->ClampCursor();
+        const size_t width = VisibleTextWidth();
+        const auto current_segments =
+            utils::BuildUtf8WrapSegments(doc_->lines[doc_->cursor_row], width);
+        size_t segment_index = current_segments.size() - 1;
+        for (size_t index = 0; index < current_segments.size(); ++index) {
+            if (doc_->cursor_col < current_segments[index].end ||
+                index + 1 == current_segments.size()) {
+                segment_index = index;
+                break;
+            }
+        }
+
+        const size_t display_column = utils::Utf8DisplayWidth(
+            doc_->lines[doc_->cursor_row],
+            current_segments[segment_index].start,
+            doc_->cursor_col);
+
+        utils::Utf8WrapSegment target;
+        if (segment_index + 1 < current_segments.size()) {
+            target = current_segments[segment_index + 1];
+        } else {
+            if (doc_->cursor_row + 1 >= doc_->lines.size()) return;
+            ++doc_->cursor_row;
+            const auto target_segments =
+                utils::BuildUtf8WrapSegments(doc_->lines[doc_->cursor_row], width);
+            target = target_segments.front();
+        }
+        doc_->cursor_col = std::min(
+            target.end,
+            utils::Utf8ByteIndexAtDisplayColumn(
+                doc_->lines[doc_->cursor_row], target.start, display_column));
     }
 
     void EditorComponent::MoveCursorPageUp() {

@@ -43,7 +43,6 @@ namespace textlt {
         size_t GetCursorCol() const;
         size_t GetLineCount() const;
         std::string TextFromCursor() const;
-        void SetBottomOverlayRows(size_t rows);
         void JumpToLine(size_t line_number);
         void SetCursorPosition(size_t row, size_t column);
 
@@ -144,7 +143,6 @@ namespace textlt {
         bool mouse_selecting_ = false;
         bool is_dragging_scrollbar_ = false;
         size_t current_search_match_ = 0;
-        size_t bottom_overlay_rows_ = 0;
         size_t drag_start_scroll_y_ = 0;
         int drag_start_y_ = 0;
         ftxui::Box editor_box_;
