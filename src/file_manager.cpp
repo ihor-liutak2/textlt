@@ -23,10 +23,48 @@
 namespace textlt {
 namespace {
 
+std::string PathToUtf8Text(const std::filesystem::path& path) {
+    try {
+        const auto value = path.u8string();
+        return std::string(value.begin(), value.end());
+    } catch (...) {
+        return "<path conversion failed>";
+    }
+}
+
+std::filesystem::path PathFromUtf8Text(const std::string& text) {
+    return std::filesystem::u8path(text);
+}
+
+#ifdef _WIN32
+std::filesystem::path WindowsEnvironmentPath(const wchar_t* name) {
+    DWORD length = GetEnvironmentVariableW(name, nullptr, 0);
+    if (length == 0) {
+        return {};
+    }
+
+    std::wstring value(length, L'\0');
+    const DWORD written = GetEnvironmentVariableW(name, &value[0], length);
+    if (written == 0) {
+        return {};
+    }
+
+    if (!value.empty() && value.back() == L'\0') {
+        value.pop_back();
+    }
+    return std::filesystem::path(value);
+}
+
+bool IsReadableDirectory(const std::filesystem::path& path) {
+    std::error_code error;
+    return !path.empty() && std::filesystem::is_directory(path, error) && !error;
+}
+#endif
+
 std::string ReadFileContent(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary);
     if (!file) {
-        throw std::runtime_error("Unable to open file: " + path.string());
+        throw std::runtime_error("Unable to open file: " + PathToUtf8Text(path));
     }
 
     return {
@@ -41,12 +79,12 @@ void WriteFileContent(const std::filesystem::path& path, const std::string& cont
 
     std::ofstream file(path, std::ios::binary);
     if (!file) {
-        throw std::runtime_error("Unable to open file for writing: " + path.string());
+        throw std::runtime_error("Unable to open file for writing: " + PathToUtf8Text(path));
     }
 
     file << content;
     if (!file) {
-        throw std::runtime_error("Unable to write file: " + path.string());
+        throw std::runtime_error("Unable to write file: " + PathToUtf8Text(path));
     }
 }
 
@@ -58,7 +96,7 @@ std::string Lowercase(std::string value) {
 }
 
 std::string PathComparisonKey(const std::filesystem::path& path) {
-    std::string key = path.string();
+    std::string key = PathToUtf8Text(path);
 #ifdef _WIN32
     return Lowercase(key);
 #else
@@ -107,7 +145,7 @@ bool HasWindowsReservedName(const std::string& name) {
         return true;
     }
 
-    const std::string stem = Lowercase(std::filesystem::path(name).stem().string());
+    const std::string stem = Lowercase(PathToUtf8Text(PathFromUtf8Text(name).stem()));
     static const char* reserved_names[] = {
         "con",
         "prn",
@@ -159,12 +197,12 @@ std::filesystem::path NormalizeExistingPath(const std::filesystem::path& path) {
 
 std::filesystem::path ExpandUserPath(const std::string& input) {
     if (input.empty() || input[0] != '~') {
-        return std::filesystem::path(input);
+        return PathFromUtf8Text(input);
     }
 
     const std::filesystem::path home = FileManager::UserHomeDirectory();
     if (home.empty()) {
-        return std::filesystem::path(input);
+        return PathFromUtf8Text(input);
     }
 
     if (input.size() == 1) {
@@ -172,10 +210,10 @@ std::filesystem::path ExpandUserPath(const std::string& input) {
     }
 
     if (input[1] == '/' || input[1] == '\\') {
-        return home / input.substr(2);
+        return home / PathFromUtf8Text(input.substr(2));
     }
 
-    return std::filesystem::path(input);
+    return PathFromUtf8Text(input);
 }
 
 bool IsRootLikePath(const std::filesystem::path& path) {
@@ -201,7 +239,7 @@ bool HasExtensionAllowed(const std::filesystem::path& path, const FileFilter& fi
         return true;
     }
 
-    const std::string extension = Lowercase(path.extension().string());
+    const std::string extension = Lowercase(PathToUtf8Text(path.extension()));
     for (std::string allowed : filter.extensions) {
         allowed = Lowercase(std::move(allowed));
         if (!allowed.empty() && allowed[0] != '.') {
@@ -264,7 +302,7 @@ bool ValidateSourceList(
         }
         std::error_code status_error;
         if (!std::filesystem::exists(path, status_error)) {
-            error = "Path does not exist: " + path.string();
+            error = "Path does not exist: " + PathToUtf8Text(path);
             return false;
         }
         const std::filesystem::path normalized_path = NormalizeExistingPath(path);
@@ -291,7 +329,7 @@ bool CopyOne(
     std::string& error) {
     std::error_code status_error;
     if (std::filesystem::exists(destination, status_error)) {
-        error = "Destination already exists: " + destination.string();
+        error = "Destination already exists: " + PathToUtf8Text(destination);
         return false;
     }
 
@@ -334,14 +372,14 @@ bool CopyOne(
         return true;
     }
 
-    error = "Unsupported file type: " + source.string();
+    error = "Unsupported file type: " + PathToUtf8Text(source);
     return false;
 }
 
 bool RemoveOne(const std::filesystem::path& path, bool recursive, std::string& error) {
     std::error_code status_error;
     if (!std::filesystem::exists(path, status_error)) {
-        error = "Path does not exist: " + path.string();
+        error = "Path does not exist: " + PathToUtf8Text(path);
         return false;
     }
 
@@ -373,11 +411,11 @@ bool MoveOne(
     std::string& error) {
     std::error_code status_error;
     if (!std::filesystem::exists(source, status_error)) {
-        error = "Source does not exist: " + source.string();
+        error = "Source does not exist: " + PathToUtf8Text(source);
         return false;
     }
     if (std::filesystem::exists(destination, status_error)) {
-        error = "Destination already exists: " + destination.string();
+        error = "Destination already exists: " + PathToUtf8Text(destination);
         return false;
     }
     if (IsRootLikePath(source)) {
@@ -467,9 +505,10 @@ bool FileManager::ListDirectory(
     std::string& error) const {
     entries.clear();
 
+    try {
     std::error_code status_error;
     if (!std::filesystem::is_directory(directory, status_error)) {
-        error = "Directory does not exist: " + directory.string();
+        error = "Directory does not exist: " + PathToUtf8Text(directory);
         return false;
     }
 
@@ -488,42 +527,48 @@ bool FileManager::ListDirectory(
             error = status_error.message();
             return false;
         }
-        const std::filesystem::directory_entry& entry = *iterator;
-        const std::string name = entry.path().filename().string();
-        bool hidden = !name.empty() && name[0] == '.';
+
+        try {
+            const std::filesystem::directory_entry& entry = *iterator;
+            const std::string name = PathToUtf8Text(entry.path().filename());
+            bool hidden = !name.empty() && name[0] == '.';
 #ifdef _WIN32
-        hidden = hidden || WindowsHiddenAttribute(entry.path());
+            hidden = hidden || WindowsHiddenAttribute(entry.path());
 #endif
-        if (hidden && !filter.show_hidden) {
-            continue;
-        }
-
-        const FileEntryType type = EntryType(entry);
-        const bool directory_entry = type == FileEntryType::Directory;
-        const bool file_entry = type == FileEntryType::File || type == FileEntryType::Symlink;
-        if (directory_entry && !filter.show_directories) {
-            continue;
-        }
-        if (!directory_entry && (!file_entry || !filter.show_files)) {
-            continue;
-        }
-        if (!directory_entry && !HasExtensionAllowed(entry.path(), filter)) {
-            continue;
-        }
-
-        FileEntry file_entry_info;
-        file_entry_info.path = entry.path();
-        file_entry_info.name = name;
-        file_entry_info.type = type;
-        file_entry_info.hidden = hidden;
-        if (type == FileEntryType::File) {
-            std::error_code size_error;
-            file_entry_info.size = entry.file_size(size_error);
-            if (size_error) {
-                file_entry_info.size = 0;
+            if (hidden && !filter.show_hidden) {
+                continue;
             }
+
+            const FileEntryType type = EntryType(entry);
+            const bool directory_entry = type == FileEntryType::Directory;
+            const bool file_entry = type == FileEntryType::File || type == FileEntryType::Symlink;
+            if (directory_entry && !filter.show_directories) {
+                continue;
+            }
+            if (!directory_entry && (!file_entry || !filter.show_files)) {
+                continue;
+            }
+            if (!directory_entry && !HasExtensionAllowed(entry.path(), filter)) {
+                continue;
+            }
+
+            FileEntry file_entry_info;
+            file_entry_info.path = entry.path();
+            file_entry_info.name = name;
+            file_entry_info.type = type;
+            file_entry_info.hidden = hidden;
+            if (type == FileEntryType::File) {
+                std::error_code size_error;
+                file_entry_info.size = entry.file_size(size_error);
+                if (size_error) {
+                    file_entry_info.size = 0;
+                }
+            }
+            entries.push_back(std::move(file_entry_info));
+        } catch (...) {
+            // Skip entries that cannot be converted or inspected on this platform.
+            continue;
         }
-        entries.push_back(std::move(file_entry_info));
     }
 
     std::sort(entries.begin(), entries.end(), [](const FileEntry& left, const FileEntry& right) {
@@ -536,6 +581,15 @@ bool FileManager::ListDirectory(
         return Lowercase(left.name) < Lowercase(right.name);
     });
     return true;
+    } catch (const std::exception& e) {
+        error = e.what();
+        entries.clear();
+        return false;
+    } catch (...) {
+        error = "Unable to read directory.";
+        entries.clear();
+        return false;
+    }
 }
 
 bool FileManager::CreateDirectoryItem(const std::filesystem::path& path, std::string& error) const {
@@ -545,7 +599,7 @@ bool FileManager::CreateDirectoryItem(const std::filesystem::path& path, std::st
     }
     std::error_code status_error;
     if (std::filesystem::exists(path, status_error)) {
-        error = "Path already exists: " + path.string();
+        error = "Path already exists: " + PathToUtf8Text(path);
         return false;
     }
     std::filesystem::create_directories(path, status_error);
@@ -563,7 +617,7 @@ bool FileManager::CreateEmptyFile(const std::filesystem::path& path, std::string
     }
     std::error_code status_error;
     if (std::filesystem::exists(path, status_error)) {
-        error = "File already exists: " + path.string();
+        error = "File already exists: " + PathToUtf8Text(path);
         return false;
     }
     const std::filesystem::path parent = path.parent_path();
@@ -577,7 +631,7 @@ bool FileManager::CreateEmptyFile(const std::filesystem::path& path, std::string
 
     std::ofstream file(path, std::ios::binary | std::ios::trunc);
     if (!file) {
-        error = "Unable to create file: " + path.string();
+        error = "Unable to create file: " + PathToUtf8Text(path);
         return false;
     }
     return true;
@@ -612,11 +666,11 @@ bool FileManager::RenameItem(
 
     std::error_code status_error;
     if (!std::filesystem::exists(source, status_error)) {
-        error = "Source does not exist: " + source.string();
+        error = "Source does not exist: " + PathToUtf8Text(source);
         return false;
     }
 
-    destination = source.parent_path() / new_name;
+    destination = source.parent_path() / PathFromUtf8Text(new_name);
     return MoveOne(source, destination, error);
 }
 
@@ -657,13 +711,13 @@ bool FileManager::PasteItems(
 
     for (const std::filesystem::path& source : clipboard_sources_) {
         if (!std::filesystem::exists(source, status_error)) {
-            error = "Clipboard source no longer exists: " + source.string();
+            error = "Clipboard source no longer exists: " + PathToUtf8Text(source);
             return false;
         }
 
         const std::filesystem::path destination = destination_directory / source.filename();
         if (std::filesystem::exists(destination, status_error)) {
-            error = "Destination already exists: " + destination.string();
+            error = "Destination already exists: " + PathToUtf8Text(destination);
             return false;
         }
         if (std::filesystem::is_directory(source, status_error) &&
@@ -709,14 +763,15 @@ const std::vector<std::filesystem::path>& FileManager::ClipboardSources() const 
 
 std::filesystem::path FileManager::UserHomeDirectory() {
 #ifdef _WIN32
-    const char* user_profile = std::getenv("USERPROFILE");
-    if (user_profile && std::string(user_profile).size() > 0) {
-        return std::filesystem::path(user_profile);
+    const std::filesystem::path user_profile = WindowsEnvironmentPath(L"USERPROFILE");
+    if (!user_profile.empty()) {
+        return user_profile;
     }
-    const char* home_drive = std::getenv("HOMEDRIVE");
-    const char* home_path = std::getenv("HOMEPATH");
-    if (home_drive && home_path) {
-        return std::filesystem::path(std::string(home_drive) + std::string(home_path));
+
+    const std::filesystem::path home_drive = WindowsEnvironmentPath(L"HOMEDRIVE");
+    const std::filesystem::path home_path = WindowsEnvironmentPath(L"HOMEPATH");
+    if (!home_drive.empty() && !home_path.empty()) {
+        return home_drive / home_path.relative_path();
     }
     return {};
 #else
@@ -724,48 +779,68 @@ std::filesystem::path FileManager::UserHomeDirectory() {
     if (!home || std::string(home).empty()) {
         return {};
     }
-    return std::filesystem::path(home);
+    return PathFromUtf8Text(home);
 #endif
 }
 
 std::filesystem::path FileManager::UserDocumentsDirectory() {
+    const std::filesystem::path home = UserHomeDirectory();
 #ifdef _WIN32
+    const std::filesystem::path profile_documents = home.empty()
+        ? std::filesystem::path()
+        : home / "Documents";
+    if (IsReadableDirectory(profile_documents)) {
+        return profile_documents;
+    }
+
     const std::filesystem::path known_folder = WindowsKnownFolder(FOLDERID_Documents);
-    if (!known_folder.empty()) {
-        std::error_code known_folder_error;
-        if (std::filesystem::is_directory(known_folder, known_folder_error)) {
-            return known_folder;
-        }
+    if (IsReadableDirectory(known_folder)) {
+        return known_folder;
+    }
+#else
+    const std::filesystem::path documents = home.empty()
+        ? std::filesystem::path()
+        : home / "Documents";
+    std::error_code error;
+    if (std::filesystem::is_directory(documents, error)) {
+        return documents;
     }
 #endif
 
-    const std::filesystem::path home = UserHomeDirectory();
     if (home.empty()) {
         return CurrentProcessDirectory();
     }
-    const std::filesystem::path documents = home / "Documents";
-    std::error_code error;
-    return std::filesystem::is_directory(documents, error) ? documents : home;
+    return home;
 }
 
 std::filesystem::path FileManager::UserDownloadsDirectory() {
+    const std::filesystem::path home = UserHomeDirectory();
 #ifdef _WIN32
+    const std::filesystem::path profile_downloads = home.empty()
+        ? std::filesystem::path()
+        : home / "Downloads";
+    if (IsReadableDirectory(profile_downloads)) {
+        return profile_downloads;
+    }
+
     const std::filesystem::path known_folder = WindowsKnownFolder(FOLDERID_Downloads);
-    if (!known_folder.empty()) {
-        std::error_code known_folder_error;
-        if (std::filesystem::is_directory(known_folder, known_folder_error)) {
-            return known_folder;
-        }
+    if (IsReadableDirectory(known_folder)) {
+        return known_folder;
+    }
+#else
+    const std::filesystem::path downloads = home.empty()
+        ? std::filesystem::path()
+        : home / "Downloads";
+    std::error_code error;
+    if (std::filesystem::is_directory(downloads, error)) {
+        return downloads;
     }
 #endif
 
-    const std::filesystem::path home = UserHomeDirectory();
     if (home.empty()) {
         return CurrentProcessDirectory();
     }
-    const std::filesystem::path downloads = home / "Downloads";
-    std::error_code error;
-    return std::filesystem::is_directory(downloads, error) ? downloads : home;
+    return home;
 }
 
 std::filesystem::path FileManager::CurrentProcessDirectory() {
@@ -788,6 +863,15 @@ std::filesystem::path FileManager::ResolvePath(
         path = base_directory / path;
     }
     return NormalizeExistingPath(path);
+}
+
+
+std::string FileManager::PathToUtf8(const std::filesystem::path& path) {
+    return PathToUtf8Text(path);
+}
+
+std::filesystem::path FileManager::PathFromUtf8(const std::string& text) {
+    return PathFromUtf8Text(text);
 }
 
 std::string FileManager::FormatFileSize(std::uintmax_t size) {
@@ -816,7 +900,7 @@ std::string FileManager::BuildPathText(const std::vector<std::filesystem::path>&
             output << '\n';
         }
         first = false;
-        output << NormalizeExistingPath(path).string();
+        output << PathToUtf8Text(NormalizeExistingPath(path));
     }
     return output.str();
 }
@@ -827,8 +911,8 @@ bool FileManager::IsPlainName(const std::string& name) {
         name == ".." ||
         name.find('/') != std::string::npos ||
         name.find('\\') != std::string::npos ||
-        std::filesystem::path(name).has_parent_path() ||
-        std::filesystem::path(name).is_absolute()) {
+        PathFromUtf8Text(name).has_parent_path() ||
+        PathFromUtf8Text(name).is_absolute()) {
         return false;
     }
 

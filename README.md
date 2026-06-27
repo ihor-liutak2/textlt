@@ -42,20 +42,108 @@ Optimized to run perfectly in native Linux environments (**MX Linux**, **Ubuntu*
 
 ### Install from Release
 
+#### Windows
+
+Copy and paste this into PowerShell. Change `VERSION` to the release tag you want, for example `v0.5.0`.
+
+```powershell
+$VERSION = "v0.5.0"
+$InstallRoot = "$env:LOCALAPPDATA\Programs\textlt"
+$Archive = "$env:TEMP\textlt-windows-x64.zip"
+
+New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
+
+Invoke-WebRequest `
+  "https://github.com/ihor-liutak2/textlt/releases/download/$VERSION/textlt-windows-x64.zip" `
+  -OutFile $Archive
+
+Remove-Item "$InstallRoot\*" -Recurse -Force -ErrorAction SilentlyContinue
+Expand-Archive -Force $Archive -DestinationPath $InstallRoot
+
+$Exe = Get-ChildItem $InstallRoot -Recurse -Filter textlt.exe | Select-Object -First 1
+
+if (-not $Exe) {
+    Write-Error "textlt.exe was not found in the extracted archive."
+    exit 1
+}
+
+$ExeDir = Split-Path $Exe.FullName
+
+@"
+@echo off
+cd /d "$ExeDir"
+"$($Exe.FullName)" %*
+"@ | Set-Content -Encoding ASCII "$InstallRoot\textlt.cmd"
+
+$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+
+if ($UserPath -notlike "*$InstallRoot*") {
+    [Environment]::SetEnvironmentVariable("Path", "$UserPath;$InstallRoot", "User")
+}
+
+Write-Host "TextLT was installed to: $ExeDir"
+Write-Host "Open a new PowerShell window and run: textlt"
+```
+
+Open a new PowerShell window after installing so Windows reloads `PATH`, then start the editor with:
+
+```powershell
+textlt
+textlt path\to\file.cpp
+```
+
+To run it immediately without opening a new PowerShell window:
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\textlt\textlt.cmd"
+```
+
+To uninstall TextLT from Windows:
+
+```powershell
+Remove-Item "$env:LOCALAPPDATA\Programs\textlt" -Recurse -Force
+```
+
 #### Linux
 
-Copy and paste this into Bash. Change `VERSION` to the release tag you want, for example `v1.0.0`.
+Copy and paste this into Bash. Change `VERSION` to the release tag you want, for example `v0.5.0`.
 
 ```bash
-VERSION="v1.0.0"
-mkdir -p "$HOME/.local/bin"
-wget -O /tmp/textlt-linux-x64.tar.gz "https://github.com/ihor-liutak2/textlt/releases/download/${VERSION}/textlt-linux-x64.tar.gz"
-tar -xzf /tmp/textlt-linux-x64.tar.gz -C "$HOME/.local/bin"
-chmod +x "$HOME/.local/bin/textlt"
+VERSION="v0.5.0"
+INSTALL_ROOT="$HOME/.local/share/textlt"
+BIN_DIR="$HOME/.local/bin"
+ARCHIVE="/tmp/textlt-linux-x64.tar.gz"
+
+mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
+wget -O "$ARCHIVE" "https://github.com/ihor-liutak2/textlt/releases/download/${VERSION}/textlt-linux-x64.tar.gz"
+rm -rf "$INSTALL_ROOT"/*
+tar -xzf "$ARCHIVE" -C "$INSTALL_ROOT"
+
+EXE="$(find "$INSTALL_ROOT" -type f -name textlt -perm -111 | head -n 1)"
+
+if [ -z "$EXE" ]; then
+  echo "textlt executable was not found in the extracted archive." >&2
+  exit 1
+fi
+
+EXE_DIR="$(dirname "$EXE")"
+
+cat > "$BIN_DIR/textlt" <<EOF
+#!/usr/bin/env bash
+cd "$EXE_DIR" || exit 1
+exec "$EXE" "\$@"
+EOF
+
+chmod +x "$BIN_DIR/textlt" "$EXE"
+
 grep -qxF 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
 grep -qxF 'export COLORTERM=truecolor' "$HOME/.bashrc" || echo 'export COLORTERM=truecolor' >> "$HOME/.bashrc"
 grep -qxF 'export TERM=xterm-256color' "$HOME/.bashrc" || echo 'export TERM=xterm-256color' >> "$HOME/.bashrc"
-source "$HOME/.bashrc"
+
+export PATH="$HOME/.local/bin:$PATH"
+export COLORTERM=truecolor
+export TERM=xterm-256color
+
 textlt
 ```
 
@@ -65,54 +153,56 @@ After this, start the editor from any terminal with:
 textlt path/to/file.cpp
 ```
 
-#### Windows
+To uninstall TextLT from Linux:
 
-Copy and paste this into PowerShell. Change `VERSION` to the release tag you want, for example `v1.0.0`.
-
-```powershell
-$VERSION = "v1.0.0"
-$InstallDir = "$env:LOCALAPPDATA\Programs\textlt"
-New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-wget "https://github.com/ihor-liutak2/textlt/releases/download/$VERSION/textlt-windows-x64.zip" -OutFile "$env:TEMP\textlt-windows-x64.zip"
-Expand-Archive -Force "$env:TEMP\textlt-windows-x64.zip" -DestinationPath $InstallDir
-$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
-if ($UserPath -notlike "*$InstallDir*") { [Environment]::SetEnvironmentVariable("Path", "$UserPath;$InstallDir", "User") }
-& "$InstallDir\textlt.exe"
-```
-
-Open a new terminal after installing so Windows reloads `PATH`, then start the editor with:
-
-```powershell
-textlt path\to\file.cpp
-```
-
-### Automated 1-Click Installation
-The repository includes an intelligent interactive deployment script that installs missing dependencies (`build-essential`, `cmake`), compiles the binary in `Release` mode, safely copies it into your user local binary path, and updates your environment path configurations.
-
-Simply clone and run the installer:
 ```bash
-git clone [https://github.com/yourusername/textlt.git](https://github.com/yourusername/textlt.git)
+rm -rf "$HOME/.local/share/textlt" "$HOME/.local/bin/textlt"
+```
+
+### Build and Install from Source on Linux
+
+Install build dependencies on Debian, Ubuntu, or MX Linux:
+
+```bash
+sudo apt update
+sudo apt install -y build-essential cmake git libcurl4-openssl-dev libarchive-dev
+```
+
+Clone and build:
+
+```bash
+git clone https://github.com/ihor-liutak2/textlt.git
 cd textlt
-chmod +x install.sh
-./install.sh
-
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j"$(nproc)"
 ```
 
-*Note: After the script finishes, reload your shell profile via `source ~/.bashrc` to activate the global `textlt` command.*
-
-###  Manual Compilation
-
-If you prefer building manually, ensure you have a C++17 compliant compiler installed:
+Run from the build directory:
 
 ```bash
-# Setup build workspace
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel $(nproc)
-
-# Execute local target
-./build/textlt path/to/your/file.cpp
-
+./build/textlt path/to/file.cpp
 ```
+
+Install the built binary for the current user:
+
+```bash
+mkdir -p "$HOME/.local/bin"
+cp build/textlt "$HOME/.local/bin/textlt"
+chmod +x "$HOME/.local/bin/textlt"
+grep -qxF 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+```
+
+### Manual Compilation
+
+If you prefer building manually, use CMake directly from the repository root:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel "$(nproc)"
+./build/textlt path/to/your/file.cpp
+```
+
+TextLT is a terminal application. On Windows, run it from PowerShell, Windows Terminal, or another terminal emulator. The Windows installer creates a `textlt.cmd` wrapper so bundled resources such as `themes` and `resources` are loaded from the correct directory.
 
 ---
 
@@ -163,9 +253,3 @@ Open the interactive **Help** window inside the editor at any time to view the l
 
 This project is licensed under the MIT License - see the [LICENSE](https://www.google.com/search?q=LICENSE) file for details.
 
-```
-
----
-
-
-```

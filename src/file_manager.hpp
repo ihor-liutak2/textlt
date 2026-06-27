@@ -92,6 +92,8 @@ public:
         const std::string& input,
         const std::filesystem::path& base_directory,
         std::string& error);
+    static std::string PathToUtf8(const std::filesystem::path& path);
+    static std::filesystem::path PathFromUtf8(const std::string& text);
     static std::string FormatFileSize(std::uintmax_t size);
     static std::string BuildPathText(const std::vector<std::filesystem::path>& paths);
     static bool IsPlainName(const std::string& name);

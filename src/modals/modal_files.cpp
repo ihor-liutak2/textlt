@@ -36,7 +36,7 @@ std::string FileTypeLabel(FileEntryType type) {
 }
 
 std::string WithTrailingSeparator(std::filesystem::path path) {
-    std::string value = path.lexically_normal().string();
+    std::string value = FileManager::PathToUtf8(path.lexically_normal());
     if (!value.empty() && value.back() != '/' && value.back() != '\\') {
         value += std::filesystem::path::preferred_separator;
     }
@@ -287,47 +287,57 @@ void FilesModalContent::LoadDirectory(const std::filesystem::path& directory) {
         return;
     }
 
-    std::error_code status_error;
-    std::filesystem::path target = directory;
-    if (target.empty()) {
-        target = std::filesystem::current_path(status_error);
-    }
-    if (!std::filesystem::is_directory(target, status_error)) {
-        SetStatus("Directory does not exist: " + target.string(), true);
-        return;
-    }
+    try {
+        std::error_code status_error;
+        std::filesystem::path target = directory;
+        if (target.empty()) {
+            target = std::filesystem::current_path(status_error);
+            if (status_error) {
+                SetStatus(status_error.message(), true);
+                return;
+            }
+        }
+        if (!std::filesystem::is_directory(target, status_error) || status_error) {
+            SetStatus("Directory does not exist: " + FileManager::PathToUtf8(target), true);
+            return;
+        }
 
-    std::vector<FileEntry> listed_entries;
-    std::string error;
-    if (!file_manager_->ListDirectory(target, FilterForMode(), listed_entries, error)) {
-        SetStatus(error.empty() ? "Unable to read directory." : error, true);
-        return;
-    }
+        std::vector<FileEntry> listed_entries;
+        std::string error;
+        if (!file_manager_->ListDirectory(target, FilterForMode(), listed_entries, error)) {
+            SetStatus(error.empty() ? "Unable to read directory." : error, true);
+            return;
+        }
 
-    current_directory_ = target.lexically_normal();
-    entries_.clear();
-    ClearSelectionMarks();
+        current_directory_ = target.lexically_normal();
+        entries_.clear();
+        ClearSelectionMarks();
 
-    const std::filesystem::path parent = current_directory_.parent_path();
-    if (!parent.empty() && parent != current_directory_) {
-        FileEntry parent_entry;
-        parent_entry.path = parent;
-        parent_entry.name = "..";
-        parent_entry.type = FileEntryType::Directory;
-        entries_.push_back(std::move(parent_entry));
-    }
+        const std::filesystem::path parent = current_directory_.parent_path();
+        if (!parent.empty() && parent != current_directory_) {
+            FileEntry parent_entry;
+            parent_entry.path = parent;
+            parent_entry.name = "..";
+            parent_entry.type = FileEntryType::Directory;
+            entries_.push_back(std::move(parent_entry));
+        }
 
-    entries_.insert(entries_.end(), listed_entries.begin(), listed_entries.end());
-    selected_entry_ = entries_.empty() ? 0 : std::min(selected_entry_, static_cast<int>(entries_.size()) - 1);
-    scroll_offset_ = 0;
-    path_input_value_ = current_directory_.string();
-    path_input_cursor_ = static_cast<int>(path_input_value_.size());
-    EnsureSelectionVisible();
+        entries_.insert(entries_.end(), listed_entries.begin(), listed_entries.end());
+        selected_entry_ = entries_.empty() ? 0 : std::min(selected_entry_, static_cast<int>(entries_.size()) - 1);
+        scroll_offset_ = 0;
+        path_input_value_ = FileManager::PathToUtf8(current_directory_);
+        path_input_cursor_ = static_cast<int>(path_input_value_.size());
+        EnsureSelectionVisible();
 
-    if (entries_.empty()) {
-        SetStatus("Directory is empty.");
-    } else {
-        SetStatus("Enter opens folders or confirms selected file. Double click works too.");
+        if (entries_.empty()) {
+            SetStatus("Directory is empty.");
+        } else {
+            SetStatus("Enter opens folders or confirms selected file. Double click works too.");
+        }
+    } catch (const std::exception& e) {
+        SetStatus(std::string("Unable to read directory: ") + e.what(), true);
+    } catch (...) {
+        SetStatus("Unable to read directory.", true);
     }
 }
 
@@ -337,6 +347,7 @@ void FilesModalContent::LoadPathFromInput() {
         return;
     }
 
+    try {
     std::string error;
     const std::filesystem::path resolved = FileManager::ResolvePath(
         path_input_value_,
@@ -355,7 +366,7 @@ void FilesModalContent::LoadPathFromInput() {
 
     if (std::filesystem::is_regular_file(resolved, status_error)) {
         LoadDirectory(resolved.parent_path());
-        const std::string name = resolved.filename().string();
+        const std::string name = FileManager::PathToUtf8(resolved.filename());
         for (size_t index = 0; index < entries_.size(); ++index) {
             if (entries_[index].name == name) {
                 SelectEntry(static_cast<int>(index));
@@ -372,13 +383,18 @@ void FilesModalContent::LoadPathFromInput() {
     if (IsSaveLikeMode() && !resolved.parent_path().empty() &&
         std::filesystem::is_directory(resolved.parent_path(), status_error)) {
         LoadDirectory(resolved.parent_path());
-        file_name_input_value_ = resolved.filename().string();
+        file_name_input_value_ = FileManager::PathToUtf8(resolved.filename());
         file_name_input_cursor_ = static_cast<int>(file_name_input_value_.size());
         SetStatus("Target file name prepared: " + file_name_input_value_);
         return;
     }
 
-    SetStatus("Path is not a directory or file: " + resolved.string(), true);
+    SetStatus("Path is not a directory or file: " + FileManager::PathToUtf8(resolved), true);
+    } catch (const std::exception& e) {
+        SetStatus(std::string("Unable to load path: ") + e.what(), true);
+    } catch (...) {
+        SetStatus("Unable to load path.", true);
+    }
 }
 
 void FilesModalContent::LoadBuiltInDirectory(const std::filesystem::path& directory) {
@@ -401,7 +417,7 @@ void FilesModalContent::AddCurrentDirectoryToFavorites() {
         return;
     }
     RefreshFavorites();
-    SetStatus("Added directory: " + current_directory_.string());
+    SetStatus("Added directory: " + FileManager::PathToUtf8(current_directory_));
 }
 
 void FilesModalContent::CopySelectedPathText() {
@@ -467,7 +483,7 @@ void FilesModalContent::StartRenameOperation() {
     StartNameOperation(
         PendingFileOperation::RenameItem,
         "New name",
-        paths.front().filename().string(),
+        FileManager::PathToUtf8(paths.front().filename()),
         "Rename selected item?");
     pending_operation_paths_ = paths;
 }
@@ -587,14 +603,14 @@ void FilesModalContent::ConfirmPendingOperation() {
                 SetStatus("Enter only a directory name.", true);
                 return;
             }
-            const std::filesystem::path target = current_directory_ / pending_operation_input_value_;
+            const std::filesystem::path target = current_directory_ / FileManager::PathFromUtf8(pending_operation_input_value_);
             if (!file_manager_->CreateDirectoryItem(target, error)) {
                 SetStatus(error.empty() ? "Create directory failed." : error, true);
                 return;
             }
             CancelPendingOperation();
             Refresh();
-            SetStatus("Directory created: " + target.filename().string());
+            SetStatus("Directory created: " + FileManager::PathToUtf8(target.filename()));
             break;
         }
         case PendingFileOperation::CreateFileItem: {
@@ -602,14 +618,14 @@ void FilesModalContent::ConfirmPendingOperation() {
                 SetStatus("Enter only a file name.", true);
                 return;
             }
-            const std::filesystem::path target = current_directory_ / pending_operation_input_value_;
+            const std::filesystem::path target = current_directory_ / FileManager::PathFromUtf8(pending_operation_input_value_);
             if (!file_manager_->CreateEmptyFile(target, error)) {
                 SetStatus(error.empty() ? "Create file failed." : error, true);
                 return;
             }
             CancelPendingOperation();
             Refresh();
-            SetStatus("File created: " + target.filename().string());
+            SetStatus("File created: " + FileManager::PathToUtf8(target.filename()));
             break;
         }
         case PendingFileOperation::DeleteItems: {
@@ -655,7 +671,7 @@ void FilesModalContent::ConfirmPendingOperation() {
             }
             CancelPendingOperation();
             Refresh();
-            SetStatus("Renamed to: " + destination.filename().string());
+            SetStatus("Renamed to: " + FileManager::PathToUtf8(destination.filename()));
             break;
         }
         case PendingFileOperation::PasteItems: {
@@ -815,7 +831,7 @@ void FilesModalContent::ConfirmSelected() {
         return;
     }
 
-    SetStatus(FooterActionLabel() + " complete: " + target.string());
+    SetStatus(FooterActionLabel() + " complete: " + FileManager::PathToUtf8(target));
     if (on_close_) {
         on_close_();
     }
@@ -941,7 +957,7 @@ bool FilesModalContent::TargetPathForMode(std::filesystem::path& path, std::stri
             error = "Enter only a file name.";
             return false;
         }
-        path = current_directory_ / file_name_input_value_;
+        path = current_directory_ / FileManager::PathFromUtf8(file_name_input_value_);
         return true;
     }
 
@@ -1221,9 +1237,9 @@ ftxui::Element FilesModalContent::RenderFavoriteDirectories() {
         if (index > 0) {
             buttons.push_back(text(" "));
         }
-        std::string label = favorite_directories_[index].filename().string();
+        std::string label = FileManager::PathToUtf8(favorite_directories_[index].filename());
         if (label.empty()) {
-            label = favorite_directories_[index].string();
+            label = FileManager::PathToUtf8(favorite_directories_[index]);
         }
         buttons.push_back(
             text(BracketLabel(TrimForDisplay(label, 16))) |
@@ -1389,9 +1405,9 @@ ftxui::Element FilesModalContent::RenderSelectionSummary() const {
         const size_t marked_count = SortedSelectedIndices().size();
         if (marked_count > 0) {
             text_value = "Selected " + std::to_string(marked_count) +
-                " item(s), cursor: " + entry.path.string();
+                " item(s), cursor: " + FileManager::PathToUtf8(entry.path);
         } else {
-            text_value = "Selected: " + entry.path.string();
+            text_value = "Selected: " + FileManager::PathToUtf8(entry.path);
         }
     }
     const std::string range = entries_.empty()
@@ -1484,9 +1500,9 @@ std::string FilesModalContent::FooterActionLabel() const {
 
 std::string FilesModalContent::FormatCurrentDirectory() const {
     if (current_directory_.empty()) {
-        return std::filesystem::current_path().string();
+        return FileManager::PathToUtf8(std::filesystem::current_path());
     }
-    return current_directory_.string();
+    return FileManager::PathToUtf8(current_directory_);
 }
 
 std::string FilesModalContent::FormatEntryName(const FileEntry& entry, size_t width) const {
@@ -1526,7 +1542,7 @@ std::string FilesModalContent::TrimForDisplay(const std::string& text, size_t ma
 
 std::string FilesModalContent::SuggestedFileNameFromPath(
     const std::filesystem::path& path) const {
-    return path.filename().string();
+    return FileManager::PathToUtf8(path.filename());
 }
 
 FilesModal::FilesModal(
