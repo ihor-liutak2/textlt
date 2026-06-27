@@ -4,6 +4,7 @@
 #include <string>
 
 #include "editor_component.hpp"
+#include "keyboard_shortcuts.hpp"
 
 namespace textlt {
 namespace {
@@ -288,19 +289,19 @@ bool IsPrintableRawTextInput(const ftxui::Event& event) {
 
 bool EditorInputController::HandleEvent(EditorComponent& editor, ftxui::Event event) {
     const std::string& input = event.input();
-    if (input == "\x1A" || input == "Ctrl+Z") {
+    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'z')) {
         editor.Undo();
         return true;
     }
-    if (input == "\x19" || input == "Ctrl+Y") {
+    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'y')) {
         editor.Redo();
         return true;
     }
-    if (input == "\x1F" || input == "Ctrl+/" || event == ftxui::Event::Special("\x1F")) {
+    if (MatchesShortcut(event, ShortcutModifier::Ctrl, '/')) {
         editor.ToggleComment();
         return true;
     }
-    if (input == "\x14" || input == "Ctrl+T") {
+    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 't')) {
         editor.ToggleCase();
         return true;
     }

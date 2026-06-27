@@ -7,6 +7,7 @@
 #include "ftxui/component/mouse.hpp"
 #include <ftxui/component/component_base.hpp>
 #include "file_utils.hpp"
+#include "keyboard_shortcuts.hpp"
 #include "theme.hpp"
 
 using namespace ftxui;
@@ -74,43 +75,23 @@ bool IsWordDeleteForwardShortcut(const ftxui::Event& event) {
 }
 
 bool IsAltHShortcut(const ftxui::Event& event) {
-    const std::string& input = event.input();
-    return input == "\x1B" "h" ||
-        input == "\x1B" "H" ||
-        input == "Alt+H" ||
-        event == ftxui::Event::Special("Alt+H");
+    return MatchesShortcut(event, ShortcutModifier::Alt, 'h');
 }
 
 bool IsAltJShortcut(const ftxui::Event& event) {
-    const std::string& input = event.input();
-    return input == "\x1Bj" ||
-        input == "\x1BJ" ||
-        input == "Alt+J" ||
-        event == ftxui::Event::Special("Alt+J");
+    return MatchesShortcut(event, ShortcutModifier::Alt, 'j');
 }
 
 bool IsAltSShortcut(const ftxui::Event& event) {
-    const std::string& input = event.input();
-    return input == "\x1Bs" ||
-        input == "\x1BS" ||
-        input == "Alt+S" ||
-        event == ftxui::Event::Special("Alt+S");
+    return MatchesShortcut(event, ShortcutModifier::Alt, 's');
 }
 
 bool IsCtrlBShortcut(const ftxui::Event& event) {
-    const std::string& input = event.input();
-    return input == "\x02" ||
-        input == "Ctrl+B" ||
-        event == ftxui::Event::Special("\x02") ||
-        event == ftxui::Event::Special("Ctrl+B");
+    return MatchesShortcut(event, ShortcutModifier::Ctrl, 'b');
 }
 
 bool IsAltBShortcut(const ftxui::Event& event) {
-    const std::string& input = event.input();
-    return input == "\x1B" "b" ||
-        input == "\x1B" "B" ||
-        input == "Alt+B" ||
-        event == ftxui::Event::Special("Alt+B");
+    return MatchesShortcut(event, ShortcutModifier::Alt, 'b');
 }
 
 bool IsOpenedSidebarChordKey(const ftxui::Event& event) {
@@ -341,7 +322,6 @@ ftxui::Element TextltApp::RenderGoToLinePanel() {
 
 bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     const std::string& input = event.input();
-    const bool has_input = !input.empty();
 
     // --- Global Event Filter: Modals and Overlays (highest layer first) ---
 
@@ -585,10 +565,8 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         return true;
     }
 
-    if (input == "\x1Bw" ||
-        input == "\x1BW" ||
-        input == "Alt+W" ||
-        event == ftxui::Event::Special("Alt+W")) {
+    if (MatchesShortcut(event, ShortcutModifier::Alt, 'w') ||
+        MatchesShortcut(event, ShortcutModifier::Ctrl, 'w')) {
         CloseCurrentFile();
         return true;
     }
@@ -672,10 +650,7 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
             return true;
         }
         // Ctrl+A (Select All)
-        if (event == ftxui::Event::Special("\x01") ||
-            input == "\x01" ||
-            event == ftxui::Event::Special("Ctrl+A") ||
-            input == "Ctrl+A") {
+        if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'a')) {
             auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
             editor_ptr->SelectAll();
             active_action_ = "Selected all text";
@@ -689,30 +664,28 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     }
 
     // Global App Shortcuts (available when no modals are active)
-    if (event.input() == "\x11") { // Ctrl+Q
+    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'q')) {
         RequestExit();
         return true;
     }
-    if (event.input() == "\x13") { // Ctrl+S
+    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 's')) {
         SaveCurrentFile();
         return true;
     }
-    if (event.input() == "\x0F") { // Ctrl+O
+    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'o')) {
         OpenFilesModal(FilesModalMode::Open);
         return true;
     }
 
     // Clipboard shortcuts (trigger dropdown actions)
-    if (event == ftxui::Event::Special("\x03") ||
-        (has_input && input[0] == '\x03') ||
+    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'c') ||
         event == ftxui::Event::Special("Ctrl+Shift+C") ||
         input == "Ctrl+Shift+C") {
         RunDropdownAction(1, 4); // This will trigger copy.
         screen_.PostEvent(ftxui::Event::Custom);
         return true;
     }
-    if (event == ftxui::Event::Special("\x18") ||
-        (has_input && input[0] == '\x18') ||
+    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'x') ||
         event == ftxui::Event::Special("Ctrl+Shift+X") ||
         input == "Ctrl+Shift+X") {
         RunDropdownAction(1, 3); // This will trigger cut.
@@ -720,8 +693,7 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         return true;
     }
     // Keep Ctrl+Shift+V for terminal configurations that reserve Ctrl+V.
-    if (input == "\x16" ||
-        input == "Ctrl+V" ||
+    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'v') ||
         event == ftxui::Event::Special("Ctrl+Shift+V") ||
         input == "Ctrl+Shift+V") {
         RunDropdownAction(1, 5); // Index for "Paste"
@@ -729,15 +701,15 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     }
     
     // Shortcuts to open Find/Replace/Go-to-Line panels
-    if (input == "\x06" || input == "Ctrl+F") {
+    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'f')) {
         OpenFindPanel(false);
         return true;
     }
-    if (event == ftxui::Event::Special("\x12") || input == "\x12" || input == "Ctrl+R") {
+    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'r')) {
         OpenFindPanel(true);
         return true;
     }
-    if (event == ftxui::Event::Special("\x07") || input == "\x07" || input == "Ctrl+G") {
+    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'g')) {
         OpenGoToLinePanel();
         return true;
     }

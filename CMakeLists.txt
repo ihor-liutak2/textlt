@@ -245,6 +245,16 @@ add_executable(textlt_text_importer_test
   src/text_importer.cpp
 )
 
+add_executable(textlt_keyboard_shortcuts_test
+  tests/keyboard_shortcuts_test.cpp
+)
+
+target_include_directories(textlt_keyboard_shortcuts_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(textlt_keyboard_shortcuts_test PRIVATE ftxui::component)
+
 target_include_directories(textlt_text_importer_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${LibArchive_INCLUDE_DIRS}
@@ -263,3 +273,4 @@ target_link_libraries(textlt_document_navigation_test PRIVATE ftxui::screen)
 
 add_test(NAME textlt_document_navigation_test COMMAND textlt_document_navigation_test)
 add_test(NAME textlt_text_importer_test COMMAND textlt_text_importer_test)
+add_test(NAME textlt_keyboard_shortcuts_test COMMAND textlt_keyboard_shortcuts_test)

@@ -34,7 +34,7 @@ MenuBarComponent::MenuBarComponent(
               " Import... ",
               " Export... ",
               " Recent Files ",
-              " Close              (Alt+W) ",
+              " Close       (Alt+W / Ctrl+W) ",
               " Close All ",
               " Save               (Ctrl+S) ",
               " Save All ",
