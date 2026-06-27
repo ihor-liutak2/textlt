@@ -14,7 +14,20 @@
 namespace textlt {
 namespace {
 
-constexpr int kProcessorListVisibleRows = 17;
+constexpr int kProcessorListVisibleRows = 16;
+const std::vector<std::string> kProcessorGroups = {
+    "All",
+    "Cleanup",
+    "Lines",
+    "Paragraphs",
+    "Case",
+    "Code",
+    "Punctuation",
+    "Tables",
+    "Markdown",
+    "Analysis",
+    "Custom",
+};
 std::string BracketLabel(const std::string& label) {
     return "[" + label + "]";
 }
@@ -97,6 +110,10 @@ TextProcessorsModalContent::TextProcessorsModalContent(
     paragraph_tab_button_ = MakeTextButton("Paragraph", [this] { SetScope(TextParserScope::Paragraph); });
     code_tab_button_ = MakeTextButton("Code", [this] { SetScope(TextParserScope::Code); });
 
+    for (const std::string& group : kProcessorGroups) {
+        group_tab_buttons_.push_back(MakeTextButton(group, [this, group] { SetGroup(group); }));
+    }
+
     processor_grid_component_ = ftxui::Renderer([this] {
         return RenderProcessorGrid();
     });
@@ -133,10 +150,13 @@ TextProcessorsModalContent::TextProcessorsModalContent(
         text_tab_button_,
         paragraph_tab_button_,
         code_tab_button_,
-        repeat_input_,
+    };
+    controls.insert(controls.end(), group_tab_buttons_.begin(), group_tab_buttons_.end());
+    controls.push_back(repeat_input_);
+    controls.insert(controls.end(), {
         whole_document_checkbox_,
         processor_grid_component_,
-    };
+    });
     controls.insert(controls.end(), param_inputs_.begin(), param_inputs_.end());
 
     container_ = ftxui::Container::Vertical(controls);
@@ -172,9 +192,11 @@ void TextProcessorsModalContent::Open() {
 void TextProcessorsModalContent::Close() {
     status_ = "Select a text processor.";
     status_is_error_ = false;
+    report_text_.clear();
 }
 
 void TextProcessorsModalContent::Reload() {
+    report_text_.clear();
     std::string error;
     const std::filesystem::path default_processors_directory =
         std::filesystem::current_path() / "text_processors";
@@ -235,6 +257,14 @@ void TextProcessorsModalContent::ApplySelected() {
         return;
     }
 
+    if (parser->output == TextParserOutput::Report || result.output == TextParserOutput::Report) {
+        report_text_ = result.text;
+        status_ = "Analysis completed: " + parser->name + ".";
+        status_is_error_ = false;
+        return;
+    }
+
+    report_text_.clear();
     if (!replace_target_text_ ||
         !replace_target_text_(whole_document_, result.text, error)) {
         status_ = error.empty() ? "Cannot replace target text." : error;
@@ -373,6 +403,13 @@ void TextProcessorsModalContent::SetScope(TextParserScope scope) {
     }
 
     active_scope_ = scope;
+    if (active_group_ != "All") {
+        const std::vector<std::string> groups = AvailableGroupsForCurrentScope();
+        if (std::find(groups.begin(), groups.end(), active_group_) == groups.end()) {
+            active_group_ = "All";
+        }
+    }
+    report_text_.clear();
     selected_parser_ = 0;
     parser_list_top_row_ = 0;
     RebuildParserList();
@@ -384,11 +421,30 @@ TextParserScope TextProcessorsModalContent::CurrentScope() const {
     return active_scope_;
 }
 
+void TextProcessorsModalContent::SetGroup(std::string group) {
+    if (group.empty()) {
+        group = "All";
+    }
+    if (active_group_ == group) {
+        return;
+    }
+    active_group_ = std::move(group);
+    selected_parser_ = 0;
+    parser_list_top_row_ = 0;
+    report_text_.clear();
+    RebuildParserList();
+    status_ = "Showing " + active_group_ + " processors.";
+    status_is_error_ = false;
+}
+
 void TextProcessorsModalContent::RebuildParserList() {
     filtered_parsers_.clear();
 
     for (const TextParserDefinition& parser : manager_.GetParsers()) {
         if (parser.scope != active_scope_) {
+            continue;
+        }
+        if (active_group_ != "All" && parser.group != active_group_) {
             continue;
         }
         filtered_parsers_.push_back(&parser);
@@ -600,26 +656,32 @@ ftxui::Element TextProcessorsModalContent::Render() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
-    return vbox({
-        RenderScopeTabs(),
+    Elements rows;
+    rows.push_back(RenderScopeTabs());
+    rows.push_back(RenderGroupTabs());
+    rows.push_back(separator() | color(theme.modal_border));
+    rows.push_back(hbox({
+        RenderSelectedParserInfo() |
+            size(WIDTH, EQUAL, 49) |
+            flex,
         separator() | color(theme.modal_border),
-        hbox({
-            RenderSelectedParserInfo() |
-                size(WIDTH, EQUAL, 49) |
-                flex,
-            separator() | color(theme.modal_border),
-            RenderParameterFields() |
-                size(WIDTH, EQUAL, 50) |
-                flex,
-        }),
-        separator() | color(theme.modal_border),
-        vbox({
-            text("Processors") | bold | color(theme.modal_accent),
-            RenderProcessorGrid() | flex,
-        }) | flex,
-        separator() | color(theme.modal_border),
-        RenderStatusLine(),
-    }) | bgcolor(theme.modal_background);
+        RenderParameterFields() |
+            size(WIDTH, EQUAL, 50) |
+            flex,
+    }));
+    rows.push_back(separator() | color(theme.modal_border));
+    rows.push_back(vbox({
+        text("Processors") | bold | color(theme.modal_accent),
+        RenderProcessorGrid() | flex,
+    }) | flex);
+    if (!report_text_.empty()) {
+        rows.push_back(separator() | color(theme.modal_border));
+        rows.push_back(RenderReportPreview());
+    }
+    rows.push_back(separator() | color(theme.modal_border));
+    rows.push_back(RenderStatusLine());
+
+    return vbox(std::move(rows)) | bgcolor(theme.modal_background);
 }
 
 ftxui::Element TextProcessorsModalContent::RenderScopeTabs() const {
@@ -640,6 +702,36 @@ ftxui::Element TextProcessorsModalContent::RenderScopeTabs() const {
             : code_tab_button_->Render(),
         filler(),
     });
+}
+
+ftxui::Element TextProcessorsModalContent::RenderGroupTabs() const {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    const std::vector<std::string> available_groups = AvailableGroupsForCurrentScope();
+
+    Elements items;
+    items.push_back(text(" Group: ") | bold | color(theme.modal_accent));
+    for (size_t index = 0; index < kProcessorGroups.size(); ++index) {
+        const std::string& group = kProcessorGroups[index];
+        if (group != "All" &&
+            std::find(available_groups.begin(), available_groups.end(), group) == available_groups.end()) {
+            continue;
+        }
+        if (items.size() > 1) {
+            items.push_back(text(" "));
+        }
+        if (active_group_ == group) {
+            items.push_back(text(BracketLabel(group)) |
+                bgcolor(theme.modal_selected_item_bg) |
+                color(theme.modal_selected_item_fg));
+        } else if (index < group_tab_buttons_.size() && group_tab_buttons_[index]) {
+            items.push_back(group_tab_buttons_[index]->Render());
+        } else {
+            items.push_back(text(BracketLabel(group)) | color(theme.modal_accent));
+        }
+    }
+    items.push_back(filler());
+    return hbox(std::move(items));
 }
 
 ftxui::Element TextProcessorsModalContent::RenderSelectedParserInfo() const {
@@ -663,6 +755,13 @@ ftxui::Element TextProcessorsModalContent::RenderSelectedParserInfo() const {
         parser->locked
             ? text("  locked") | dim | color(theme.modal_text_color)
             : text("") | color(theme.modal_text_color),
+    }));
+    rows.push_back(hbox({
+        text("Group: ") | bold | color(theme.modal_accent),
+        text(parser->group.empty() ? "Custom" : parser->group) | color(theme.modal_text_color),
+        text("  Output: ") | bold | color(theme.modal_accent),
+        text(parser->output == TextParserOutput::Report ? "Report" : "Replace text") |
+            color(theme.modal_text_color),
     }));
     rows.push_back(text(""));
     rows.push_back(text("Description") | bold | color(theme.modal_accent));
@@ -836,6 +935,27 @@ ftxui::Element TextProcessorsModalContent::RenderStatusLine() const {
     });
 }
 
+ftxui::Element TextProcessorsModalContent::RenderReportPreview() const {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    Elements rows;
+    rows.push_back(text(" Analysis report ") | bold | color(theme.modal_accent));
+
+    std::istringstream input(report_text_);
+    std::string line;
+    int shown = 0;
+    while (shown < 5 && std::getline(input, line)) {
+        rows.push_back(text(" " + TrimForDisplay(line, 100) + " ") | color(theme.modal_text_color));
+        ++shown;
+    }
+
+    if (input.good()) {
+        rows.push_back(text(" ...") | dim | color(theme.modal_text_color));
+    }
+
+    return vbox(std::move(rows));
+}
+
 std::vector<std::string> TextProcessorsModalContent::WrapText(
     const std::string& text,
     size_t width) const {
@@ -900,6 +1020,35 @@ std::string TextProcessorsModalContent::ScopeDisplay(TextParserScope scope) cons
     default:
         return "Text";
     }
+}
+
+std::vector<std::string> TextProcessorsModalContent::AvailableGroupsForCurrentScope() const {
+    std::vector<std::string> groups;
+    for (const TextParserDefinition& parser : manager_.GetParsers()) {
+        if (parser.scope != active_scope_) {
+            continue;
+        }
+        const std::string group = parser.group.empty() ? "Custom" : parser.group;
+        if (std::find(groups.begin(), groups.end(), group) == groups.end()) {
+            groups.push_back(group);
+        }
+    }
+
+    std::vector<std::string> ordered;
+    for (const std::string& group : kProcessorGroups) {
+        if (group == "All") {
+            continue;
+        }
+        if (std::find(groups.begin(), groups.end(), group) != groups.end()) {
+            ordered.push_back(group);
+        }
+    }
+    for (const std::string& group : groups) {
+        if (std::find(ordered.begin(), ordered.end(), group) == ordered.end()) {
+            ordered.push_back(group);
+        }
+    }
+    return ordered;
 }
 
 std::string TextProcessorsModalContent::NormalizedParamType(const std::string& type) const {

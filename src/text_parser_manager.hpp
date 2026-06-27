@@ -20,6 +20,11 @@ enum class TextParserEngine {
   Builtin,
 };
 
+enum class TextParserOutput {
+  ReplaceText,
+  Report,
+};
+
 struct TextParserParam {
   std::string id;
   std::string label;
@@ -34,7 +39,9 @@ struct TextParserDefinition {
   std::string name;
   TextParserScope scope = TextParserScope::Text;
   std::string description;
+  std::string group = "Custom";
   TextParserEngine engine = TextParserEngine::Lua;
+  TextParserOutput output = TextParserOutput::ReplaceText;
   std::filesystem::path script_path;
   std::string builtin_id;
   int repeat_default = 1;
@@ -47,6 +54,7 @@ struct TextParserApplyResult {
   bool success = false;
   std::string text;
   std::string error;
+  TextParserOutput output = TextParserOutput::ReplaceText;
 };
 
 class TextParserManager {

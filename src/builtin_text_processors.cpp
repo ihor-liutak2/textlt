@@ -7,6 +7,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <iomanip>
+#include <map>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -630,10 +632,62 @@ std::string TrimTrailingSpacesFromLine(std::string line) {
   return line;
 }
 
+
+std::string TrimLeadingSpacesFromLine(std::string line) {
+  std::size_t start = 0;
+  while (start < line.size() && (line[start] == ' ' || line[start] == '\t')) {
+    ++start;
+  }
+  if (start > 0) {
+    line.erase(0, start);
+  }
+  return line;
+}
+
+std::string TrimSpacesFromLine(std::string line) {
+  line = TrimTrailingSpacesFromLine(std::move(line));
+  return TrimLeadingSpacesFromLine(std::move(line));
+}
+
+bool IsHorizontalSpaceCodepoint(std::uint32_t codepoint) {
+  return codepoint == ' ' || codepoint == '\t' || codepoint == 0x00A0;
+}
+
+bool IsZeroWidthCodepoint(std::uint32_t codepoint) {
+  return codepoint == 0xFEFF || codepoint == 0x200B || codepoint == 0x200C ||
+      codepoint == 0x200D || codepoint == 0x2060;
+}
+
+bool IsAsciiControlCodepoint(std::uint32_t codepoint) {
+  return (codepoint < 0x20 || codepoint == 0x7F) &&
+      codepoint != '\n' && codepoint != '\r' && codepoint != '\t';
+}
+
+bool IsLowercaseLetterForJoin(std::uint32_t codepoint) {
+  return IsAsciiLower(codepoint) || IsCyrillicLower(codepoint);
+}
+
+bool StartsWithLowercaseLetter(const std::string& line) {
+  for (std::uint32_t codepoint : DecodeUtf8(line)) {
+    if (IsHorizontalSpaceCodepoint(codepoint)) {
+      continue;
+    }
+    return IsLowercaseLetterForJoin(codepoint);
+  }
+  return false;
+}
+
 BuiltinTextProcessorResult SuccessResult(std::string text) {
   BuiltinTextProcessorResult result;
   result.success = true;
   result.text = std::move(text);
+  return result;
+}
+
+BuiltinTextProcessorResult ReportResult(std::string report) {
+  BuiltinTextProcessorResult result;
+  result.success = true;
+  result.text = std::move(report);
   return result;
 }
 
@@ -695,22 +749,89 @@ TextParserParam TextParam(
   return param;
 }
 
-TextParserDefinition BuiltinDefinition(
+TextParserDefinition MakeBuiltinDefinition(
     std::string id,
     std::string name,
     std::string description,
+    TextParserScope scope,
+    std::string group,
+    TextParserOutput output,
     std::vector<TextParserParam> params = {}) {
   TextParserDefinition definition;
   definition.id = std::move(id);
   definition.name = std::move(name);
-  definition.scope = TextParserScope::Code;
+  definition.scope = scope;
   definition.description = std::move(description);
+  definition.group = std::move(group);
   definition.engine = TextParserEngine::Builtin;
+  definition.output = output;
   definition.builtin_id = definition.id;
   definition.locked = true;
   definition.repeat_default = 1;
   definition.params = std::move(params);
   return definition;
+}
+
+TextParserDefinition BuiltinDefinition(
+    std::string id,
+    std::string name,
+    std::string description,
+    std::vector<TextParserParam> params = {}) {
+  return MakeBuiltinDefinition(
+      std::move(id),
+      std::move(name),
+      std::move(description),
+      TextParserScope::Code,
+      "Code",
+      TextParserOutput::ReplaceText,
+      std::move(params));
+}
+
+TextParserDefinition GroupedBuiltinDefinition(
+    std::string id,
+    std::string name,
+    std::string description,
+    std::string group,
+    std::vector<TextParserParam> params = {}) {
+  return MakeBuiltinDefinition(
+      std::move(id),
+      std::move(name),
+      std::move(description),
+      TextParserScope::Code,
+      std::move(group),
+      TextParserOutput::ReplaceText,
+      std::move(params));
+}
+
+TextParserDefinition TextBuiltinDefinition(
+    std::string id,
+    std::string name,
+    std::string description,
+    std::string group,
+    std::vector<TextParserParam> params = {}) {
+  return MakeBuiltinDefinition(
+      std::move(id),
+      std::move(name),
+      std::move(description),
+      TextParserScope::Text,
+      std::move(group),
+      TextParserOutput::ReplaceText,
+      std::move(params));
+}
+
+TextParserDefinition AnalysisDefinition(
+    std::string id,
+    std::string name,
+    std::string description,
+    std::vector<TextParserParam> params = {}) {
+  return MakeBuiltinDefinition(
+      std::move(id),
+      std::move(name),
+      std::move(description),
+      TextParserScope::Text,
+      "Analysis",
+      TextParserOutput::Report,
+      std::move(params));
 }
 
 BuiltinTextProcessorResult RunTransformer(
@@ -1175,96 +1296,796 @@ BuiltinTextProcessorResult RemoveLinePrefix(
   return SuccessResult(JoinLinesPreservingFinalNewline(lines, HasFinalNewline(input_text)));
 }
 
+
+BuiltinTextProcessorResult TrimLines(const std::string& input_text) {
+  std::vector<std::string> lines = SplitLines(input_text);
+  bool changed = false;
+
+  for (std::string& line : lines) {
+    const std::string trimmed = TrimSpacesFromLine(line);
+    if (trimmed != line) {
+      line = trimmed;
+      changed = true;
+    }
+  }
+
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(JoinLinesPreservingFinalNewline(lines, HasFinalNewline(input_text)));
+}
+
+BuiltinTextProcessorResult TrimDocument(const std::string& input_text) {
+  std::vector<std::string> lines = SplitLines(input_text);
+  if (lines.empty()) {
+    return SuccessResult(input_text);
+  }
+
+  std::size_t first = 0;
+  while (first < lines.size() && IsBlankLine(lines[first])) {
+    ++first;
+  }
+
+  if (first == lines.size()) {
+    return SuccessResult("");
+  }
+
+  std::size_t last = lines.size() - 1;
+  while (last > first && IsBlankLine(lines[last])) {
+    --last;
+  }
+
+  std::vector<std::string> output;
+  output.reserve(last - first + 1);
+  for (std::size_t index = first; index <= last; ++index) {
+    output.push_back(lines[index]);
+  }
+
+  output.front() = TrimLeadingSpacesFromLine(std::move(output.front()));
+  output.back() = TrimTrailingSpacesFromLine(std::move(output.back()));
+
+  const std::string result = JoinLinesPreservingFinalNewline(output, HasFinalNewline(input_text));
+  if (result == input_text) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(result);
+}
+
+BuiltinTextProcessorResult NormalizeSpaces(const std::string& input_text) {
+  std::string output;
+  output.reserve(input_text.size());
+  bool in_horizontal_space = false;
+  bool changed = false;
+
+  for (std::uint32_t codepoint : DecodeUtf8(input_text)) {
+    if (codepoint == '\n' || codepoint == '\r') {
+      output += EncodeUtf8(codepoint);
+      in_horizontal_space = false;
+      continue;
+    }
+
+    if (IsHorizontalSpaceCodepoint(codepoint)) {
+      if (!in_horizontal_space) {
+        output.push_back(' ');
+      }
+      if (codepoint != ' ' || in_horizontal_space) {
+        changed = true;
+      }
+      in_horizontal_space = true;
+      continue;
+    }
+
+    output += EncodeUtf8(codepoint);
+    in_horizontal_space = false;
+  }
+
+  if (!changed && output == input_text) {
+    return SuccessResult(input_text);
+  }
+  return TrimLines(output);
+}
+
+BuiltinTextProcessorResult RemoveDuplicateSpaces(const std::string& input_text) {
+  std::vector<std::string> lines = SplitLines(input_text);
+  bool changed = false;
+
+  for (std::string& line : lines) {
+    std::string output;
+    output.reserve(line.size());
+    bool previous_space = false;
+    for (char ch : line) {
+      if (ch == ' ') {
+        if (!previous_space) {
+          output.push_back(ch);
+        } else {
+          changed = true;
+        }
+        previous_space = true;
+      } else {
+        output.push_back(ch);
+        previous_space = false;
+      }
+    }
+    if (output != line) {
+      line = std::move(output);
+    }
+  }
+
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(JoinLinesPreservingFinalNewline(lines, HasFinalNewline(input_text)));
+}
+
+BuiltinTextProcessorResult RemoveInvisibleCharacters(const std::string& input_text) {
+  std::string output;
+  output.reserve(input_text.size());
+  bool changed = false;
+
+  for (std::uint32_t codepoint : DecodeUtf8(input_text)) {
+    if (IsZeroWidthCodepoint(codepoint) || codepoint == 0x00AD || IsAsciiControlCodepoint(codepoint)) {
+      changed = true;
+      continue;
+    }
+    if (codepoint == 0x00A0) {
+      output.push_back(' ');
+      changed = true;
+      continue;
+    }
+    output += EncodeUtf8(codepoint);
+  }
+
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(output);
+}
+
+BuiltinTextProcessorResult RemoveZeroWidthCharacters(const std::string& input_text) {
+  std::string output;
+  output.reserve(input_text.size());
+  bool changed = false;
+
+  for (std::uint32_t codepoint : DecodeUtf8(input_text)) {
+    if (IsZeroWidthCodepoint(codepoint)) {
+      changed = true;
+      continue;
+    }
+    output += EncodeUtf8(codepoint);
+  }
+
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(output);
+}
+
+BuiltinTextProcessorResult ReplaceNonBreakingSpaces(const std::string& input_text) {
+  std::string output;
+  output.reserve(input_text.size());
+  bool changed = false;
+
+  for (std::uint32_t codepoint : DecodeUtf8(input_text)) {
+    if (codepoint == 0x00A0) {
+      output.push_back(' ');
+      changed = true;
+    } else {
+      output += EncodeUtf8(codepoint);
+    }
+  }
+
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(output);
+}
+
+BuiltinTextProcessorResult RemoveSoftHyphens(const std::string& input_text) {
+  std::string output;
+  output.reserve(input_text.size());
+  bool changed = false;
+
+  for (std::uint32_t codepoint : DecodeUtf8(input_text)) {
+    if (codepoint == 0x00AD) {
+      changed = true;
+      continue;
+    }
+    output += EncodeUtf8(codepoint);
+  }
+
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(output);
+}
+
+BuiltinTextProcessorResult RemoveBom(const std::string& input_text) {
+  std::string output;
+  output.reserve(input_text.size());
+  bool changed = false;
+
+  for (std::uint32_t codepoint : DecodeUtf8(input_text)) {
+    if (codepoint == 0xFEFF) {
+      changed = true;
+      continue;
+    }
+    output += EncodeUtf8(codepoint);
+  }
+
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(output);
+}
+
+BuiltinTextProcessorResult RemoveControlCharacters(const std::string& input_text) {
+  std::string output;
+  output.reserve(input_text.size());
+  bool changed = false;
+
+  for (std::uint32_t codepoint : DecodeUtf8(input_text)) {
+    if (IsAsciiControlCodepoint(codepoint)) {
+      changed = true;
+      continue;
+    }
+    output += EncodeUtf8(codepoint);
+  }
+
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(output);
+}
+
+BuiltinTextProcessorResult NormalizeLineEndings(
+    const std::string& input_text,
+    const std::string& target_ending) {
+  std::string normalized;
+  normalized.reserve(input_text.size());
+  bool changed = false;
+
+  for (std::size_t index = 0; index < input_text.size(); ++index) {
+    const char ch = input_text[index];
+    if (ch == '\r') {
+      if (index + 1 < input_text.size() && input_text[index + 1] == '\n') {
+        ++index;
+      }
+      normalized += target_ending;
+      changed = true;
+    } else if (ch == '\n') {
+      normalized += target_ending;
+      if (target_ending != "\n") {
+        changed = true;
+      }
+    } else {
+      normalized.push_back(ch);
+    }
+  }
+
+  if (!changed && normalized == input_text) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(normalized);
+}
+
+BuiltinTextProcessorResult RemovePageNumbers(
+    const std::string& input_text,
+    std::size_t max_number_digits) {
+  std::vector<std::string> lines = SplitLines(input_text);
+  std::vector<std::string> output;
+  output.reserve(lines.size());
+  bool changed = false;
+
+  for (const std::string& line : lines) {
+    const std::string trimmed = TrimSpacesFromLine(line);
+    const bool digit_only = !trimmed.empty() &&
+        trimmed.size() <= max_number_digits &&
+        std::all_of(trimmed.begin(), trimmed.end(), [](unsigned char ch) {
+          return std::isdigit(ch) != 0;
+        });
+    if (digit_only) {
+      changed = true;
+      continue;
+    }
+    output.push_back(line);
+  }
+
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(JoinLinesPreservingFinalNewline(output, HasFinalNewline(input_text)));
+}
+
+BuiltinTextProcessorResult FixOcrHyphenation(const std::string& input_text) {
+  std::vector<std::string> lines = SplitLines(input_text);
+  if (lines.size() < 2) {
+    return SuccessResult(input_text);
+  }
+
+  std::vector<std::string> output;
+  output.reserve(lines.size());
+  bool changed = false;
+
+  for (std::size_t index = 0; index < lines.size(); ++index) {
+    std::string line = lines[index];
+    while (index + 1 < lines.size() && !line.empty()) {
+      std::string trimmed_line = TrimTrailingSpacesFromLine(line);
+      const bool ascii_hyphen = !trimmed_line.empty() && trimmed_line.back() == '-';
+      bool soft_hyphen = false;
+      const std::vector<std::uint32_t> codepoints = DecodeUtf8(trimmed_line);
+      if (!codepoints.empty() && codepoints.back() == 0x00AD) {
+        soft_hyphen = true;
+      }
+
+      if (!ascii_hyphen && !soft_hyphen) {
+        break;
+      }
+      if (!StartsWithLowercaseLetter(lines[index + 1])) {
+        break;
+      }
+
+      if (ascii_hyphen) {
+        trimmed_line.pop_back();
+      } else {
+        trimmed_line.clear();
+        for (std::size_t cp_index = 0; cp_index + 1 < codepoints.size(); ++cp_index) {
+          trimmed_line += EncodeUtf8(codepoints[cp_index]);
+        }
+      }
+
+      line = trimmed_line + TrimLeadingSpacesFromLine(lines[index + 1]);
+      ++index;
+      changed = true;
+    }
+    output.push_back(line);
+  }
+
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(JoinLinesPreservingFinalNewline(output, HasFinalNewline(input_text)));
+}
+
+BuiltinTextProcessorResult JoinBrokenLines(
+    const std::string& input_text,
+    bool keep_paragraph_breaks) {
+  std::vector<std::string> lines = SplitLines(input_text);
+  if (lines.empty()) {
+    return SuccessResult(input_text);
+  }
+
+  std::vector<std::string> output;
+  std::string paragraph;
+  bool changed = false;
+
+  auto flush_paragraph = [&]() {
+    if (!paragraph.empty()) {
+      output.push_back(paragraph);
+      paragraph.clear();
+    }
+  };
+
+  for (const std::string& raw_line : lines) {
+    const std::string line = TrimSpacesFromLine(raw_line);
+    if (line.empty()) {
+      flush_paragraph();
+      if (keep_paragraph_breaks && (output.empty() || !output.back().empty())) {
+        output.push_back("");
+      }
+      if (!raw_line.empty()) {
+        changed = true;
+      }
+      continue;
+    }
+
+    if (paragraph.empty()) {
+      paragraph = line;
+    } else {
+      paragraph += ' ';
+      paragraph += line;
+      changed = true;
+    }
+
+    if (line != raw_line) {
+      changed = true;
+    }
+  }
+  flush_paragraph();
+
+  while (!output.empty() && output.back().empty()) {
+    output.pop_back();
+    changed = true;
+  }
+
+  const std::string result = JoinLinesPreservingFinalNewline(output, HasFinalNewline(input_text));
+  if (!changed && result == input_text) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(result);
+}
+
+std::size_t CountLineEndings(const std::string& text, const std::string& ending) {
+  std::size_t count = 0;
+  for (std::size_t index = 0; index + ending.size() <= text.size();) {
+    if (text.compare(index, ending.size(), ending) == 0) {
+      ++count;
+      index += ending.size();
+    } else {
+      ++index;
+    }
+  }
+  return count;
+}
+
+std::size_t CountCodepoints(const std::string& text) {
+  return DecodeUtf8(text).size();
+}
+
+std::size_t CountWords(const std::string& text) {
+  std::size_t words = 0;
+  bool inside_word = false;
+  for (std::uint32_t codepoint : DecodeUtf8(text)) {
+    if (IsLetterOrDigitCodepoint(codepoint)) {
+      if (!inside_word) {
+        ++words;
+        inside_word = true;
+      }
+    } else {
+      inside_word = false;
+    }
+  }
+  return words;
+}
+
+std::size_t CountParagraphs(const std::vector<std::string>& lines) {
+  std::size_t paragraphs = 0;
+  bool inside_paragraph = false;
+  for (const std::string& line : lines) {
+    if (IsBlankLine(line)) {
+      inside_paragraph = false;
+      continue;
+    }
+    if (!inside_paragraph) {
+      ++paragraphs;
+      inside_paragraph = true;
+    }
+  }
+  return paragraphs;
+}
+
+BuiltinTextProcessorResult AnalyzeTextStatistics(const std::string& input_text) {
+  const std::vector<std::string> lines = SplitLines(input_text);
+  std::size_t non_empty_lines = 0;
+  for (const std::string& line : lines) {
+    if (!IsBlankLine(line)) {
+      ++non_empty_lines;
+    }
+  }
+
+  std::ostringstream report;
+  report << "Text statistics\n";
+  report << "Bytes: " << input_text.size() << '\n';
+  report << "Characters: " << CountCodepoints(input_text) << '\n';
+  report << "Words: " << CountWords(input_text) << '\n';
+  report << "Lines: " << lines.size() << '\n';
+  report << "Non-empty lines: " << non_empty_lines << '\n';
+  report << "Paragraphs: " << CountParagraphs(lines) << '\n';
+  return ReportResult(report.str());
+}
+
+BuiltinTextProcessorResult AnalyzeLongLines(
+    const std::string& input_text,
+    std::size_t max_line_length) {
+  const std::vector<std::string> lines = SplitLines(input_text);
+  std::ostringstream report;
+  std::size_t count = 0;
+  report << "Long lines over " << max_line_length << " characters\n";
+
+  for (std::size_t index = 0; index < lines.size(); ++index) {
+    const std::size_t length = CountCodepoints(lines[index]);
+    if (length <= max_line_length) {
+      continue;
+    }
+    ++count;
+    if (count <= 30) {
+      report << "Line " << (index + 1) << ": " << length << " characters\n";
+    }
+  }
+
+  report << "Total: " << count << '\n';
+  if (count > 30) {
+    report << "Shown first 30 lines only.\n";
+  }
+  return ReportResult(report.str());
+}
+
+BuiltinTextProcessorResult AnalyzeDuplicateLines(
+    const std::string& input_text,
+    bool case_sensitive,
+    bool trim_before_compare,
+    SortLanguage language) {
+  const std::vector<std::string> lines = SplitLines(input_text);
+  const SortLanguage resolved_language = ResolveAutoSortLanguage(language, input_text);
+
+  struct DuplicateInfo {
+    std::string line;
+    std::size_t count = 0;
+    std::vector<std::size_t> line_numbers;
+  };
+
+  std::vector<DuplicateInfo> duplicates;
+  std::unordered_map<std::string, std::size_t> index_by_key;
+
+  auto make_key = [case_sensitive, trim_before_compare, resolved_language](std::string value) {
+    if (trim_before_compare) {
+      value = TrimTrailingSpacesFromLine(std::move(value));
+      std::size_t start = 0;
+      while (start < value.size() && (value[start] == ' ' || value[start] == '\t')) {
+        ++start;
+      }
+      value.erase(0, start);
+    }
+    return SortKeyToString(BuildSortKey(value, resolved_language, case_sensitive));
+  };
+
+  for (std::size_t line_index = 0; line_index < lines.size(); ++line_index) {
+    const std::string key = make_key(lines[line_index]);
+    auto it = index_by_key.find(key);
+    if (it == index_by_key.end()) {
+      index_by_key[key] = duplicates.size();
+      DuplicateInfo info;
+      info.line = lines[line_index];
+      info.count = 1;
+      info.line_numbers.push_back(line_index + 1);
+      duplicates.push_back(std::move(info));
+      continue;
+    }
+    DuplicateInfo& info = duplicates[it->second];
+    ++info.count;
+    info.line_numbers.push_back(line_index + 1);
+  }
+
+  std::ostringstream report;
+  std::size_t duplicate_groups = 0;
+  std::size_t duplicate_extra_lines = 0;
+  report << "Duplicate lines\n";
+  for (const DuplicateInfo& info : duplicates) {
+    if (info.count <= 1) {
+      continue;
+    }
+    ++duplicate_groups;
+    duplicate_extra_lines += info.count - 1;
+    if (duplicate_groups <= 25) {
+      report << "Count " << info.count << ": " << info.line << "\n  Lines: ";
+      for (std::size_t i = 0; i < info.line_numbers.size(); ++i) {
+        if (i > 0) {
+          report << ", ";
+        }
+        report << info.line_numbers[i];
+      }
+      report << '\n';
+    }
+  }
+  report << "Groups: " << duplicate_groups << '\n';
+  report << "Extra duplicate lines: " << duplicate_extra_lines << '\n';
+  if (duplicate_groups > 25) {
+    report << "Shown first 25 groups only.\n";
+  }
+  return ReportResult(report.str());
+}
+
+std::string HexCodepoint(std::uint32_t codepoint) {
+  std::ostringstream output;
+  output << "U+" << std::uppercase << std::hex << std::setw(4) << std::setfill('0') << codepoint;
+  return output.str();
+}
+
+BuiltinTextProcessorResult AnalyzeInvisibleCharacters(const std::string& input_text) {
+  std::map<std::string, std::size_t> counts;
+  for (std::uint32_t codepoint : DecodeUtf8(input_text)) {
+    if (codepoint == 0xFEFF) {
+      ++counts["BOM / zero width no-break space U+FEFF"];
+    } else if (codepoint == 0x00A0) {
+      ++counts["Non-breaking space U+00A0"];
+    } else if (codepoint == 0x00AD) {
+      ++counts["Soft hyphen U+00AD"];
+    } else if (codepoint >= 0x200B && codepoint <= 0x200D) {
+      ++counts["Zero-width character " + HexCodepoint(codepoint)];
+    } else if (codepoint == 0x2060) {
+      ++counts["Word joiner U+2060"];
+    } else if (codepoint == '\t') {
+      ++counts["Tab U+0009"];
+    } else if (codepoint < 0x20 && codepoint != '\n' && codepoint != '\r') {
+      ++counts["Control character " + HexCodepoint(codepoint)];
+    }
+  }
+
+  std::ostringstream report;
+  report << "Invisible characters\n";
+  if (counts.empty()) {
+    report << "No invisible characters found.\n";
+    return ReportResult(report.str());
+  }
+
+  std::size_t total = 0;
+  for (const auto& item : counts) {
+    total += item.second;
+    report << item.first << ": " << item.second << '\n';
+  }
+  report << "Total: " << total << '\n';
+  return ReportResult(report.str());
+}
+
+BuiltinTextProcessorResult AnalyzeLineEndings(const std::string& input_text) {
+  std::size_t crlf = 0;
+  std::size_t lf = 0;
+  std::size_t cr = 0;
+
+  for (std::size_t index = 0; index < input_text.size(); ++index) {
+    if (input_text[index] == '\r') {
+      if (index + 1 < input_text.size() && input_text[index + 1] == '\n') {
+        ++crlf;
+        ++index;
+      } else {
+        ++cr;
+      }
+    } else if (input_text[index] == '\n') {
+      ++lf;
+    }
+  }
+
+  const std::size_t styles = (crlf > 0 ? 1 : 0) + (lf > 0 ? 1 : 0) + (cr > 0 ? 1 : 0);
+  std::ostringstream report;
+  report << "Line endings\n";
+  report << "CRLF: " << crlf << '\n';
+  report << "LF: " << lf << '\n';
+  report << "CR: " << cr << '\n';
+  report << "Mixed: " << (styles > 1 ? "yes" : "no") << '\n';
+  return ReportResult(report.str());
+}
+
+BuiltinTextProcessorResult AnalyzeCharacterInventory(const std::string& input_text) {
+  std::unordered_map<std::uint32_t, std::size_t> counts;
+  for (std::uint32_t codepoint : DecodeUtf8(input_text)) {
+    if (codepoint > 0x7F) {
+      ++counts[codepoint];
+    }
+  }
+
+  std::vector<std::pair<std::uint32_t, std::size_t>> items(counts.begin(), counts.end());
+  std::sort(items.begin(), items.end(), [](const auto& left, const auto& right) {
+    if (left.second != right.second) {
+      return left.second > right.second;
+    }
+    return left.first < right.first;
+  });
+
+  std::ostringstream report;
+  report << "Non-ASCII character inventory\n";
+  if (items.empty()) {
+    report << "No non-ASCII characters found.\n";
+    return ReportResult(report.str());
+  }
+
+  std::size_t shown = 0;
+  for (const auto& item : items) {
+    if (shown >= 40) {
+      break;
+    }
+    report << EncodeUtf8(item.first) << " " << HexCodepoint(item.first) << ": " << item.second << '\n';
+    ++shown;
+  }
+  report << "Unique non-ASCII characters: " << items.size() << '\n';
+  if (items.size() > shown) {
+    report << "Shown first " << shown << " characters only.\n";
+  }
+  return ReportResult(report.str());
+}
+
 }  // namespace
 
 std::vector<TextParserDefinition> CreateBuiltinTextProcessors() {
   return {
-      BuiltinDefinition(
+      GroupedBuiltinDefinition(
           "builtin_indent_lines",
           "Indent lines",
           "Adds spaces to the beginning of each selected line.",
+          "Code",
           {IntegerParam(
               "indent_width",
               "Indent width",
               "4",
               "Number of spaces to insert at the beginning of each line.")}),
-      BuiltinDefinition(
+      GroupedBuiltinDefinition(
           "builtin_outdent_lines",
           "Outdent lines",
           "Removes one indentation level from each selected line.",
+          "Code",
           {IntegerParam(
               "indent_width",
               "Indent width",
               "4",
               "Maximum number of spaces to remove from the beginning of each line.")}),
-      BuiltinDefinition(
+      GroupedBuiltinDefinition(
           "builtin_convert_4_spaces_to_2",
           "Convert 4 spaces to 2",
-          "Converts leading indentation blocks of four spaces into two spaces."),
-      BuiltinDefinition(
+          "Converts leading indentation blocks of four spaces into two spaces.",
+          "Code"),
+      GroupedBuiltinDefinition(
           "builtin_convert_2_spaces_to_4",
           "Convert 2 spaces to 4",
-          "Converts leading indentation blocks of two spaces into four spaces."),
-      BuiltinDefinition(
+          "Converts leading indentation blocks of two spaces into four spaces.",
+          "Code"),
+      GroupedBuiltinDefinition(
           "builtin_toggle_case",
           "Toggle case",
-          "Toggles letter case in the selected text. Supports Ukrainian and Russian letters."),
-      BuiltinDefinition(
+          "Toggles letter case in the selected text. Supports Ukrainian and Russian letters.",
+          "Case"),
+      GroupedBuiltinDefinition(
           "builtin_change_case",
           "Change case",
           "Changes selected text case. Identifier modes are applied per line.",
+          "Case",
           {TextParam(
               "mode",
               "Mode",
               "toggle",
               "Case mode: toggle, upper, lower, title, sentence, snake, camel, pascal, or kebab.")}),
-      BuiltinDefinition(
+      GroupedBuiltinDefinition(
           "builtin_trim_trailing_spaces",
           "Trim trailing spaces",
-          "Removes spaces and tabs from the end of each line."),
-      BuiltinDefinition(
+          "Removes spaces and tabs from the end of each line.",
+          "Cleanup"),
+      GroupedBuiltinDefinition(
           "builtin_ensure_final_newline",
           "Ensure final newline",
-          "Adds one newline at the end of non-empty text if it is missing."),
-      BuiltinDefinition(
+          "Adds one newline at the end of non-empty text if it is missing.",
+          "Cleanup"),
+      GroupedBuiltinDefinition(
           "builtin_remove_final_extra_blank_lines",
           "Remove final extra blank lines",
-          "Removes blank lines after the last non-blank line."),
-      BuiltinDefinition(
+          "Removes blank lines after the last non-blank line.",
+          "Cleanup"),
+      GroupedBuiltinDefinition(
           "builtin_remove_empty_lines",
           "Remove empty lines",
-          "Removes all empty or whitespace-only lines."),
-      BuiltinDefinition(
+          "Removes all empty or whitespace-only lines.",
+          "Lines"),
+      GroupedBuiltinDefinition(
           "builtin_collapse_empty_lines",
           "Collapse empty lines",
           "Limits consecutive empty lines to the selected count.",
+          "Lines",
           {IntegerParam(
               "max_blank_lines",
               "Max blank lines",
               "1",
               "Maximum number of consecutive empty lines to keep.")}),
-      BuiltinDefinition(
+      GroupedBuiltinDefinition(
           "builtin_tabs_to_spaces",
           "Tabs to spaces",
           "Replaces tab characters with spaces using the selected tab width.",
+          "Code",
           {IntegerParam(
               "tab_width",
               "Tab width",
               "4",
               "Number of columns represented by one tab.")}),
-      BuiltinDefinition(
+      GroupedBuiltinDefinition(
           "builtin_spaces_to_tabs",
           "Leading spaces to tabs",
           "Converts leading indentation spaces to tabs using the selected tab width.",
+          "Code",
           {IntegerParam(
               "tab_width",
               "Tab width",
               "4",
               "Number of leading spaces represented by one tab.")}),
-      BuiltinDefinition(
+      GroupedBuiltinDefinition(
           "builtin_sort_lines_az",
           "Sort lines A-Z",
           "Sorts lines in ascending order.",
+          "Lines",
           {TextParam(
                "language",
                "Language",
@@ -1275,10 +2096,11 @@ std::vector<TextParserDefinition> CreateBuiltinTextProcessors() {
                "Case sensitive",
                "false",
                "Use case-sensitive comparison when sorting lines.")}),
-      BuiltinDefinition(
+      GroupedBuiltinDefinition(
           "builtin_sort_lines_za",
           "Sort lines Z-A",
           "Sorts lines in descending order.",
+          "Lines",
           {TextParam(
                "language",
                "Language",
@@ -1289,10 +2111,11 @@ std::vector<TextParserDefinition> CreateBuiltinTextProcessors() {
                "Case sensitive",
                "false",
                "Use case-sensitive comparison when sorting lines.")}),
-      BuiltinDefinition(
+      GroupedBuiltinDefinition(
           "builtin_unique_lines",
           "Unique lines",
           "Keeps the first occurrence of each line and removes duplicates.",
+          "Lines",
           {TextParam(
                "language",
                "Language",
@@ -1308,10 +2131,11 @@ std::vector<TextParserDefinition> CreateBuiltinTextProcessors() {
                "Trim compare",
                "false",
                "Ignore leading and trailing spaces when comparing lines.")}),
-      BuiltinDefinition(
+      GroupedBuiltinDefinition(
           "builtin_add_line_prefix",
           "Add line prefix",
           "Adds selected prefix to every line.",
+          "Lines",
           {TextParam(
                "prefix",
                "Prefix",
@@ -1322,15 +2146,170 @@ std::vector<TextParserDefinition> CreateBuiltinTextProcessors() {
                "Only non-empty",
                "true",
                "Skip empty or whitespace-only lines.")}),
-      BuiltinDefinition(
+      GroupedBuiltinDefinition(
           "builtin_remove_line_prefix",
           "Remove line prefix",
           "Removes selected prefix from the beginning of lines where it exists.",
+          "Lines",
           {TextParam(
               "prefix",
               "Prefix",
               "// ",
               "Text to remove from the beginning of each line.")}),
+      TextBuiltinDefinition(
+          "builtin_text_cleanup_trim_lines",
+          "Trim lines",
+          "Removes leading and trailing spaces or tabs from every line.",
+          "Cleanup"),
+      TextBuiltinDefinition(
+          "builtin_text_cleanup_trim_document",
+          "Trim document",
+          "Removes blank lines and outer spaces at the beginning and end of the document.",
+          "Cleanup"),
+      TextBuiltinDefinition(
+          "builtin_text_cleanup_normalize_spaces",
+          "Normalize spaces",
+          "Replaces tabs and non-breaking spaces with regular spaces, collapses repeated spaces, and trims lines.",
+          "Cleanup"),
+      TextBuiltinDefinition(
+          "builtin_text_cleanup_remove_duplicate_spaces",
+          "Remove duplicate spaces",
+          "Collapses repeated regular spaces inside each line.",
+          "Cleanup"),
+      TextBuiltinDefinition(
+          "builtin_text_cleanup_remove_empty_lines",
+          "Remove empty lines",
+          "Removes all empty or whitespace-only lines from text.",
+          "Cleanup"),
+      TextBuiltinDefinition(
+          "builtin_text_cleanup_collapse_empty_lines",
+          "Collapse empty lines",
+          "Limits consecutive empty lines to the selected count.",
+          "Cleanup",
+          {IntegerParam(
+              "max_blank_lines",
+              "Max blank lines",
+              "1",
+              "Maximum number of consecutive empty lines to keep.")}),
+      TextBuiltinDefinition(
+          "builtin_text_cleanup_remove_invisible_chars",
+          "Remove invisible characters",
+          "Removes zero-width characters, soft hyphens, BOM, and control characters. Non-breaking spaces become spaces.",
+          "Cleanup"),
+      TextBuiltinDefinition(
+          "builtin_text_cleanup_remove_zero_width_chars",
+          "Remove zero-width characters",
+          "Removes BOM, zero-width spaces, zero-width joiners, and word joiners.",
+          "Cleanup"),
+      TextBuiltinDefinition(
+          "builtin_text_cleanup_replace_nbsp",
+          "Replace non-breaking spaces",
+          "Replaces non-breaking spaces with regular spaces.",
+          "Cleanup"),
+      TextBuiltinDefinition(
+          "builtin_text_cleanup_remove_soft_hyphens",
+          "Remove soft hyphens",
+          "Removes invisible soft hyphen characters.",
+          "Cleanup"),
+      TextBuiltinDefinition(
+          "builtin_text_cleanup_remove_bom",
+          "Remove BOM",
+          "Removes UTF-8 BOM / zero-width no-break space characters.",
+          "Cleanup"),
+      TextBuiltinDefinition(
+          "builtin_text_cleanup_remove_control_chars",
+          "Remove control characters",
+          "Removes ASCII control characters except tabs and line breaks.",
+          "Cleanup"),
+      TextBuiltinDefinition(
+          "builtin_text_cleanup_normalize_line_endings",
+          "Normalize line endings",
+          "Converts line endings to LF or CRLF.",
+          "Cleanup",
+          {TextParam(
+              "ending",
+              "Ending",
+              "lf",
+              "Target line ending: lf or crlf.")}),
+      TextBuiltinDefinition(
+          "builtin_text_cleanup_normalize_tabs",
+          "Normalize tabs",
+          "Replaces tab characters with spaces using the selected tab width.",
+          "Cleanup",
+          {IntegerParam(
+              "tab_width",
+              "Tab width",
+              "4",
+              "Number of columns represented by one tab.")}),
+      TextBuiltinDefinition(
+          "builtin_text_cleanup_remove_page_numbers",
+          "Remove page numbers",
+          "Removes lines that contain only short page numbers.",
+          "Cleanup",
+          {IntegerParam(
+              "max_number_digits",
+              "Max number digits",
+              "4",
+              "Only digit-only lines up to this length are removed.")}),
+      TextBuiltinDefinition(
+          "builtin_text_cleanup_fix_ocr_hyphenation",
+          "Fix OCR hyphenation",
+          "Joins words split across lines by a hyphen or soft hyphen.",
+          "Cleanup"),
+      TextBuiltinDefinition(
+          "builtin_text_cleanup_join_broken_lines",
+          "Join broken lines",
+          "Joins wrapped lines inside paragraphs into normal paragraph lines.",
+          "Cleanup",
+          {BooleanParam(
+              "keep_paragraph_breaks",
+              "Keep paragraph breaks",
+              "true",
+              "Keep blank lines between paragraphs.")}),
+      AnalysisDefinition(
+          "builtin_analysis_text_statistics",
+          "Text statistics",
+          "Counts bytes, characters, words, lines, non-empty lines, and paragraphs."),
+      AnalysisDefinition(
+          "builtin_analysis_long_lines",
+          "Find long lines",
+          "Reports lines longer than the selected maximum length.",
+          {IntegerParam(
+              "max_line_length",
+              "Max line length",
+              "120",
+              "Lines longer than this value will be reported.")}),
+      AnalysisDefinition(
+          "builtin_analysis_duplicate_lines",
+          "Find duplicate lines",
+          "Reports duplicate lines and their line numbers.",
+          {TextParam(
+               "language",
+               "Language",
+               "auto",
+               "Comparison language: auto, english, russian, ukrainian, or binary."),
+           BooleanParam(
+               "case_sensitive",
+               "Case sensitive",
+               "false",
+               "Use case-sensitive comparison when detecting duplicate lines."),
+           BooleanParam(
+               "trim_before_compare",
+               "Trim compare",
+               "true",
+               "Ignore leading and trailing spaces when comparing lines.")}),
+      AnalysisDefinition(
+          "builtin_analysis_invisible_chars",
+          "Find invisible characters",
+          "Reports tabs, non-breaking spaces, soft hyphens, zero-width characters, and control characters."),
+      AnalysisDefinition(
+          "builtin_analysis_line_endings",
+          "Check line endings",
+          "Reports CRLF, LF, CR counts and whether line endings are mixed."),
+      AnalysisDefinition(
+          "builtin_analysis_character_inventory",
+          "Non-ASCII inventory",
+          "Reports non-ASCII characters and their counts."),
   };
 }
 
@@ -1495,6 +2474,143 @@ BuiltinTextProcessorResult ApplyBuiltinTextProcessor(
 
   if (definition.builtin_id == "builtin_remove_line_prefix") {
     return RemoveLinePrefix(input_text, GetParam(params, "prefix", "// "));
+  }
+
+  if (definition.builtin_id == "builtin_text_cleanup_trim_lines") {
+    return TrimLines(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_text_cleanup_trim_document") {
+    return TrimDocument(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_text_cleanup_normalize_spaces") {
+    return NormalizeSpaces(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_text_cleanup_remove_duplicate_spaces") {
+    return RemoveDuplicateSpaces(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_text_cleanup_remove_empty_lines") {
+    return RemoveEmptyLines(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_text_cleanup_collapse_empty_lines") {
+    std::size_t max_blank_lines = 1;
+    std::string error;
+    if (!ParsePositiveSize(params, "max_blank_lines", 0, 20, max_blank_lines, error)) {
+      return {false, {}, error};
+    }
+    return CollapseEmptyLines(input_text, max_blank_lines);
+  }
+
+  if (definition.builtin_id == "builtin_text_cleanup_remove_invisible_chars") {
+    return RemoveInvisibleCharacters(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_text_cleanup_remove_zero_width_chars") {
+    return RemoveZeroWidthCharacters(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_text_cleanup_replace_nbsp") {
+    return ReplaceNonBreakingSpaces(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_text_cleanup_remove_soft_hyphens") {
+    return RemoveSoftHyphens(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_text_cleanup_remove_bom") {
+    return RemoveBom(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_text_cleanup_remove_control_chars") {
+    return RemoveControlCharacters(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_text_cleanup_normalize_line_endings") {
+    std::string ending = ToLowerAscii(GetParam(params, "ending", "lf"));
+    if (ending == "lf" || ending == "unix") {
+      return NormalizeLineEndings(input_text, "\n");
+    }
+    if (ending == "crlf" || ending == "windows") {
+      return NormalizeLineEndings(input_text, "\r\n");
+    }
+    return {false, {}, "Parameter ending must be lf or crlf."};
+  }
+
+  if (definition.builtin_id == "builtin_text_cleanup_normalize_tabs") {
+    std::size_t tab_width = 4;
+    std::string error;
+    if (!ParsePositiveSize(params, "tab_width", 1, 16, tab_width, error)) {
+      return {false, {}, error};
+    }
+    return ConvertTabsToSpaces(input_text, tab_width);
+  }
+
+  if (definition.builtin_id == "builtin_text_cleanup_remove_page_numbers") {
+    std::size_t max_number_digits = 4;
+    std::string error;
+    if (!ParsePositiveSize(params, "max_number_digits", 1, 20, max_number_digits, error)) {
+      return {false, {}, error};
+    }
+    return RemovePageNumbers(input_text, max_number_digits);
+  }
+
+  if (definition.builtin_id == "builtin_text_cleanup_fix_ocr_hyphenation") {
+    return FixOcrHyphenation(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_text_cleanup_join_broken_lines") {
+    bool keep_paragraph_breaks = true;
+    std::string error;
+    if (!ParseBoolParam(params, "keep_paragraph_breaks", true, keep_paragraph_breaks, error)) {
+      return {false, {}, error};
+    }
+    return JoinBrokenLines(input_text, keep_paragraph_breaks);
+  }
+
+  if (definition.builtin_id == "builtin_analysis_text_statistics") {
+    return AnalyzeTextStatistics(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_analysis_long_lines") {
+    std::size_t max_line_length = 120;
+    std::string error;
+    if (!ParsePositiveSize(params, "max_line_length", 1, 100000, max_line_length, error)) {
+      return {false, {}, error};
+    }
+    return AnalyzeLongLines(input_text, max_line_length);
+  }
+
+  if (definition.builtin_id == "builtin_analysis_duplicate_lines") {
+    SortLanguage language = SortLanguage::Auto;
+    bool case_sensitive = false;
+    bool trim_before_compare = true;
+    std::string error;
+    if (!ParseSortLanguage(params, "language", SortLanguage::Auto, language, error)) {
+      return {false, {}, error};
+    }
+    if (!ParseBoolParam(params, "case_sensitive", false, case_sensitive, error)) {
+      return {false, {}, error};
+    }
+    if (!ParseBoolParam(params, "trim_before_compare", true, trim_before_compare, error)) {
+      return {false, {}, error};
+    }
+    return AnalyzeDuplicateLines(input_text, case_sensitive, trim_before_compare, language);
+  }
+
+  if (definition.builtin_id == "builtin_analysis_invisible_chars") {
+    return AnalyzeInvisibleCharacters(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_analysis_line_endings") {
+    return AnalyzeLineEndings(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_analysis_character_inventory") {
+    return AnalyzeCharacterInventory(input_text);
   }
 
   return {false, {}, "Unknown built-in text processor: " + definition.builtin_id};

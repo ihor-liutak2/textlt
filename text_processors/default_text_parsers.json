@@ -8,7 +8,8 @@
       "script": "text_parsers/remove_invisible_chars.lua",
       "description": "Removes zero-width and most control characters while keeping new lines and tabs.",
       "repeat_default": 1,
-      "params": []
+      "params": [],
+      "group": "Cleanup"
     },
     {
       "id": "normalize_spaces",
@@ -17,7 +18,8 @@
       "script": "text_parsers/normalize_spaces.lua",
       "description": "Replaces non-breaking spaces and repeated spaces with normal spaces, then trims each line.",
       "repeat_default": 1,
-      "params": []
+      "params": [],
+      "group": "Cleanup"
     },
     {
       "id": "unwrap_lines",
@@ -34,7 +36,8 @@
           "default": "20",
           "description": "Minimum line length used when deciding whether a line is part of a wrapped paragraph."
         }
-      ]
+      ],
+      "group": "Cleanup"
     },
     {
       "id": "two_fixed_columns",
@@ -65,7 +68,8 @@
           "default": "30",
           "description": "Number of characters in the right column."
         }
-      ]
+      ],
+      "group": "Tables"
     },
     {
       "id": "trim_trailing_spaces",
@@ -74,7 +78,8 @@
       "script": "text_parsers/trim_trailing_spaces.lua",
       "description": "Removes spaces and tabs from the end of each code line without changing indentation.",
       "repeat_default": 1,
-      "params": []
+      "params": [],
+      "group": "Cleanup"
     }
   ]
 }

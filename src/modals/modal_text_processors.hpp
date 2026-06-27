@@ -61,6 +61,7 @@ private:
         std::function<void()> on_click);
 
     void SetScope(TextParserScope scope);
+    void SetGroup(std::string group);
     TextParserScope CurrentScope() const;
     void RebuildParserList();
     void RebuildParserListKeepingSelection(const std::string& parser_id);
@@ -76,17 +77,20 @@ private:
     void EnsureSelectionVisible();
 
     ftxui::Element RenderScopeTabs() const;
+    ftxui::Element RenderGroupTabs() const;
     ftxui::Element RenderSelectedParserInfo() const;
     ftxui::Element RenderParameterFields() const;
     ftxui::Element RenderProcessorGrid() const;
     ftxui::Element RenderProcessorColumn(bool right_column, int visible_rows) const;
     ftxui::Element RenderProcessorCell(int parser_index, int width, int cell_slot) const;
     ftxui::Element RenderStatusLine() const;
+    ftxui::Element RenderReportPreview() const;
 
     std::vector<std::string> WrapText(const std::string& text, size_t width) const;
     std::string TrimForDisplay(const std::string& text, size_t max_size) const;
     std::string ScopeLabel(TextParserScope scope) const;
     std::string ScopeDisplay(TextParserScope scope) const;
+    std::vector<std::string> AvailableGroupsForCurrentScope() const;
     std::string NormalizedParamType(const std::string& type) const;
     std::string ParamHintText() const;
 
@@ -97,6 +101,7 @@ private:
 
     TextParserManager manager_;
     TextParserScope active_scope_ = TextParserScope::Text;
+    std::string active_group_ = "All";
     std::vector<const TextParserDefinition*> filtered_parsers_;
     int selected_parser_ = 0;
     int parser_list_top_row_ = 0;
@@ -108,10 +113,12 @@ private:
     std::vector<int> param_cursors_ = {0, 0, 0, 0};
     std::string status_ = "Select a text processor.";
     bool status_is_error_ = false;
+    std::string report_text_;
 
     ftxui::Component text_tab_button_;
     ftxui::Component paragraph_tab_button_;
     ftxui::Component code_tab_button_;
+    std::vector<ftxui::Component> group_tab_buttons_;
     ftxui::Component processor_grid_component_;
     std::vector<ftxui::Component> param_inputs_;
     ftxui::Component repeat_input_;

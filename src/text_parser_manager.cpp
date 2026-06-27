@@ -150,6 +150,24 @@ TextParserEngine ParseEngine(const std::string& value) {
   return TextParserEngine::Lua;
 }
 
+TextParserOutput ParseOutput(const std::string& value) {
+  std::string lower = value;
+  std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  if (lower == "report" || lower == "analysis") {
+    return TextParserOutput::Report;
+  }
+  return TextParserOutput::ReplaceText;
+}
+
+std::string NormalizeGroupName(std::string group) {
+  if (group.empty()) {
+    return "Custom";
+  }
+  return group;
+}
+
 bool HasParserId(const std::vector<TextParserDefinition>& parsers,
                  const std::string& parser_id) {
   return std::any_of(parsers.begin(), parsers.end(), [&](const TextParserDefinition& parser) {
@@ -355,6 +373,8 @@ bool TextParserManager::LoadFromFile(const fs::path& config_path, std::string& e
 
     definition.scope = ParseScope(GetOptionalString(parser_json, "scope", "text"));
     definition.description = GetOptionalString(parser_json, "description", "");
+    definition.group = NormalizeGroupName(GetOptionalString(parser_json, "group", "Custom"));
+    definition.output = ParseOutput(GetOptionalString(parser_json, "output", "replace_text"));
     definition.repeat_default =
         std::max(1, GetOptionalInt(parser_json, "repeat_default", 1));
     definition.pinned = GetOptionalBool(parser_json, "pinned", false);
@@ -515,7 +535,10 @@ TextParserApplyResult TextParserManager::ApplyDefinition(
 
   const auto merged_params = MergeParams(definition, params);
   const int requested_repeats = repeat_count > 0 ? repeat_count : definition.repeat_default;
-  const int repeats = std::max(1, std::min(requested_repeats, 50));
+  const int repeats = definition.output == TextParserOutput::Report
+      ? 1
+      : std::max(1, std::min(requested_repeats, 50));
+  result.output = definition.output;
 
   if (definition.engine == TextParserEngine::Builtin) {
     std::string current_text = input_text;
@@ -531,6 +554,7 @@ TextParserApplyResult TextParserManager::ApplyDefinition(
 
     result.success = true;
     result.text = std::move(current_text);
+    result.output = definition.output;
     return result;
   }
 
@@ -604,6 +628,7 @@ TextParserApplyResult TextParserManager::ApplyDefinition(
 
   result.success = true;
   result.text = std::move(current_text);
+  result.output = definition.output;
   return result;
 }
 
