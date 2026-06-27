@@ -72,6 +72,89 @@ unsigned long long StableHash(const std::string& text) {
     return hash;
 }
 
+
+std::string SafePathSegment(const std::string& value) {
+    std::string segment;
+    segment.reserve(value.size());
+    for (unsigned char character : value) {
+        if (std::isalnum(character) || character == '-' || character == '_' || character == '.') {
+            segment.push_back(static_cast<char>(character));
+        } else {
+            segment.push_back('_');
+        }
+    }
+    return segment.empty() ? "default" : segment;
+}
+
+std::string QuoteShellPath(const std::filesystem::path& path) {
+#ifdef _WIN32
+    std::string value = path.string();
+    std::string quoted = "\"";
+    for (char character : value) {
+        if (character == '"') {
+            quoted += "\\\"";
+        } else {
+            quoted.push_back(character);
+        }
+    }
+    quoted += "\"";
+    return quoted;
+#else
+    const std::string value = path.string();
+    std::string quoted = "'";
+    for (char character : value) {
+        if (character == '\'') {
+            quoted += "'\\''";
+        } else {
+            quoted.push_back(character);
+        }
+    }
+    quoted += "'";
+    return quoted;
+#endif
+}
+
+
+Json LoadJsonFile(const std::filesystem::path& path) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        return Json();
+    }
+    return Json::parse(file, nullptr, false);
+}
+
+bool WriteTextFile(const std::filesystem::path& path, const std::string& text) {
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    if (!file) {
+        return false;
+    }
+    file << text;
+    return static_cast<bool>(file);
+}
+
+bool RunPiperCommand(const std::filesystem::path& executable,
+                     const std::filesystem::path& model,
+                     const std::filesystem::path& config,
+                     const std::filesystem::path& input_text,
+                     const std::filesystem::path& output_wav) {
+#ifdef _WIN32
+    const std::string command =
+        "type " + QuoteShellPath(input_text) +
+        " | " + QuoteShellPath(executable) +
+        " --model " + QuoteShellPath(model) +
+        " --config " + QuoteShellPath(config) +
+        " --output_file " + QuoteShellPath(output_wav);
+#else
+    const std::string command =
+        QuoteShellPath(executable) +
+        " --model " + QuoteShellPath(model) +
+        " --config " + QuoteShellPath(config) +
+        " --output_file " + QuoteShellPath(output_wav) +
+        " < " + QuoteShellPath(input_text);
+#endif
+    return std::system(command.c_str()) == 0;
+}
+
 } // namespace
 
 CloudTtsPipeline::CloudTtsPipeline() = default;
@@ -293,6 +376,245 @@ std::vector<CloudTtsPipeline::PiperVoiceOption> CloudTtsPipeline::ListPiperVoice
     return options;
 }
 
+
+bool CloudTtsPipeline::PiperRuntimeInstalled() const {
+    return !PiperExecutablePath().empty();
+}
+
+bool CloudTtsPipeline::GenerateChunkAudio(
+    const std::string& book_id,
+    size_t chunk_index,
+    const std::string& voice_id,
+    std::string* error) const {
+    if (book_id.empty()) {
+        if (error) {
+            *error = "Book id is empty";
+        }
+        return false;
+    }
+    if (voice_id.empty()) {
+        if (error) {
+            *error = "Voice is not selected";
+        }
+        return false;
+    }
+
+    const std::filesystem::path executable = PiperExecutablePath();
+    if (executable.empty()) {
+        if (error) {
+            *error = "Piper runtime is not installed";
+        }
+        return false;
+    }
+
+    Json voice;
+    if (!FindPiperVoiceById(voice_id, &voice)) {
+        if (error) {
+            *error = "Piper voice is not in registry";
+        }
+        return false;
+    }
+    if (!PiperVoiceInstalled(voice)) {
+        if (error) {
+            *error = "Piper voice files are missing";
+        }
+        return false;
+    }
+
+    const std::filesystem::path book_directory = BookDirectory(book_id);
+    const std::filesystem::path chunks_path = book_directory / "chunks.json";
+    Json chunks_json = LoadJsonFile(chunks_path);
+    if (!chunks_json.is_array() || chunk_index >= chunks_json.size()) {
+        if (error) {
+            *error = "Chunk index is out of range";
+        }
+        return false;
+    }
+
+    Json& chunk = chunks_json[chunk_index];
+    const std::string text = JsonString(chunk, "cleansed_text");
+    if (text.empty()) {
+        chunk["status"] = "failed";
+        chunk["audio_path"] = "";
+        WriteJsonAtomically(chunks_path, chunks_json);
+        if (error) {
+            *error = "Chunk text is empty";
+        }
+        return false;
+    }
+
+    const std::filesystem::path output_wav = ChunkAudioPath(book_id, chunk_index, voice_id);
+    const std::filesystem::path relative_wav = RelativeChunkAudioPath(chunk_index, voice_id);
+    std::error_code exists_error;
+    if (std::filesystem::exists(output_wav, exists_error)) {
+        chunk["status"] = "ready";
+        chunk["audio_path"] = relative_wav.generic_string();
+        return WriteJsonAtomically(chunks_path, chunks_json);
+    }
+
+    std::error_code create_error;
+    std::filesystem::create_directories(output_wav.parent_path(), create_error);
+    if (create_error) {
+        if (error) {
+            *error = "Cannot create audio cache directory";
+        }
+        return false;
+    }
+
+    const std::filesystem::path input_path = output_wav.string() + ".txt";
+    if (!WriteTextFile(input_path, text + "\n")) {
+        if (error) {
+            *error = "Cannot write Piper input file";
+        }
+        return false;
+    }
+
+    const std::filesystem::path model = PiperModelsDirectory() / JsonString(voice, "model_path");
+    const std::filesystem::path config = PiperModelsDirectory() / JsonString(voice, "config_path");
+    const bool ok = RunPiperCommand(executable, model, config, input_path, output_wav);
+    std::error_code cleanup_error;
+    std::filesystem::remove(input_path, cleanup_error);
+
+    exists_error.clear();
+    const bool output_exists = std::filesystem::exists(output_wav, exists_error);
+    if (!ok || !output_exists) {
+        chunk["status"] = "failed";
+        chunk["audio_path"] = "";
+        WriteJsonAtomically(chunks_path, chunks_json);
+        if (error) {
+            *error = "Piper generation failed";
+        }
+        return false;
+    }
+
+    chunk["status"] = "ready";
+    chunk["audio_path"] = relative_wav.generic_string();
+    return WriteJsonAtomically(chunks_path, chunks_json);
+}
+
+CloudTtsPipeline::AudioGenerationResult CloudTtsPipeline::EnsureAudioLookahead(
+    const std::string& book_id,
+    size_t start_chunk_index,
+    const std::string& voice_id,
+    size_t lookahead_count,
+    std::string* error) const {
+    AudioGenerationResult result;
+    if (lookahead_count == 0) {
+        return result;
+    }
+
+    const std::filesystem::path chunks_path = BookDirectory(book_id) / "chunks.json";
+    const Json chunks_json = LoadJsonFile(chunks_path);
+    if (!chunks_json.is_array()) {
+        if (error) {
+            *error = "Cannot load chunks";
+        }
+        return result;
+    }
+
+    const size_t end = std::min(chunks_json.size(), start_chunk_index + lookahead_count);
+    std::string last_error;
+    for (size_t index = start_chunk_index; index < end; ++index) {
+        ++result.requested_chunks;
+        const std::filesystem::path output_wav = ChunkAudioPath(book_id, index, voice_id);
+        std::error_code exists_error;
+        if (std::filesystem::exists(output_wav, exists_error)) {
+            ++result.already_ready_chunks;
+            continue;
+        }
+        std::string chunk_error;
+        if (GenerateChunkAudio(book_id, index, voice_id, &chunk_error)) {
+            ++result.generated_chunks;
+        } else {
+            ++result.failed_chunks;
+            if (!chunk_error.empty()) {
+                last_error = chunk_error;
+            }
+        }
+    }
+
+    if (result.failed_chunks > 0 && error) {
+        *error = last_error.empty() ? "Some chunks failed" : last_error;
+    }
+    return result;
+}
+
+bool CloudTtsPipeline::ClearBookAudioCache(const std::string& book_id, std::string* error) const {
+    if (book_id.empty()) {
+        if (error) {
+            *error = "Book id is empty";
+        }
+        return false;
+    }
+
+    const std::filesystem::path book_directory = BookDirectory(book_id);
+    const std::filesystem::path audio_directory = book_directory / "audio";
+    std::error_code remove_error;
+    std::filesystem::remove_all(audio_directory, remove_error);
+    if (remove_error) {
+        if (error) {
+            *error = "Cannot remove audio cache";
+        }
+        return false;
+    }
+    std::error_code create_error;
+    std::filesystem::create_directories(audio_directory, create_error);
+
+    const std::filesystem::path chunks_path = book_directory / "chunks.json";
+    Json chunks_json = LoadJsonFile(chunks_path);
+    if (chunks_json.is_array()) {
+        for (Json& chunk : chunks_json) {
+            if (!chunk.is_object()) {
+                continue;
+            }
+            chunk["status"] = "prepared";
+            chunk["audio_path"] = "";
+        }
+        WriteJsonAtomically(chunks_path, chunks_json);
+    }
+    return true;
+}
+
+uintmax_t CloudTtsPipeline::BookAudioCacheSize(const std::string& book_id) const {
+    const std::filesystem::path audio_directory = BookDirectory(book_id) / "audio";
+    uintmax_t total = 0;
+    std::error_code error;
+    if (!std::filesystem::exists(audio_directory, error)) {
+        return total;
+    }
+    std::filesystem::recursive_directory_iterator iterator(audio_directory, error);
+    std::filesystem::recursive_directory_iterator end;
+    while (!error && iterator != end) {
+        const std::filesystem::directory_entry& entry = *iterator;
+        if (entry.is_regular_file(error)) {
+            error.clear();
+            total += entry.file_size(error);
+        }
+        error.clear();
+        iterator.increment(error);
+    }
+    return total;
+}
+
+size_t CloudTtsPipeline::FindChunkIndexForLine(const std::string& book_id, size_t line) const {
+    const Json chunks_json = LoadJsonFile(BookDirectory(book_id) / "chunks.json");
+    if (!chunks_json.is_array() || chunks_json.empty()) {
+        return 0;
+    }
+    for (size_t index = 0; index < chunks_json.size(); ++index) {
+        const Json& chunk = chunks_json[index];
+        if (!chunk.is_object()) {
+            continue;
+        }
+        const size_t start_line = JsonSize(chunk, "start_line", 0);
+        const size_t end_line = JsonSize(chunk, "end_line", start_line);
+        if (line >= start_line && line <= end_line) {
+            return index;
+        }
+    }
+    return 0;
+}
+
 void CloudTtsPipeline::Submit(
     std::string entire_document_text,
     std::filesystem::path source_file_path,
@@ -458,50 +780,36 @@ CloudTtsPipeline::SourcePosition CloudTtsPipeline::AdvancePosition(
 std::string CloudTtsPipeline::CleanseText(const std::string& text) {
     std::string filtered;
     filtered.reserve(text.size());
+
+    bool previous_space = false;
     for (unsigned char character : text) {
-        if (std::isalnum(character) ||
-            character == ' ' ||
-            character == '.' ||
-            character == ',' ||
-            character == '-' ||
-            character == '_') {
-            filtered.push_back(static_cast<char>(character));
-        } else if (std::isspace(character)) {
-            filtered.push_back(' ');
-        } else {
-            filtered.push_back(' ');
-        }
-    }
-
-    std::istringstream filtered_stream(filtered);
-    std::ostringstream split_tokens;
-    std::string raw_token;
-    bool first_split_token = true;
-    while (filtered_stream >> raw_token) {
-        if (!first_split_token) {
-            split_tokens << ' ';
-        }
-        split_tokens << SplitIdentifierToken(raw_token);
-        first_split_token = false;
-    }
-
-    std::istringstream stream(split_tokens.str());
-    std::ostringstream cleansed;
-    std::string token;
-    bool first = true;
-    while (stream >> token) {
-        if (token.size() > kMaximumWordLength) {
+        const bool whitespace = character == ' ' ||
+                                character == '\t' ||
+                                character == '\n' ||
+                                character == '\r' ||
+                                character == '\f' ||
+                                character == '\v';
+        if (whitespace) {
+            if (!filtered.empty() && !previous_space) {
+                filtered.push_back(' ');
+            }
+            previous_space = true;
             continue;
         }
-        if (!first) {
-            cleansed << ' ';
-        }
-        cleansed << token;
-        first = false;
-    }
-    return cleansed.str();
-}
 
+        if (character < 32 || character == 127) {
+            continue;
+        }
+
+        filtered.push_back(static_cast<char>(character));
+        previous_space = false;
+    }
+
+    while (!filtered.empty() && filtered.back() == ' ') {
+        filtered.pop_back();
+    }
+    return filtered;
+}
 std::filesystem::path CloudTtsPipeline::UserDataDirectory() {
 #ifdef _WIN32
     const char* local_app_data = std::getenv("LOCALAPPDATA");
@@ -541,6 +849,43 @@ std::filesystem::path CloudTtsPipeline::RegistryDirectory() {
     return data.empty() ? std::filesystem::path{} : data / "registries";
 }
 
+std::filesystem::path CloudTtsPipeline::PiperRuntimeDirectory() {
+    const std::filesystem::path data = UserDataDirectory();
+    return data.empty() ? std::filesystem::path{} : data / "piper" / "bin";
+}
+
+std::filesystem::path CloudTtsPipeline::PiperModelsDirectory() {
+    const std::filesystem::path data = UserDataDirectory();
+    return data.empty() ? std::filesystem::path{} : data / "piper" / "models";
+}
+
+std::filesystem::path CloudTtsPipeline::PiperExecutablePath() {
+    const std::filesystem::path runtime_directory = PiperRuntimeDirectory();
+    if (runtime_directory.empty()) {
+        return {};
+    }
+    std::error_code error;
+    if (!std::filesystem::exists(runtime_directory, error)) {
+        return {};
+    }
+#ifdef _WIN32
+    constexpr const char* binary_name = "piper.exe";
+#else
+    constexpr const char* binary_name = "piper";
+#endif
+    std::filesystem::recursive_directory_iterator iterator(runtime_directory, error);
+    std::filesystem::recursive_directory_iterator end;
+    while (!error && iterator != end) {
+        const std::filesystem::directory_entry& entry = *iterator;
+        if (entry.is_regular_file(error) && entry.path().filename() == binary_name) {
+            return entry.path();
+        }
+        error.clear();
+        iterator.increment(error);
+    }
+    return {};
+}
+
 bool CloudTtsPipeline::PiperVoiceInstalled(const Json& voice) {
     const std::string model_path = JsonString(voice, "model_path");
     const std::string config_path = JsonString(voice, "config_path");
@@ -548,11 +893,56 @@ bool CloudTtsPipeline::PiperVoiceInstalled(const Json& voice) {
         return false;
     }
 
-    const std::filesystem::path models_directory =
-        UserDataDirectory() / "piper" / "models";
+    const std::filesystem::path models_directory = PiperModelsDirectory();
     std::error_code error;
     return std::filesystem::exists(models_directory / model_path, error) &&
            std::filesystem::exists(models_directory / config_path, error);
+}
+
+bool CloudTtsPipeline::FindPiperVoiceById(const std::string& voice_id, Json* voice) {
+    if (!voice || voice_id.empty()) {
+        return false;
+    }
+
+    const std::filesystem::path registry_path =
+        RegistryDirectory() / "piper_voices_index.json";
+    std::ifstream file(registry_path, std::ios::binary);
+    if (!file) {
+        return false;
+    }
+
+    const Json root = Json::parse(file, nullptr, false);
+    if (root.is_discarded() || !root.is_object()) {
+        return false;
+    }
+
+    const auto voices = root.find("voices");
+    if (voices == root.end() || !voices->is_array()) {
+        return false;
+    }
+
+    for (const Json& candidate : *voices) {
+        if (candidate.is_object() && JsonString(candidate, "id") == voice_id) {
+            *voice = candidate;
+            return true;
+        }
+    }
+    return false;
+}
+
+std::filesystem::path CloudTtsPipeline::RelativeChunkAudioPath(
+    size_t chunk_index,
+    const std::string& voice_id) {
+    std::ostringstream filename;
+    filename << "chunk_" << std::setw(6) << std::setfill('0') << chunk_index << ".wav";
+    return std::filesystem::path("audio") / SafePathSegment(voice_id) / filename.str();
+}
+
+std::filesystem::path CloudTtsPipeline::ChunkAudioPath(
+    const std::string& book_id,
+    size_t chunk_index,
+    const std::string& voice_id) {
+    return BookDirectory(book_id) / RelativeChunkAudioPath(chunk_index, voice_id);
 }
 
 std::string CloudTtsPipeline::BuildBookId(

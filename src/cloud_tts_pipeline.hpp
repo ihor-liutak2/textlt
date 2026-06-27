@@ -93,6 +93,13 @@ public:
         bool installed = false;
     };
 
+    struct AudioGenerationResult {
+        size_t requested_chunks = 0;
+        size_t generated_chunks = 0;
+        size_t already_ready_chunks = 0;
+        size_t failed_chunks = 0;
+    };
+
     CloudTtsPipeline();
     ~CloudTtsPipeline();
 
@@ -113,6 +120,21 @@ public:
     std::vector<LanguageOption> ListLanguageOptions() const;
     std::vector<PiperVoiceOption> ListPiperVoiceOptions(
         const std::string& language_code) const;
+    bool PiperRuntimeInstalled() const;
+    bool GenerateChunkAudio(
+        const std::string& book_id,
+        size_t chunk_index,
+        const std::string& voice_id,
+        std::string* error) const;
+    AudioGenerationResult EnsureAudioLookahead(
+        const std::string& book_id,
+        size_t start_chunk_index,
+        const std::string& voice_id,
+        size_t lookahead_count,
+        std::string* error) const;
+    bool ClearBookAudioCache(const std::string& book_id, std::string* error) const;
+    uintmax_t BookAudioCacheSize(const std::string& book_id) const;
+    size_t FindChunkIndexForLine(const std::string& book_id, size_t line) const;
 
 private:
     static std::vector<PreparedChunk> BuildPreparedChunks(
@@ -128,7 +150,18 @@ private:
     static std::filesystem::path LibraryDirectory();
     static std::filesystem::path BookDirectory(const std::string& book_id);
     static std::filesystem::path RegistryDirectory();
+    static std::filesystem::path PiperRuntimeDirectory();
+    static std::filesystem::path PiperModelsDirectory();
+    static std::filesystem::path PiperExecutablePath();
     static bool PiperVoiceInstalled(const Json& voice);
+    static bool FindPiperVoiceById(const std::string& voice_id, Json* voice);
+    static std::filesystem::path ChunkAudioPath(
+        const std::string& book_id,
+        size_t chunk_index,
+        const std::string& voice_id);
+    static std::filesystem::path RelativeChunkAudioPath(
+        size_t chunk_index,
+        const std::string& voice_id);
     static std::string BuildBookId(
         const std::filesystem::path& source_file_path,
         const std::string& text);

@@ -88,6 +88,7 @@ private:
     void StartAiModelDelete();
     void ConfirmAiModelDelete();
     void CancelAiModelDelete();
+    void StartPiperRuntimeInstall();
     void StartTtsVoiceDownload();
     void StartTtsVoiceDelete();
     void ConfirmTtsVoiceDelete();
@@ -118,6 +119,7 @@ private:
     std::atomic<float> ai_progress_{0.0f};
 
     std::thread tts_download_thread_;
+    std::thread tts_runtime_thread_;
     mutable std::mutex tts_download_mutex_;
     std::atomic_bool tts_cancel_download_{false};
     bool tts_downloading_ = false;
@@ -154,6 +156,7 @@ private:
     ftxui::Component tts_voice_menu_;
     ftxui::Component ai_model_menu_;
     ftxui::Component fetch_tts_button_;
+    ftxui::Component tts_runtime_install_button_;
     ftxui::Component tts_download_button_;
     ftxui::Component tts_delete_button_;
     ftxui::Component tts_confirm_delete_button_;

@@ -668,7 +668,9 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
     ai_model_menu_ = ftxui::Menu(&ai_model_labels_, &selected_ai_model_, checkbox_option);
 
     fetch_tts_button_ = make_button("Fetch registry", [this] { FetchRegistries(); });
-    tts_download_button_ = make_button("Download", [this] { StartTtsVoiceDownload(); });
+    tts_runtime_install_button_ =
+        make_button("Install Piper", [this] { StartPiperRuntimeInstall(); });
+    tts_download_button_ = make_button("Download voice", [this] { StartTtsVoiceDownload(); });
     tts_delete_button_ = make_button("Delete", [this] { StartTtsVoiceDelete(); });
     tts_confirm_delete_button_ =
         make_button("Confirm delete", [this] { ConfirmTtsVoiceDelete(); });
@@ -697,6 +699,7 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
         ftxui::Container::Vertical({
             ftxui::Container::Horizontal({
                 fetch_tts_button_,
+                tts_runtime_install_button_,
                 tts_download_button_,
                 tts_delete_button_,
                 tts_test_button_,
@@ -736,6 +739,9 @@ AssistantSettingsModalContent::~AssistantSettingsModalContent() {
     tts_cancel_download_ = true;
     if (tts_download_thread_.joinable()) {
         tts_download_thread_.join();
+    }
+    if (tts_runtime_thread_.joinable()) {
+        tts_runtime_thread_.join();
     }
     if (ai_runtime_thread_.joinable()) {
         ai_runtime_thread_.join();
