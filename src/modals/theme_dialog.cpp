@@ -90,22 +90,27 @@ void ThemeSelectionContent::TakeFocus() {
 
 // --- ThemeDialog Implementation ---
 
-ThemeDialog::ThemeDialog(const Theme* active_theme, ThemeCallback on_preview, ThemeCallback on_select)
-    : current_active_theme_(active_theme) { // Initialize current_active_theme_
+ThemeDialog::ThemeDialog(
+    const Theme* active_theme,
+    ThemeCallback on_preview,
+    ThemeCallback on_select,
+    CloseCallback on_close)
+    : current_active_theme_(active_theme),
+      on_close_(std::move(on_close)) {
     
     content_impl_ = std::make_shared<ThemeSelectionContent>(current_active_theme_, on_preview, [this, on_select](const std::string& theme_name) {
         on_select(theme_name);
-        Close(); // Close the dialog after selection
+        RequestClose();
     });
-    modal_window_ = std::make_shared<ModalWindow>(content_impl_, current_active_theme_, [this] { Close(); });
-    modal_window_->SetFooterText("Enter selects, mouse wheel scrolls, Escape closes.");
+    modal_window_ = std::make_shared<ModalWindow>(
+        content_impl_, current_active_theme_, [this] { RequestClose(); });
     modal_window_->SetFooterButtons({
         {"Select", [this] {
             if (content_impl_) {
                 content_impl_->SelectCurrentTheme();
             }
         }},
-        {"Close", [this] { Close(); }},
+        {"Close", [this] { RequestClose(); }},
     });
 }
 
@@ -126,6 +131,16 @@ void ThemeDialog::Open(const std::vector<Theme>& themes, const std::string& acti
 
 void ThemeDialog::Close() {
     open_ = false;
+}
+
+void ThemeDialog::RequestClose() {
+    if (!open_) {
+        return;
+    }
+    open_ = false;
+    if (on_close_) {
+        on_close_();
+    }
 }
 
 bool ThemeDialog::IsOpen() const {

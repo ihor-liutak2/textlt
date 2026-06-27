@@ -46,9 +46,14 @@ class ThemeDialog {
 public:
     // Keep existing callbacks for external usage
     using ThemeCallback = std::function<void(const std::string& theme_name)>;
+    using CloseCallback = std::function<void()>;
 
     // Constructor will now build ThemeSelectionContent and ModalWindow
-    ThemeDialog(const Theme* active_theme, ThemeCallback on_preview, ThemeCallback on_select);
+    ThemeDialog(
+        const Theme* active_theme,
+        ThemeCallback on_preview,
+        ThemeCallback on_select,
+        CloseCallback on_close);
 
     // External interface remains the same for app_view.cpp
     ftxui::Component View() const;
@@ -59,9 +64,12 @@ public:
     void SetTheme(const Theme* new_theme); // New method to propagate theme changes
 
 private:
+    void RequestClose();
+
     // Internal state and components
     bool open_ = false; // Manages if the modal is currently open
     const Theme* current_active_theme_ = nullptr; // Keep track of the current theme
+    CloseCallback on_close_;
     std::shared_ptr<ThemeSelectionContent> content_impl_;
     std::shared_ptr<ModalWindow> modal_window_; // This is the component that will be rendered and handle events
 };

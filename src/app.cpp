@@ -152,7 +152,8 @@ TextltApp::TextltApp()
       theme_dialog_(
           &current_theme_,
           [this](const std::string& theme_name) { PreviewTheme(theme_name); },
-          [this](const std::string& theme_name) { SelectTheme(theme_name); }),
+          [this](const std::string& theme_name) { SelectTheme(theme_name); },
+          [this] { CloseThemeDialog(); }),
       unsaved_changes_dialog_(
           &current_theme_,
           [this] { SaveAndExit(); },
