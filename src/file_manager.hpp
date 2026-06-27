@@ -56,7 +56,7 @@ public:
         std::vector<FileEntry>& entries,
         std::string& error) const;
 
-    bool CreateDirectory(const std::filesystem::path& path, std::string& error) const;
+    bool CreateDirectoryItem(const std::filesystem::path& path, std::string& error) const;
     bool CreateEmptyFile(const std::filesystem::path& path, std::string& error) const;
     bool DeleteItems(
         const std::vector<std::filesystem::path>& paths,

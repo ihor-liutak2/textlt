@@ -425,7 +425,7 @@ void FilesModalContent::CopySelectedPathText() {
 
 void FilesModalContent::StartCreateDirectoryOperation() {
     StartNameOperation(
-        PendingFileOperation::CreateDirectory,
+        PendingFileOperation::CreateDirectoryItem,
         "Directory name",
         "New Folder",
         "Create directory in current directory?");
@@ -433,7 +433,7 @@ void FilesModalContent::StartCreateDirectoryOperation() {
 
 void FilesModalContent::StartCreateFileOperation() {
     StartNameOperation(
-        PendingFileOperation::CreateFile,
+        PendingFileOperation::CreateFileItem,
         "File name",
         "new_file.txt",
         "Create empty file in current directory?");
@@ -582,13 +582,13 @@ void FilesModalContent::ConfirmPendingOperation() {
 
     std::string error;
     switch (pending_operation_) {
-        case PendingFileOperation::CreateDirectory: {
+        case PendingFileOperation::CreateDirectoryItem: {
             if (!FileManager::IsPlainName(pending_operation_input_value_)) {
                 SetStatus("Enter only a directory name.", true);
                 return;
             }
             const std::filesystem::path target = current_directory_ / pending_operation_input_value_;
-            if (!file_manager_->CreateDirectory(target, error)) {
+            if (!file_manager_->CreateDirectoryItem(target, error)) {
                 SetStatus(error.empty() ? "Create directory failed." : error, true);
                 return;
             }
@@ -597,7 +597,7 @@ void FilesModalContent::ConfirmPendingOperation() {
             SetStatus("Directory created: " + target.filename().string());
             break;
         }
-        case PendingFileOperation::CreateFile: {
+        case PendingFileOperation::CreateFileItem: {
             if (!FileManager::IsPlainName(pending_operation_input_value_)) {
                 SetStatus("Enter only a file name.", true);
                 return;
@@ -680,16 +680,16 @@ bool FilesModalContent::HasPendingOperation() const {
 }
 
 bool FilesModalContent::PendingOperationNeedsInput() const {
-    return pending_operation_ == PendingFileOperation::CreateDirectory ||
-        pending_operation_ == PendingFileOperation::CreateFile ||
+    return pending_operation_ == PendingFileOperation::CreateDirectoryItem ||
+        pending_operation_ == PendingFileOperation::CreateFileItem ||
         pending_operation_ == PendingFileOperation::RenameItem;
 }
 
 std::string FilesModalContent::PendingOperationActionLabel() const {
     switch (pending_operation_) {
-        case PendingFileOperation::CreateDirectory:
+        case PendingFileOperation::CreateDirectoryItem:
             return "Create Dir";
-        case PendingFileOperation::CreateFile:
+        case PendingFileOperation::CreateFileItem:
             return "Create File";
         case PendingFileOperation::DeleteItems:
             return "Delete";

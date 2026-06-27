@@ -538,7 +538,7 @@ bool FileManager::ListDirectory(
     return true;
 }
 
-bool FileManager::CreateDirectory(const std::filesystem::path& path, std::string& error) const {
+bool FileManager::CreateDirectoryItem(const std::filesystem::path& path, std::string& error) const {
     if (path.empty()) {
         error = "Enter a directory path.";
         return false;

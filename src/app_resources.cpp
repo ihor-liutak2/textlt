@@ -82,7 +82,7 @@ std::filesystem::path UserConfigDirectory() {
     return EditorConfig::DefaultConfigPath().parent_path();
 }
 
-void CreateDirectory(const std::filesystem::path& path) {
+void EnsureDirectoryExists(const std::filesystem::path& path) {
     if (path.empty()) {
         return;
     }
@@ -113,10 +113,10 @@ void EnsureAssistantDataDirectories() {
         return;
     }
 
-    CreateDirectory(data_directory / "piper" / "bin");
-    CreateDirectory(data_directory / "piper" / "models");
-    CreateDirectory(data_directory / "ai" / "runtimes");
-    CreateDirectory(data_directory / "ai" / "models");
+    EnsureDirectoryExists(data_directory / "piper" / "bin");
+    EnsureDirectoryExists(data_directory / "piper" / "models");
+    EnsureDirectoryExists(data_directory / "ai" / "runtimes");
+    EnsureDirectoryExists(data_directory / "ai" / "models");
 }
 
 } // namespace
@@ -124,8 +124,8 @@ void EnsureAssistantDataDirectories() {
 void EnsureStartupResources() {
     const std::filesystem::path config_directory = UserConfigDirectory();
     if (!config_directory.empty()) {
-        CreateDirectory(config_directory);
-        CreateDirectory(config_directory / "themes");
+        EnsureDirectoryExists(config_directory);
+        EnsureDirectoryExists(config_directory / "themes");
     }
     EnsureDefaultConfigFile();
 }
@@ -133,11 +133,11 @@ void EnsureStartupResources() {
 void EnsureAssistantResources() {
     const std::filesystem::path config_directory = UserConfigDirectory();
     if (!config_directory.empty()) {
-        CreateDirectory(config_directory / "registries");
+        EnsureDirectoryExists(config_directory / "registries");
     }
 
     EnsureAssistantDataDirectories();
-    CreateDirectory(UserCacheDirectory());
+    EnsureDirectoryExists(UserCacheDirectory());
 }
 
 } // namespace textlt

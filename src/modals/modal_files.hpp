@@ -78,8 +78,8 @@ public:
 private:
     enum class PendingFileOperation {
         None,
-        CreateDirectory,
-        CreateFile,
+        CreateDirectoryItem,
+        CreateFileItem,
         DeleteItems,
         RenameItem,
         PasteItems,
