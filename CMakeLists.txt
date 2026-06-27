@@ -209,6 +209,11 @@ target_link_libraries(textlt PRIVATE
 )
 
 if(WIN32)
+  target_compile_definitions(textlt PRIVATE
+    NOMINMAX
+    WIN32_LEAN_AND_MEAN
+    _CRT_SECURE_NO_WARNINGS
+  )
   target_link_libraries(textlt PRIVATE shell32 ole32)
 endif()
 

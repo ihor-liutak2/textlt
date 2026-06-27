@@ -70,7 +70,7 @@ std::filesystem::path RegistryDirectory() {
     return data.empty() ? std::filesystem::path{} : data / "registries";
 }
 
-void CreateDirectory(const std::filesystem::path& path) {
+void EnsureDirectory(const std::filesystem::path& path) {
     if (path.empty()) {
         return;
     }
@@ -360,7 +360,7 @@ bool DownloadRuntimeArchive(const std::string& url,
                             std::function<void()>& request_redraw) {
     using namespace assistant_modal_detail;
 
-    CreateDirectory(final_path.parent_path());
+    EnsureDirectory(final_path.parent_path());
     const std::filesystem::path part_path = final_path.string() + ".part";
     std::error_code error;
     std::filesystem::remove(part_path, error);
@@ -407,8 +407,8 @@ bool DownloadAiModelFile(const std::string& url,
                          std::function<void()>& request_redraw) {
     using namespace assistant_modal_detail;
 
-    CreateDirectory(final_path.parent_path());
-    CreateDirectory(part_path.parent_path());
+    EnsureDirectory(final_path.parent_path());
+    EnsureDirectory(part_path.parent_path());
     std::error_code error;
     std::filesystem::remove(part_path, error);
 
@@ -478,7 +478,7 @@ bool ExtractRuntimeArchive(const std::filesystem::path& archive_path,
                            const std::filesystem::path& destination) {
     using namespace assistant_modal_detail;
 
-    CreateDirectory(destination);
+    EnsureDirectory(destination);
 
     archive* input = archive_read_new();
     archive* output = archive_write_disk_new();
@@ -565,7 +565,7 @@ RegistryDownloadResult DownloadRegistry(const char* url, const char* filename) {
         return RegistryDownloadResult::Failed;
     }
 
-    CreateDirectory(registry_directory);
+    EnsureDirectory(registry_directory);
 
     const std::filesystem::path final_path = registry_directory / filename;
     CurlManager::RequestOptions options;
@@ -844,16 +844,16 @@ void AssistantSettingsModalContent::SetTodoStatus(std::string action) {
     using namespace assistant_modal_detail;
 
     if (selected_tab_ == 0) {
-        CreateDirectory(UserDataDirectory() / "piper" / "models");
-        CreateDirectory(DownloadCacheDirectory());
+        EnsureDirectory(UserDataDirectory() / "piper" / "models");
+        EnsureDirectory(DownloadCacheDirectory());
         std::lock_guard<std::mutex> lock(tts_download_mutex_);
         tts_status_ = "TODO: " + action + " support is not implemented";
         tts_progress_ = 0.0f;
         return;
     }
-    CreateDirectory(UserDataDirectory() / "ai" / "models");
-    CreateDirectory(UserDataDirectory() / "ai" / "runtimes");
-    CreateDirectory(DownloadCacheDirectory());
+    EnsureDirectory(UserDataDirectory() / "ai" / "models");
+    EnsureDirectory(UserDataDirectory() / "ai" / "runtimes");
+    EnsureDirectory(DownloadCacheDirectory());
     std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
     ai_status_ = "TODO: " + action + " support is not implemented";
     ai_runtime_progress_visible_ = false;
@@ -864,8 +864,8 @@ void AssistantSettingsModalContent::SetTodoStatus(std::string action) {
 bool AssistantSettingsModalContent::ResolveAiRuntimeDownload() {
     using namespace assistant_modal_detail;
 
-    CreateDirectory(UserDataDirectory() / "ai" / "runtimes");
-    CreateDirectory(DownloadCacheDirectory());
+    EnsureDirectory(UserDataDirectory() / "ai" / "runtimes");
+    EnsureDirectory(DownloadCacheDirectory());
 
     ai_runtime_download_url_.clear();
     ai_runtime_asset_name_.clear();

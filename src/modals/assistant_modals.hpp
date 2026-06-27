@@ -44,7 +44,7 @@ enum class RegistryKind {
 
 std::filesystem::path UserDataDirectory();
 std::filesystem::path DownloadCacheDirectory();
-void CreateDirectory(const std::filesystem::path& path);
+void EnsureDirectory(const std::filesystem::path& path);
 const char* RegistryFilename(RegistryKind kind);
 RegistryLoadResult LoadUserRegistryJson(const char* filename, Json* root);
 RegistryLoadResult LoadUserRegistryJson(RegistryKind kind, Json* root);

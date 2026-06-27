@@ -179,8 +179,8 @@ bool DownloadPiperFile(const std::string& url,
                        std::string* error_message) {
     using namespace assistant_modal_detail;
 
-    CreateDirectory(final_path.parent_path());
-    CreateDirectory(DownloadCacheDirectory());
+    EnsureDirectory(final_path.parent_path());
+    EnsureDirectory(DownloadCacheDirectory());
     const std::filesystem::path part_path =
         DownloadCacheDirectory() / (final_path.filename().string() + ".part");
 
