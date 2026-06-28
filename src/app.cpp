@@ -157,6 +157,18 @@ TextltApp::TextltApp()
                   SetEditorLayoutMode(EditorLayoutMode::Single);
               }
           },
+          [this](size_t pane_index) {
+              SetActiveEditorPane(pane_index);
+              screen_.PostEvent(ftxui::Event::Custom);
+          },
+          [this](size_t pane_index, size_t document_index) {
+              AssignDocumentToEditorPane(pane_index, document_index);
+          },
+          [this](size_t pane_index, const std::string& role) {
+              SetEditorPaneRole(pane_index, role);
+          },
+          [this] { DuplicateActiveDocumentToNextPane(); },
+          [this] { EqualizeEditorPaneWidths(); },
           [this] { CloseViewLayoutModal(); }),
       ai_actions_modal_(&current_theme_),
       assistant_settings_modal_(
@@ -193,12 +205,20 @@ TextltApp::TextltApp()
         editor_pane_renderers_.push_back(ftxui::CatchEvent(
             pane_renderer,
             [this, pane_index](ftxui::Event event) {
-                if (event.is_mouse() && pane_index < VisibleEditorPaneCount()) {
+                if (event.is_mouse() &&
+                    pane_index < VisibleEditorPaneCount() &&
+                    MainViewCanActivateEditorPane()) {
                     SetActiveEditorPane(pane_index);
                 }
                 return false;
             }));
     }
+
+    // Keep one stable component tree. A component cannot safely belong to the
+    // single-, two-, and three-pane containers at the same time: TakeFocus()
+    // would follow an ambiguous parent chain and reset the workspace to the
+    // single-pane tab when a modal closes. RenderEditorPane() hides panes that
+    // are not part of the selected layout.
     editor_workspace_container_ = ftxui::Container::Horizontal(editor_pane_renderers_);
 
     RestoreOpenedDocuments();

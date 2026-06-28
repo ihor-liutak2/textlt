@@ -94,6 +94,26 @@ bool IsAltBShortcut(const ftxui::Event& event) {
     return MatchesShortcut(event, ShortcutModifier::Alt, 'b');
 }
 
+bool IsAltLeftShortcut(const ftxui::Event& event) {
+    const std::string& input = event.input();
+    return input == "Alt+Left" ||
+        input == "\x1B[1;3D" ||
+        input == "\x1B[1;9D" ||
+        input == "\x1B[27;3;68~" ||
+        input == "\x1B[68;3u" ||
+        event == ftxui::Event::Special("Alt+Left");
+}
+
+bool IsAltRightShortcut(const ftxui::Event& event) {
+    const std::string& input = event.input();
+    return input == "Alt+Right" ||
+        input == "\x1B[1;3C" ||
+        input == "\x1B[1;9C" ||
+        input == "\x1B[27;3;67~" ||
+        input == "\x1B[67;3u" ||
+        event == ftxui::Event::Special("Alt+Right");
+}
+
 bool IsOpenedSidebarChordKey(const ftxui::Event& event) {
     const std::string& input = event.input();
     return input == "o" ||
@@ -448,6 +468,15 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     if (IsCtrlBShortcut(event)) {
         pending_sidebar_chord_ = true;
         HandleCtrlBFileExplorer();
+        return true;
+    }
+
+    if (IsAltRightShortcut(event)) {
+        FocusNextEditorPane();
+        return true;
+    }
+    if (IsAltLeftShortcut(event)) {
+        FocusPreviousEditorPane();
         return true;
     }
 

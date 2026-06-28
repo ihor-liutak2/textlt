@@ -173,6 +173,13 @@ private:
     int EditorLayoutModeIndex() const;
     void SetEditorLayoutMode(EditorLayoutMode mode);
     void SetActiveEditorPane(size_t pane_index);
+    void FocusNextEditorPane();
+    void FocusPreviousEditorPane();
+    void EqualizeEditorPaneWidths();
+    void SetEditorPaneRole(size_t pane_index, const std::string& role);
+    void AssignDocumentToEditorPane(size_t pane_index, size_t document_index);
+    void DuplicateActiveDocumentToNextPane();
+    bool MainViewCanActivateEditorPane() const;
     void EnsureEditorPanesHaveDocuments();
     void AssignDocumentToActivePane(size_t document_index);
     void SyncEditorPaneDocuments();
@@ -240,6 +247,9 @@ private:
     ftxui::Component text_editor_;
     std::vector<ftxui::Component> editor_pane_components_;
     std::vector<ftxui::Component> editor_pane_renderers_;
+    ftxui::Component editor_workspace_single_;
+    ftxui::Component editor_workspace_two_;
+    ftxui::Component editor_workspace_three_;
     ftxui::Component editor_workspace_container_;
     ftxui::Component sidebar_panel_;
     HelpDialog help_dialog_;
@@ -264,6 +274,10 @@ private:
     std::vector<EditorPaneState> editor_panes_;
     size_t active_editor_pane_index_ = 0;
     EditorLayoutMode editor_layout_mode_ = EditorLayoutMode::Single;
+    int editor_workspace_tab_index_ = 0;
+    int editor_two_left_width_ = 72;
+    int editor_three_left_width_ = 48;
+    int editor_three_right_width_ = 48;
 
     std::string find_query_;
     std::string replace_text_;

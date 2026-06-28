@@ -3,11 +3,46 @@
 #include <algorithm>
 #include <filesystem>
 #include <string>
+#include <utility>
 
 #include "ftxui/component/event.hpp"
 #include "ftxui/dom/elements.hpp"
 
 namespace textlt {
+
+namespace {
+
+std::string DocumentTitle(const std::shared_ptr<Document>& doc) {
+    if (!doc) {
+        return "Untitled";
+    }
+    std::string title = doc->path.filename().string();
+    if (title.empty()) {
+        title = doc->path.string();
+    }
+    if (title.empty()) {
+        title = "Untitled";
+    }
+    return title;
+}
+
+std::string ShortDocumentTitle(const std::shared_ptr<Document>& doc) {
+    std::string title = DocumentTitle(doc);
+    if (doc && doc->is_dirty) {
+        title += " *";
+    }
+    return title;
+}
+
+bool IsMemoryOnlyPath(const std::shared_ptr<Document>& doc) {
+    if (!doc) {
+        return false;
+    }
+    const std::string path = doc->path.string();
+    return path.empty() || path == "Untitled" || path == "untitled.txt";
+}
+
+} // namespace
 
 std::shared_ptr<EditorComponent> TextltApp::ActiveEditor() const {
     if (!text_editor_) {
@@ -54,6 +89,26 @@ void TextltApp::SetEditorLayoutMode(EditorLayoutMode mode) {
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
+bool TextltApp::MainViewCanActivateEditorPane() const {
+    return ActiveLayer() == UiLayer::Main &&
+        (!menu_bar_ || !menu_bar_->IsDropdownOpen()) &&
+        current_search_mode_ == SearchMode::None &&
+        !show_goto_line_bar_ &&
+        !help_dialog_.IsOpen() &&
+        !recent_files_modal_.IsOpen() &&
+        !search_files_modal_.IsOpen() &&
+        !files_modal_.IsOpen() &&
+        !text_processors_modal_.IsOpen() &&
+        !git_modal_.IsOpen() &&
+        !git_settings_modal_.IsOpen() &&
+        !tts_modal_.IsOpen() &&
+        !view_layout_modal_.IsOpen() &&
+        !ai_actions_modal_.IsOpen() &&
+        !assistant_settings_modal_.IsOpen() &&
+        !theme_dialog_.IsOpen() &&
+        !unsaved_changes_dialog_.IsOpen();
+}
+
 void TextltApp::SetActiveEditorPane(size_t pane_index) {
     if (editor_pane_components_.empty()) {
         return;
@@ -63,10 +118,7 @@ void TextltApp::SetActiveEditorPane(size_t pane_index) {
         return;
     }
     pane_index = std::min(pane_index, visible_count - 1);
-    // Changing the pane assignment can happen while the View Layout modal is
-    // active. Do not switch the root Container::Tab back to Main or move FTXUI
-    // focus into the editor in that case: the modal must keep receiving events
-    // until it is explicitly closed.
+
     const bool editor_layer_is_active = ActiveLayer() == UiLayer::Main;
     active_editor_pane_index_ = pane_index;
     sidebar_has_focus_ = false;
@@ -82,6 +134,95 @@ void TextltApp::SetActiveEditorPane(size_t pane_index) {
     }
     RefreshOpenedDocumentsSidebar();
     UpdateFileMenuLabels();
+}
+
+void TextltApp::FocusNextEditorPane() {
+    const size_t visible_count = VisibleEditorPaneCount();
+    if (visible_count <= 1) {
+        active_action_ = "Only one editor pane is visible";
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+    SetActiveEditorPane((active_editor_pane_index_ + 1) % visible_count);
+    active_action_ = "Active pane: " + std::to_string(active_editor_pane_index_ + 1);
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::FocusPreviousEditorPane() {
+    const size_t visible_count = VisibleEditorPaneCount();
+    if (visible_count <= 1) {
+        active_action_ = "Only one editor pane is visible";
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+    const size_t next_index = active_editor_pane_index_ == 0
+        ? visible_count - 1
+        : active_editor_pane_index_ - 1;
+    SetActiveEditorPane(next_index);
+    active_action_ = "Active pane: " + std::to_string(active_editor_pane_index_ + 1);
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::EqualizeEditorPaneWidths() {
+    editor_two_left_width_ = 72;
+    editor_three_left_width_ = 48;
+    editor_three_right_width_ = 48;
+    active_action_ = "Editor pane widths reset";
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::SetEditorPaneRole(size_t pane_index, const std::string& role) {
+    if (pane_index >= editor_panes_.size()) {
+        return;
+    }
+    editor_panes_[pane_index].role = role.empty() ? "General" : role;
+    active_action_ = "Pane " + std::to_string(pane_index + 1) + " role: " + editor_panes_[pane_index].role;
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::AssignDocumentToEditorPane(size_t pane_index, size_t document_index) {
+    if (pane_index >= editor_panes_.size() ||
+        pane_index >= editor_pane_components_.size() ||
+        document_index >= open_documents_.size() ||
+        !open_documents_[document_index]) {
+        return;
+    }
+
+    editor_panes_[pane_index].document_index = document_index;
+    auto editor = std::static_pointer_cast<EditorComponent>(editor_pane_components_[pane_index]);
+    if (editor) {
+        editor->SetDocument(open_documents_[document_index]);
+    }
+
+    if (pane_index == active_editor_pane_index_) {
+        active_document_index_ = document_index;
+        text_editor_ = editor_pane_components_[pane_index];
+    }
+
+    active_action_ = "Pane " + std::to_string(pane_index + 1) + " document: " +
+        ShortDocumentTitle(open_documents_[document_index]);
+    RefreshOpenedDocumentsSidebar();
+    UpdateFileMenuLabels();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::DuplicateActiveDocumentToNextPane() {
+    if (open_documents_.empty() || active_document_index_ >= open_documents_.size()) {
+        return;
+    }
+
+    const size_t visible_count = VisibleEditorPaneCount();
+    if (visible_count <= 1) {
+        SetEditorLayoutMode(EditorLayoutMode::TwoColumns);
+    }
+
+    const size_t updated_visible_count = VisibleEditorPaneCount();
+    const size_t target_pane = updated_visible_count <= 1
+        ? active_editor_pane_index_
+        : (active_editor_pane_index_ + 1) % updated_visible_count;
+    AssignDocumentToEditorPane(target_pane, active_document_index_);
+    active_action_ = "Duplicated active document to pane " + std::to_string(target_pane + 1);
+    screen_.PostEvent(ftxui::Event::Custom);
 }
 
 void TextltApp::EnsureEditorPanesHaveDocuments() {
@@ -127,7 +268,9 @@ void TextltApp::AssignDocumentToActivePane(size_t document_index) {
     auto editor = std::static_pointer_cast<EditorComponent>(text_editor_);
     if (editor) {
         editor->SetDocument(open_documents_[document_index]);
-        editor->TakeFocus();
+        if (ActiveLayer() == UiLayer::Main) {
+            editor->TakeFocus();
+        }
     }
     RefreshOpenedDocumentsSidebar();
     UpdateFileMenuLabels();
@@ -158,20 +301,9 @@ ftxui::Element TextltApp::RenderEditorPane(size_t pane_index) {
     auto editor = std::static_pointer_cast<EditorComponent>(editor_pane_components_[pane_index]);
     std::shared_ptr<Document> doc = editor ? editor->GetDocument() : nullptr;
 
-    std::string title = "Untitled";
-    bool dirty = false;
-    std::string type_label = "Plain Text";
-    if (doc) {
-        title = doc->path.filename().string();
-        if (title.empty()) {
-            title = doc->path.string();
-        }
-        if (title.empty()) {
-            title = "Untitled";
-        }
-        dirty = doc->is_dirty;
-        type_label = doc->Label();
-    }
+    const std::string title = DocumentTitle(doc);
+    const bool dirty = doc && doc->is_dirty;
+    const std::string type_label = doc ? doc->Label() : "Plain Text";
 
     const bool active = !sidebar_has_focus_ && pane_index == active_editor_pane_index_;
     const std::string marker = active ? "●" : "○";
@@ -207,24 +339,34 @@ ViewLayoutSnapshot TextltApp::CurrentViewLayoutSnapshot() const {
     snapshot.layout_index = EditorLayoutModeIndex();
     snapshot.layout_name = EditorLayoutModeLabel(editor_layout_mode_);
     snapshot.active_pane_index = active_editor_pane_index_;
+    snapshot.two_left_width = editor_two_left_width_;
+    snapshot.three_left_width = editor_three_left_width_;
+    snapshot.three_right_width = editor_three_right_width_;
+
+    for (size_t doc_index = 0; doc_index < open_documents_.size(); ++doc_index) {
+        const auto& doc = open_documents_[doc_index];
+        if (!doc) {
+            continue;
+        }
+        ViewLayoutDocumentInfo doc_info;
+        doc_info.title = ShortDocumentTitle(doc);
+        doc_info.path = doc->path.string();
+        doc_info.dirty = doc->is_dirty;
+        doc_info.memory_only = IsMemoryOnlyPath(doc);
+        doc_info.active = doc_index == active_document_index_;
+        snapshot.documents.push_back(std::move(doc_info));
+    }
 
     const size_t visible_count = VisibleEditorPaneCount();
     for (size_t pane_index = 0; pane_index < visible_count; ++pane_index) {
         ViewLayoutPaneInfo info;
         info.role = pane_index < editor_panes_.size() ? editor_panes_[pane_index].role : "General";
         info.active = pane_index == active_editor_pane_index_;
-        if (pane_index < editor_panes_.size() &&
-            editor_panes_[pane_index].document_index < open_documents_.size()) {
-            const auto& doc = open_documents_[editor_panes_[pane_index].document_index];
-            if (doc) {
-                info.title = doc->path.filename().string();
-                if (info.title.empty()) {
-                    info.title = doc->path.string();
-                }
-                if (doc->is_dirty) {
-                    info.title += " *";
-                }
-            }
+        info.document_index = pane_index < editor_panes_.size() ? editor_panes_[pane_index].document_index : 0;
+        if (info.document_index < open_documents_.size()) {
+            const auto& doc = open_documents_[info.document_index];
+            info.title = ShortDocumentTitle(doc);
+            info.path = doc ? doc->path.string() : "";
         }
         if (info.title.empty()) {
             info.title = "Untitled";

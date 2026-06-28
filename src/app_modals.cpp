@@ -67,6 +67,8 @@ std::vector<std::string> BuiltInHelpLines() {
         "",
         "Menus",
         "  Tab           Switch focus from File Explorer to Editor",
+        "  Alt+Left      Switch to the previous editor pane",
+        "  Alt+Right     Switch to the next editor pane",
         "  Ctrl+B        Toggle File Explorer",
         "  Ctrl+B, O     Open File Explorer on the Opened tab",
         "  Alt+B         Toggle File Explorer between Opened and Project",
@@ -82,6 +84,7 @@ std::vector<std::string> BuiltInHelpLines() {
         "  Auto Pairing inserts matching brackets and quotes.",
         "  Smart Auto-Indent carries indentation onto new lines.",
         "  Theme opens the dynamic theme selector.",
+        "  View Layout opens the pane and column manager.",
         "",
         "Syntax Highlighting",
         "  Language        Supported Extensions / Filenames",
@@ -420,15 +423,17 @@ void TextltApp::OpenViewLayoutModal() {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
+    SetActiveLayer(UiLayer::ViewLayout);
     view_layout_modal_.Open();
     active_action_ = "Opened View Layout";
-    SetActiveLayer(UiLayer::ViewLayout);
+    screen_.PostEvent(ftxui::Event::Custom);
 }
 
 
 void TextltApp::CloseViewLayoutModal() {
     view_layout_modal_.Close();
     FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
 }
 
 
