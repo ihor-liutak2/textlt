@@ -416,6 +416,22 @@ void TextltApp::CloseTtsModal() {
 }
 
 
+void TextltApp::OpenViewLayoutModal() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+    view_layout_modal_.Open();
+    active_action_ = "Opened View Layout";
+    SetActiveLayer(UiLayer::ViewLayout);
+}
+
+
+void TextltApp::CloseViewLayoutModal() {
+    view_layout_modal_.Close();
+    FocusEditor();
+}
+
+
 void TextltApp::OpenAiActionsModal() {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();

@@ -408,6 +408,9 @@ void TextltApp::HandleOptionsMenu(int item) {
     } else if (item == 8) {
         OpenThemeDialog();
         return;
+    } else if (item == 9) {
+        OpenViewLayoutModal();
+        return;
     }
     CloseDropdown();
 }

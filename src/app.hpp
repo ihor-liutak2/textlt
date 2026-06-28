@@ -20,6 +20,7 @@
 #include "modals/modal_git_settings.hpp"
 #include "modals/modal_recent_files.hpp"
 #include "modals/modal_tts.hpp"
+#include "modals/modal_view_layout.hpp"
 #include "modals/modal_search_files.hpp"
 #include "modals/modal_files.hpp"
 #include "modals/modal_text_processors.hpp"
@@ -51,6 +52,17 @@ private:
         Replace,
     };
 
+    enum class EditorLayoutMode {
+        Single = 0,
+        TwoColumns = 1,
+        ThreeColumns = 2,
+    };
+
+    struct EditorPaneState {
+        size_t document_index = 0;
+        std::string role = "General";
+    };
+
     // Keep application layer selection type-safe. FTXUI's Container::Tab API
     // requires an int pointer, so active_layer_index_ is only an adapter at
     // that boundary.
@@ -68,6 +80,7 @@ private:
         Git,
         GitSettings,
         Tts,
+        ViewLayout,
         AiActions,
         AssistantSettings,
     };
@@ -122,6 +135,8 @@ private:
     void CloseHelpDialog();
     void OpenTtsModal();
     void CloseTtsModal();
+    void OpenViewLayoutModal();
+    void CloseViewLayoutModal();
     void OpenAiActionsModal();
     void CloseAiActionsModal();
     void OpenAssistantSettingsModal();
@@ -152,6 +167,17 @@ private:
     void OpenRestoredDocument(const OpenedFileState& entry);
     void RefreshOpenedDocumentsSidebar();
     std::shared_ptr<Document> ActiveDocument() const;
+    std::shared_ptr<EditorComponent> ActiveEditor() const;
+    size_t VisibleEditorPaneCount() const;
+    std::string EditorLayoutModeLabel(EditorLayoutMode mode) const;
+    int EditorLayoutModeIndex() const;
+    void SetEditorLayoutMode(EditorLayoutMode mode);
+    void SetActiveEditorPane(size_t pane_index);
+    void EnsureEditorPanesHaveDocuments();
+    void AssignDocumentToActivePane(size_t document_index);
+    void SyncEditorPaneDocuments();
+    ftxui::Element RenderEditorPane(size_t pane_index);
+    ViewLayoutSnapshot CurrentViewLayoutSnapshot() const;
     void InitializeWithFiles(const std::vector<std::string>& files_to_open);
     void OpenSidebarFile(const std::filesystem::path& path);
     void SaveCurrentFile();
@@ -212,6 +238,9 @@ private:
     GitManager git_manager_;
     FileManager file_manager_;
     ftxui::Component text_editor_;
+    std::vector<ftxui::Component> editor_pane_components_;
+    std::vector<ftxui::Component> editor_pane_renderers_;
+    ftxui::Component editor_workspace_container_;
     ftxui::Component sidebar_panel_;
     HelpDialog help_dialog_;
     RecentFilesHistory recent_files_history_;
@@ -225,12 +254,16 @@ private:
 
     CloudTtsPipeline cloud_tts_pipeline_;
     TtsModal tts_modal_;
+    ViewLayoutModal view_layout_modal_;
     AiActionsModal ai_actions_modal_;
     AssistantSettingsModal assistant_settings_modal_;
     ThemeDialog theme_dialog_;
     UnsavedChangesDialog unsaved_changes_dialog_;
     std::vector<std::shared_ptr<Document>> open_documents_;
     size_t active_document_index_ = 0;
+    std::vector<EditorPaneState> editor_panes_;
+    size_t active_editor_pane_index_ = 0;
+    EditorLayoutMode editor_layout_mode_ = EditorLayoutMode::Single;
 
     std::string find_query_;
     std::string replace_text_;

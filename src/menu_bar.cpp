@@ -67,6 +67,7 @@ MenuBarComponent::MenuBarComponent(
               " Tab Size: 4 spaces ",
               " Convert Tabs to Spaces ",
               " Theme... ",
+              " View Layout... ",
           },
           {
               " TTS                 (Alt+H) ",

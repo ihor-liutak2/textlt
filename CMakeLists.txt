@@ -142,6 +142,7 @@ add_executable(textlt
   src/app_file_actions.cpp
   src/app_document_actions.cpp
   src/app_tts_actions.cpp
+  src/app_workspace.cpp
   src/app_resources.cpp
   src/app_view.cpp
   src/cloud_tts_pipeline.cpp
@@ -178,6 +179,7 @@ add_executable(textlt
   src/modals/modal_git_utils.cpp
   src/modals/modal_recent_files.cpp
   src/modals/modal_tts.cpp
+  src/modals/modal_view_layout.cpp
   src/modals/modal_window.cpp
   src/modals/theme_dialog.cpp
   src/modals/unsaved_changes_dialog.cpp

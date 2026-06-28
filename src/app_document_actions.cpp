@@ -26,7 +26,15 @@ void TextltApp::SwitchEditorFocus() {
 void TextltApp::FocusEditor() {
     sidebar_has_focus_ = false;
     SetActiveLayer(UiLayer::Main);
-    text_editor_->TakeFocus();
+    if (active_editor_pane_index_ >= editor_pane_components_.size()) {
+        active_editor_pane_index_ = 0;
+    }
+    if (!editor_pane_components_.empty()) {
+        text_editor_ = editor_pane_components_[active_editor_pane_index_];
+    }
+    if (text_editor_) {
+        text_editor_->TakeFocus();
+    }
 }
 
 
@@ -118,7 +126,8 @@ std::shared_ptr<Document> TextltApp::ActiveDocument() const {
     if (active_document_index_ < open_documents_.size()) {
         return open_documents_[active_document_index_];
     }
-    return std::static_pointer_cast<EditorComponent>(text_editor_)->GetDocument();
+    const auto editor = ActiveEditor();
+    return editor ? editor->GetDocument() : nullptr;
 }
 
 
@@ -153,7 +162,7 @@ void TextltApp::AddOpenDocument(std::shared_ptr<Document> doc) {
 
     open_documents_.push_back(doc);
     active_document_index_ = open_documents_.size() - 1;
-    std::static_pointer_cast<EditorComponent>(text_editor_)->SetDocument(doc);
+    AssignDocumentToActivePane(active_document_index_);
     RefreshOpenedDocumentsSidebar();
 }
 
@@ -172,8 +181,8 @@ void TextltApp::EnsureOneOpenDocument() {
         if (active_document_index_ >= open_documents_.size()) {
             active_document_index_ = open_documents_.size() - 1;
         }
-        std::static_pointer_cast<EditorComponent>(text_editor_)
-            ->SetDocument(open_documents_[active_document_index_]);
+        AssignDocumentToActivePane(active_document_index_);
+        SyncEditorPaneDocuments();
         RefreshOpenedDocumentsSidebar();
         return;
     }
@@ -202,8 +211,15 @@ void TextltApp::RemoveOpenDocument(size_t index) {
         --active_document_index_;
     }
 
-    std::static_pointer_cast<EditorComponent>(text_editor_)
-        ->SetDocument(open_documents_[active_document_index_]);
+    for (EditorPaneState& pane : editor_panes_) {
+        if (pane.document_index > index) {
+            --pane.document_index;
+        } else if (pane.document_index == index) {
+            pane.document_index = active_document_index_;
+        }
+    }
+
+    SyncEditorPaneDocuments();
     RefreshOpenedDocumentsSidebar();
 }
 
@@ -337,8 +353,8 @@ void TextltApp::RestoreOpenedDocuments() {
 
     if (!open_documents_.empty()) {
         active_document_index_ = std::min(opened_config.active_index, open_documents_.size() - 1);
-        std::static_pointer_cast<EditorComponent>(text_editor_)
-            ->SetDocument(open_documents_[active_document_index_]);
+        AssignDocumentToActivePane(active_document_index_);
+        SyncEditorPaneDocuments();
         RefreshOpenedDocumentsSidebar();
     }
 
@@ -352,14 +368,13 @@ void TextltApp::ActivateOpenDocument(size_t index) {
     }
 
     PersistActiveFavoriteCursor();
-    active_document_index_ = index;
-    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-    editor_ptr->SetDocument(open_documents_[index]);
+    AssignDocumentToActivePane(index);
+    auto editor_ptr = ActiveEditor();
     RestoreFavoriteCursor(open_documents_[index]->path.string());
     RefreshOpenedDocumentsSidebar();
     UpdateFileMenuLabels();
     PersistOpenedDocuments();
-    active_action_ = "Switched to " + editor_ptr->CurrentFilePath();
+    active_action_ = "Switched to " + (editor_ptr ? editor_ptr->CurrentFilePath() : open_documents_[index]->path.string());
     screen_.PostEvent(ftxui::Event::Custom);
 }
 

@@ -145,6 +145,19 @@ TextltApp::TextltApp()
           &current_theme_,
           &cloud_tts_pipeline_,
           [this] { QueueTtsBookPreparationFromCursor(); }),
+      view_layout_modal_(
+          &current_theme_,
+          [this] { return CurrentViewLayoutSnapshot(); },
+          [this](int layout_index) {
+              if (layout_index == 1) {
+                  SetEditorLayoutMode(EditorLayoutMode::TwoColumns);
+              } else if (layout_index == 2) {
+                  SetEditorLayoutMode(EditorLayoutMode::ThreeColumns);
+              } else {
+                  SetEditorLayoutMode(EditorLayoutMode::Single);
+              }
+          },
+          [this] { CloseViewLayoutModal(); }),
       ai_actions_modal_(&current_theme_),
       assistant_settings_modal_(
           &current_theme_,
@@ -165,6 +178,29 @@ TextltApp::TextltApp()
             this->RunDropdownAction(menu_index, item_index);
         },
         &current_theme_);
+
+    editor_panes_.assign(3, EditorPaneState{});
+    editor_pane_components_.clear();
+    editor_pane_components_.push_back(text_editor_);
+    editor_pane_components_.push_back(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_));
+    editor_pane_components_.push_back(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_));
+
+    editor_pane_renderers_.clear();
+    for (size_t pane_index = 0; pane_index < editor_pane_components_.size(); ++pane_index) {
+        auto pane_renderer = ftxui::Renderer(
+            editor_pane_components_[pane_index],
+            [this, pane_index] { return RenderEditorPane(pane_index); });
+        editor_pane_renderers_.push_back(ftxui::CatchEvent(
+            pane_renderer,
+            [this, pane_index](ftxui::Event event) {
+                if (event.is_mouse() && pane_index < VisibleEditorPaneCount()) {
+                    SetActiveEditorPane(pane_index);
+                }
+                return false;
+            }));
+    }
+    editor_workspace_container_ = ftxui::Container::Horizontal(editor_pane_renderers_);
+
     RestoreOpenedDocuments();
     EnsureOneOpenDocument();
     UpdateFileMenuLabels();
@@ -172,7 +208,7 @@ TextltApp::TextltApp()
 
     auto body_content = ftxui::Container::Horizontal({
         sidebar_panel_,
-        text_editor_,
+        editor_workspace_container_,
     });
     body_container_ = ftxui::CatchEvent(body_content, [this](ftxui::Event event) {
         if (event == ftxui::Event::Tab &&
@@ -186,6 +222,7 @@ TextltApp::TextltApp()
             !git_modal_.IsOpen() &&
             !git_settings_modal_.IsOpen() &&
             !tts_modal_.IsOpen() &&
+            !view_layout_modal_.IsOpen() &&
             !ai_actions_modal_.IsOpen() &&
             !assistant_settings_modal_.IsOpen() &&
             !theme_dialog_.IsOpen() &&
@@ -338,6 +375,7 @@ TextltApp::TextltApp()
         git_modal_.View(),
         git_settings_modal_.View(),
         tts_modal_.View(),
+        view_layout_modal_.View(),
         ai_actions_modal_.View(),
         assistant_settings_modal_.View(),
     }, &active_layer_index_);

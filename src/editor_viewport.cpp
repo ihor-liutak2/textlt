@@ -12,6 +12,9 @@ namespace textlt {
 namespace {
 
 constexpr size_t kScrollbarColumns = 2;
+constexpr size_t kFallbackViewportWidth = 80;
+constexpr size_t kMaxSafeViewportWidth = 1000;
+constexpr size_t kMaxSafeViewportHeight = 300;
 
 } // namespace
 
@@ -191,20 +194,35 @@ size_t EditorComponent::VisibleHeight() const {
         return 1;
     }
 
-    const size_t total_height =
-    static_cast<size_t>(editor_box_.y_max - editor_box_.y_min + 1);
-    return total_height;
+    const long long total_height =
+        static_cast<long long>(editor_box_.y_max) -
+        static_cast<long long>(editor_box_.y_min) + 1;
+    if (total_height <= 0) {
+        return 1;
+    }
+
+    // The viewport box can be uninitialized during early component composition
+    // or before a pane has been reflected by FTXUI. Clamp the value so a bad
+    // box cannot allocate an enormous number of rendered rows.
+    return std::min(static_cast<size_t>(total_height), kMaxSafeViewportHeight);
 }
 
 size_t EditorComponent::VisibleTextWidth() const {
-    const size_t total_width = editor_box_.x_max >= editor_box_.x_min
-    ? static_cast<size_t>(editor_box_.x_max - editor_box_.x_min + 1)
-    : 80;
+    size_t total_width = kFallbackViewportWidth;
+    if (editor_box_.x_max >= editor_box_.x_min) {
+        const long long measured_width =
+            static_cast<long long>(editor_box_.x_max) -
+            static_cast<long long>(editor_box_.x_min) + 1;
+        if (measured_width > 0 &&
+            static_cast<size_t>(measured_width) <= kMaxSafeViewportWidth) {
+            total_width = static_cast<size_t>(measured_width);
+        }
+    }
+
     const bool show_line_numbers = config_ && config_->show_line_numbers;
     const size_t line_number_columns =
     show_line_numbers ? LineNumberText(0, LineNumberWidth()).size() : 0;
 
-    // kScrollbarColumns is defined in your editor_mouse.cpp/component.cpp
     if (line_number_columns + kScrollbarColumns >= total_width) {
         return 1;
     }

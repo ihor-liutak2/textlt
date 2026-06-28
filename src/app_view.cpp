@@ -114,14 +114,18 @@ ftxui::Element TextltApp::Render() {
 
     Element top_menu_element = menu_bar_->Render();
         
+    Element editor_workspace = editor_workspace_container_
+        ? editor_workspace_container_->Render() | xflex
+        : text_editor_->Render() | xflex;
+
     Element workspace = editor_config_.show_file_explorer
         ? hbox({
               sidebar_panel_->Render() | size(WIDTH, EQUAL, 28),
               separator(),
-              text_editor_->Render() | xflex,
+              editor_workspace | xflex,
           })
         : hbox({
-              text_editor_->Render() | xflex,
+              editor_workspace | xflex,
           });
 
     Elements base_rows = {
@@ -217,6 +221,9 @@ ftxui::Element TextltApp::Render() {
     }
     if (tts_modal_.IsOpen()) {
         layers.push_back(tts_modal_.View()->Render() | clear_under | center);
+    }
+    if (view_layout_modal_.IsOpen()) {
+        layers.push_back(view_layout_modal_.View()->Render() | clear_under | center);
     }
     if (ai_actions_modal_.IsOpen()) {
         layers.push_back(ai_actions_modal_.View()->Render() | clear_under | center);
@@ -344,6 +351,7 @@ bool TextltApp::ActiveModalIsOpen() const {
         case UiLayer::Git: return git_modal_.IsOpen();
         case UiLayer::GitSettings: return git_settings_modal_.IsOpen();
         case UiLayer::Tts: return tts_modal_.IsOpen();
+        case UiLayer::ViewLayout: return view_layout_modal_.IsOpen();
         case UiLayer::AiActions: return ai_actions_modal_.IsOpen();
         case UiLayer::AssistantSettings: return assistant_settings_modal_.IsOpen();
     }
