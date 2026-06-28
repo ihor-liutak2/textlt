@@ -178,7 +178,7 @@ private:
     void EqualizeEditorPaneWidths();
     void SetEditorPaneRole(size_t pane_index, const std::string& role);
     void AssignDocumentToEditorPane(size_t pane_index, size_t document_index);
-    void DuplicateActiveDocumentToNextPane();
+    void SplitActiveDocumentToNextPane();
     bool MainViewCanActivateEditorPane() const;
     void EnsureEditorPanesHaveDocuments();
     void AssignDocumentToActivePane(size_t document_index);

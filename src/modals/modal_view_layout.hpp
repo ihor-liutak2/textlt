@@ -57,7 +57,7 @@ public:
         PaneCallback on_focus_pane,
         PaneDocumentCallback on_assign_document,
         PaneRoleCallback on_set_role,
-        ActionCallback on_duplicate_active,
+        ActionCallback on_split_active,
         ActionCallback on_equal_widths);
 
     ftxui::Element Render() override;
@@ -90,7 +90,7 @@ private:
     PaneCallback on_focus_pane_;
     PaneDocumentCallback on_assign_document_;
     PaneRoleCallback on_set_role_;
-    ActionCallback on_duplicate_active_;
+    ActionCallback on_split_active_;
     ActionCallback on_equal_widths_;
     ViewLayoutSnapshot snapshot_;
 
@@ -119,7 +119,7 @@ private:
     ftxui::Component focus_pane_button_;
     ftxui::Component assign_document_button_;
     ftxui::Component set_role_button_;
-    ftxui::Component duplicate_active_button_;
+    ftxui::Component split_active_button_;
     ftxui::Component equal_widths_button_;
     ftxui::Component container_;
 };
@@ -141,7 +141,7 @@ public:
         PaneCallback on_focus_pane,
         PaneDocumentCallback on_assign_document,
         PaneRoleCallback on_set_role,
-        ActionCallback on_duplicate_active,
+        ActionCallback on_split_active,
         ActionCallback on_equal_widths,
         CloseCallback on_close);
 

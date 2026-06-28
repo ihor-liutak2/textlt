@@ -167,7 +167,7 @@ TextltApp::TextltApp()
           [this](size_t pane_index, const std::string& role) {
               SetEditorPaneRole(pane_index, role);
           },
-          [this] { DuplicateActiveDocumentToNextPane(); },
+          [this] { SplitActiveDocumentToNextPane(); },
           [this] { EqualizeEditorPaneWidths(); },
           [this] { CloseViewLayoutModal(); }),
       ai_actions_modal_(&current_theme_),

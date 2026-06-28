@@ -37,7 +37,7 @@ ViewLayoutContent::ViewLayoutContent(
     PaneCallback on_focus_pane,
     PaneDocumentCallback on_assign_document,
     PaneRoleCallback on_set_role,
-    ActionCallback on_duplicate_active,
+    ActionCallback on_split_active,
     ActionCallback on_equal_widths)
     : theme_(theme),
       snapshot_provider_(std::move(snapshot_provider)),
@@ -45,7 +45,7 @@ ViewLayoutContent::ViewLayoutContent(
       on_focus_pane_(std::move(on_focus_pane)),
       on_assign_document_(std::move(on_assign_document)),
       on_set_role_(std::move(on_set_role)),
-      on_duplicate_active_(std::move(on_duplicate_active)),
+      on_split_active_(std::move(on_split_active)),
       on_equal_widths_(std::move(on_equal_widths)) {
     single_button_ = ftxui::Button(MakeButtonOption("Single", [this] {
         selected_layout_index_ = 0;
@@ -78,9 +78,9 @@ ViewLayoutContent::ViewLayoutContent(
     set_role_button_ = ftxui::Button(MakeButtonOption("Set role", [this] {
         ApplySelectedRole();
     }));
-    duplicate_active_button_ = ftxui::Button(MakeButtonOption("Duplicate active file", [this] {
-        if (on_duplicate_active_) {
-            on_duplicate_active_();
+    split_active_button_ = ftxui::Button(MakeButtonOption("Split active document", [this] {
+        if (on_split_active_) {
+            on_split_active_();
         }
         RefreshFromApp();
     }));
@@ -108,7 +108,7 @@ ViewLayoutContent::ViewLayoutContent(
             set_role_button_,
         }),
         ftxui::Container::Horizontal({
-            duplicate_active_button_,
+            split_active_button_,
             equal_widths_button_,
         }),
     });
@@ -213,11 +213,11 @@ void ViewLayoutContent::RefreshFromApp() {
         snapshot_ = snapshot_provider_();
         selected_layout_index_ = snapshot_.layout_index;
         selected_pane_index_ = static_cast<int>(snapshot_.active_pane_index);
-        SyncControlsFromSelectedPane();
     } else {
         snapshot_ = ViewLayoutSnapshot{};
     }
     RefreshEntriesFromSnapshot();
+    SyncControlsFromSelectedPane();
     ClampSelections();
 }
 
@@ -336,7 +336,7 @@ ftxui::Element ViewLayoutContent::RenderPaneManager(const Theme& theme) {
             separator() | color(theme.modal_border),
             vbox({
                 selected_details,
-                duplicate_active_button_->Render(),
+                split_active_button_->Render(),
             }) | xflex,
         }),
     });
@@ -396,7 +396,7 @@ ViewLayoutModal::ViewLayoutModal(
     PaneCallback on_focus_pane,
     PaneDocumentCallback on_assign_document,
     PaneRoleCallback on_set_role,
-    ActionCallback on_duplicate_active,
+    ActionCallback on_split_active,
     ActionCallback on_equal_widths,
     CloseCallback on_close)
     : theme_(theme),
@@ -408,7 +408,7 @@ ViewLayoutModal::ViewLayoutModal(
         std::move(on_focus_pane),
         std::move(on_assign_document),
         std::move(on_set_role),
-        std::move(on_duplicate_active),
+        std::move(on_split_active),
         std::move(on_equal_widths));
     modal_window_ = std::make_shared<ModalWindow>(
         content_,

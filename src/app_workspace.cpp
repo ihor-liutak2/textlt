@@ -206,22 +206,56 @@ void TextltApp::AssignDocumentToEditorPane(size_t pane_index, size_t document_in
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
-void TextltApp::DuplicateActiveDocumentToNextPane() {
-    if (open_documents_.empty() || active_document_index_ >= open_documents_.size()) {
+void TextltApp::SplitActiveDocumentToNextPane() {
+    if (open_documents_.empty()) {
+        EnsureOneOpenDocument();
+    }
+    if (open_documents_.empty()) {
         return;
+    }
+
+    size_t source_pane = active_editor_pane_index_;
+    if (source_pane >= editor_panes_.size()) {
+        source_pane = 0;
+        active_editor_pane_index_ = 0;
+    }
+
+    size_t source_document_index = active_document_index_;
+    if (source_pane < editor_panes_.size() &&
+        editor_panes_[source_pane].document_index < open_documents_.size()) {
+        source_document_index = editor_panes_[source_pane].document_index;
+    }
+    if (source_document_index >= open_documents_.size() ||
+        !open_documents_[source_document_index]) {
+        source_document_index = std::min(active_document_index_, open_documents_.size() - 1);
+    }
+
+    if (VisibleEditorPaneCount() <= 1) {
+        SetEditorLayoutMode(EditorLayoutMode::TwoColumns);
     }
 
     const size_t visible_count = VisibleEditorPaneCount();
     if (visible_count <= 1) {
-        SetEditorLayoutMode(EditorLayoutMode::TwoColumns);
+        active_action_ = "Could not split the active document";
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
     }
 
-    const size_t updated_visible_count = VisibleEditorPaneCount();
-    const size_t target_pane = updated_visible_count <= 1
-        ? active_editor_pane_index_
-        : (active_editor_pane_index_ + 1) % updated_visible_count;
-    AssignDocumentToEditorPane(target_pane, active_document_index_);
-    active_action_ = "Duplicated active document to pane " + std::to_string(target_pane + 1);
+    source_pane = std::min(source_pane, visible_count - 1);
+    size_t target_pane = source_pane + 1;
+    if (target_pane >= visible_count) {
+        target_pane = source_pane == 0 ? 1 : source_pane - 1;
+    }
+
+    // This is a view split, not a file copy: both panes point at the same
+    // shared Document object. EditorComponent keeps its own scroll state, so
+    // each pane can view a different part of the same file.
+    AssignDocumentToEditorPane(source_pane, source_document_index);
+    AssignDocumentToEditorPane(target_pane, source_document_index);
+    SetActiveEditorPane(source_pane);
+
+    const std::string title = ShortDocumentTitle(open_documents_[source_document_index]);
+    active_action_ = "Split " + title + " into pane " + std::to_string(target_pane + 1);
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
