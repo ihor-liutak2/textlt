@@ -3,7 +3,10 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <fstream>
+#include <iterator>
 #include <sstream>
+#include <set>
 #include <utility>
 
 namespace textlt {
@@ -376,6 +379,131 @@ GitManager::CommandResult GitManager::ClearLocalIdentity() {
     return result;
 }
 
+
+std::vector<GitManager::CompareRef> GitManager::GetCompareRefs(size_t recent_commit_limit) {
+    std::vector<CompareRef> refs;
+    std::set<std::string> seen;
+
+    auto add_ref = [&](std::string label, std::string value) {
+        label = Trim(std::move(label));
+        value = Trim(std::move(value));
+        if (label.empty() || value.empty()) {
+            return;
+        }
+        if (!seen.insert(value).second) {
+            return;
+        }
+        refs.push_back({std::move(label), std::move(value)});
+    };
+
+    add_ref("Working tree", "WORKTREE");
+    add_ref("HEAD", "HEAD");
+
+    std::string current;
+    for (const std::string& branch : GetLocalBranches(&current)) {
+        add_ref(branch == current ? branch + " (current)" : branch, branch);
+    }
+    for (const std::string& branch : GetRemoteBranches()) {
+        add_ref(branch, branch);
+    }
+    for (const std::string& tag : GetTags()) {
+        add_ref(tag, tag);
+    }
+
+    CommandResult log_result = RunGitCommand({
+        "log",
+        "--all",
+        "--date-order",
+        "--oneline",
+        "-n",
+        std::to_string(recent_commit_limit),
+    });
+    if (log_result.success()) {
+        std::istringstream stream(log_result.output);
+        std::string line;
+        while (std::getline(stream, line)) {
+            line = Trim(line);
+            if (line.empty()) {
+                continue;
+            }
+            std::istringstream line_stream(line);
+            std::string hash;
+            line_stream >> hash;
+            if (!hash.empty()) {
+                add_ref(line, hash);
+            }
+        }
+    }
+
+    return refs;
+}
+
+std::vector<GitManager::CompareEntry> GitManager::GetCompareEntries(
+    const std::string& left_ref,
+    const std::string& right_ref) {
+    CommandResult result;
+    if (IsWorkingTreeRef(left_ref) && IsWorkingTreeRef(right_ref)) {
+        result.exit_code = 0;
+        return {};
+    }
+
+    if (IsWorkingTreeRef(right_ref)) {
+        result = RunGitCommand({"diff", "--name-status", left_ref, "--"});
+    } else if (IsWorkingTreeRef(left_ref)) {
+        result = RunGitCommand({"diff", "--name-status", "-R", right_ref, "--"});
+    } else {
+        result = RunGitCommand({"diff", "--name-status", left_ref, right_ref, "--"});
+    }
+
+    if (!result.success()) {
+        return {};
+    }
+    return ParseCompareEntries(result.output);
+}
+
+GitManager::CommandResult GitManager::CompareDiff(
+    const std::string& left_ref,
+    const std::string& right_ref,
+    const std::string& path) {
+    if (IsWorkingTreeRef(left_ref) && IsWorkingTreeRef(right_ref)) {
+        CommandResult result;
+        result.exit_code = 1;
+        result.output = "Both compare refs point to the working tree.";
+        return result;
+    }
+
+    if (IsWorkingTreeRef(right_ref)) {
+        return RunGitCommand({"diff", left_ref, "--", path});
+    }
+    if (IsWorkingTreeRef(left_ref)) {
+        return RunGitCommand({"diff", "-R", right_ref, "--", path});
+    }
+    return RunGitCommand({"diff", left_ref, right_ref, "--", path});
+}
+
+GitManager::CommandResult GitManager::ReadFileAtRef(
+    const std::string& ref,
+    const std::string& path) {
+    if (IsWorkingTreeRef(ref)) {
+        CommandResult result;
+        const std::filesystem::path root = RepositoryRoot();
+        const std::filesystem::path file_path = (root / path).lexically_normal();
+        std::ifstream file(file_path, std::ios::binary);
+        if (!file) {
+            result.exit_code = 1;
+            result.output = "File is not present in working tree: " + path;
+            return result;
+        }
+        result.output.assign(
+            std::istreambuf_iterator<char>(file),
+            std::istreambuf_iterator<char>());
+        result.exit_code = 0;
+        return result;
+    }
+
+    return RunGitCommand({"show", ref + ":" + path});
+}
+
 std::vector<std::string> GitManager::GetConfigList(bool global_scope) {
     std::vector<std::string> lines;
     CommandResult result = global_scope
@@ -564,6 +692,51 @@ std::vector<GitManager::StatusEntry> GitManager::ParseStatusEntries(const std::s
     }
 
     return entries;
+}
+
+
+std::vector<GitManager::CompareEntry> GitManager::ParseCompareEntries(const std::string& output) {
+    std::vector<CompareEntry> entries;
+    std::istringstream stream(output);
+    std::string line;
+
+    while (std::getline(stream, line)) {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        if (line.empty()) {
+            continue;
+        }
+
+        std::vector<std::string> parts;
+        std::string part;
+        std::istringstream line_stream(line);
+        while (std::getline(line_stream, part, '\t')) {
+            parts.push_back(part);
+        }
+        if (parts.size() < 2) {
+            continue;
+        }
+
+        CompareEntry entry;
+        entry.status = parts[0];
+        if (!entry.status.empty() && (entry.status[0] == 'R' || entry.status[0] == 'C') && parts.size() >= 3) {
+            entry.old_path = parts[1];
+            entry.path = parts[2];
+        } else {
+            entry.path = parts[1];
+        }
+
+        if (!entry.path.empty()) {
+            entries.push_back(std::move(entry));
+        }
+    }
+
+    return entries;
+}
+
+bool GitManager::IsWorkingTreeRef(const std::string& ref) {
+    return Trim(ref).empty() || Trim(ref) == "WORKTREE" || Trim(ref) == "Working tree";
 }
 
 GitManager::CommandResult GitManager::RunGitCommand(const std::vector<std::string>& args) {

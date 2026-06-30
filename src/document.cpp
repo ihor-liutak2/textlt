@@ -71,6 +71,8 @@ void Document::Reset() {
     cursor_row = 0;
     cursor_col = 0;
     is_dirty = false;
+    read_only = false;
+    temporary = false;
     history.Clear();
     lines = {""};
 }

@@ -163,6 +163,9 @@ namespace textlt {
 
     void EditorComponent::SaveToFile(const std::string& path) {
         if (!doc_) return;
+        if (doc_->read_only) {
+            throw std::runtime_error("Document is read-only");
+        }
 
         const std::string save_path = path.empty() ? doc_->path.string() : path;
         std::ofstream file(save_path, std::ios::binary);
@@ -212,6 +215,10 @@ namespace textlt {
 
     bool EditorComponent::IsDirty() const {
         return doc_ ? doc_->is_dirty : false;
+    }
+
+    bool EditorComponent::IsReadOnly() const {
+        return doc_ ? doc_->read_only : false;
     }
 
     LineEnding EditorComponent::ActiveLineEnding() const {

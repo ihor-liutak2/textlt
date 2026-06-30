@@ -34,6 +34,17 @@ public:
         std::string push_url;
     };
 
+    struct CompareRef {
+        std::string label;
+        std::string value;
+    };
+
+    struct CompareEntry {
+        std::string path;
+        std::string old_path;
+        std::string status;
+    };
+
     struct GitIdentity {
         std::string effective_name;
         std::string effective_email;
@@ -95,6 +106,16 @@ public:
 
     std::vector<std::string> GetConfigList(bool global_scope);
 
+    std::vector<CompareRef> GetCompareRefs(size_t recent_commit_limit = 30);
+    std::vector<CompareEntry> GetCompareEntries(
+        const std::string& left_ref,
+        const std::string& right_ref);
+    CommandResult CompareDiff(
+        const std::string& left_ref,
+        const std::string& right_ref,
+        const std::string& path);
+    CommandResult ReadFileAtRef(const std::string& ref, const std::string& path);
+
 private:
     struct Snapshot {
         std::filesystem::path working_directory;
@@ -111,6 +132,8 @@ private:
     static std::string Trim(std::string value);
     static std::map<std::string, char> ParseStatusOutput(const std::string& output);
     static std::vector<StatusEntry> ParseStatusEntries(const std::string& output);
+    static std::vector<CompareEntry> ParseCompareEntries(const std::string& output);
+    static bool IsWorkingTreeRef(const std::string& ref);
 
     CommandResult RunGitCommand(const std::vector<std::string>& args);
     std::string GitCommandPrefix();

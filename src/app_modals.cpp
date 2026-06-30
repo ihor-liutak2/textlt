@@ -347,6 +347,64 @@ void TextltApp::CloseGitModal() {
 }
 
 
+
+
+bool TextltApp::OpenGitCompareDocuments(
+    const std::string& left_title,
+    const std::string& left_content,
+    const std::string& right_title,
+    const std::string& right_content,
+    std::string& error) {
+    if (left_title.empty()) {
+        error = "Git compare title is empty.";
+        return false;
+    }
+
+    auto make_git_doc = [](const std::string& title, const std::string& content) {
+        auto doc = std::make_shared<Document>();
+        doc->LoadContent(content, title.empty() ? "Git compare" : title);
+        doc->read_only = true;
+        doc->temporary = true;
+        doc->is_dirty = false;
+        return doc;
+    };
+
+    auto left_doc = make_git_doc(left_title, left_content);
+    open_documents_.push_back(left_doc);
+    const size_t left_index = open_documents_.size() - 1;
+
+    size_t right_index = left_index;
+    if (!right_title.empty()) {
+        auto right_doc = make_git_doc(right_title, right_content);
+        open_documents_.push_back(right_doc);
+        right_index = open_documents_.size() - 1;
+    }
+
+    if (right_title.empty()) {
+        SetEditorLayoutMode(EditorLayoutMode::Single);
+        AssignDocumentToEditorPane(0, left_index);
+        SetActiveEditorPane(0);
+    } else {
+        SetEditorLayoutMode(EditorLayoutMode::TwoColumns);
+        AssignDocumentToEditorPane(0, left_index);
+        AssignDocumentToEditorPane(1, right_index);
+        SetEditorPaneRole(0, "Git Left");
+        SetEditorPaneRole(1, "Git Right");
+        SetActiveEditorPane(0);
+    }
+
+    active_document_index_ = left_index;
+    active_action_ = right_title.empty()
+        ? "Opened Git diff"
+        : "Opened Git side-by-side compare";
+    RefreshOpenedDocumentsSidebar();
+    UpdateFileMenuLabels();
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
+    return true;
+}
+
+
 void TextltApp::OpenGitSettingsModal() {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();

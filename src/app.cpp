@@ -138,6 +138,19 @@ TextltApp::TextltApp()
               }
               return opened;
           },
+          [this](
+              const std::string& left_title,
+              const std::string& left_content,
+              const std::string& right_title,
+              const std::string& right_content,
+              std::string& error) {
+              return OpenGitCompareDocuments(
+                  left_title,
+                  left_content,
+                  right_title,
+                  right_content,
+                  error);
+          },
           [this](const std::string& text) {
               WriteSystemClipboard(text);
           }),

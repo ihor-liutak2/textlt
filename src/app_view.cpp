@@ -513,6 +513,12 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         }
 
         if (IsLineManipulationShortcut(event)) {
+            auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+            if (editor_ptr && editor_ptr->IsReadOnly()) {
+                active_action_ = "Document is read-only";
+                screen_.PostEvent(ftxui::Event::Custom);
+                return true;
+            }
             if (text_editor_->OnEvent(event)) {
                 screen_.PostEvent(ftxui::Event::Custom);
                 return true;
@@ -521,12 +527,22 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         }
         if (IsWordDeleteBackwardShortcut(event)) {
             auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+            if (editor_ptr && editor_ptr->IsReadOnly()) {
+                active_action_ = "Document is read-only";
+                screen_.PostEvent(ftxui::Event::Custom);
+                return true;
+            }
             editor_ptr->DeleteWordBackward();
             screen_.PostEvent(ftxui::Event::Custom);
             return true;
         }
         if (IsWordDeleteForwardShortcut(event)) {
             auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+            if (editor_ptr && editor_ptr->IsReadOnly()) {
+                active_action_ = "Document is read-only";
+                screen_.PostEvent(ftxui::Event::Custom);
+                return true;
+            }
             editor_ptr->DeleteWordForward();
             screen_.PostEvent(ftxui::Event::Custom);
             return true;
@@ -534,6 +550,11 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         // Handle Enter key for new line insertion in the editor
         if (event == ftxui::Event::Return) {
             auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+            if (editor_ptr && editor_ptr->IsReadOnly()) {
+                active_action_ = "Document is read-only";
+                screen_.PostEvent(ftxui::Event::Custom);
+                return true;
+            }
             editor_ptr->HandleAutoIndentReturn();
             screen_.PostEvent(ftxui::Event::Custom);
             return true;

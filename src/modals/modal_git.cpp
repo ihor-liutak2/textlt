@@ -19,11 +19,13 @@ GitModalContent::GitModalContent(
     const Theme* theme,
     GitManager* git_manager,
     OpenFileCallback on_open_file,
+    OpenCompareCallback on_open_compare,
     WriteClipboardCallback write_clipboard,
     CloseCallback on_close)
     : theme_(theme),
       git_manager_(git_manager),
       on_open_file_(std::move(on_open_file)),
+      on_open_compare_(std::move(on_open_compare)),
       write_clipboard_(std::move(write_clipboard)),
       on_close_(std::move(on_close)) {
     status_tab_button_ = MakeTabButton("Status", static_cast<int>(Tab::Status));
@@ -33,6 +35,7 @@ GitModalContent::GitModalContent(
     remote_tab_button_ = MakeTabButton("Remote", static_cast<int>(Tab::Remote));
     tags_tab_button_ = MakeTabButton("Tags", static_cast<int>(Tab::Tags));
     server_tab_button_ = MakeTabButton("Server", static_cast<int>(Tab::Server));
+    compare_tab_button_ = MakeTabButton("Compare", static_cast<int>(Tab::Compare));
 
     tab_buttons_ = ftxui::Container::Horizontal({
         status_tab_button_,
@@ -42,6 +45,7 @@ GitModalContent::GitModalContent(
         remote_tab_button_,
         tags_tab_button_,
         server_tab_button_,
+        compare_tab_button_,
     });
 
     ftxui::MenuOption status_menu_option = ftxui::MenuOption::Vertical();
@@ -209,6 +213,46 @@ GitModalContent::GitModalContent(
     push_all_tags_button_ = MakeTextButton("Push all tags", [this] { PushAllTags(); });
     fetch_tags_button_ = MakeTextButton("Fetch tags", [this] { FetchTags(); });
 
+
+    ftxui::MenuOption compare_ref_menu_option = ftxui::MenuOption::Vertical();
+    compare_ref_menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        ftxui::Element row = ftxui::text(state.label);
+        if (state.focused || state.active) {
+            return row |
+                ftxui::bgcolor(theme.modal_selected_item_bg) |
+                ftxui::color(theme.modal_selected_item_fg) |
+                ftxui::bold;
+        }
+        return row | ftxui::color(theme.modal_text_color);
+    };
+    compare_left_ref_menu_ = ftxui::Menu(&compare_ref_labels_, &selected_compare_left_ref_, compare_ref_menu_option);
+    compare_right_ref_menu_ = ftxui::Menu(&compare_ref_labels_, &selected_compare_right_ref_, compare_ref_menu_option);
+
+    ftxui::MenuOption compare_file_menu_option = ftxui::MenuOption::Vertical();
+    compare_file_menu_option.on_enter = [this] { OpenCompareSideBySide(); };
+    compare_file_menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        ftxui::Element row = ftxui::text(state.label);
+        if (state.focused || state.active) {
+            return row |
+                ftxui::bgcolor(theme.modal_selected_item_bg) |
+                ftxui::color(theme.modal_selected_item_fg) |
+                ftxui::bold;
+        }
+        return row | ftxui::color(theme.modal_text_color);
+    };
+    compare_file_menu_ = ftxui::Menu(&compare_file_labels_, &selected_compare_file_, compare_file_menu_option);
+
+    refresh_compare_refs_button_ = MakeTextButton("Refresh refs", [this] {
+        RefreshCompareRefs();
+        RefreshCompareFiles();
+    });
+    refresh_compare_files_button_ = MakeTextButton("Refresh files", [this] { RefreshCompareFiles(); });
+    open_compare_side_button_ = MakeTextButton("Open side by side", [this] { OpenCompareSideBySide(); });
+    open_compare_diff_button_ = MakeTextButton("Open unified diff", [this] { OpenCompareUnifiedDiff(); });
+    copy_compare_diff_button_ = MakeTextButton("Copy diff", [this] { CopyCompareDiff(); });
+
     ftxui::InputOption confirm_input_option;
     confirm_input_option.multiline = false;
     confirm_input_component_ = ftxui::Input(&confirm_typed_text_, "confirmation", confirm_input_option);
@@ -312,6 +356,21 @@ GitModalContent::GitModalContent(
         }),
     });
 
+    compare_tab_container_ = ftxui::Container::Vertical({
+        ftxui::Container::Horizontal({
+            refresh_compare_refs_button_,
+            refresh_compare_files_button_,
+            open_compare_side_button_,
+            open_compare_diff_button_,
+            copy_compare_diff_button_,
+        }),
+        ftxui::Container::Horizontal({
+            compare_left_ref_menu_,
+            compare_right_ref_menu_,
+        }),
+        compare_file_menu_,
+    });
+
     tab_body_container_ = ftxui::Container::Tab({
         status_tab_container_,
         diff_tab_container_,
@@ -320,6 +379,7 @@ GitModalContent::GitModalContent(
         remote_tab_container_,
         tags_tab_container_,
         server_tab_container_,
+        compare_tab_container_,
     }, &selected_tab_);
 
     auto primary_container = ftxui::Container::Vertical({
@@ -367,6 +427,14 @@ ftxui::Component GitModalContent::MakeTabButton(std::string label, int tab_index
             remote_filter_input_component_->TakeFocus();
         } else if (selected_tab_ == static_cast<int>(Tab::Tags) && tag_filter_input_component_) {
             tag_filter_input_component_->TakeFocus();
+        } else if (selected_tab_ == static_cast<int>(Tab::Compare) && compare_file_menu_) {
+            if (compare_refs_.empty()) {
+                RefreshCompareRefs();
+            }
+            if (compare_entries_.empty()) {
+                RefreshCompareFiles();
+            }
+            compare_file_menu_->TakeFocus();
         }
     };
     option.transform = [this, tab_index](const ftxui::EntryState& state) {
@@ -393,6 +461,8 @@ void GitModalContent::Open() {
     RefreshAll();
     RefreshRemoteBranches();
     RefreshTags();
+    RefreshCompareRefs();
+    RefreshCompareFiles();
     if (status_list_component_) {
         status_list_component_->TakeFocus();
     }
@@ -418,6 +488,8 @@ ftxui::Element GitModalContent::RenderTitle() {
         tags_tab_button_->Render(),
         ftxui::text(" "),
         server_tab_button_->Render(),
+        ftxui::text(" "),
+        compare_tab_button_->Render(),
     });
 }
 
@@ -437,6 +509,8 @@ ftxui::Element GitModalContent::Render() {
         body = RenderRemoteTab();
     } else if (selected_tab_ == static_cast<int>(Tab::Tags)) {
         body = RenderTagsTab();
+    } else if (selected_tab_ == static_cast<int>(Tab::Compare)) {
+        body = RenderCompareTab();
     } else {
         body = RenderServerTab();
     }
@@ -493,6 +567,19 @@ bool GitModalContent::HandleEvent(ftxui::Event event) {
         }
     }
 
+    if (selected_tab_ == static_cast<int>(Tab::Compare)) {
+        const bool wheel_down = event.is_mouse() && event.mouse().button == ftxui::Mouse::WheelDown;
+        const bool wheel_up = event.is_mouse() && event.mouse().button == ftxui::Mouse::WheelUp;
+        if (event == ftxui::Event::ArrowDown || event == ftxui::Event::PageDown || wheel_down) {
+            compare_diff_scroll_offset_ += event == ftxui::Event::PageDown ? 10 : 3;
+            return false;
+        }
+        if (event == ftxui::Event::ArrowUp || event == ftxui::Event::PageUp || wheel_up) {
+            compare_diff_scroll_offset_ = std::max(0, compare_diff_scroll_offset_ - (event == ftxui::Event::PageUp ? 10 : 3));
+            return false;
+        }
+    }
+
     if (selected_tab_ == static_cast<int>(Tab::Server)) {
         const bool wheel_down = event.is_mouse() && event.mouse().button == ftxui::Mouse::WheelDown;
         const bool wheel_up = event.is_mouse() && event.mouse().button == ftxui::Mouse::WheelUp;
@@ -522,12 +609,14 @@ GitModal::GitModal(
     const Theme* theme,
     GitManager* git_manager,
     OpenFileCallback on_open_file,
+    OpenCompareCallback on_open_compare,
     WriteClipboardCallback write_clipboard)
     : theme_(theme) {
     content_ = std::make_shared<GitModalContent>(
         theme_,
         git_manager,
         std::move(on_open_file),
+        std::move(on_open_compare),
         std::move(write_clipboard),
         [this] { Close(); });
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });

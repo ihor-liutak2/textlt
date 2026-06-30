@@ -54,6 +54,8 @@ struct Document {
     size_t cursor_col = 0;
     Selection selection;
     bool is_dirty = false;
+    bool read_only = false;
+    bool temporary = false;
     
     HistoryManager history;
 

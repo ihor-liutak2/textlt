@@ -19,6 +19,10 @@ void GitModalContent::RefreshAll() {
     if (selected_tab_ == static_cast<int>(Tab::Diff)) {
         RefreshDiff();
     }
+    if (selected_tab_ == static_cast<int>(Tab::Compare)) {
+        RefreshCompareRefs();
+        RefreshCompareFiles();
+    }
 }
 
 

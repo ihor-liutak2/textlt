@@ -37,6 +37,7 @@ namespace textlt {
         // Accessors now delegate to doc_
         std::string CurrentFilePath() const;
         bool IsDirty() const;
+        bool IsReadOnly() const;
         LineEnding ActiveLineEnding() const;
         std::string ActiveLineEndingLabel() const;
         size_t GetCursorRow() const;

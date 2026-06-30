@@ -20,6 +20,12 @@ namespace textlt {
 class GitModalContent : public IModalContent {
 public:
     using OpenFileCallback = std::function<bool(const std::filesystem::path&, std::string&)>;
+    using OpenCompareCallback = std::function<bool(
+        const std::string& left_title,
+        const std::string& left_content,
+        const std::string& right_title,
+        const std::string& right_content,
+        std::string& error)>;
     using WriteClipboardCallback = std::function<void(const std::string&)>;
     using CloseCallback = std::function<void()>;
 
@@ -27,6 +33,7 @@ public:
         const Theme* theme,
         GitManager* git_manager,
         OpenFileCallback on_open_file,
+        OpenCompareCallback on_open_compare,
         WriteClipboardCallback write_clipboard,
         CloseCallback on_close);
 
@@ -52,6 +59,7 @@ private:
         Remote = 4,
         Tags = 5,
         Server = 6,
+        Compare = 7,
     };
 
     ftxui::Component MakeTextButton(std::string label, std::function<void()> on_click);
@@ -61,6 +69,8 @@ private:
     void RefreshBranches();
     void RefreshDiff();
     void RefreshCommitFiles();
+    void RefreshCompareRefs();
+    void RefreshCompareFiles();
     void RefreshAll();
 
     void ToggleSelectedFileStaged();
@@ -71,6 +81,9 @@ private:
 
     void CopyDiff();
     void CommitStagedFiles();
+    void OpenCompareSideBySide();
+    void OpenCompareUnifiedDiff();
+    void CopyCompareDiff();
 
     void CheckoutSelectedBranch();
     void MergeSelectedBranch();
@@ -111,6 +124,9 @@ private:
     bool HasStagedFiles() const;
     std::string SelectedFilePath() const;
     std::string SelectedBranchName() const;
+    std::string SelectedCompareFilePath() const;
+    std::string SelectedCompareLeftRef() const;
+    std::string SelectedCompareRightRef() const;
     std::filesystem::path RepositoryPath() const;
 
     void RebuildStatusLabels();
@@ -118,6 +134,7 @@ private:
     void RebuildRemoteBranchLabels();
     void RebuildTagLabels();
     void RebuildCommitLabels();
+    void RebuildCompareLabels();
     void SplitOutputLines(const std::string& output, std::vector<std::string>* lines) const;
     std::string TrimForDisplay(const std::string& text, size_t max_size) const;
     std::string StatusCodeForEntry(const GitManager::StatusEntry& entry) const;
@@ -129,6 +146,7 @@ private:
     ftxui::Element RenderRemoteTab();
     ftxui::Element RenderTagsTab();
     ftxui::Element RenderServerTab();
+    ftxui::Element RenderCompareTab();
     ftxui::Element RenderTextLines(
         const std::vector<std::string>& lines,
         const std::string& empty_text,
@@ -137,6 +155,7 @@ private:
     const Theme* theme_ = nullptr;
     GitManager* git_manager_ = nullptr;
     OpenFileCallback on_open_file_;
+    OpenCompareCallback on_open_compare_;
     WriteClipboardCallback write_clipboard_;
     CloseCallback on_close_;
 
@@ -182,6 +201,17 @@ private:
     std::vector<std::string> server_output_lines_;
     int server_output_scroll_offset_ = 0;
 
+    std::vector<GitManager::CompareRef> compare_refs_;
+    std::vector<std::string> compare_ref_labels_;
+    std::vector<GitManager::CompareEntry> compare_entries_;
+    std::vector<std::string> compare_file_labels_;
+    int selected_compare_left_ref_ = 1;
+    int selected_compare_right_ref_ = 0;
+    int selected_compare_file_ = 0;
+    std::string compare_diff_text_;
+    std::vector<std::string> compare_diff_lines_;
+    int compare_diff_scroll_offset_ = 0;
+
     bool confirm_active_ = false;
     int confirm_layer_index_ = 0;
     std::string confirm_title_;
@@ -198,6 +228,7 @@ private:
     ftxui::Component remote_tab_button_;
     ftxui::Component tags_tab_button_;
     ftxui::Component server_tab_button_;
+    ftxui::Component compare_tab_button_;
     ftxui::Component tab_buttons_;
 
     ftxui::Component status_menu_;
@@ -252,6 +283,15 @@ private:
     ftxui::Component push_button_;
     ftxui::Component force_push_button_;
 
+    ftxui::Component compare_left_ref_menu_;
+    ftxui::Component compare_right_ref_menu_;
+    ftxui::Component compare_file_menu_;
+    ftxui::Component refresh_compare_refs_button_;
+    ftxui::Component refresh_compare_files_button_;
+    ftxui::Component open_compare_side_button_;
+    ftxui::Component open_compare_diff_button_;
+    ftxui::Component copy_compare_diff_button_;
+
     ftxui::Component status_tab_container_;
     ftxui::Component diff_tab_container_;
     ftxui::Component commit_tab_container_;
@@ -259,6 +299,7 @@ private:
     ftxui::Component remote_tab_container_;
     ftxui::Component tags_tab_container_;
     ftxui::Component server_tab_container_;
+    ftxui::Component compare_tab_container_;
     ftxui::Component tab_body_container_;
     ftxui::Component container_;
 };
@@ -266,12 +307,14 @@ private:
 class GitModal {
 public:
     using OpenFileCallback = GitModalContent::OpenFileCallback;
+    using OpenCompareCallback = GitModalContent::OpenCompareCallback;
     using WriteClipboardCallback = GitModalContent::WriteClipboardCallback;
 
     GitModal(
         const Theme* theme,
         GitManager* git_manager,
         OpenFileCallback on_open_file,
+        OpenCompareCallback on_open_compare,
         WriteClipboardCallback write_clipboard);
 
     ftxui::Component View() const;

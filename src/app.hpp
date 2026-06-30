@@ -104,6 +104,12 @@ private:
     void CloseGitModal();
     void OpenGitSettingsModal();
     void CloseGitSettingsModal();
+    bool OpenGitCompareDocuments(
+        const std::string& left_title,
+        const std::string& left_content,
+        const std::string& right_title,
+        const std::string& right_content,
+        std::string& error);
 
     std::vector<FileSearchRoot> CurrentSearchFileRoots() const;
     bool OpenSearchFileMatch(const FileSearchMatch& match, std::string& error);

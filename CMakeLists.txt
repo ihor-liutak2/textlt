@@ -176,6 +176,7 @@ add_executable(textlt
   src/modals/modal_git_branches_server.cpp
   src/modals/modal_git_remote_tags.cpp
   src/modals/modal_git_confirm.cpp
+  src/modals/modal_git_compare.cpp
   src/modals/modal_git_utils.cpp
   src/modals/modal_recent_files.cpp
   src/modals/modal_tts.cpp

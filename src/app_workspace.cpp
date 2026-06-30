@@ -345,6 +345,9 @@ ftxui::Element TextltApp::RenderEditorPane(size_t pane_index) {
     if (dirty) {
         header_text += " *";
     }
+    if (doc && doc->read_only) {
+        header_text += " [RO]";
+    }
     header_text += " | " + type_label;
 
     Element header = hbox({

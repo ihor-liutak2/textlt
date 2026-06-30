@@ -289,39 +289,53 @@ bool IsPrintableRawTextInput(const ftxui::Event& event) {
 
 bool EditorInputController::HandleEvent(EditorComponent& editor, ftxui::Event event) {
     const std::string& input = event.input();
+    const bool read_only = editor.IsReadOnly();
     if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'z')) {
-        editor.Undo();
+        if (!read_only) {
+            editor.Undo();
+        }
         return true;
     }
     if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'y')) {
-        editor.Redo();
+        if (!read_only) {
+            editor.Redo();
+        }
         return true;
     }
     if (MatchesShortcut(event, ShortcutModifier::Ctrl, '/')) {
-        editor.ToggleComment();
+        if (!read_only) {
+            editor.ToggleComment();
+        }
         return true;
     }
     if (MatchesShortcut(event, ShortcutModifier::Ctrl, 't')) {
-        editor.ToggleCase();
+        if (!read_only) {
+            editor.ToggleCase();
+        }
         return true;
     }
 
     if (IsDuplicateLinesEvent(event)) {
-        return editor.DuplicateLines();
+        return read_only || editor.DuplicateLines();
     }
     if (IsMoveLinesUpEvent(event)) {
-        return editor.MoveLinesUp();
+        return read_only || editor.MoveLinesUp();
     }
     if (IsMoveLinesDownEvent(event)) {
-        return editor.MoveLinesDown();
+        return read_only || editor.MoveLinesDown();
     }
 
     if (IsShiftTabEvent(event)) {
-        editor.OutdentLines();
+        if (!read_only) {
+            editor.OutdentLines();
+        }
         return true;
     }
 
     if (event == ftxui::Event::Tab) {
+        if (read_only) {
+            return true;
+        }
         if (editor.HasSelection()) {
             editor.IndentLines();
             return true;
@@ -334,16 +348,23 @@ bool EditorInputController::HandleEvent(EditorComponent& editor, ftxui::Event ev
     }
 
     if (IsWordDeleteBackwardEvent(event)) {
-        editor.DeleteWordBackward();
+        if (!read_only) {
+            editor.DeleteWordBackward();
+        }
         return true;
     }
 
     if (IsCtrlDeleteEvent(event)) {
-        editor.DeleteWordForward();
+        if (!read_only) {
+            editor.DeleteWordForward();
+        }
         return true;
     }
 
     if (event.is_character() && editor.doc_) {
+        if (read_only) {
+            return true;
+        }
         const std::string& event_input = event.input();
         if (HasMultipleUtf8Codepoints(event_input) ||
             event_input.find('\n') != std::string::npos ||
@@ -368,11 +389,16 @@ bool EditorInputController::HandleEvent(EditorComponent& editor, ftxui::Event ev
     }
 
     if (IsPrintableRawTextInput(event) && editor.doc_) {
-        editor.InsertText(event.input());
+        if (!read_only) {
+            editor.InsertText(event.input());
+        }
         return true;
     }
 
     if (event == ftxui::Event::Backspace && editor.doc_) {
+        if (read_only) {
+            return true;
+        }
         editor.EndTypingGroup();
         if (editor.HasSelection()) {
             editor.DeleteSelection();
@@ -387,6 +413,9 @@ bool EditorInputController::HandleEvent(EditorComponent& editor, ftxui::Event ev
     }
 
     if (event == ftxui::Event::Delete && editor.doc_) {
+        if (read_only) {
+            return true;
+        }
         editor.EndTypingGroup();
         if (editor.HasSelection()) {
             editor.DeleteSelection();
@@ -401,7 +430,7 @@ bool EditorInputController::HandleEvent(EditorComponent& editor, ftxui::Event ev
     }
 
     if (event == ftxui::Event::Return) {
-        return editor.HandleAutoIndentReturn();
+        return read_only || editor.HandleAutoIndentReturn();
     }
 
     NavigationAction action = NavigationAction::Left;

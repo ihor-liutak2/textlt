@@ -273,6 +273,10 @@ void TextltApp::PersistOpenedDocuments() {
         entry.row = doc->cursor_row;
         entry.column = doc->cursor_col;
 
+        if (doc->temporary || doc->read_only) {
+            continue;
+        }
+
         if (IsMemoryOnlyDocument(doc)) {
             const std::string content = doc->ToContent();
             if (content.empty()) {

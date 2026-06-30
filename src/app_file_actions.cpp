@@ -20,6 +20,10 @@ namespace textlt {
 bool TextltApp::SaveFile(const std::string& path, std::string& error) {
     try {
         const auto doc = ActiveDocument();
+        if (doc && doc->read_only) {
+            error = "Cannot save a read-only Git compare document.";
+            throw std::runtime_error(error);
+        }
         if (!file_manager_.SaveAs(doc, path, error)) {
             throw std::runtime_error(error);
         }
