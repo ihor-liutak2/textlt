@@ -20,7 +20,7 @@ public:
         const std::string& url,
         const std::vector<std::string>& headers,
         const std::string& request_body = {},
-        int timeout_seconds = 300) const;
+        int timeout_seconds = 0) const;
 
     RemoteHttpResponse Download(
         const std::string& method,
@@ -28,14 +28,14 @@ public:
         const std::vector<std::string>& headers,
         const std::filesystem::path& output_path,
         const std::string& request_body = {},
-        int timeout_seconds = 300) const;
+        int timeout_seconds = 0) const;
 
     RemoteHttpResponse UploadFile(
         const std::string& method,
         const std::string& url,
         const std::vector<std::string>& headers,
         const std::filesystem::path& input_path,
-        int timeout_seconds = 300) const;
+        int timeout_seconds = 0) const;
 
     static std::string UrlEncode(const std::string& value);
     static bool CheckCurlExecutable(std::string& error);

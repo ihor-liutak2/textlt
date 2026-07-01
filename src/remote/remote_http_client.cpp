@@ -17,6 +17,9 @@ namespace {
 
 constexpr const char* kHttpStatusMarker = "TEXTLT_HTTP_STATUS:";
 constexpr const char* kUserAgent = "textlt/1.0";
+constexpr int kProgressWindowSeconds = 20;
+constexpr int kConnectTimeoutSeconds = 20;
+constexpr int kIdleSpeedLimitBytesPerSecond = 1;
 
 std::filesystem::path MakeTempPath(const std::string& prefix) {
     const auto now = std::chrono::steady_clock::now().time_since_epoch();
@@ -94,12 +97,16 @@ std::string BuildCurlConfig(
     }
 
     std::ostringstream config;
-    config << "silent\n";
     config << "show-error\n";
     config << "location\n";
+    config << "progress-bar\n";
     config << "user-agent = " << CurlConfigQuote(kUserAgent) << "\n";
-    config << "connect-timeout = 15\n";
-    config << "max-time = " << (timeout_seconds > 0 ? timeout_seconds : 300) << "\n";
+    config << "connect-timeout = " << kConnectTimeoutSeconds << "\n";
+    config << "speed-time = " << kProgressWindowSeconds << "\n";
+    config << "speed-limit = " << kIdleSpeedLimitBytesPerSecond << "\n";
+    if (timeout_seconds > 0) {
+        config << "max-time = " << timeout_seconds << "\n";
+    }
     config << "request = " << CurlConfigQuote(method.empty() ? "GET" : method) << "\n";
     config << "url = " << CurlConfigQuote(url) << "\n";
 
@@ -314,7 +321,9 @@ bool RemoteHttpClient::CheckCurlExecutable(std::string& error) {
         return true;
     }
     error = "The external curl executable was not found or cannot be started.\n"
-            "Install it on Debian/Ubuntu/MX Linux with:\n"
+            "Install it with the packaged helper:\n"
+            "  textlt-install-runtime-deps.sh\n"
+            "or on Debian/Ubuntu/MX Linux with:\n"
             "  sudo apt install curl";
     if (!result.error.empty()) {
         error += "\n" + result.error;

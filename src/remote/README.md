@@ -101,7 +101,7 @@ This module does not perform OAuth login yet. A later OAuth modal should fill th
 
 Dropbox is now the first active cloud file-manager backend.
 
-The Dropbox provider uses Dropbox HTTP API endpoints through `RemoteHttpClient`, which calls the external `curl` executable. It does not require linking TextLT against libcurl.
+The Dropbox provider uses Dropbox HTTP API endpoints through `RemoteHttpClient`, which calls the external `curl` executable. It does not require linking TextLT against a curl development library.
 
 Supported Dropbox operations:
 
@@ -126,7 +126,7 @@ Google Drive is active after patch 11. Microsoft OneDrive/SharePoint is active a
 
 Google Drive is now an active cloud file-manager backend alongside SFTP and Dropbox.
 
-The Google Drive provider uses Google Drive API v3 endpoints through `RemoteHttpClient`, which calls the external `curl` executable. It does not require linking TextLT against libcurl.
+The Google Drive provider uses Google Drive API v3 endpoints through `RemoteHttpClient`, which calls the external `curl` executable. It does not require linking TextLT against a curl development library.
 
 Supported Google Drive operations:
 
@@ -154,7 +154,7 @@ Microsoft OneDrive/SharePoint is active after patch 12.
 
 Microsoft OneDrive/SharePoint is now an active cloud file-manager backend alongside SFTP, Dropbox, and Google Drive.
 
-The Microsoft provider uses Microsoft Graph driveItem endpoints through `RemoteHttpClient`, which calls the external `curl` executable. It does not require linking TextLT against libcurl.
+The Microsoft provider uses Microsoft Graph driveItem endpoints through `RemoteHttpClient`, which calls the external `curl` executable. It does not require linking TextLT against a curl development library.
 
 Supported Microsoft operations:
 
@@ -182,7 +182,7 @@ The first Microsoft provider version intentionally supports rename inside the sa
 
 ## External curl runtime dependency
 
-TextLT no longer links against libcurl for the remote/cloud module. HTTP requests are centralized in `src/remote/remote_http_client.*` and executed through the system `curl` program. This keeps the binary/install package smaller when the target system already provides `curl`.
+TextLT no longer links against a curl development library for the remote/cloud module. HTTP requests are centralized in `src/remote/remote_http_client.*` and executed through the system `curl` program. This keeps the binary/install package smaller when the target system already provides `curl`. Transfers use a 20-second progress/idle window: as long as data continues to move, the operation keeps receiving another window; if no data moves for 20 seconds, curl reports a stalled transfer.
 
 Install the runtime tool on Debian/Ubuntu/MX Linux with:
 
@@ -190,4 +190,4 @@ Install the runtime tool on Debian/Ubuntu/MX Linux with:
 sudo apt install curl
 ```
 
-The older `CurlManager` also uses the same external-curl path now, so `libcurl4-openssl-dev` is no longer required for building TextLT.
+The older `CurlManager` also uses the same external-curl path now, so the curl development package is no longer required for building TextLT.

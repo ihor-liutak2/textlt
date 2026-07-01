@@ -43,7 +43,7 @@ FetchContent_Declare(pugixml
 FetchContent_MakeAvailable(pugixml)
 
 # Remote/network support uses the external curl executable at runtime.
-# No libcurl development package is required for building TextLT.
+# No curl development library is required for building TextLT.
 
 # Archive extraction support.
 find_package(LibArchive QUIET)
@@ -227,6 +227,7 @@ target_link_libraries(textlt PRIVATE
 )
 
 install(TARGETS textlt RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(PROGRAMS scripts/textlt-install-runtime-deps.sh DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(DIRECTORY themes DESTINATION ${CMAKE_INSTALL_DATADIR}/textlt)
 install(DIRECTORY text_processors DESTINATION ${CMAKE_INSTALL_DATADIR}/textlt)
 
@@ -290,6 +291,14 @@ add_executable(textlt_remote_http_client_test
 
 target_include_directories(textlt_remote_http_client_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+add_executable(textlt_no_embedded_curl_test
+  tests/no_embedded_curl_test.cpp
+)
+
+target_compile_definitions(textlt_no_embedded_curl_test PRIVATE
+  TEXTLT_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
 add_executable(textlt_remote_dropbox_provider_test
@@ -361,6 +370,7 @@ add_test(NAME textlt_keyboard_shortcuts_test COMMAND textlt_keyboard_shortcuts_t
 add_test(NAME textlt_remote_path_test COMMAND textlt_remote_path_test)
 add_test(NAME textlt_remote_oauth_token_store_test COMMAND textlt_remote_oauth_token_store_test)
 add_test(NAME textlt_remote_http_client_test COMMAND textlt_remote_http_client_test)
+add_test(NAME textlt_no_embedded_curl_test COMMAND textlt_no_embedded_curl_test)
 add_test(NAME textlt_remote_dropbox_provider_test COMMAND textlt_remote_dropbox_provider_test)
 add_test(NAME textlt_remote_google_drive_provider_test COMMAND textlt_remote_google_drive_provider_test)
 add_test(NAME textlt_remote_microsoft_drive_provider_test COMMAND textlt_remote_microsoft_drive_provider_test)

@@ -9,7 +9,7 @@
 namespace textlt {
 
 void CurlManager::EnsureInitialized() {
-    // The application uses the external curl executable now, not libcurl.
+    // The application uses the external curl executable now.
 }
 
 CurlManager::Response CurlManager::Get(const std::string& url) {
@@ -28,7 +28,7 @@ CurlManager::Response CurlManager::Get(const std::string& url,
     }
 
     RemoteHttpClient client;
-    const RemoteHttpResponse response = client.Request("GET", url, headers, {}, 300);
+    const RemoteHttpResponse response = client.Request("GET", url, headers, {}, 0);
     return {
         response.ok,
         response.status_code,

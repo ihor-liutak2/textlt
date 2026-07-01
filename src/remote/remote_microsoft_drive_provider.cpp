@@ -73,7 +73,7 @@ HttpResult HttpRequest(
     headers.insert(headers.end(), extra_headers.begin(), extra_headers.end());
 
     RemoteHttpClient client;
-    return client.Request(method, url, headers, request_body, 300);
+    return client.Request(method, url, headers, request_body, 0);
 }
 
 HttpResult JsonRequest(
