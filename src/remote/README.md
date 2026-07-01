@@ -122,4 +122,32 @@ Dropbox root path is represented as `/` in TextLT and as an empty path string in
 
 To use Dropbox files before a full OAuth login modal exists, the configured token file must contain an `access_token` value. The placeholder token created by the connection modal is not enough by itself.
 
-Google Drive and Microsoft OneDrive/SharePoint are still configuration-only at this step. Their providers should follow the same `IRemoteProvider` pattern in later patches.
+Google Drive is active after patch 11. Microsoft OneDrive/SharePoint is still configuration-only and should follow the same `IRemoteProvider` pattern in a later patch.
+
+## Patch 11 Google Drive backend
+
+Google Drive is now an active cloud file-manager backend alongside SFTP and Dropbox.
+
+The Google Drive provider uses the existing project libcurl dependency and Google Drive API v3 endpoints. It does not add a new HTTP library.
+
+Supported Google Drive operations:
+
+- list folder;
+- download ordinary binary files with `alt=media`;
+- upload new files with multipart upload;
+- overwrite existing ordinary files with media upload;
+- recursive folder download;
+- recursive folder upload;
+- rename files or folders;
+- delete files or folders;
+- create folders;
+- open remote file through the same local cache used by SFTP and Dropbox;
+- manual `Sync Last` upload for cached Google Drive files.
+
+Google Drive root path is represented as `/` in TextLT. If `Root folder ID` is empty, the provider uses the Drive `root` alias. If `Root folder ID` is set, `/` in the TextLT remote panel maps to that configured folder.
+
+To use Google Drive files before a full OAuth login modal exists, the configured token file must contain an `access_token` value. The placeholder token created by the connection modal is not enough by itself.
+
+Google Workspace native files such as Docs, Sheets, and Slides are shown as non-ordinary entries. They can be renamed or deleted, but download/export support is intentionally left for a later patch.
+
+Microsoft OneDrive/SharePoint remains configuration-only at this step.

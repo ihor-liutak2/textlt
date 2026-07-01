@@ -12,6 +12,7 @@
 #include "ftxui/component/mouse.hpp"
 #include "ftxui/dom/elements.hpp"
 #include "remote/remote_dropbox_provider.hpp"
+#include "remote/remote_google_drive_provider.hpp"
 #include "remote/remote_oauth_token_store.hpp"
 #include "remote/remote_sftp_provider.hpp"
 
@@ -458,7 +459,7 @@ ftxui::Element RemoteConnectionsModalContent::RenderForm() {
             rows.push_back(field("Token file", token_file_input_));
             rows.push_back(field("Root folder ID", root_folder_id_input_));
             rows.push_back(note("Press Token to create/verify the token JSON placeholder."));
-            rows.push_back(note("Leave Root folder ID empty to use the Drive root. API file operations come next."));
+            rows.push_back(note("Leave Root folder ID empty to use the Drive root. Google Drive file operations are active now."));
             break;
         case RemoteConnectionType::MicrosoftDrive:
             rows.push_back(field("Account label", account_label_input_));
@@ -479,7 +480,7 @@ ftxui::Element RemoteConnectionsModalContent::RenderForm() {
             rows.push_back(field("Token file", token_file_input_));
             rows.push_back(field("Remote root", remote_root_input_));
             rows.push_back(note("Press Token to create/verify the token JSON placeholder."));
-            rows.push_back(note("Remote root can be / or /TextLT. Dropbox API file operations come next."));
+            rows.push_back(note("Remote root can be / or /TextLT. Dropbox file operations are active now."));
             break;
     }
 
@@ -743,6 +744,25 @@ void RemoteConnectionsModalContent::TestSelected() {
         return;
     }
 
+    if (config.type == RemoteConnectionType::GoogleDrive) {
+        RemoteGoogleDriveProvider provider;
+        std::string error;
+        if (!provider.Connect(config, error)) {
+            output_ = DescribeRemoteOAuthTokenStatus(config) + "\n" + error;
+            SetStatus("Google Drive token is not ready.", true);
+            return;
+        }
+        std::string output;
+        if (!provider.TestConnection(output, error)) {
+            output_ = error;
+            SetStatus("Google Drive connection test failed.", true);
+            return;
+        }
+        output_ = output;
+        SetStatus("Google Drive connection test succeeded.");
+        return;
+    }
+
     if (config.type != RemoteConnectionType::Sftp) {
         output_ = DescribeRemoteOAuthTokenStatus(config) +
             "\nOAuth login and REST file operations for this provider will use this token file in a later API patch.";
@@ -868,7 +888,7 @@ RemoteConnectionsModal::RemoteConnectionsModal(
         [this] { Close(); });
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
     modal_->SetBodyFrameScrolling(false);
-    modal_->SetFooterText("Choose SFTP, Google, Microsoft, or Dropbox. SFTP and Dropbox file operations are active now; Google/Microsoft are configuration-only.");
+    modal_->SetFooterText("Choose SFTP, Google, Microsoft, or Dropbox. SFTP, Dropbox, and Google Drive file operations are active now; Microsoft is configuration-only.");
 }
 
 ftxui::Component RemoteConnectionsModal::View() const {

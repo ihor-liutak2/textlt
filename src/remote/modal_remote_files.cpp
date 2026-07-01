@@ -487,12 +487,14 @@ bool RemoteFilesModalContent::EnsureRemoteProvider() {
             provider = std::make_unique<RemoteDropboxProvider>();
             break;
         case RemoteConnectionType::GoogleDrive:
+            provider = std::make_unique<RemoteGoogleDriveProvider>();
+            break;
         case RemoteConnectionType::MicrosoftDrive:
             remote_provider_.reset();
             remote_panel_.entries.clear();
             remote_panel_.path = config.remote_root.empty() ? "/" : config.remote_root;
             remote_panel_.path_input = remote_panel_.path;
-            SetPanelStatus(PanelSide::Remote, "This cloud type can be configured, but its file provider is not implemented yet. Dropbox and SFTP are active now.", true);
+            SetPanelStatus(PanelSide::Remote, "Microsoft cloud type can be configured, but its file provider is not implemented yet. SFTP, Dropbox, and Google Drive are active now.", true);
             return false;
     }
 
@@ -824,8 +826,10 @@ bool RemoteFilesModalContent::UploadCachedLocalFile(
         provider = std::make_unique<RemoteSftpProvider>();
     } else if (iter->connection.type == RemoteConnectionType::Dropbox) {
         provider = std::make_unique<RemoteDropboxProvider>();
+    } else if (iter->connection.type == RemoteConnectionType::GoogleDrive) {
+        provider = std::make_unique<RemoteGoogleDriveProvider>();
     } else {
-        error = "Manual sync is implemented for SFTP and Dropbox cached files only.";
+        error = "Manual sync is implemented for SFTP, Dropbox, and Google Drive cached files only.";
         SetStatus(error, true);
         return false;
     }

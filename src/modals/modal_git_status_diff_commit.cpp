@@ -362,16 +362,14 @@ ftxui::Element GitModalContent::RenderCommitTab() {
 
     return ftxui::vbox({
         ftxui::text("Files to commit:") | ftxui::bold | ftxui::color(theme.modal_accent),
-        staged_files_view |
-            ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, 14) |
-            ftxui::yflex,
+        staged_files_view | ftxui::yflex,
         ftxui::separator() | ftxui::color(theme.modal_border),
         ftxui::text("Commit message:") | ftxui::bold | ftxui::color(theme.modal_accent),
         commit_message_input_->Render() |
             ftxui::bgcolor(theme.modal_input_bg) |
             ftxui::color(theme.modal_input_fg) |
             ftxui::frame |
-            ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, 5),
+            ftxui::size(ftxui::HEIGHT, ftxui::EQUAL, 5),
         ftxui::hbox({
             ftxui::filler(),
             commit_button_->Render(),

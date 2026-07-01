@@ -18,6 +18,7 @@
 #include "remote/remote_config_store.hpp"
 #include "remote/remote_entry.hpp"
 #include "remote/remote_dropbox_provider.hpp"
+#include "remote/remote_google_drive_provider.hpp"
 #include "remote/remote_local_provider.hpp"
 #include "remote/remote_provider.hpp"
 #include "remote/remote_sftp_provider.hpp"

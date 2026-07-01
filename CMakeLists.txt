@@ -193,6 +193,7 @@ add_executable(textlt
   src/remote/remote_config_store.cpp
   src/remote/remote_oauth_token_store.cpp
   src/remote/remote_dropbox_provider.cpp
+  src/remote/remote_google_drive_provider.cpp
   src/remote/remote_command_runner.cpp
   src/remote/remote_local_provider.cpp
   src/remote/remote_sftp_provider.cpp
@@ -308,6 +309,23 @@ target_link_libraries(textlt_remote_dropbox_provider_test PRIVATE
   CURL::libcurl
 )
 
+add_executable(textlt_remote_google_drive_provider_test
+  tests/remote_google_drive_provider_test.cpp
+  src/remote/remote_connection_config.cpp
+  src/remote/remote_google_drive_provider.cpp
+  src/remote/remote_oauth_token_store.cpp
+)
+
+target_include_directories(textlt_remote_google_drive_provider_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+  ${CURL_INCLUDE_DIRS}
+)
+
+target_link_libraries(textlt_remote_google_drive_provider_test PRIVATE
+  CURL::libcurl
+)
+
 target_link_libraries(textlt_keyboard_shortcuts_test PRIVATE ftxui::component)
 
 target_include_directories(textlt_text_importer_test PRIVATE
@@ -332,3 +350,4 @@ add_test(NAME textlt_keyboard_shortcuts_test COMMAND textlt_keyboard_shortcuts_t
 add_test(NAME textlt_remote_path_test COMMAND textlt_remote_path_test)
 add_test(NAME textlt_remote_oauth_token_store_test COMMAND textlt_remote_oauth_token_store_test)
 add_test(NAME textlt_remote_dropbox_provider_test COMMAND textlt_remote_dropbox_provider_test)
+add_test(NAME textlt_remote_google_drive_provider_test COMMAND textlt_remote_google_drive_provider_test)
