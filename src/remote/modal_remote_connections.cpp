@@ -13,6 +13,7 @@
 #include "ftxui/dom/elements.hpp"
 #include "remote/remote_dropbox_provider.hpp"
 #include "remote/remote_google_drive_provider.hpp"
+#include "remote/remote_microsoft_drive_provider.hpp"
 #include "remote/remote_oauth_token_store.hpp"
 #include "remote/remote_sftp_provider.hpp"
 
@@ -763,6 +764,25 @@ void RemoteConnectionsModalContent::TestSelected() {
         return;
     }
 
+    if (config.type == RemoteConnectionType::MicrosoftDrive) {
+        RemoteMicrosoftDriveProvider provider;
+        std::string error;
+        if (!provider.Connect(config, error)) {
+            output_ = DescribeRemoteOAuthTokenStatus(config) + "\n" + error;
+            SetStatus("Microsoft token is not ready.", true);
+            return;
+        }
+        std::string output;
+        if (!provider.TestConnection(output, error)) {
+            output_ = error;
+            SetStatus("Microsoft connection test failed.", true);
+            return;
+        }
+        output_ = output;
+        SetStatus("Microsoft connection test succeeded.");
+        return;
+    }
+
     if (config.type != RemoteConnectionType::Sftp) {
         output_ = DescribeRemoteOAuthTokenStatus(config) +
             "\nOAuth login and REST file operations for this provider will use this token file in a later API patch.";
@@ -888,7 +908,7 @@ RemoteConnectionsModal::RemoteConnectionsModal(
         [this] { Close(); });
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
     modal_->SetBodyFrameScrolling(false);
-    modal_->SetFooterText("Choose SFTP, Google, Microsoft, or Dropbox. SFTP, Dropbox, and Google Drive file operations are active now; Microsoft is configuration-only.");
+    modal_->SetFooterText("Choose SFTP, Google, Microsoft, or Dropbox. SFTP, Dropbox, Google Drive, and Microsoft file operations are active now.");
 }
 
 ftxui::Component RemoteConnectionsModal::View() const {

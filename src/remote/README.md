@@ -37,11 +37,9 @@ The connection modal has real type switching and separate fields for each suppor
 
 All fields are persisted in `remote_connections.json`.
 
-## Active file-manager backend
+## Active file-manager backends
 
-SFTP is the active file-manager backend in this version. It uses the external `ssh` and `sftp` programs that are already installed on the system.
-
-Google Drive, Microsoft OneDrive/SharePoint, and Dropbox can be configured and saved now. Their actual list/upload/download/delete providers should be implemented in a later patch through the existing `CurlManager`/REST API layer, not through a new HTTP dependency.
+SFTP, Dropbox, Google Drive, and Microsoft OneDrive/SharePoint are active file-manager backends in this version. SFTP uses the external `ssh` and `sftp` programs that are already installed on the system. Cloud backends use the existing project libcurl dependency and token files.
 
 ## Supported for SFTP
 
@@ -90,14 +88,14 @@ The SFTP provider also checks for external `ssh` and `sftp` executables during c
 
 ## OAuth token files
 
-Google Drive, Microsoft OneDrive/SharePoint, and Dropbox now share a small token-file layer:
+Google Drive, Microsoft OneDrive/SharePoint, and Dropbox share a small token-file layer:
 
 - token files live under `~/.config/textlt/remote_tokens/` by default on Linux;
 - the connection modal can create a placeholder token JSON with the `Token` button;
 - `Test` for cloud connections validates the configured token file and reports whether it is only a placeholder or already contains an access/refresh token;
 - the connection config keeps the token-file path, but the future access/refresh tokens are stored in the token file itself.
 
-This patch does not perform OAuth login yet. The next cloud-provider patches should fill these token files through browser/device login and then use them from the Google Drive, Microsoft Graph, and Dropbox REST providers.
+This module does not perform OAuth login yet. A later OAuth modal should fill these token files through browser/device login and then the cloud providers use those tokens for REST calls.
 
 ## Patch 10 Dropbox backend
 
@@ -122,7 +120,7 @@ Dropbox root path is represented as `/` in TextLT and as an empty path string in
 
 To use Dropbox files before a full OAuth login modal exists, the configured token file must contain an `access_token` value. The placeholder token created by the connection modal is not enough by itself.
 
-Google Drive is active after patch 11. Microsoft OneDrive/SharePoint is still configuration-only and should follow the same `IRemoteProvider` pattern in a later patch.
+Google Drive is active after patch 11. Microsoft OneDrive/SharePoint is active after patch 12.
 
 ## Patch 11 Google Drive backend
 
@@ -150,4 +148,33 @@ To use Google Drive files before a full OAuth login modal exists, the configured
 
 Google Workspace native files such as Docs, Sheets, and Slides are shown as non-ordinary entries. They can be renamed or deleted, but download/export support is intentionally left for a later patch.
 
-Microsoft OneDrive/SharePoint remains configuration-only at this step.
+Microsoft OneDrive/SharePoint is active after patch 12.
+
+## Patch 12 Microsoft OneDrive / SharePoint backend
+
+Microsoft OneDrive/SharePoint is now an active cloud file-manager backend alongside SFTP, Dropbox, and Google Drive.
+
+The Microsoft provider uses Microsoft Graph driveItem endpoints through the existing project libcurl dependency. It does not add a new HTTP library.
+
+Supported Microsoft operations:
+
+- list folder;
+- download ordinary files with the driveItem `/content` endpoint;
+- upload or replace small/medium files with the driveItem `/content` endpoint;
+- recursive folder download;
+- recursive folder upload;
+- rename files or folders inside the same parent folder;
+- delete files or folders;
+- create folders;
+- open remote file through the same local cache used by SFTP, Dropbox, and Google Drive;
+- manual `Sync Last` upload for cached Microsoft files.
+
+Microsoft remote root is represented as `/` in TextLT. Connection target selection works like this:
+
+- if `Drive ID` is set, the provider uses `/drives/{drive_id}`;
+- otherwise, if `Site ID` is set, it uses `/sites/{site_id}/drive`;
+- otherwise, it uses `/me/drive`.
+
+To use Microsoft files before a full OAuth login modal exists, the configured token file must contain an `access_token` value. The placeholder token created by the connection modal is not enough by itself.
+
+The first Microsoft provider version intentionally supports rename inside the same folder only. Cross-folder move support can be added later by updating `parentReference`.
