@@ -83,6 +83,7 @@ jobs:
           cp scripts/textlt-launcher.sh AppDir/usr/bin/textlt
           cp scripts/textlt-install-runtime-deps.sh AppDir/usr/bin/textlt-install-runtime-deps.sh
           chmod +x AppDir/usr/bin/textlt AppDir/usr/bin/textlt-bin AppDir/usr/bin/textlt-install-runtime-deps.sh
+          file AppDir/usr/bin/textlt-bin | grep -q 'ELF'
           TEXTLT_CHECK_RUNTIME_ONLY=1 AppDir/usr/bin/textlt
           cp -R themes AppDir/usr/share/textlt/themes
           cp -R text_processors AppDir/usr/share/textlt/text_processors
@@ -118,7 +119,7 @@ jobs:
 
           ./linuxdeploy-x86_64.AppImage \
             --appdir AppDir \
-            --executable AppDir/usr/bin/textlt \
+            --executable AppDir/usr/bin/textlt-bin \
             --desktop-file AppDir/usr/share/applications/textlt.desktop \
             --icon-file AppDir/usr/share/icons/hicolor/256x256/apps/textlt.png \
             --output appimage
@@ -155,7 +156,7 @@ jobs:
           curl.exe --version
           ssh.exe -V
           sftp.exe -h 2>$null; if ($LASTEXITCODE -ne 0) { Write-Host "sftp help command returned $LASTEXITCODE" }
-          powershell.exe -NoProfile -Command "$PSVersionTable.PSVersion"
+          powershell.exe -NoProfile -Command '$PSVersionTable.PSVersion'
 
       - name: Configure
         shell: pwsh
