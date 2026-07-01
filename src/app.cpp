@@ -225,6 +225,17 @@ TextltApp::TextltApp()
         },
         &current_theme_);
 
+    title_bar_open_tts_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
+        "TTS",
+        [this] {
+            OpenTtsModal();
+            screen_.PostEvent(ftxui::Event::Custom);
+        },
+        &current_theme_));
+    title_bar_component_ = ftxui::Renderer(
+        ftxui::Container::Horizontal({title_bar_open_tts_button_}),
+        [this] { return RenderTitleBar(); });
+
     editor_panes_.assign(3, EditorPaneState{});
     editor_pane_components_.clear();
     editor_pane_components_.push_back(text_editor_);
@@ -291,6 +302,7 @@ TextltApp::TextltApp()
 
     // FIXED: Added missing underscore to match class declaration
     main_container_ = ftxui::Container::Vertical({
+        title_bar_component_,
         menu_bar_,
         body_container_,
     });

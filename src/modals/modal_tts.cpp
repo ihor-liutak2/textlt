@@ -745,6 +745,38 @@ void TtsModalContent::ShowSelectedBookInfo() {
     status_ = show_selected_book_info_ ? "Book info shown" : "Book info hidden";
 }
 
+bool TtsModalContent::IsAudioWorkerRunning() const {
+    std::lock_guard<std::mutex> lock(audio_worker_mutex_);
+    return audio_worker_running_;
+}
+
+bool TtsModalContent::HasPreparedBook() const {
+    return !library_books_.empty() &&
+           selected_library_book_ >= 0 &&
+           selected_library_book_ < static_cast<int>(library_books_.size());
+}
+
+std::string TtsModalContent::HeaderStatus() const {
+    {
+        std::lock_guard<std::mutex> lock(audio_worker_mutex_);
+        if (audio_worker_running_) {
+            return audio_worker_status_.empty() ? "Generating audio" : audio_worker_status_;
+        }
+    }
+
+    if (!HasPreparedBook()) {
+        return {};
+    }
+
+    const CloudTtsPipeline::BookInfo& book = library_books_[selected_library_book_];
+    std::string title = BookDisplayTitle(book);
+    if (title.size() > 28) {
+        title = title.substr(0, 25) + "...";
+    }
+    return title + " " + std::to_string(book.ready_chunks) + "/" +
+           std::to_string(book.prepared_chunks) + " ready";
+}
+
 ftxui::Element TtsModalContent::RenderTitle() {
     return ftxui::hbox({
         run_tab_button_->Render(),
@@ -1063,6 +1095,18 @@ bool TtsModal::IsOpen() const {
 
 bool TtsModal::OnEvent(ftxui::Event event) {
     return open_ && modal_ && modal_->OnEvent(std::move(event));
+}
+
+bool TtsModal::IsAudioWorkerRunning() const {
+    return content_ && content_->IsAudioWorkerRunning();
+}
+
+bool TtsModal::ShouldShowHeaderControls() const {
+    return content_ && (content_->IsAudioWorkerRunning() || content_->HasPreparedBook());
+}
+
+std::string TtsModal::HeaderStatus() const {
+    return content_ ? content_->HeaderStatus() : std::string();
 }
 
 } // namespace textlt

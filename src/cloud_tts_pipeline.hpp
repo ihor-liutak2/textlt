@@ -150,11 +150,6 @@ private:
     static std::filesystem::path LibraryDirectory();
     static std::filesystem::path BookDirectory(const std::string& book_id);
     static std::filesystem::path RegistryDirectory();
-    static std::filesystem::path PiperRuntimeDirectory();
-    static std::filesystem::path PiperModelsDirectory();
-    static std::filesystem::path PiperExecutablePath();
-    static bool PiperVoiceInstalled(const Json& voice);
-    static bool FindPiperVoiceById(const std::string& voice_id, Json* voice);
     static std::filesystem::path ChunkAudioPath(
         const std::string& book_id,
         size_t chunk_index,

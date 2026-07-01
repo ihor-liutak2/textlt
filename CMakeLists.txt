@@ -177,6 +177,7 @@ add_executable(textlt
   src/modals/modal_files.cpp
   src/modals/modal_text_processors.cpp
   src/opened_config.cpp
+  src/piper_manager.cpp
   src/recent_files.cpp
   src/remote/remote_connection_config.cpp
   src/remote/remote_config_store.cpp
@@ -362,9 +363,20 @@ target_include_directories(textlt_remote_microsoft_drive_provider_test PRIVATE
 add_executable(textlt_tts_pipeline_test
   tests/tts_pipeline_test.cpp
   src/cloud_tts_pipeline.cpp
+  src/piper_manager.cpp
 )
 
 target_include_directories(textlt_tts_pipeline_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+)
+
+add_executable(textlt_piper_manager_test
+  tests/piper_manager_test.cpp
+  src/piper_manager.cpp
+)
+
+target_include_directories(textlt_piper_manager_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
@@ -391,6 +403,7 @@ add_test(NAME textlt_document_navigation_test COMMAND textlt_document_navigation
 add_test(NAME textlt_text_importer_test COMMAND textlt_text_importer_test)
 add_test(NAME textlt_keyboard_shortcuts_test COMMAND textlt_keyboard_shortcuts_test)
 add_test(NAME textlt_tts_pipeline_test COMMAND textlt_tts_pipeline_test)
+add_test(NAME textlt_piper_manager_test COMMAND textlt_piper_manager_test)
 add_test(NAME textlt_remote_path_test COMMAND textlt_remote_path_test)
 add_test(NAME textlt_remote_oauth_token_store_test COMMAND textlt_remote_oauth_token_store_test)
 add_test(NAME textlt_remote_http_client_test COMMAND textlt_remote_http_client_test)

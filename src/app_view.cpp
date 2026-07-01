@@ -125,6 +125,44 @@ bool IsOpenedSidebarChordKey(const ftxui::Event& event) {
 
 } // namespace
 
+ftxui::Element TextltApp::RenderTtsHeaderStrip() {
+    using namespace ftxui;
+
+    if (!tts_modal_.ShouldShowHeaderControls()) {
+        return text("");
+    }
+
+    const std::string status = tts_modal_.HeaderStatus();
+    Elements controls = {
+        text(" TTS: ") | bold | color(current_theme_.menu_foreground),
+        text(status.empty() ? "ready" : status) | color(current_theme_.menu_foreground),
+        text("  "),
+        title_bar_open_tts_button_ ? title_bar_open_tts_button_->Render() : text("[TTS]"),
+        text(" "),
+        text("[Play]") | dim | color(current_theme_.menu_foreground),
+        text(" "),
+        text("[Pause]") | dim | color(current_theme_.menu_foreground),
+        text(" "),
+        text("[Stop]") | dim | color(current_theme_.menu_foreground),
+        text(" "),
+        text("[Next]") | dim | color(current_theme_.menu_foreground),
+    };
+
+    return hbox(std::move(controls));
+}
+
+ftxui::Element TextltApp::RenderTitleBar() {
+    using namespace ftxui;
+
+    return hbox({
+        text(" textlt v1.0.0 - Native Non-Modal Text Editor") |
+            bold |
+            color(current_theme_.menu_foreground),
+        filler(),
+        RenderTtsHeaderStrip(),
+    });
+}
+
 ftxui::Element TextltApp::Render() {
     using namespace ftxui;
 
@@ -149,9 +187,7 @@ ftxui::Element TextltApp::Render() {
           });
 
     Elements base_rows = {
-        text(" textlt v1.0.0 - Native Non-Modal Text Editor") |
-            bold |
-            color(current_theme_.menu_foreground),
+        title_bar_component_ ? title_bar_component_->Render() : RenderTitleBar(),
         separator(),
         top_menu_element,
         separator(),

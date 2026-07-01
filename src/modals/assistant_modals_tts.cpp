@@ -18,6 +18,7 @@
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/event.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "piper_manager.hpp"
 
 namespace textlt {
 namespace {
@@ -32,21 +33,6 @@ ftxui::Element StatusLine(const std::string& label,
     });
 }
 
-bool PiperVoiceInstalled(const Json& voice) {
-    using namespace assistant_modal_detail;
-
-    const std::string model_path = JsonString(voice, "model_path");
-    const std::string config_path = JsonString(voice, "config_path");
-    if (model_path.empty() || config_path.empty()) {
-        return false;
-    }
-
-    const std::filesystem::path models_directory =
-        UserDataDirectory() / "piper" / "models";
-    std::error_code error;
-    return std::filesystem::exists(models_directory / model_path, error) &&
-           std::filesystem::exists(models_directory / config_path, error);
-}
 
 std::string FormatBytes(unsigned long long value) {
     std::string text = std::to_string(value);
@@ -65,113 +51,6 @@ std::string FormatBytes(unsigned long long value) {
 }
 
 
-std::filesystem::path PiperRuntimeDirectory() {
-    using namespace assistant_modal_detail;
-    const std::filesystem::path data = UserDataDirectory();
-    return data.empty() ? std::filesystem::path{} : data / "piper" / "bin";
-}
-
-std::filesystem::path PiperModelsDirectory() {
-    using namespace assistant_modal_detail;
-    const std::filesystem::path data = UserDataDirectory();
-    return data.empty() ? std::filesystem::path{} : data / "piper" / "models";
-}
-
-std::filesystem::path PiperDownloadArchivePath() {
-    using namespace assistant_modal_detail;
-#ifdef _WIN32
-    const std::string filename = "piper_windows_amd64.zip";
-#else
-    const std::string filename = "piper_linux_x86_64.tar.gz";
-#endif
-    const std::filesystem::path cache = DownloadCacheDirectory();
-    return cache.empty() ? std::filesystem::path{} : cache / filename;
-}
-
-std::string PiperRuntimeDownloadUrl() {
-#if defined(_WIN32) && (defined(_M_X64) || defined(__x86_64__))
-    return "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip";
-#elif !defined(_WIN32) && defined(__x86_64__)
-    return "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz";
-#else
-    return {};
-#endif
-}
-
-std::filesystem::path FindPiperExecutable() {
-    const std::filesystem::path runtime_directory = PiperRuntimeDirectory();
-    if (runtime_directory.empty()) {
-        return {};
-    }
-    std::error_code error;
-    if (!std::filesystem::exists(runtime_directory, error)) {
-        return {};
-    }
-
-#ifdef _WIN32
-    constexpr const char* binary_name = "piper.exe";
-#else
-    constexpr const char* binary_name = "piper";
-#endif
-
-    std::filesystem::recursive_directory_iterator iterator(runtime_directory, error);
-    std::filesystem::recursive_directory_iterator end;
-    while (!error && iterator != end) {
-        const std::filesystem::directory_entry& entry = *iterator;
-        if (entry.is_regular_file(error) && entry.path().filename() == binary_name) {
-            return entry.path();
-        }
-        error.clear();
-        iterator.increment(error);
-    }
-    return {};
-}
-
-bool PiperRuntimeInstalled() {
-    return !FindPiperExecutable().empty();
-}
-
-std::string QuoteShellPath(const std::filesystem::path& path) {
-#ifdef _WIN32
-    std::string value = path.string();
-    std::string quoted = "\"";
-    for (char character : value) {
-        if (character == '"') {
-            quoted += "\\\"";
-        } else {
-            quoted.push_back(character);
-        }
-    }
-    quoted += "\"";
-    return quoted;
-#else
-    const std::string value = path.string();
-    std::string quoted = "'";
-    for (char character : value) {
-        if (character == '\'') {
-            quoted += "'\\''";
-        } else {
-            quoted.push_back(character);
-        }
-    }
-    quoted += "'";
-    return quoted;
-#endif
-}
-
-std::string QuotePowerShellSingle(const std::filesystem::path& path) {
-    std::string value = path.string();
-    std::string quoted = "'";
-    for (char character : value) {
-        if (character == '\'') {
-            quoted += "''";
-        } else {
-            quoted.push_back(character);
-        }
-    }
-    quoted += "'";
-    return quoted;
-}
 
 bool IsSafeArchivePath(const std::filesystem::path& path) {
     if (path.empty() || path.is_absolute()) {
@@ -259,7 +138,7 @@ bool ExtractArchive(const std::filesystem::path& archive_path,
     archive_write_free(output);
 
 #ifndef _WIN32
-    const std::filesystem::path piper = FindPiperExecutable();
+    const std::filesystem::path piper = PiperManager::RuntimeExecutablePath();
     if (!piper.empty()) {
         std::error_code permissions_error;
         std::filesystem::permissions(
@@ -330,7 +209,7 @@ bool PlayWaveFile(const std::filesystem::path& wav_path, std::string* error) {
 #ifdef _WIN32
     const std::string command =
         "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$p = " +
-        QuotePowerShellSingle(wav_path) +
+        PiperManager::QuotePowerShellSingle(wav_path) +
         "; Add-Type -AssemblyName System; (New-Object System.Media.SoundPlayer $p).PlaySync()\"";
     const int result = std::system(command.c_str());
     if (result != 0 && error) {
@@ -346,9 +225,9 @@ bool PlayWaveFile(const std::filesystem::path& wav_path, std::string* error) {
         }
         std::string command;
         if (player == "ffplay") {
-            command = player + " -nodisp -autoexit " + QuoteShellPath(wav_path) + " >/dev/null 2>&1";
+            command = player + " -nodisp -autoexit " + PiperManager::QuoteShellPath(wav_path) + " >/dev/null 2>&1";
         } else {
-            command = player + " " + QuoteShellPath(wav_path) + " >/dev/null 2>&1";
+            command = player + " " + PiperManager::QuoteShellPath(wav_path) + " >/dev/null 2>&1";
         }
         if (std::system(command.c_str()) == 0) {
             return true;
@@ -361,78 +240,6 @@ bool PlayWaveFile(const std::filesystem::path& wav_path, std::string* error) {
 #endif
 }
 
-bool RunPiperToFile(const Json& voice,
-                    const std::string& text,
-                    const std::filesystem::path& output_wav,
-                    std::string* error) {
-    using namespace assistant_modal_detail;
-
-    const std::filesystem::path executable = FindPiperExecutable();
-    if (executable.empty()) {
-        if (error) {
-            *error = "Piper runtime is not installed";
-        }
-        return false;
-    }
-
-    const std::string model_path = JsonString(voice, "model_path");
-    const std::string config_path = JsonString(voice, "config_path");
-    const std::filesystem::path model = PiperModelsDirectory() / model_path;
-    const std::filesystem::path config = PiperModelsDirectory() / config_path;
-    std::error_code exists_error;
-    if (!std::filesystem::exists(model, exists_error) ||
-        !std::filesystem::exists(config, exists_error)) {
-        if (error) {
-            *error = "Selected Piper voice files are missing";
-        }
-        return false;
-    }
-
-    EnsureDirectory(output_wav.parent_path());
-    const std::filesystem::path input_path = output_wav.string() + ".txt";
-    {
-        std::ofstream input(input_path, std::ios::binary | std::ios::trunc);
-        if (!input) {
-            if (error) {
-                *error = "Cannot write Piper input text";
-            }
-            return false;
-        }
-        input << text << '\n';
-    }
-
-#ifdef _WIN32
-    const std::string command =
-        "type " + QuoteShellPath(input_path) +
-        " | " + QuoteShellPath(executable) +
-        " --model " + QuoteShellPath(model) +
-        " --config " + QuoteShellPath(config) +
-        " --output_file " + QuoteShellPath(output_wav);
-#else
-    const std::string command =
-        QuoteShellPath(executable) +
-        " --model " + QuoteShellPath(model) +
-        " --config " + QuoteShellPath(config) +
-        " --output_file " + QuoteShellPath(output_wav) +
-        " < " + QuoteShellPath(input_path);
-#endif
-    const int result = std::system(command.c_str());
-    std::error_code remove_error;
-    std::filesystem::remove(input_path, remove_error);
-    if (result != 0) {
-        if (error) {
-            *error = "Piper command failed";
-        }
-        return false;
-    }
-    if (!std::filesystem::exists(output_wav, exists_error)) {
-        if (error) {
-            *error = "Piper did not create audio file";
-        }
-        return false;
-    }
-    return true;
-}
 
 bool FindSelectedPiperVoice(const std::string& selected_language,
                             int selected_voice,
@@ -498,7 +305,7 @@ std::vector<Json> SelectedInstalledPiperVoices(const std::string& selected_langu
 
     Json voice;
     if (FindSelectedPiperVoice(selected_language, selected_voice, &voice) &&
-        PiperVoiceInstalled(voice)) {
+        PiperManager::VoiceInstalled(voice)) {
         selected.push_back(std::move(voice));
     }
     return selected;
@@ -690,7 +497,7 @@ void AssistantSettingsModalContent::RebuildTtsVoices() {
                 std::string label = JsonString(voice, "id");
                 const std::string quality = JsonString(voice, "quality");
                 label += " | " + (quality.empty() ? "unknown" : quality);
-                label += PiperVoiceInstalled(voice) ? " | installed" : " | not installed";
+                label += PiperManager::VoiceInstalled(voice) ? " | installed" : " | not installed";
                 tts_voice_labels_.push_back(label);
             }
         }
@@ -716,15 +523,15 @@ void AssistantSettingsModalContent::StartPiperRuntimeInstall() {
         tts_runtime_thread_.join();
     }
 
-    const std::string url = PiperRuntimeDownloadUrl();
+    const std::string url = PiperManager::RuntimeDownloadUrl();
     if (url.empty()) {
         std::lock_guard<std::mutex> lock(tts_download_mutex_);
         tts_status_ = "Piper runtime is not available for this platform";
         return;
     }
 
-    const std::filesystem::path archive_path = PiperDownloadArchivePath();
-    const std::filesystem::path runtime_directory = PiperRuntimeDirectory();
+    const std::filesystem::path archive_path = PiperManager::RuntimeDownloadArchivePath();
+    const std::filesystem::path runtime_directory = PiperManager::RuntimeDirectory();
     if (archive_path.empty() || runtime_directory.empty()) {
         std::lock_guard<std::mutex> lock(tts_download_mutex_);
         tts_status_ = "Piper install path is not available";
@@ -785,7 +592,7 @@ void AssistantSettingsModalContent::StartPiperRuntimeInstall() {
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
 
-        const bool installed = extract_ok && PiperRuntimeInstalled();
+        const bool installed = extract_ok && PiperManager::RuntimeInstalled();
         std::lock_guard<std::mutex> lock(tts_download_mutex_);
         tts_downloading_ = false;
         tts_download_visible_ = false;
@@ -1023,7 +830,7 @@ void AssistantSettingsModalContent::TestTtsVoice() {
         tts_status_ = "Select one voice to test";
         return;
     }
-    if (!PiperRuntimeInstalled()) {
+    if (!PiperManager::RuntimeInstalled()) {
         std::lock_guard<std::mutex> lock(tts_download_mutex_);
         tts_status_ = "Piper runtime is not installed";
         return;
@@ -1037,7 +844,7 @@ void AssistantSettingsModalContent::TestTtsVoice() {
         tts_status_ = "No voice selected";
         return;
     }
-    if (!PiperVoiceInstalled(voice)) {
+    if (!PiperManager::VoiceInstalled(voice)) {
         std::lock_guard<std::mutex> lock(tts_download_mutex_);
         tts_status_ = "Voice is not installed";
         return;
@@ -1061,11 +868,11 @@ void AssistantSettingsModalContent::TestTtsVoice() {
 
     tts_runtime_thread_ = std::thread([this, voice] {
         const std::filesystem::path test_directory =
-            PiperModelsDirectory().parent_path() / "test";
+            PiperManager::ModelsDirectory().parent_path() / "test";
         assistant_modal_detail::EnsureDirectory(test_directory);
         const std::filesystem::path wav_path = test_directory / "piper_test.wav";
         std::string error_message;
-        const bool generated = RunPiperToFile(
+        const bool generated = PiperManager::RunToFile(
             voice,
             "Привіт. Це тест локального голосу Piper у TextLT.",
             wav_path,
@@ -1146,9 +953,9 @@ ftxui::Element AssistantSettingsModalContent::RenderTtsTab(const Theme& theme) {
     rows.push_back(separator() | color(theme.modal_border));
     rows.push_back(StatusLine(
         "Piper runtime",
-        PiperRuntimeInstalled() ? "installed" : "missing - use Install Piper",
+        PiperManager::RuntimeInstalled() ? "installed" : "missing - use Install Piper",
         theme));
-    const std::filesystem::path piper_executable = FindPiperExecutable();
+    const std::filesystem::path piper_executable = PiperManager::RuntimeExecutablePath();
     if (!piper_executable.empty()) {
         rows.push_back(StatusLine("Piper executable", piper_executable.string(), theme));
     }

@@ -219,6 +219,8 @@ private:
     ftxui::Element Render();
     ftxui::Element RenderFindPanel();
     ftxui::Element RenderGoToLinePanel();
+    ftxui::Element RenderTitleBar();
+    ftxui::Element RenderTtsHeaderStrip();
     bool HandleGlobalEvent(ftxui::Event event);
     int DropdownX() const;
     void OpenFindPanel(bool replace_mode);
@@ -318,6 +320,8 @@ private:
     SearchPanelInput active_search_panel_input_ = SearchPanelInput::Find;
     std::string terminal_bracketed_paste_buffer_;
     std::shared_ptr<MenuBarComponent> menu_bar_;
+    ftxui::Component title_bar_component_;
+    ftxui::Component title_bar_open_tts_button_;
     ftxui::Component body_container_;
     ftxui::Component main_container_;
     ftxui::Component root_container_;

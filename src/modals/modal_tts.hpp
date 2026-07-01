@@ -40,6 +40,9 @@ public:
     void SetTheme(const Theme* theme) { theme_ = theme; }
     void Open();
     void RefreshLibrary();
+    bool IsAudioWorkerRunning() const;
+    bool HasPreparedBook() const;
+    std::string HeaderStatus() const;
 
 private:
     enum class Tab {
@@ -143,6 +146,9 @@ public:
     void Close();
     bool IsOpen() const;
     bool OnEvent(ftxui::Event event);
+    bool IsAudioWorkerRunning() const;
+    bool ShouldShowHeaderControls() const;
+    std::string HeaderStatus() const;
 
 private:
     bool open_ = false;
