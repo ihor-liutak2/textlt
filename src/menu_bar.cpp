@@ -21,6 +21,7 @@ MenuBarComponent::MenuBarComponent(
           " Edit ",
           " Options ",
           " AI ",
+          " Remote ",
           " Git ",
           " Help ",
           " Exit ",
@@ -73,6 +74,10 @@ MenuBarComponent::MenuBarComponent(
               " TTS                 (Alt+H) ",
               " AI Actions          (Alt+J) ",
               " Assistant Settings  (Alt+S) ",
+          },
+          {
+              " Remote Files... ",
+              " Remote Connections... ",
           },
           {
               " Git... ",

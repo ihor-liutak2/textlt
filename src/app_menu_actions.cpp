@@ -126,16 +126,19 @@ void TextltApp::RunDropdownAction(int menu_index, int item_index) {
             HandleAiMenu(item_index);
             return;
         case 4:
-            HandleGitMenu(item_index);
+            HandleRemoteMenu(item_index);
             return;
         case 5:
+            HandleGitMenu(item_index);
+            return;
+        case 6:
             if (item_index == 0) {
                 OpenAboutDialog();
             } else {
                 OpenHelpDialog();
             }
             return;
-        case 6: if (item_index == 0) RequestExit(); return;
+        case 7: if (item_index == 0) RequestExit(); return;
         default: CloseDropdown();                            return;
     }
 }
@@ -346,6 +349,20 @@ void TextltApp::HandleAiMenu(int item) {
             CloseDropdown();
             return;
     }
+}
+
+
+void TextltApp::HandleRemoteMenu(int item) {
+    if (item == 0) {
+        OpenRemoteFilesModal();
+        return;
+    }
+    if (item == 1) {
+        OpenRemoteConnectionsModal();
+        return;
+    }
+
+    CloseDropdown();
 }
 
 

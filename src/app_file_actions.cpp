@@ -32,6 +32,8 @@ bool TextltApp::SaveFile(const std::string& path, std::string& error) {
         git_manager_.SetWorkingDirectory(std::filesystem::path(path).parent_path());
         git_manager_.Invalidate();
         PersistOpenedDocuments();
+
+
         active_action_ = "Saved " + path;
         return true;
     } catch (const std::exception& exception) {

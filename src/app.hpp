@@ -27,6 +27,9 @@
 #include "menu_bar.hpp"
 #include "opened_config.hpp"
 #include "recent_files.hpp"
+#include "remote/modal_remote_connections.hpp"
+#include "remote/modal_remote_files.hpp"
+#include "remote/remote_config_store.hpp"
 #include "sidebar_component.hpp"
 #include "modals/theme_dialog.hpp"
 #include "modals/unsaved_changes_dialog.hpp"
@@ -77,6 +80,8 @@ private:
         SearchFiles,
         Files,
         TextProcessors,
+        RemoteConnections,
+        RemoteFiles,
         Git,
         GitSettings,
         Tts,
@@ -100,6 +105,10 @@ private:
     void CloseFilesModal();
     void OpenTextProcessorsModal();
     void CloseTextProcessorsModal();
+    void OpenRemoteConnectionsModal();
+    void CloseRemoteConnectionsModal();
+    void OpenRemoteFilesModal();
+    void CloseRemoteFilesModal();
     void OpenGitModal();
     void CloseGitModal();
     void OpenGitSettingsModal();
@@ -236,6 +245,7 @@ private:
     void HandleEditMenu(int item);
     void HandleOptionsMenu(int item);
     void HandleAiMenu(int item);
+    void HandleRemoteMenu(int item);
     void HandleGitMenu(int item);
     
     // Platform-specific clipboard abstraction utilities
@@ -250,6 +260,7 @@ private:
     ftxui::ScreenInteractive screen_;
     GitManager git_manager_;
     FileManager file_manager_;
+    RemoteConfigStore remote_config_store_;
     ftxui::Component text_editor_;
     std::vector<ftxui::Component> editor_pane_components_;
     std::vector<ftxui::Component> editor_pane_renderers_;
@@ -265,6 +276,8 @@ private:
     SearchFilesModal search_files_modal_;
     FilesModal files_modal_;
     TextProcessorsModal text_processors_modal_;
+    RemoteConnectionsModal remote_connections_modal_;
+    RemoteFilesModal remote_files_modal_;
     GitModal git_modal_;
     GitSettingsModal git_settings_modal_;
 

@@ -189,6 +189,13 @@ add_executable(textlt
   src/modals/modal_text_processors.cpp
   src/opened_config.cpp
   src/recent_files.cpp
+  src/remote/remote_connection_config.cpp
+  src/remote/remote_config_store.cpp
+  src/remote/remote_command_runner.cpp
+  src/remote/remote_local_provider.cpp
+  src/remote/remote_sftp_provider.cpp
+  src/remote/modal_remote_connections.cpp
+  src/remote/modal_remote_files.cpp
   src/sidebar_component.cpp
   src/syntax_highlighter.cpp
   src/terminal_flow_control_guard.cpp
@@ -258,7 +265,16 @@ add_executable(textlt_keyboard_shortcuts_test
   tests/keyboard_shortcuts_test.cpp
 )
 
+add_executable(textlt_remote_path_test
+  tests/remote_path_test.cpp
+  src/remote/remote_connection_config.cpp
+)
+
 target_include_directories(textlt_keyboard_shortcuts_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_include_directories(textlt_remote_path_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
@@ -283,3 +299,4 @@ target_link_libraries(textlt_document_navigation_test PRIVATE ftxui::screen)
 add_test(NAME textlt_document_navigation_test COMMAND textlt_document_navigation_test)
 add_test(NAME textlt_text_importer_test COMMAND textlt_text_importer_test)
 add_test(NAME textlt_keyboard_shortcuts_test COMMAND textlt_keyboard_shortcuts_test)
+add_test(NAME textlt_remote_path_test COMMAND textlt_remote_path_test)

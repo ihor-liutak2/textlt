@@ -99,6 +99,8 @@ bool TextltApp::MainViewCanActivateEditorPane() const {
         !search_files_modal_.IsOpen() &&
         !files_modal_.IsOpen() &&
         !text_processors_modal_.IsOpen() &&
+        !remote_connections_modal_.IsOpen() &&
+        !remote_files_modal_.IsOpen() &&
         !git_modal_.IsOpen() &&
         !git_settings_modal_.IsOpen() &&
         !tts_modal_.IsOpen() &&

@@ -230,6 +230,12 @@ ftxui::Element TextltApp::Render() {
     if (text_processors_modal_.IsOpen()) {
         layers.push_back(text_processors_modal_.View()->Render() | clear_under | center);
     }
+    if (remote_connections_modal_.IsOpen()) {
+        layers.push_back(remote_connections_modal_.View()->Render() | clear_under | center);
+    }
+    if (remote_files_modal_.IsOpen()) {
+        layers.push_back(remote_files_modal_.View()->Render() | clear_under | center);
+    }
     if (git_modal_.IsOpen()) {
         layers.push_back(git_modal_.View()->Render() | clear_under | center);
     }
@@ -368,6 +374,8 @@ bool TextltApp::ActiveModalIsOpen() const {
         case UiLayer::SearchFiles: return search_files_modal_.IsOpen();
         case UiLayer::Files: return files_modal_.IsOpen();
         case UiLayer::TextProcessors: return text_processors_modal_.IsOpen();
+        case UiLayer::RemoteConnections: return remote_connections_modal_.IsOpen();
+        case UiLayer::RemoteFiles: return remote_files_modal_.IsOpen();
         case UiLayer::Git: return git_modal_.IsOpen();
         case UiLayer::GitSettings: return git_settings_modal_.IsOpen();
         case UiLayer::Tts: return tts_modal_.IsOpen();

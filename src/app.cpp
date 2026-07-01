@@ -62,6 +62,7 @@ TextltApp::TextltApp()
       current_theme_(FindThemeByName(themes_, editor_config_.active_theme_name)),
       screen_(ftxui::ScreenInteractive::Fullscreen()),
       file_manager_(),
+      remote_config_store_(),
       text_editor_(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_)),
       sidebar_panel_(ftxui::Make<SidebarPanel>(
           [this](const std::filesystem::path& path) { OpenSidebarFile(path); },
@@ -126,6 +127,25 @@ TextltApp::TextltApp()
               const std::string& text,
               std::string& error) {
               return ReplaceTextProcessorTargetText(whole_document, text, error);
+          }),
+      remote_connections_modal_(
+          &current_theme_,
+          &remote_config_store_),
+      remote_files_modal_(
+          &current_theme_,
+          &remote_config_store_,
+          &file_manager_,
+          [this] { return CurrentSidebarDirectory(); },
+          [this](const std::filesystem::path& path, std::string& error) {
+              const bool opened = OpenFile(path.string(), error);
+              if (opened) {
+                  FocusEditor();
+                  screen_.PostEvent(ftxui::Event::Custom);
+              }
+              return opened;
+          },
+          [this](const std::string& text) {
+              WriteSystemClipboard(text);
           }),
       git_modal_(
           &current_theme_,
@@ -252,6 +272,8 @@ TextltApp::TextltApp()
             !search_files_modal_.IsOpen() &&
             !files_modal_.IsOpen() &&
             !text_processors_modal_.IsOpen() &&
+            !remote_connections_modal_.IsOpen() &&
+            !remote_files_modal_.IsOpen() &&
             !git_modal_.IsOpen() &&
             !git_settings_modal_.IsOpen() &&
             !tts_modal_.IsOpen() &&
@@ -405,6 +427,8 @@ TextltApp::TextltApp()
         search_files_modal_.View(),
         files_modal_.View(),
         text_processors_modal_.View(),
+        remote_connections_modal_.View(),
+        remote_files_modal_.View(),
         git_modal_.View(),
         git_settings_modal_.View(),
         tts_modal_.View(),

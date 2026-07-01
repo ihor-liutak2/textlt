@@ -249,6 +249,44 @@ void TextltApp::CloseTextProcessorsModal() {
 }
 
 
+void TextltApp::OpenRemoteConnectionsModal() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+
+    remote_connections_modal_.Open();
+    active_action_ = "Opened Remote Connections";
+    SetActiveLayer(UiLayer::RemoteConnections);
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CloseRemoteConnectionsModal() {
+    remote_connections_modal_.Close();
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::OpenRemoteFilesModal() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+
+    remote_files_modal_.Open();
+    active_action_ = "Opened Remote Files";
+    SetActiveLayer(UiLayer::RemoteFiles);
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CloseRemoteFilesModal() {
+    remote_files_modal_.Close();
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
 bool TextltApp::GetTextProcessorTargetText(
     bool whole_document,
     std::string& text,
