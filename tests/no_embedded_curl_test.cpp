@@ -43,6 +43,28 @@ bool ShouldSkipDirectory(const std::filesystem::path& path) {
         name == "AppDir";
 }
 
+bool Contains(const std::string& text, const std::string& needle) {
+    return text.find(needle) != std::string::npos;
+}
+
+void RequireContains(const std::filesystem::path& root,
+                     const std::filesystem::path& relative,
+                     const std::string& needle,
+                     bool& ok) {
+    const std::filesystem::path path = root / relative;
+    if (!std::filesystem::exists(path)) {
+        std::cerr << "Missing file: " << relative.string() << "\n";
+        ok = false;
+        return;
+    }
+    const std::string content = ReadFile(path);
+    if (!Contains(content, needle)) {
+        std::cerr << "Expected " << relative.string() << " to contain: " << needle << "\n";
+        ok = false;
+    }
+}
+
+
 } // namespace
 
 int main() {
@@ -96,6 +118,23 @@ int main() {
             }
         }
     }
+
+    RequireContains(root, "scripts/textlt-install-runtime-deps.sh", "curl openssh-client", ok);
+    RequireContains(root, "scripts/textlt-install-runtime-deps.sh", "openssh-clients", ok);
+    RequireContains(root, "scripts/textlt-install-runtime-deps.sh", "curl ssh sftp", ok);
+    RequireContains(root, "scripts/textlt-launcher.sh", "for tool in curl ssh sftp", ok);
+    RequireContains(root, "scripts/textlt-install-runtime-deps.ps1", "ssh.exe", ok);
+    RequireContains(root, "scripts/textlt-install-runtime-deps.ps1", "sftp.exe", ok);
+    RequireContains(root, "scripts/textlt-install-runtime-deps.ps1", "curl.exe", ok);
+    RequireContains(root, ".github/workflows/release.yml", "openssh-client", ok);
+    RequireContains(root, ".github/workflows/release.yml", "ssh -V", ok);
+    RequireContains(root, ".github/workflows/release.yml", "sftp", ok);
+    RequireContains(root, "src/remote/remote_http_client.cpp", "speed-time", ok);
+    RequireContains(root, "src/remote/remote_http_client.cpp", "kProgressWindowSeconds = 20", ok);
+    RequireContains(root, "src/remote/remote_http_client.cpp", "speed-limit", ok);
+    RequireContains(root, "src/remote/remote_http_client.cpp", "kIdleSpeedLimitBytesPerSecond = 1", ok);
+    RequireContains(root, "src/remote/remote_http_client.cpp", "connect-timeout", ok);
+    RequireContains(root, "src/remote/remote_http_client.cpp", "kConnectTimeoutSeconds = 20", ok);
 
     return ok ? 0 : 1;
 }

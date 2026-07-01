@@ -5,19 +5,32 @@ SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 INSTALLER="$SELF_DIR/textlt-install-runtime-deps.sh"
 BINARY="$SELF_DIR/textlt-bin"
 
+missing=""
+for tool in curl ssh sftp; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    missing="$missing $tool"
+  fi
+done
+
 if [ "${TEXTLT_CHECK_RUNTIME_ONLY:-}" = "1" ]; then
+  if [ -z "$missing" ]; then
+    echo "TextLT runtime dependencies are available: curl ssh sftp"
+    exit 0
+  fi
   if [ -x "$INSTALLER" ]; then
     exec "$INSTALLER"
   fi
-  command -v curl >/dev/null 2>&1
-  exit $?
+  echo "TextLT missing runtime dependencies:$missing" >&2
+  exit 127
 fi
 
-if ! command -v curl >/dev/null 2>&1; then
+if [ -n "$missing" ]; then
+  echo "TextLT missing runtime dependencies:$missing" >&2
   if [ -x "$INSTALLER" ]; then
     "$INSTALLER"
   else
-    echo "TextLT needs the external curl executable. Install it with: sudo apt install curl" >&2
+    echo "Installer script was not found: $INSTALLER" >&2
+    echo "Install manually: curl and openssh-client" >&2
     exit 127
   fi
 fi

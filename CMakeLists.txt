@@ -227,7 +227,19 @@ target_link_libraries(textlt PRIVATE
 )
 
 install(TARGETS textlt RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(PROGRAMS scripts/textlt-install-runtime-deps.sh DESTINATION ${CMAKE_INSTALL_BINDIR})
+if(UNIX)
+  install(PROGRAMS
+    scripts/textlt-install-runtime-deps.sh
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+  )
+endif()
+
+if(WIN32)
+  install(FILES
+    scripts/textlt-install-runtime-deps.ps1
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+  )
+endif()
 install(DIRECTORY themes DESTINATION ${CMAKE_INSTALL_DATADIR}/textlt)
 install(DIRECTORY text_processors DESTINATION ${CMAKE_INSTALL_DATADIR}/textlt)
 

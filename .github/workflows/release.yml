@@ -27,6 +27,7 @@ jobs:
             file \
             libfuse2 \
             curl \
+            openssh-client \
             libarchive-dev
 
       - name: Configure
@@ -41,7 +42,11 @@ jobs:
         run: |
           ctest --test-dir build -R "textlt_no_embedded_curl_test|textlt_remote_http_client_test" --output-on-failure
           command -v curl
+          command -v ssh
+          command -v sftp
           curl --version
+          ssh -V
+          sftp -h >/dev/null 2>&1 || true
 
       - name: Package Linux tar.gz
         run: |
@@ -141,10 +146,12 @@ jobs:
         run: |
           vcpkg install libarchive --triplet x64-windows-static
 
-      - name: Check external curl runtime
+      - name: Check external runtime tools
         shell: pwsh
         run: |
           curl.exe --version
+          ssh.exe -V
+          sftp.exe -h 2>$null; if ($LASTEXITCODE -ne 0) { Write-Host "sftp help command returned $LASTEXITCODE" }
 
       - name: Configure
         shell: pwsh

@@ -1,26 +1,46 @@
 $ErrorActionPreference = "Stop"
 
-$curl = Get-Command curl.exe -ErrorAction SilentlyContinue
-if ($curl) {
-    Write-Host "TextLT runtime dependency check: curl.exe is installed."
+$missing = @()
+foreach ($tool in @("curl.exe", "ssh.exe", "sftp.exe")) {
+    if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+        $missing += $tool
+    }
+}
+
+if ($missing.Count -eq 0) {
+    Write-Host "TextLT runtime dependencies are already installed: curl.exe ssh.exe sftp.exe"
     exit 0
 }
 
-Write-Host "TextLT needs the external curl.exe executable for cloud/HTTP features."
+Write-Host "TextLT missing runtime dependencies: $($missing -join ', ')"
 
-$winget = Get-Command winget.exe -ErrorAction SilentlyContinue
-if ($winget) {
-    Write-Host "Installing curl with winget..."
-    winget install --id cURL.cURL --source winget --accept-source-agreements --accept-package-agreements
-} else {
-    Write-Error "curl.exe is missing and winget is not available. Install curl manually or enable the Windows built-in curl.exe feature."
-    exit 127
+if ($missing -contains "ssh.exe" -or $missing -contains "sftp.exe") {
+    Write-Host "Trying to install OpenSSH Client Windows capability..."
+    try {
+        Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0 | Out-Null
+    } catch {
+        Write-Warning "Could not install OpenSSH Client automatically. Enable 'OpenSSH Client' in Windows Optional Features."
+    }
 }
 
-$curl = Get-Command curl.exe -ErrorAction SilentlyContinue
-if (-not $curl) {
-    Write-Error "curl installation finished, but curl.exe is still not available in PATH."
-    exit 127
+if ($missing -contains "curl.exe") {
+    if (Get-Command winget.exe -ErrorAction SilentlyContinue) {
+        Write-Host "Trying to install curl with winget..."
+        winget install --id cURL.cURL --silent --accept-package-agreements --accept-source-agreements
+    } else {
+        Write-Warning "winget is not available. Install curl.exe manually or add it to PATH."
+    }
 }
 
-Write-Host "TextLT runtime dependency check: curl.exe is installed."
+$stillMissing = @()
+foreach ($tool in @("curl.exe", "ssh.exe", "sftp.exe")) {
+    if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+        $stillMissing += $tool
+    }
+}
+
+if ($stillMissing.Count -gt 0) {
+    throw "TextLT runtime dependencies are still missing: $($stillMissing -join ', ')"
+}
+
+Write-Host "TextLT runtime dependencies installed: curl.exe ssh.exe sftp.exe"

@@ -191,3 +191,50 @@ sudo apt install curl
 ```
 
 The older `CurlManager` also uses the same external-curl path now, so the curl development package is no longer required for building TextLT.
+
+## Runtime dependency closure
+
+TextLT does not link against a curl development library for remote/cloud features.
+HTTP requests are sent through the external `curl` executable, and SFTP/SSH
+operations use the external OpenSSH tools `ssh` and `sftp`.
+
+Required runtime tools for remote work:
+
+```bash
+curl
+ssh
+sftp
+```
+
+Linux packages:
+
+```bash
+# Debian / Ubuntu / MX Linux
+sudo apt install curl openssh-client
+
+# Fedora
+sudo dnf install curl openssh-clients
+
+# Arch
+sudo pacman -S curl openssh
+
+# Alpine
+sudo apk add curl openssh-client
+```
+
+The release package includes:
+
+```text
+textlt-install-runtime-deps.sh
+textlt-install-runtime-deps.ps1
+```
+
+The Linux launcher checks `curl`, `ssh`, and `sftp` before starting TextLT and
+runs the installer script if something is missing.
+
+External `curl` uses a 20-second connection/progress window:
+
+- connection timeout: 20 seconds;
+- stalled-transfer timeout: 20 seconds without at least 1 byte/second;
+- if data keeps moving, transfer continues through the next 20-second window.
+
