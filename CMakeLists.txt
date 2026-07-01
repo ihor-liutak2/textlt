@@ -42,19 +42,8 @@ FetchContent_Declare(pugixml
 )
 FetchContent_MakeAvailable(pugixml)
 
-# Download support.
-find_package(CURL QUIET)
-
-if(CURL_FOUND)
-  message(STATUS "TextLT: libcurl found")
-  message(STATUS "TextLT: libcurl version: ${CURL_VERSION_STRING}")
-else()
-  message(FATAL_ERROR
-    "TextLT: libcurl development files were not found.\n"
-    "Install on Debian/Ubuntu/MX Linux:\n"
-    "  sudo apt install libcurl4-openssl-dev\n"
-  )
-endif()
+# Remote/network support uses the external curl executable at runtime.
+# No libcurl development package is required for building TextLT.
 
 # Archive extraction support.
 find_package(LibArchive QUIET)
@@ -192,6 +181,7 @@ add_executable(textlt
   src/remote/remote_connection_config.cpp
   src/remote/remote_config_store.cpp
   src/remote/remote_oauth_token_store.cpp
+  src/remote/remote_http_client.cpp
   src/remote/remote_dropbox_provider.cpp
   src/remote/remote_google_drive_provider.cpp
   src/remote/remote_microsoft_drive_provider.cpp
@@ -223,7 +213,6 @@ add_executable(textlt
 target_include_directories(textlt PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party
-  ${CURL_INCLUDE_DIRS}
   ${LibArchive_INCLUDE_DIRS}
 )
 
@@ -232,7 +221,6 @@ target_link_libraries(textlt PRIVATE
   ftxui::dom
   ftxui::component
   pugixml::pugixml
-  CURL::libcurl
   ${LibArchive_LIBRARIES}
   lua54
   Threads::Threads
@@ -293,56 +281,61 @@ target_include_directories(textlt_remote_oauth_token_store_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
 
+
+add_executable(textlt_remote_http_client_test
+  tests/remote_http_client_test.cpp
+  src/remote/remote_http_client.cpp
+  src/remote/remote_command_runner.cpp
+)
+
+target_include_directories(textlt_remote_http_client_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
 add_executable(textlt_remote_dropbox_provider_test
   tests/remote_dropbox_provider_test.cpp
   src/remote/remote_connection_config.cpp
   src/remote/remote_dropbox_provider.cpp
   src/remote/remote_oauth_token_store.cpp
+  src/remote/remote_http_client.cpp
+  src/remote/remote_command_runner.cpp
 )
 
 target_include_directories(textlt_remote_dropbox_provider_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party
-  ${CURL_INCLUDE_DIRS}
 )
 
-target_link_libraries(textlt_remote_dropbox_provider_test PRIVATE
-  CURL::libcurl
-)
 
 add_executable(textlt_remote_google_drive_provider_test
   tests/remote_google_drive_provider_test.cpp
   src/remote/remote_connection_config.cpp
   src/remote/remote_google_drive_provider.cpp
   src/remote/remote_oauth_token_store.cpp
+  src/remote/remote_http_client.cpp
+  src/remote/remote_command_runner.cpp
 )
 
 target_include_directories(textlt_remote_google_drive_provider_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party
-  ${CURL_INCLUDE_DIRS}
 )
 
-target_link_libraries(textlt_remote_google_drive_provider_test PRIVATE
-  CURL::libcurl
-)
 
 add_executable(textlt_remote_microsoft_drive_provider_test
   tests/remote_microsoft_drive_provider_test.cpp
   src/remote/remote_connection_config.cpp
   src/remote/remote_microsoft_drive_provider.cpp
   src/remote/remote_oauth_token_store.cpp
+  src/remote/remote_http_client.cpp
+  src/remote/remote_command_runner.cpp
 )
 
 target_include_directories(textlt_remote_microsoft_drive_provider_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party
-  ${CURL_INCLUDE_DIRS}
 )
 
-target_link_libraries(textlt_remote_microsoft_drive_provider_test PRIVATE
-  CURL::libcurl
-)
 
 target_link_libraries(textlt_keyboard_shortcuts_test PRIVATE ftxui::component)
 
@@ -367,6 +360,7 @@ add_test(NAME textlt_text_importer_test COMMAND textlt_text_importer_test)
 add_test(NAME textlt_keyboard_shortcuts_test COMMAND textlt_keyboard_shortcuts_test)
 add_test(NAME textlt_remote_path_test COMMAND textlt_remote_path_test)
 add_test(NAME textlt_remote_oauth_token_store_test COMMAND textlt_remote_oauth_token_store_test)
+add_test(NAME textlt_remote_http_client_test COMMAND textlt_remote_http_client_test)
 add_test(NAME textlt_remote_dropbox_provider_test COMMAND textlt_remote_dropbox_provider_test)
 add_test(NAME textlt_remote_google_drive_provider_test COMMAND textlt_remote_google_drive_provider_test)
 add_test(NAME textlt_remote_microsoft_drive_provider_test COMMAND textlt_remote_microsoft_drive_provider_test)

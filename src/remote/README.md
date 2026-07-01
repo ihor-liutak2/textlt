@@ -39,7 +39,7 @@ All fields are persisted in `remote_connections.json`.
 
 ## Active file-manager backends
 
-SFTP, Dropbox, Google Drive, and Microsoft OneDrive/SharePoint are active file-manager backends in this version. SFTP uses the external `ssh` and `sftp` programs that are already installed on the system. Cloud backends use the existing project libcurl dependency and token files.
+SFTP, Dropbox, Google Drive, and Microsoft OneDrive/SharePoint are active file-manager backends in this version. SFTP uses the external `ssh` and `sftp` programs that are already installed on the system. Cloud backends use the external `curl` program through the shared `RemoteHttpClient` helper and token files.
 
 ## Supported for SFTP
 
@@ -101,7 +101,7 @@ This module does not perform OAuth login yet. A later OAuth modal should fill th
 
 Dropbox is now the first active cloud file-manager backend.
 
-The Dropbox provider uses the existing project libcurl dependency and Dropbox HTTP API endpoints. It does not add a new HTTP library.
+The Dropbox provider uses Dropbox HTTP API endpoints through `RemoteHttpClient`, which calls the external `curl` executable. It does not require linking TextLT against libcurl.
 
 Supported Dropbox operations:
 
@@ -126,7 +126,7 @@ Google Drive is active after patch 11. Microsoft OneDrive/SharePoint is active a
 
 Google Drive is now an active cloud file-manager backend alongside SFTP and Dropbox.
 
-The Google Drive provider uses the existing project libcurl dependency and Google Drive API v3 endpoints. It does not add a new HTTP library.
+The Google Drive provider uses Google Drive API v3 endpoints through `RemoteHttpClient`, which calls the external `curl` executable. It does not require linking TextLT against libcurl.
 
 Supported Google Drive operations:
 
@@ -154,7 +154,7 @@ Microsoft OneDrive/SharePoint is active after patch 12.
 
 Microsoft OneDrive/SharePoint is now an active cloud file-manager backend alongside SFTP, Dropbox, and Google Drive.
 
-The Microsoft provider uses Microsoft Graph driveItem endpoints through the existing project libcurl dependency. It does not add a new HTTP library.
+The Microsoft provider uses Microsoft Graph driveItem endpoints through `RemoteHttpClient`, which calls the external `curl` executable. It does not require linking TextLT against libcurl.
 
 Supported Microsoft operations:
 
@@ -178,3 +178,16 @@ Microsoft remote root is represented as `/` in TextLT. Connection target selecti
 To use Microsoft files before a full OAuth login modal exists, the configured token file must contain an `access_token` value. The placeholder token created by the connection modal is not enough by itself.
 
 The first Microsoft provider version intentionally supports rename inside the same folder only. Cross-folder move support can be added later by updating `parentReference`.
+
+
+## External curl runtime dependency
+
+TextLT no longer links against libcurl for the remote/cloud module. HTTP requests are centralized in `src/remote/remote_http_client.*` and executed through the system `curl` program. This keeps the binary/install package smaller when the target system already provides `curl`.
+
+Install the runtime tool on Debian/Ubuntu/MX Linux with:
+
+```bash
+sudo apt install curl
+```
+
+The older `CurlManager` also uses the same external-curl path now, so `libcurl4-openssl-dev` is no longer required for building TextLT.

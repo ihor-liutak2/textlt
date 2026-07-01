@@ -2,19 +2,17 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
-#include <mutex>
 #include <sstream>
 #include <system_error>
 #include <utility>
 #include <vector>
 
-#include <curl/curl.h>
 
 #include "json_utils.hpp"
+#include "remote/remote_http_client.hpp"
 #include "remote/remote_oauth_token_store.hpp"
 
 namespace textlt {
@@ -23,51 +21,7 @@ namespace {
 constexpr const char* kGraphApiHost = "https://graph.microsoft.com/v1.0";
 constexpr const char* kUserAgent = "textlt/1.0";
 
-struct HttpResult {
-    bool ok = false;
-    long status_code = 0;
-    std::string body;
-    std::string error;
-};
-
-size_t WriteStringCallback(char* data, size_t size, size_t count, void* user_data) {
-    auto* output = static_cast<std::string*>(user_data);
-    output->append(data, size * count);
-    return size * count;
-}
-
-size_t WriteFileCallback(char* data, size_t size, size_t count, void* user_data) {
-    FILE* file = static_cast<FILE*>(user_data);
-    return std::fwrite(data, size, count, file);
-}
-
-class CurlHeaders {
-public:
-    CurlHeaders() = default;
-    CurlHeaders(const CurlHeaders&) = delete;
-    CurlHeaders& operator=(const CurlHeaders&) = delete;
-    ~CurlHeaders() {
-        if (headers_) {
-            curl_slist_free_all(headers_);
-        }
-    }
-
-    void Append(const std::string& header) {
-        headers_ = curl_slist_append(headers_, header.c_str());
-    }
-
-    curl_slist* Get() const { return headers_; }
-
-private:
-    curl_slist* headers_ = nullptr;
-};
-
-void EnsureCurlInitialized() {
-    static std::once_flag init_once;
-    std::call_once(init_once, [] {
-        curl_global_init(CURL_GLOBAL_DEFAULT);
-    });
-}
+using HttpResult = RemoteHttpResponse;
 
 std::string TrimForError(std::string value, size_t max_size = 1000) {
     while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front()))) {
@@ -104,18 +58,7 @@ std::string AuthorizationHeader(const std::string& token_type, const std::string
 }
 
 std::string UrlEncode(const std::string& value) {
-    EnsureCurlInitialized();
-    CURL* curl = curl_easy_init();
-    if (!curl) {
-        return value;
-    }
-    char* encoded = curl_easy_escape(curl, value.c_str(), static_cast<int>(value.size()));
-    std::string result = encoded ? encoded : value;
-    if (encoded) {
-        curl_free(encoded);
-    }
-    curl_easy_cleanup(curl);
-    return result;
+    return RemoteHttpClient::UrlEncode(value);
 }
 
 HttpResult HttpRequest(
@@ -125,52 +68,12 @@ HttpResult HttpRequest(
     const std::string& token_type,
     const std::vector<std::string>& extra_headers = {},
     const std::string& request_body = {}) {
-    EnsureCurlInitialized();
+    std::vector<std::string> headers;
+    headers.push_back(AuthorizationHeader(token_type, access_token));
+    headers.insert(headers.end(), extra_headers.begin(), extra_headers.end());
 
-    HttpResult result;
-    CURL* curl = curl_easy_init();
-    if (!curl) {
-        result.error = "Cannot initialize libcurl.";
-        return result;
-    }
-
-    CurlHeaders headers;
-    headers.Append(AuthorizationHeader(token_type, access_token));
-    for (const std::string& header : extra_headers) {
-        headers.Append(header);
-    }
-
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.Get());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteStringCallback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &result.body);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, kUserAgent);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L);
-
-    if (method == "POST") {
-        curl_easy_setopt(curl, CURLOPT_POST, 1L);
-    } else if (method == "PUT") {
-        curl_easy_setopt(curl, CURLOPT_UPLOAD, 0L);
-        curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
-    } else if (method != "GET") {
-        curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method.c_str());
-    }
-
-    if (!request_body.empty() || method == "POST" || method == "PATCH" || method == "PUT") {
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, request_body.data());
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(request_body.size()));
-    }
-
-    const CURLcode code = curl_easy_perform(curl);
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &result.status_code);
-    if (code != CURLE_OK) {
-        result.error = curl_easy_strerror(code);
-    }
-    curl_easy_cleanup(curl);
-
-    result.ok = code == CURLE_OK && result.status_code >= 200 && result.status_code < 300;
-    return result;
+    RemoteHttpClient client;
+    return client.Request(method, url, headers, request_body, 300);
 }
 
 HttpResult JsonRequest(
@@ -193,61 +96,14 @@ HttpResult DownloadToFile(
     const std::string& access_token,
     const std::string& token_type,
     const std::filesystem::path& local_path) {
-    EnsureCurlInitialized();
-
-    HttpResult result;
-    std::error_code fs_error;
-    const std::filesystem::path parent = local_path.parent_path();
-    if (!parent.empty()) {
-        std::filesystem::create_directories(parent, fs_error);
-        if (fs_error) {
-            result.error = "Cannot create local directory: " + parent.string() + "\n" + fs_error.message();
-            return result;
-        }
-    }
-
-    FILE* file = std::fopen(local_path.string().c_str(), "wb");
-    if (!file) {
-        result.error = "Cannot open local file for writing: " + local_path.string();
-        return result;
-    }
-
-    CURL* curl = curl_easy_init();
-    if (!curl) {
-        std::fclose(file);
-        result.error = "Cannot initialize libcurl.";
-        return result;
-    }
-
-    CurlHeaders headers;
-    headers.Append(AuthorizationHeader(token_type, access_token));
-
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.Get());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteFileCallback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
-    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, WriteStringCallback);
-    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &result.body);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, kUserAgent);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L);
-
-    const CURLcode code = curl_easy_perform(curl);
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &result.status_code);
-    if (code != CURLE_OK) {
-        result.error = curl_easy_strerror(code);
-    }
-    curl_easy_cleanup(curl);
-    const bool close_ok = std::fclose(file) == 0;
-
-    result.ok = code == CURLE_OK && close_ok && result.status_code >= 200 && result.status_code < 300;
-    if (!result.ok) {
-        std::filesystem::remove(local_path, fs_error);
-        if (result.error.empty() && !close_ok) {
-            result.error = "Cannot finish writing local file.";
-        }
-    }
-    return result;
+    RemoteHttpClient client;
+    return client.Download(
+        "GET",
+        url,
+        {AuthorizationHeader(token_type, access_token)},
+        local_path,
+        {},
+        300);
 }
 
 bool ReadWholeFile(const std::filesystem::path& path, std::string& content, std::string& error) {

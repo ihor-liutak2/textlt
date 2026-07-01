@@ -3,17 +3,14 @@
 #include <algorithm>
 #include <chrono>
 #include <cctype>
-#include <cstdio>
 #include <filesystem>
-#include <fstream>
-#include <mutex>
 #include <sstream>
 #include <system_error>
 #include <utility>
 
-#include <curl/curl.h>
 
 #include "json_utils.hpp"
+#include "remote/remote_http_client.hpp"
 #include "remote/remote_oauth_token_store.hpp"
 
 namespace textlt {
@@ -23,51 +20,7 @@ constexpr const char* kDropboxApiHost = "https://api.dropboxapi.com/2";
 constexpr const char* kDropboxContentHost = "https://content.dropboxapi.com/2";
 constexpr const char* kUserAgent = "textlt/1.0";
 
-struct HttpResult {
-    bool ok = false;
-    long status_code = 0;
-    std::string body;
-    std::string error;
-};
-
-size_t WriteStringCallback(char* data, size_t size, size_t count, void* user_data) {
-    auto* output = static_cast<std::string*>(user_data);
-    output->append(data, size * count);
-    return size * count;
-}
-
-size_t WriteFileCallback(char* data, size_t size, size_t count, void* user_data) {
-    FILE* file = static_cast<FILE*>(user_data);
-    return std::fwrite(data, size, count, file);
-}
-
-class CurlHeaders {
-public:
-    CurlHeaders() = default;
-    CurlHeaders(const CurlHeaders&) = delete;
-    CurlHeaders& operator=(const CurlHeaders&) = delete;
-    ~CurlHeaders() {
-        if (headers_) {
-            curl_slist_free_all(headers_);
-        }
-    }
-
-    void Append(const std::string& header) {
-        headers_ = curl_slist_append(headers_, header.c_str());
-    }
-
-    curl_slist* Get() const { return headers_; }
-
-private:
-    curl_slist* headers_ = nullptr;
-};
-
-void EnsureCurlInitialized() {
-    static std::once_flag init_once;
-    std::call_once(init_once, [] {
-        curl_global_init(CURL_GLOBAL_DEFAULT);
-    });
-}
+using HttpResult = RemoteHttpResponse;
 
 std::string TrimForError(std::string value, size_t max_size = 800) {
     while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front()))) {
@@ -108,40 +61,16 @@ HttpResult PostJson(
     const std::string& access_token,
     const std::string& token_type,
     const Json& request_body) {
-    EnsureCurlInitialized();
-
-    HttpResult result;
-    CURL* curl = curl_easy_init();
-    if (!curl) {
-        result.error = "Cannot initialize libcurl.";
-        return result;
-    }
-
-    const std::string body = request_body.dump();
-    CurlHeaders headers;
-    headers.Append(AuthorizationHeader(token_type, access_token));
-    headers.Append("Content-Type: application/json");
-
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_POST, 1L);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.Get());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteStringCallback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &result.body);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, kUserAgent);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 120L);
-
-    const CURLcode code = curl_easy_perform(curl);
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &result.status_code);
-    if (code != CURLE_OK) {
-        result.error = curl_easy_strerror(code);
-    }
-    curl_easy_cleanup(curl);
-
-    result.ok = code == CURLE_OK && result.status_code >= 200 && result.status_code < 300;
-    return result;
+    RemoteHttpClient client;
+    return client.Request(
+        "POST",
+        url,
+        {
+            AuthorizationHeader(token_type, access_token),
+            "Content-Type: application/json",
+        },
+        request_body.dump(),
+        120);
 }
 
 HttpResult PostContentDownload(
@@ -150,79 +79,17 @@ HttpResult PostContentDownload(
     const std::string& token_type,
     const Json& api_arg,
     const std::filesystem::path& local_path) {
-    EnsureCurlInitialized();
-
-    HttpResult result;
-    std::error_code fs_error;
-    const std::filesystem::path parent = local_path.parent_path();
-    if (!parent.empty()) {
-        std::filesystem::create_directories(parent, fs_error);
-        if (fs_error) {
-            result.error = "Cannot create local directory: " + parent.string() + "\n" + fs_error.message();
-            return result;
-        }
-    }
-
-    FILE* file = std::fopen(local_path.string().c_str(), "wb");
-    if (!file) {
-        result.error = "Cannot open local file for writing: " + local_path.string();
-        return result;
-    }
-
-    CURL* curl = curl_easy_init();
-    if (!curl) {
-        std::fclose(file);
-        result.error = "Cannot initialize libcurl.";
-        return result;
-    }
-
-    CurlHeaders headers;
-    headers.Append(AuthorizationHeader(token_type, access_token));
-    headers.Append("Dropbox-API-Arg: " + api_arg.dump());
-
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_POST, 1L);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, 0L);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.Get());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteFileCallback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
-    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, WriteStringCallback);
-    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &result.body);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, kUserAgent);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L);
-
-    const CURLcode code = curl_easy_perform(curl);
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &result.status_code);
-    if (code != CURLE_OK) {
-        result.error = curl_easy_strerror(code);
-    }
-    curl_easy_cleanup(curl);
-    const bool close_ok = std::fclose(file) == 0;
-
-    result.ok = code == CURLE_OK && close_ok && result.status_code >= 200 && result.status_code < 300;
-    if (!result.ok) {
-        std::filesystem::remove(local_path, fs_error);
-        if (result.error.empty() && !close_ok) {
-            result.error = "Cannot finish writing local file.";
-        }
-    }
-    return result;
-}
-
-bool ReadWholeFile(const std::filesystem::path& path, std::string& content, std::string& error) {
-    std::ifstream file(path, std::ios::binary);
-    if (!file) {
-        error = "Cannot open local file for upload: " + path.string();
-        return false;
-    }
-    content.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
-    if (!file.good() && !file.eof()) {
-        error = "Cannot read local file: " + path.string();
-        return false;
-    }
-    error.clear();
-    return true;
+    RemoteHttpClient client;
+    return client.Download(
+        "POST",
+        url,
+        {
+            AuthorizationHeader(token_type, access_token),
+            "Dropbox-API-Arg: " + api_arg.dump(),
+        },
+        local_path,
+        {},
+        300);
 }
 
 HttpResult PostContentUpload(
@@ -231,45 +98,17 @@ HttpResult PostContentUpload(
     const std::string& token_type,
     const Json& api_arg,
     const std::filesystem::path& local_path) {
-    EnsureCurlInitialized();
-
-    HttpResult result;
-    std::string file_content;
-    if (!ReadWholeFile(local_path, file_content, result.error)) {
-        return result;
-    }
-
-    CURL* curl = curl_easy_init();
-    if (!curl) {
-        result.error = "Cannot initialize libcurl.";
-        return result;
-    }
-
-    CurlHeaders headers;
-    headers.Append(AuthorizationHeader(token_type, access_token));
-    headers.Append("Content-Type: application/octet-stream");
-    headers.Append("Dropbox-API-Arg: " + api_arg.dump());
-
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_POST, 1L);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, file_content.data());
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(file_content.size()));
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.Get());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteStringCallback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &result.body);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, kUserAgent);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L);
-
-    const CURLcode code = curl_easy_perform(curl);
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &result.status_code);
-    if (code != CURLE_OK) {
-        result.error = curl_easy_strerror(code);
-    }
-    curl_easy_cleanup(curl);
-
-    result.ok = code == CURLE_OK && result.status_code >= 200 && result.status_code < 300;
-    return result;
+    RemoteHttpClient client;
+    return client.UploadFile(
+        "POST",
+        url,
+        {
+            AuthorizationHeader(token_type, access_token),
+            "Content-Type: application/octet-stream",
+            "Dropbox-API-Arg: " + api_arg.dump(),
+        },
+        local_path,
+        300);
 }
 
 RemoteEntryType DropboxEntryType(const Json& entry) {
