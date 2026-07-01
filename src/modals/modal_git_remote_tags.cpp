@@ -108,7 +108,9 @@ void GitModalContent::CreateTag() {
     RequestConfirm(
         "Confirm tag create",
         message.empty() ? "Create lightweight tag." : "Create annotated tag.",
-        message.empty() ? "git tag " + tag_name : "git tag -a " + tag_name + " -m \"message\"",
+        message.empty()
+            ? "git tag " + tag_name
+            : "git tag -a " + tag_name + " -m \"" + TrimForDisplay(message, 70) + "\"",
         [this, tag_name, message] {
             RunAndRefresh("Create tag", git_manager_->CreateTag(tag_name, message));
             RefreshTags();
@@ -244,6 +246,21 @@ ftxui::Element GitModalContent::RenderRemoteTab() {
 
 ftxui::Element GitModalContent::RenderTagsTab() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    ftxui::Element tag_list = tag_labels_.empty()
+        ? (ftxui::text("No tags.") | ftxui::color(theme.modal_text_color) |
+           ftxui::frame | ftxui::yflex)
+        : (tag_menu_->Render() | ftxui::vscroll_indicator |
+           ftxui::frame | ftxui::yflex);
+    ftxui::Element padded_tag_list = ftxui::vbox({
+        ftxui::text(""),
+        ftxui::hbox({
+            ftxui::text(" "),
+            tag_list | ftxui::yflex,
+            ftxui::text("          "),
+        }) | ftxui::yflex,
+        ftxui::text(""),
+    }) | ftxui::yflex;
+
     return ftxui::vbox({
         ftxui::hbox({
             ftxui::text("Tags") | ftxui::bold | ftxui::color(theme.modal_accent),
@@ -266,9 +283,7 @@ ftxui::Element GitModalContent::RenderTagsTab() {
                 ftxui::color(theme.modal_input_fg) |
                 ftxui::xflex,
         }),
-        tag_labels_.empty()
-            ? (ftxui::text("No tags.") | ftxui::color(theme.modal_text_color) | ftxui::frame | ftxui::yflex)
-            : (tag_menu_->Render() | ftxui::vscroll_indicator | ftxui::frame | ftxui::yflex),
+        padded_tag_list,
         ftxui::separator() | ftxui::color(theme.modal_border),
         ftxui::hbox({
             ftxui::text("Tag name: ") | ftxui::color(theme.modal_text_color),
