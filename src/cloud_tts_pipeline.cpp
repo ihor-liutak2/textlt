@@ -496,6 +496,104 @@ bool CloudTtsPipeline::ClearBookAudioCache(const std::string& book_id, std::stri
     return true;
 }
 
+
+bool CloudTtsPipeline::GetChunkAudioPath(
+    const std::string& book_id,
+    size_t chunk_index,
+    const std::string& voice_id,
+    std::filesystem::path* audio_path,
+    std::string* error) const {
+    if (!audio_path) {
+        if (error) {
+            *error = "Audio output path target is missing";
+        }
+        return false;
+    }
+    if (book_id.empty()) {
+        if (error) {
+            *error = "Book id is empty";
+        }
+        return false;
+    }
+    if (voice_id.empty()) {
+        if (error) {
+            *error = "Voice is not selected";
+        }
+        return false;
+    }
+
+    const std::filesystem::path chunks_path = BookDirectory(book_id) / "chunks.json";
+    const Json chunks_json = LoadJsonObject(chunks_path);
+    if (!chunks_json.is_array() || chunk_index >= chunks_json.size()) {
+        if (error) {
+            *error = "Chunk index is out of range";
+        }
+        return false;
+    }
+
+    const Json& chunk = chunks_json[chunk_index];
+    std::error_code exists_error;
+    const std::filesystem::path selected_voice_audio = ChunkAudioPath(book_id, chunk_index, voice_id);
+    if (std::filesystem::exists(selected_voice_audio, exists_error)) {
+        *audio_path = selected_voice_audio;
+        return true;
+    }
+
+    const std::string stored_audio_path = JsonString(chunk, "audio_path");
+    if (!stored_audio_path.empty()) {
+        exists_error.clear();
+        const std::filesystem::path stored_candidate =
+            BookDirectory(book_id) / std::filesystem::path(stored_audio_path);
+        if (std::filesystem::exists(stored_candidate, exists_error)) {
+            *audio_path = stored_candidate;
+            return true;
+        }
+    }
+
+    if (error) {
+        *error = "Chunk audio has not been generated yet";
+    }
+    return false;
+}
+
+bool CloudTtsPipeline::MarkChunkPlayed(
+    const std::string& book_id,
+    size_t chunk_index,
+    const std::string& voice_id,
+    std::string* error) const {
+    if (book_id.empty()) {
+        if (error) {
+            *error = "Book id is empty";
+        }
+        return false;
+    }
+
+    const std::filesystem::path chunks_path = BookDirectory(book_id) / "chunks.json";
+    Json chunks_json = LoadJsonObject(chunks_path);
+    if (!chunks_json.is_array() || chunk_index >= chunks_json.size()) {
+        if (error) {
+            *error = "Chunk index is out of range";
+        }
+        return false;
+    }
+
+    std::filesystem::path audio_path;
+    std::string audio_error;
+    if (!GetChunkAudioPath(book_id, chunk_index, voice_id, &audio_path, &audio_error)) {
+        if (error) {
+            *error = audio_error.empty() ? "Chunk audio is missing" : audio_error;
+        }
+        return false;
+    }
+
+    Json& chunk = chunks_json[chunk_index];
+    chunk["status"] = "played";
+    if (JsonString(chunk, "audio_path").empty()) {
+        chunk["audio_path"] = RelativeChunkAudioPath(chunk_index, voice_id).generic_string();
+    }
+    return WriteJsonAtomically(chunks_path, chunks_json);
+}
+
 uintmax_t CloudTtsPipeline::BookAudioCacheSize(const std::string& book_id) const {
     const std::filesystem::path audio_directory = BookDirectory(book_id) / "audio";
     uintmax_t total = 0;

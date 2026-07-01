@@ -139,13 +139,13 @@ ftxui::Element TextltApp::RenderTtsHeaderStrip() {
         text("  "),
         title_bar_open_tts_button_ ? title_bar_open_tts_button_->Render() : text("[TTS]"),
         text(" "),
-        text("[Play]") | dim | color(current_theme_.menu_foreground),
+        title_bar_tts_play_button_ ? title_bar_tts_play_button_->Render() : text("[Play]"),
         text(" "),
-        text("[Pause]") | dim | color(current_theme_.menu_foreground),
+        title_bar_tts_pause_button_ ? title_bar_tts_pause_button_->Render() : text("[Pause]"),
         text(" "),
-        text("[Stop]") | dim | color(current_theme_.menu_foreground),
+        title_bar_tts_stop_button_ ? title_bar_tts_stop_button_->Render() : text("[Stop]"),
         text(" "),
-        text("[Next]") | dim | color(current_theme_.menu_foreground),
+        title_bar_tts_next_button_ ? title_bar_tts_next_button_->Render() : text("[Next]"),
     };
 
     return hbox(std::move(controls));

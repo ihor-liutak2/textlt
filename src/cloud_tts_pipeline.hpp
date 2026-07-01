@@ -133,6 +133,17 @@ public:
         size_t lookahead_count,
         std::string* error) const;
     bool ClearBookAudioCache(const std::string& book_id, std::string* error) const;
+    bool GetChunkAudioPath(
+        const std::string& book_id,
+        size_t chunk_index,
+        const std::string& voice_id,
+        std::filesystem::path* audio_path,
+        std::string* error) const;
+    bool MarkChunkPlayed(
+        const std::string& book_id,
+        size_t chunk_index,
+        const std::string& voice_id,
+        std::string* error) const;
     uintmax_t BookAudioCacheSize(const std::string& book_id) const;
     size_t FindChunkIndexForLine(const std::string& book_id, size_t line) const;
 

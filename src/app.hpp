@@ -322,6 +322,10 @@ private:
     std::shared_ptr<MenuBarComponent> menu_bar_;
     ftxui::Component title_bar_component_;
     ftxui::Component title_bar_open_tts_button_;
+    ftxui::Component title_bar_tts_play_button_;
+    ftxui::Component title_bar_tts_pause_button_;
+    ftxui::Component title_bar_tts_stop_button_;
+    ftxui::Component title_bar_tts_next_button_;
     ftxui::Component body_container_;
     ftxui::Component main_container_;
     ftxui::Component root_container_;

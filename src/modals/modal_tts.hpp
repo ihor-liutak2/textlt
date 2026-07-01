@@ -15,6 +15,7 @@
 #include "modal_interface.hpp"
 #include "modal_window.hpp"
 #include "theme.hpp"
+#include "tts_audio_player.hpp"
 
 namespace textlt {
 
@@ -23,7 +24,8 @@ public:
     TtsModalContent(
         const Theme* theme,
         CloudTtsPipeline* pipeline,
-        std::function<void()> prepare_current_file);
+        std::function<void()> prepare_current_file,
+        std::function<void()> request_ui_refresh);
 
     ftxui::Element Render() override;
     ~TtsModalContent() override;
@@ -41,8 +43,13 @@ public:
     void Open();
     void RefreshLibrary();
     bool IsAudioWorkerRunning() const;
+    bool IsPlaybackActive() const;
     bool HasPreparedBook() const;
     std::string HeaderStatus() const;
+    void Play();
+    void Pause();
+    void Stop();
+    void Next();
 
 private:
     enum class Tab {
@@ -67,7 +74,16 @@ private:
     ftxui::Element RenderBookInfoPanel() const;
     void SaveSelectedVoice();
     void StartGenerateAudio(size_t lookahead_count);
+    void StartGenerateAllAudio();
     void ClearSelectedAudioCache();
+    void StartPlaybackFrom(size_t chunk_index);
+    void PlaybackLoop(std::string book_id,
+                      std::string voice_id,
+                      size_t start_chunk_index,
+                      size_t total_chunks);
+    void SetPlaybackStatus(std::string status);
+    void NotifyUiRefresh();
+    void JoinPlaybackWorker();
     std::string SelectedBookId() const;
     std::string SelectedVoiceId() const;
     size_t SelectedStartChunkIndex() const;
@@ -78,6 +94,7 @@ private:
     const Theme* theme_ = nullptr;
     CloudTtsPipeline* pipeline_ = nullptr;
     std::function<void()> prepare_current_file_;
+    std::function<void()> request_ui_refresh_;
     int selected_tab_ = static_cast<int>(Tab::Run);
     std::vector<CloudTtsPipeline::BookInfo> library_books_;
     std::vector<std::string> library_book_labels_ = {"No prepared books"};
@@ -104,6 +121,17 @@ private:
     std::string audio_worker_status_;
     bool audio_worker_refresh_pending_ = false;
 
+    std::thread playback_worker_;
+    mutable std::mutex playback_mutex_;
+    std::atomic<bool> playback_stop_requested_{false};
+    std::atomic<bool> playback_pause_requested_{false};
+    std::atomic<bool> playback_next_requested_{false};
+    bool playback_worker_running_ = false;
+    bool playback_paused_ = false;
+    size_t playback_chunk_index_ = 0;
+    std::string playback_status_;
+    TtsAudioPlayer audio_player_;
+
     ftxui::Component run_tab_button_;
     ftxui::Component library_tab_button_;
     ftxui::Component tab_buttons_;
@@ -115,6 +143,11 @@ private:
     ftxui::Component save_voice_button_;
     ftxui::Component generate_current_button_;
     ftxui::Component generate_next_button_;
+    ftxui::Component generate_all_button_;
+    ftxui::Component play_button_;
+    ftxui::Component pause_button_;
+    ftxui::Component stop_button_;
+    ftxui::Component next_button_;
     ftxui::Component clear_audio_cache_button_;
     ftxui::Component info_button_;
     ftxui::Component run_book_menu_;
@@ -139,7 +172,8 @@ public:
     TtsModal(
         const Theme* theme,
         CloudTtsPipeline* pipeline,
-        std::function<void()> prepare_current_file);
+        std::function<void()> prepare_current_file,
+        std::function<void()> request_ui_refresh);
 
     ftxui::Component View() const;
     void Open();
@@ -147,8 +181,13 @@ public:
     bool IsOpen() const;
     bool OnEvent(ftxui::Event event);
     bool IsAudioWorkerRunning() const;
+    bool IsPlaybackActive() const;
     bool ShouldShowHeaderControls() const;
     std::string HeaderStatus() const;
+    void Play();
+    void Pause();
+    void Stop();
+    void Next();
 
 private:
     bool open_ = false;

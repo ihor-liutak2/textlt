@@ -28,6 +28,8 @@ jobs:
             libfuse2 \
             curl \
             openssh-client \
+            pulseaudio-utils \
+            alsa-utils \
             libarchive-dev
 
       - name: Configure
@@ -44,6 +46,7 @@ jobs:
           command -v curl
           command -v ssh
           command -v sftp
+          command -v paplay || command -v aplay || command -v ffplay || command -v pw-play
           curl --version
           ssh -V
           sftp -h >/dev/null 2>&1 || true
@@ -152,6 +155,7 @@ jobs:
           curl.exe --version
           ssh.exe -V
           sftp.exe -h 2>$null; if ($LASTEXITCODE -ne 0) { Write-Host "sftp help command returned $LASTEXITCODE" }
+          powershell.exe -NoProfile -Command "$PSVersionTable.PSVersion"
 
       - name: Configure
         shell: pwsh

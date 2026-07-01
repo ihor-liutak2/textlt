@@ -151,10 +151,12 @@ ftxui::Element SuggestionLine(const std::vector<std::string>& suggestions,
 TtsModalContent::TtsModalContent(
     const Theme* theme,
     CloudTtsPipeline* pipeline,
-    std::function<void()> prepare_current_file)
+    std::function<void()> prepare_current_file,
+    std::function<void()> request_ui_refresh)
     : theme_(theme),
       pipeline_(pipeline),
-      prepare_current_file_(std::move(prepare_current_file)) {
+      prepare_current_file_(std::move(prepare_current_file)),
+      request_ui_refresh_(std::move(request_ui_refresh)) {
     run_tab_button_ = MakeTabButton("Run", static_cast<int>(Tab::Run));
     library_tab_button_ = MakeTabButton("Library", static_cast<int>(Tab::Library));
     tab_buttons_ = ftxui::Container::Horizontal({
@@ -176,6 +178,16 @@ TtsModalContent::TtsModalContent(
         MakeTextButton("Generate current", [this] { StartGenerateAudio(1); });
     generate_next_button_ =
         MakeTextButton("Generate next 3", [this] { StartGenerateAudio(4); });
+    generate_all_button_ =
+        MakeTextButton("Generate all", [this] { StartGenerateAllAudio(); });
+    play_button_ =
+        MakeTextButton("Play", [this] { Play(); });
+    pause_button_ =
+        MakeTextButton("Pause", [this] { Pause(); });
+    stop_button_ =
+        MakeTextButton("Stop", [this] { Stop(); });
+    next_button_ =
+        MakeTextButton("Next", [this] { Next(); });
     clear_audio_cache_button_ =
         MakeTextButton("Clear audio cache", [this] { ClearSelectedAudioCache(); });
     info_button_ =
@@ -241,7 +253,14 @@ TtsModalContent::TtsModalContent(
         ftxui::Container::Horizontal({
             generate_current_button_,
             generate_next_button_,
+            generate_all_button_,
             clear_audio_cache_button_,
+        }),
+        ftxui::Container::Horizontal({
+            play_button_,
+            pause_button_,
+            stop_button_,
+            next_button_,
         }),
     });
 
@@ -274,6 +293,8 @@ TtsModalContent::TtsModalContent(
 }
 
 TtsModalContent::~TtsModalContent() {
+    Stop();
+    JoinPlaybackWorker();
     JoinAudioWorker();
 }
 
@@ -703,7 +724,285 @@ void TtsModalContent::StartGenerateAudio(size_t lookahead_count) {
             audio_worker_status_ = final_status;
             audio_worker_refresh_pending_ = true;
         }
+        NotifyUiRefresh();
     });
+}
+
+
+void TtsModalContent::StartGenerateAllAudio() {
+    if (library_books_.empty() ||
+        selected_library_book_ < 0 ||
+        selected_library_book_ >= static_cast<int>(library_books_.size())) {
+        status_ = "No prepared book selected";
+        return;
+    }
+    const CloudTtsPipeline::BookInfo& book = library_books_[selected_library_book_];
+    StartGenerateAudio(book.total_chunks == 0 ? 1 : book.total_chunks);
+}
+
+void TtsModalContent::NotifyUiRefresh() {
+    if (request_ui_refresh_) {
+        request_ui_refresh_();
+    }
+}
+
+void TtsModalContent::SetPlaybackStatus(std::string status) {
+    {
+        std::lock_guard<std::mutex> lock(playback_mutex_);
+        playback_status_ = std::move(status);
+    }
+    NotifyUiRefresh();
+}
+
+void TtsModalContent::JoinPlaybackWorker() {
+    if (playback_worker_.joinable()) {
+        playback_worker_.join();
+    }
+}
+
+void TtsModalContent::StartPlaybackFrom(size_t chunk_index) {
+    if (!pipeline_) {
+        status_ = "TTS pipeline is not available";
+        return;
+    }
+    if (!TtsAudioPlayer::HasAvailablePlayer()) {
+        status_ = TtsAudioPlayer::DependencyHelpText();
+        return;
+    }
+
+    const std::string book_id = SelectedBookId();
+    if (book_id.empty()) {
+        status_ = "No prepared book selected";
+        return;
+    }
+    const std::string voice_id = SelectedVoiceId();
+    if (voice_id.empty()) {
+        status_ = "No Piper voice selected";
+        return;
+    }
+    if (!pipeline_->PiperRuntimeInstalled()) {
+        status_ = "Piper runtime is not installed. Use Assistant Settings / TTS / Install Piper.";
+        return;
+    }
+    if (selected_piper_voice_ >= 0 &&
+        selected_piper_voice_ < static_cast<int>(piper_voice_installed_.size()) &&
+        !piper_voice_installed_[selected_piper_voice_]) {
+        status_ = "Selected voice is not installed. Use Assistant Settings / TTS to download it.";
+        return;
+    }
+    if (library_books_.empty() ||
+        selected_library_book_ < 0 ||
+        selected_library_book_ >= static_cast<int>(library_books_.size())) {
+        status_ = "No prepared book selected";
+        return;
+    }
+
+    const CloudTtsPipeline::BookInfo& book = library_books_[selected_library_book_];
+    if (book.total_chunks == 0) {
+        status_ = "Selected book has no TTS chunks";
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(playback_mutex_);
+        if (playback_worker_running_) {
+            status_ = "Playback is already running";
+            return;
+        }
+    }
+
+    JoinPlaybackWorker();
+    playback_stop_requested_.store(false);
+    playback_pause_requested_.store(false);
+    playback_next_requested_.store(false);
+
+    chunk_index = std::min(chunk_index, book.total_chunks - 1);
+    {
+        std::lock_guard<std::mutex> lock(playback_mutex_);
+        playback_worker_running_ = true;
+        playback_paused_ = false;
+        playback_chunk_index_ = chunk_index;
+        playback_status_ = "Starting playback";
+        status_ = "Starting playback";
+    }
+
+    playback_worker_ = std::thread(
+        [this, book_id, voice_id, chunk_index, total_chunks = book.total_chunks] {
+            PlaybackLoop(book_id, voice_id, chunk_index, total_chunks);
+        });
+    NotifyUiRefresh();
+}
+
+void TtsModalContent::PlaybackLoop(
+    std::string book_id,
+    std::string voice_id,
+    size_t start_chunk_index,
+    size_t total_chunks) {
+    size_t index = start_chunk_index;
+    std::string final_status;
+
+    while (index < total_chunks) {
+        if (playback_stop_requested_.load()) {
+            break;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(playback_mutex_);
+            playback_chunk_index_ = index;
+            playback_status_ = "Preparing chunk " + std::to_string(index + 1) + "/" +
+                               std::to_string(total_chunks);
+        }
+        NotifyUiRefresh();
+
+        std::string error;
+        if (!pipeline_->GenerateChunkAudio(book_id, index, voice_id, &error)) {
+            final_status = error.empty()
+                ? "Playback failed while generating audio"
+                : "Playback failed: " + error;
+            break;
+        }
+
+        std::filesystem::path audio_path;
+        if (!pipeline_->GetChunkAudioPath(book_id, index, voice_id, &audio_path, &error)) {
+            final_status = error.empty()
+                ? "Playback failed: audio path is missing"
+                : "Playback failed: " + error;
+            break;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(playback_mutex_);
+            playback_chunk_index_ = index;
+            playback_status_ = "Playing chunk " + std::to_string(index + 1) + "/" +
+                               std::to_string(total_chunks);
+        }
+        NotifyUiRefresh();
+
+        std::string play_error;
+        const bool played = audio_player_.PlayFileBlocking(
+            audio_path,
+            &playback_stop_requested_,
+            &play_error);
+
+        if (playback_next_requested_.exchange(false)) {
+            playback_stop_requested_.store(false);
+            playback_pause_requested_.store(false);
+            index = std::min(index + 1, total_chunks);
+            continue;
+        }
+
+        if (playback_stop_requested_.load()) {
+            break;
+        }
+
+        if (!played) {
+            final_status = play_error.empty()
+                ? "Playback failed"
+                : "Playback failed: " + play_error;
+            break;
+        }
+
+        pipeline_->MarkChunkPlayed(book_id, index, voice_id, nullptr);
+        ++index;
+    }
+
+    const bool paused = playback_pause_requested_.load();
+    const bool stopped = playback_stop_requested_.load();
+    {
+        std::lock_guard<std::mutex> lock(playback_mutex_);
+        playback_worker_running_ = false;
+        playback_paused_ = paused;
+        playback_chunk_index_ = std::min(index, total_chunks == 0 ? size_t{0} : total_chunks - 1);
+        if (paused) {
+            playback_status_ = "Paused at chunk " + std::to_string(playback_chunk_index_ + 1);
+        } else if (stopped) {
+            playback_status_ = "Playback stopped";
+        } else if (!final_status.empty()) {
+            playback_status_ = final_status;
+        } else {
+            playback_status_ = "Playback complete";
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(audio_worker_mutex_);
+        audio_worker_status_.clear();
+        audio_worker_refresh_pending_ = true;
+    }
+    NotifyUiRefresh();
+}
+
+void TtsModalContent::Play() {
+    {
+        std::lock_guard<std::mutex> lock(playback_mutex_);
+        if (playback_worker_running_) {
+            status_ = playback_status_.empty() ? "Playback is already running" : playback_status_;
+            return;
+        }
+    }
+
+    size_t start_chunk = SelectedStartChunkIndex();
+    {
+        std::lock_guard<std::mutex> lock(playback_mutex_);
+        if (playback_paused_) {
+            start_chunk = playback_chunk_index_;
+        }
+    }
+    StartPlaybackFrom(start_chunk);
+}
+
+void TtsModalContent::Pause() {
+    std::lock_guard<std::mutex> lock(playback_mutex_);
+    if (!playback_worker_running_) {
+        status_ = playback_paused_ ? playback_status_ : "Playback is not running";
+        return;
+    }
+    playback_pause_requested_.store(true);
+    playback_stop_requested_.store(true);
+    status_ = "Pausing playback...";
+    playback_status_ = status_;
+    NotifyUiRefresh();
+}
+
+void TtsModalContent::Stop() {
+    {
+        std::lock_guard<std::mutex> lock(playback_mutex_);
+        if (!playback_worker_running_) {
+            playback_paused_ = false;
+            playback_status_ = "Playback stopped";
+            status_ = "Playback stopped";
+            return;
+        }
+        playback_pause_requested_.store(false);
+        playback_next_requested_.store(false);
+        playback_stop_requested_.store(true);
+        status_ = "Stopping playback...";
+        playback_status_ = status_;
+    }
+    NotifyUiRefresh();
+}
+
+void TtsModalContent::Next() {
+    size_t next_chunk = 0;
+    bool should_start = false;
+    {
+        std::lock_guard<std::mutex> lock(playback_mutex_);
+        if (playback_worker_running_) {
+            playback_next_requested_.store(true);
+            playback_pause_requested_.store(false);
+            playback_stop_requested_.store(true);
+            status_ = "Skipping to next chunk...";
+            playback_status_ = status_;
+            NotifyUiRefresh();
+            return;
+        }
+        next_chunk = playback_paused_ ? playback_chunk_index_ + 1 : SelectedStartChunkIndex() + 1;
+        playback_paused_ = false;
+        should_start = true;
+    }
+    if (should_start) {
+        StartPlaybackFrom(next_chunk);
+    }
 }
 
 void TtsModalContent::ClearSelectedAudioCache() {
@@ -750,6 +1049,11 @@ bool TtsModalContent::IsAudioWorkerRunning() const {
     return audio_worker_running_;
 }
 
+bool TtsModalContent::IsPlaybackActive() const {
+    std::lock_guard<std::mutex> lock(playback_mutex_);
+    return playback_worker_running_ || playback_paused_;
+}
+
 bool TtsModalContent::HasPreparedBook() const {
     return !library_books_.empty() &&
            selected_library_book_ >= 0 &&
@@ -757,6 +1061,12 @@ bool TtsModalContent::HasPreparedBook() const {
 }
 
 std::string TtsModalContent::HeaderStatus() const {
+    {
+        std::lock_guard<std::mutex> lock(playback_mutex_);
+        if (playback_worker_running_ || playback_paused_) {
+            return playback_status_.empty() ? "Playback ready" : playback_status_;
+        }
+    }
     {
         std::lock_guard<std::mutex> lock(audio_worker_mutex_);
         if (audio_worker_running_) {
@@ -900,10 +1210,24 @@ ftxui::Element TtsModalContent::RenderRunTab() {
             text(" "),
             generate_next_button_->Render(),
             text(" "),
+            generate_all_button_->Render(),
+            text(" "),
             clear_audio_cache_button_->Render(),
         }),
         StatusLine("Cache size", SelectedAudioCacheSizeText(), theme),
-        paragraph("Generate current creates audio for the current chunk. Generate next 3 keeps a small cache ready for future playback. Voice download/runtime install stays in Assistant Settings / TTS.") |
+        separator() | color(theme.modal_border),
+        PanelTitle("Playback", theme),
+        hbox({
+            play_button_->Render(),
+            text(" "),
+            pause_button_->Render(),
+            text(" "),
+            stop_button_->Render(),
+            text(" "),
+            next_button_->Render(),
+        }),
+        StatusLine("Player", TtsAudioPlayer::SelectedPlayerLabel().empty() ? TtsAudioPlayer::DependencyHelpText() : TtsAudioPlayer::SelectedPlayerLabel(), theme),
+        paragraph("Play generates missing chunks on demand, plays them with a system audio player, and advances automatically. Pause stops at the current chunk; Play resumes from that chunk.") |
             dim |
             color(theme.modal_text_color),
     }) | flex;
@@ -1061,12 +1385,14 @@ ftxui::Element TtsModalContent::Render() {
 TtsModal::TtsModal(
     const Theme* theme,
     CloudTtsPipeline* pipeline,
-    std::function<void()> prepare_current_file)
+    std::function<void()> prepare_current_file,
+    std::function<void()> request_ui_refresh)
     : theme_(theme) {
     content_ = std::make_shared<TtsModalContent>(
         theme_,
         pipeline,
-        std::move(prepare_current_file));
+        std::move(prepare_current_file),
+        std::move(request_ui_refresh));
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
     modal_->SetFooterText("Escape closes.");
     modal_->SetFooterButtons({{"Close", [this] { Close(); }}});
@@ -1101,12 +1427,41 @@ bool TtsModal::IsAudioWorkerRunning() const {
     return content_ && content_->IsAudioWorkerRunning();
 }
 
+bool TtsModal::IsPlaybackActive() const {
+    return content_ && content_->IsPlaybackActive();
+}
+
 bool TtsModal::ShouldShowHeaderControls() const {
-    return content_ && (content_->IsAudioWorkerRunning() || content_->HasPreparedBook());
+    return content_ &&
+           (content_->IsAudioWorkerRunning() || content_->IsPlaybackActive() || content_->HasPreparedBook());
 }
 
 std::string TtsModal::HeaderStatus() const {
     return content_ ? content_->HeaderStatus() : std::string();
+}
+
+void TtsModal::Play() {
+    if (content_) {
+        content_->Play();
+    }
+}
+
+void TtsModal::Pause() {
+    if (content_) {
+        content_->Pause();
+    }
+}
+
+void TtsModal::Stop() {
+    if (content_) {
+        content_->Stop();
+    }
+}
+
+void TtsModal::Next() {
+    if (content_) {
+        content_->Next();
+    }
 }
 
 } // namespace textlt

@@ -178,7 +178,8 @@ TextltApp::TextltApp()
       tts_modal_(
           &current_theme_,
           &cloud_tts_pipeline_,
-          [this] { QueueTtsBookPreparationFromCursor(); }),
+          [this] { QueueTtsBookPreparationFromCursor(); },
+          [this] { screen_.PostEvent(ftxui::Event::Custom); }),
       view_layout_modal_(
           &current_theme_,
           [this] { return CurrentViewLayoutSnapshot(); },
@@ -232,8 +233,42 @@ TextltApp::TextltApp()
             screen_.PostEvent(ftxui::Event::Custom);
         },
         &current_theme_));
+    title_bar_tts_play_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
+        "Play",
+        [this] {
+            tts_modal_.Play();
+            screen_.PostEvent(ftxui::Event::Custom);
+        },
+        &current_theme_));
+    title_bar_tts_pause_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
+        "Pause",
+        [this] {
+            tts_modal_.Pause();
+            screen_.PostEvent(ftxui::Event::Custom);
+        },
+        &current_theme_));
+    title_bar_tts_stop_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
+        "Stop",
+        [this] {
+            tts_modal_.Stop();
+            screen_.PostEvent(ftxui::Event::Custom);
+        },
+        &current_theme_));
+    title_bar_tts_next_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
+        "Next",
+        [this] {
+            tts_modal_.Next();
+            screen_.PostEvent(ftxui::Event::Custom);
+        },
+        &current_theme_));
     title_bar_component_ = ftxui::Renderer(
-        ftxui::Container::Horizontal({title_bar_open_tts_button_}),
+        ftxui::Container::Horizontal({
+            title_bar_open_tts_button_,
+            title_bar_tts_play_button_,
+            title_bar_tts_pause_button_,
+            title_bar_tts_stop_button_,
+            title_bar_tts_next_button_,
+        }),
         [this] { return RenderTitleBar(); });
 
     editor_panes_.assign(3, EditorPaneState{});
