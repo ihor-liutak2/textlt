@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -109,7 +110,9 @@ public:
     void Submit(
         std::string entire_document_text,
         std::filesystem::path source_file_path,
-        size_t current_cursor_line);
+        size_t current_cursor_line,
+        bool force_rebuild = false);
+    std::string WaitForPendingPreparation();
     std::vector<BookInfo> ListLocalBooks() const;
     bool LoadBookMetadata(const std::string& book_id, BookMetadata* book) const;
     bool UpdateBookMetadata(
@@ -133,6 +136,7 @@ public:
         size_t lookahead_count,
         std::string* error) const;
     bool ClearBookAudioCache(const std::string& book_id, std::string* error) const;
+    bool DeleteBook(const std::string& book_id, std::string* error) const;
     bool GetChunkAudioPath(
         const std::string& book_id,
         size_t chunk_index,
@@ -181,6 +185,8 @@ private:
     void JoinWorker();
 
     std::thread worker_;
+    mutable std::mutex preparation_mutex_;
+    std::string last_prepared_book_id_;
 };
 
 } // namespace textlt

@@ -13,14 +13,18 @@ namespace textlt {
 
 using Json = nlohmann::ordered_json;
 
-inline Json LoadJsonObject(const std::filesystem::path& path) {
+inline Json LoadJsonValue(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary);
     if (!file) {
-        return Json::object();
+        return Json();
     }
-
     Json parsed = Json::parse(file, nullptr, false);
-    if (parsed.is_discarded() || !parsed.is_object()) {
+    return parsed.is_discarded() ? Json() : parsed;
+}
+
+inline Json LoadJsonObject(const std::filesystem::path& path) {
+    Json parsed = LoadJsonValue(path);
+    if (!parsed.is_object()) {
         return Json::object();
     }
     return parsed;

@@ -178,7 +178,9 @@ TextltApp::TextltApp()
       tts_modal_(
           &current_theme_,
           &cloud_tts_pipeline_,
-          [this] { QueueTtsBookPreparationFromCursor(); },
+          [this](bool force_rebuild) {
+              QueueTtsBookPreparationFromCursor(force_rebuild);
+          },
           [this] { screen_.PostEvent(ftxui::Event::Custom); }),
       view_layout_modal_(
           &current_theme_,

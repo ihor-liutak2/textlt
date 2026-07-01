@@ -7,14 +7,15 @@
 namespace textlt {
 
 
-void TextltApp::QueueTtsBookPreparationFromCursor() {
+void TextltApp::QueueTtsBookPreparationFromCursor(bool force_rebuild) {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
 
     // Submit document content and cursor row index for TTS processing
     cloud_tts_pipeline_.Submit(
         editor_ptr->GetAllText(),
         editor_ptr->CurrentFilePath(),
-        editor_ptr->GetCursorRow());
+        editor_ptr->GetCursorRow(),
+        force_rebuild);
 
     active_action_ = "Queued TTS book preparation";
     screen_.PostEvent(ftxui::Event::Custom);

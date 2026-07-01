@@ -268,7 +268,6 @@ bool TtsAudioPlayer::PlayFileBlocking(
         return false;
     }
 
-    const PlayerCommand& player = players.front();
 #ifdef _WIN32
     if (stop_requested && stop_requested->load()) {
         if (error) {
@@ -276,16 +275,33 @@ bool TtsAudioPlayer::PlayFileBlocking(
         }
         return false;
     }
-    const int result = std::system(BuildWindowsCommand(player, audio_file).c_str());
-    if (result == 0) {
-        return true;
+    for (const PlayerCommand& player : players) {
+        const int result = std::system(BuildWindowsCommand(player, audio_file).c_str());
+        if (result == 0) {
+            return true;
+        }
     }
     if (error) {
-        *error = "Audio player failed";
+        *error = "All available audio players failed";
     }
     return false;
 #else
-    return PlayWithPosixProcess(player, audio_file, stop_requested, error);
+    std::string last_error;
+    for (const PlayerCommand& player : players) {
+        if (PlayWithPosixProcess(player, audio_file, stop_requested, &last_error)) {
+            return true;
+        }
+        if (stop_requested && stop_requested->load()) {
+            if (error) {
+                *error = last_error.empty() ? "Playback stopped" : last_error;
+            }
+            return false;
+        }
+    }
+    if (error) {
+        *error = last_error.empty() ? "All available audio players failed" : last_error;
+    }
+    return false;
 #endif
 }
 

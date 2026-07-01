@@ -206,7 +206,7 @@ private:
     void SaveAllOpenedFiles();
     void PersistActiveFavoriteCursor();
     void RestoreFavoriteCursor(const std::string& path);
-    void QueueTtsBookPreparationFromCursor();
+    void QueueTtsBookPreparationFromCursor(bool force_rebuild = false);
     void PreviewTheme(const std::string& theme_name);
     void SelectTheme(const std::string& theme_name);
     void SaveConfig();

@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <exception>
 #include <filesystem>
+#include <future>
 #include <iomanip>
 #include <sstream>
 #include <utility>
@@ -151,7 +153,7 @@ ftxui::Element SuggestionLine(const std::vector<std::string>& suggestions,
 TtsModalContent::TtsModalContent(
     const Theme* theme,
     CloudTtsPipeline* pipeline,
-    std::function<void()> prepare_current_file,
+    std::function<void(bool)> prepare_current_file,
     std::function<void()> request_ui_refresh)
     : theme_(theme),
       pipeline_(pipeline),
@@ -159,27 +161,23 @@ TtsModalContent::TtsModalContent(
       request_ui_refresh_(std::move(request_ui_refresh)) {
     run_tab_button_ = MakeTabButton("Run", static_cast<int>(Tab::Run));
     library_tab_button_ = MakeTabButton("Library", static_cast<int>(Tab::Library));
+    voice_tab_button_ = MakeTabButton("Voice", static_cast<int>(Tab::Voice));
     tab_buttons_ = ftxui::Container::Horizontal({
         run_tab_button_,
         library_tab_button_,
+        voice_tab_button_,
     });
 
     run_refresh_library_button_ =
-        MakeTextButton("Refresh", [this] { RefreshLibrary(); });
+        MakeTextButton("Refresh", [this] { StartRunWorkflow(true, false); });
     library_refresh_library_button_ =
-        MakeTextButton("Refresh", [this] { RefreshLibrary(); });
-    prepare_current_file_button_ =
-        MakeTextButton("Prepare current file", [this] { PrepareCurrentFile(); });
+        MakeTextButton("Refresh", [this] { StartRunWorkflow(true, false); });
     save_metadata_button_ =
         MakeTextButton("Save metadata", [this] { SaveSelectedMetadata(); });
     save_voice_button_ =
         MakeTextButton("Save voice", [this] { SaveSelectedVoice(); });
     generate_current_button_ =
-        MakeTextButton("Generate current", [this] { StartGenerateAudio(1); });
-    generate_next_button_ =
-        MakeTextButton("Generate next 3", [this] { StartGenerateAudio(4); });
-    generate_all_button_ =
-        MakeTextButton("Generate all", [this] { StartGenerateAllAudio(); });
+        MakeTextButton("Test", [this] { TestCurrentChunk(); });
     play_button_ =
         MakeTextButton("Play", [this] { Play(); });
     pause_button_ =
@@ -192,6 +190,10 @@ TtsModalContent::TtsModalContent(
         MakeTextButton("Clear audio cache", [this] { ClearSelectedAudioCache(); });
     info_button_ =
         MakeTextButton("Info", [this] { ShowSelectedBookInfo(); });
+    delete_book_button_ =
+        MakeTextButton("Delete", [this] { DeleteSelectedBook(); });
+    close_info_button_ =
+        MakeTextButton("Close", [this] { CloseSelectedBookInfo(); });
 
     auto make_book_menu = [this] {
         ftxui::MenuOption menu_option = ftxui::MenuOption::Vertical();
@@ -222,7 +224,10 @@ TtsModalContent::TtsModalContent(
         ftxui::Input(&metadata_series_index_, "series index", input_option);
 
     ftxui::MenuOption language_option = ftxui::MenuOption::Vertical();
-    language_option.on_change = [this] { RebuildVoiceOptions(); };
+    language_option.on_change = [this] {
+        RebuildVoiceOptions();
+        SaveSelectedMetadata();
+    };
     language_option.entries_option.transform = [this](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
         ftxui::Element row =
@@ -243,17 +248,10 @@ TtsModalContent::TtsModalContent(
         ftxui::Menu(&piper_voice_labels_, &selected_piper_voice_, voice_option);
 
     run_tab_container_ = ftxui::Container::Vertical({
-        ftxui::Container::Horizontal({
-            run_refresh_library_button_,
-            prepare_current_file_button_,
-        }),
+        run_refresh_library_button_,
         run_book_menu_,
-        piper_voice_menu_,
-        save_voice_button_,
         ftxui::Container::Horizontal({
             generate_current_button_,
-            generate_next_button_,
-            generate_all_button_,
             clear_audio_cache_button_,
         }),
         ftxui::Container::Horizontal({
@@ -268,6 +266,7 @@ TtsModalContent::TtsModalContent(
         ftxui::Container::Horizontal({
             library_refresh_library_button_,
             info_button_,
+            delete_book_button_,
         }),
         library_book_menu_,
         title_input_,
@@ -277,16 +276,42 @@ TtsModalContent::TtsModalContent(
         series_index_input_,
         language_menu_,
         save_metadata_button_,
+        close_info_button_,
+    });
+
+    voice_tab_container_ = ftxui::Container::Vertical({
+        piper_voice_menu_,
+        save_voice_button_,
     });
 
     tab_body_container_ = ftxui::Container::Tab({
         run_tab_container_,
         library_tab_container_,
+        voice_tab_container_,
     }, &selected_tab_);
 
-    controls_ = ftxui::Container::Vertical({
+    auto primary_controls = ftxui::Container::Vertical({
         tab_buttons_,
         tab_body_container_,
+    });
+    auto info_controls = ftxui::CatchEvent(close_info_button_, [this](ftxui::Event event) {
+        if (event == ftxui::Event::Escape) {
+            CloseSelectedBookInfo();
+            return true;
+        }
+        return false;
+    });
+    controls_ = ftxui::Container::Tab(
+        {primary_controls, info_controls}, &info_layer_index_);
+    controls_ = ftxui::CatchEvent(controls_, [this](ftxui::Event event) {
+        if (event == ftxui::Event::Custom && info_popup_pending_) {
+            info_popup_pending_ = false;
+            show_selected_book_info_ = true;
+            info_layer_index_ = 1;
+            close_info_button_->TakeFocus();
+            return true;
+        }
+        return false;
     });
     renderer_ = ftxui::Renderer(controls_, [this] { return Render(); });
     RefreshLibrary();
@@ -337,29 +362,102 @@ ftxui::Component TtsModalContent::MakeTabButton(std::string label, int tab_index
 
 void TtsModalContent::SelectTab(int tab_index) {
     selected_tab_ = tab_index;
-    if (selected_tab_ == static_cast<int>(Tab::Run) && prepare_current_file_button_) {
-        prepare_current_file_button_->TakeFocus();
+    if (selected_tab_ == static_cast<int>(Tab::Run)) {
+        if (play_button_) {
+            play_button_->TakeFocus();
+        }
     } else if (selected_tab_ == static_cast<int>(Tab::Library) && library_book_menu_) {
         library_book_menu_->TakeFocus();
+    } else if (selected_tab_ == static_cast<int>(Tab::Voice) && piper_voice_menu_) {
+        piper_voice_menu_->TakeFocus();
     }
 }
 
 void TtsModalContent::Open() {
-    selected_tab_ = static_cast<int>(Tab::Run);
+    selected_tab_ = static_cast<int>(Tab::Library);
+    show_selected_book_info_ = false;
+    info_layer_index_ = 0;
     RefreshLibrary();
-    if (prepare_current_file_button_) {
-        prepare_current_file_button_->TakeFocus();
+    if (library_book_menu_) {
+        library_book_menu_->TakeFocus();
     }
 }
 
-void TtsModalContent::PrepareCurrentFile() {
-    if (!prepare_current_file_) {
+void TtsModalContent::StartRunWorkflow(bool force_rebuild, bool play_after) {
+    if (!prepare_current_file_ || !pipeline_) {
         status_ = "Current document is not available to TTS UI";
         return;
     }
-    prepare_current_file_();
-    RefreshLibrary();
-    status_ = "Queued current file preparation";
+    {
+        std::lock_guard<std::mutex> lock(audio_worker_mutex_);
+        if (audio_worker_running_) {
+            status_ = "TTS preparation is already running";
+            return;
+        }
+    }
+    JoinAudioWorker();
+    {
+        std::lock_guard<std::mutex> lock(audio_worker_mutex_);
+        audio_worker_running_ = true;
+        audio_worker_play_after_ = play_after;
+        audio_worker_status_ = "Preparing current file...";
+        audio_worker_frame_ = 0;
+        status_ = audio_worker_status_;
+    }
+    NotifyUiRefresh();
+    prepare_current_file_(force_rebuild);
+
+    audio_worker_ = std::thread([this] {
+        const auto started_at = std::chrono::steady_clock::now();
+        auto future = std::async(std::launch::async, [this] {
+            std::string final_status;
+            const std::string book_id = pipeline_->WaitForPendingPreparation();
+            if (book_id.empty()) {
+                return std::make_pair(book_id, std::string("TTS book preparation failed"));
+            }
+            CloudTtsPipeline::BookMetadata book;
+            if (!pipeline_->LoadBookMetadata(book_id, &book)) {
+                return std::make_pair(book_id, std::string("Prepared book metadata is unavailable"));
+            }
+            if (book.piper_voice_id.empty()) {
+                return std::make_pair(book_id, std::string("Select and save an installed voice first"));
+            }
+            const size_t chunk = pipeline_->FindChunkIndexForLine(book_id, book.last_cursor_line);
+            std::string error;
+            const auto result = pipeline_->EnsureAudioLookahead(
+                book_id, chunk, book.piper_voice_id, 3, &error);
+            std::ostringstream message;
+            message << "Prepared current chunk + next 2: "
+                    << result.generated_chunks << " generated, "
+                    << result.already_ready_chunks << " ready";
+            if (result.failed_chunks > 0) {
+                message << ", " << result.failed_chunks << " failed";
+                if (!error.empty()) {
+                    message << " - " << error;
+                }
+            }
+            return std::make_pair(book_id, message.str());
+        });
+        while (future.wait_for(std::chrono::milliseconds(100)) != std::future_status::ready) {
+            ++audio_worker_frame_;
+            NotifyUiRefresh();
+        }
+        while (std::chrono::steady_clock::now() - started_at <
+               std::chrono::milliseconds(300)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            ++audio_worker_frame_;
+            NotifyUiRefresh();
+        }
+        auto result = future.get();
+        {
+            std::lock_guard<std::mutex> lock(audio_worker_mutex_);
+            audio_worker_running_ = false;
+            audio_worker_selected_book_id_ = std::move(result.first);
+            audio_worker_status_ = std::move(result.second);
+            audio_worker_refresh_pending_ = true;
+        }
+        NotifyUiRefresh();
+    });
 }
 
 void TtsModalContent::RefreshLibrary() {
@@ -478,7 +576,27 @@ void TtsModalContent::RebuildVoiceOptions() {
 
     if (piper_voice_labels_.empty()) {
         piper_voice_labels_.push_back("No Piper voices for selected language");
+        return;
     }
+    AutoSelectPreferredVoice();
+}
+
+void TtsModalContent::AutoSelectPreferredVoice() {
+    auto find_installed_quality = [this](const std::string& quality) {
+        for (size_t index = 0; index < piper_voice_ids_.size(); ++index) {
+            if (index < piper_voice_installed_.size() && piper_voice_installed_[index] &&
+                (LowerAscii(piper_voice_ids_[index]).find(quality) != std::string::npos ||
+                 LowerAscii(piper_voice_labels_[index]).find(quality) != std::string::npos)) {
+                return static_cast<int>(index);
+            }
+        }
+        return -1;
+    };
+    int preferred = find_installed_quality("medium");
+    if (preferred < 0) {
+        preferred = find_installed_quality("high");
+    }
+    selected_piper_voice_ = preferred < 0 ? 0 : preferred;
 }
 
 void TtsModalContent::SyncMetadataFieldsFromSelection() {
@@ -493,10 +611,12 @@ void TtsModalContent::SyncMetadataFieldsFromSelection() {
         selected_language_ = 0;
         RebuildVoiceOptions();
         show_selected_book_info_ = false;
+        info_layer_index_ = 0;
         return;
     }
 
     show_selected_book_info_ = false;
+    info_layer_index_ = 0;
     const CloudTtsPipeline::BookInfo& book = library_books_[selected_library_book_];
     metadata_title_ = book.title;
     metadata_author_ = book.author;
@@ -512,13 +632,32 @@ void TtsModalContent::SyncMetadataFieldsFromSelection() {
         }
     }
     RebuildVoiceOptions();
-    selected_piper_voice_ = 0;
+    bool saved_voice_available = false;
     if (!book.piper_voice_id.empty()) {
         for (size_t index = 0; index < piper_voice_ids_.size(); ++index) {
             if (piper_voice_ids_[index] == book.piper_voice_id) {
                 selected_piper_voice_ = static_cast<int>(index);
+                saved_voice_available = true;
                 break;
             }
+        }
+    }
+    if (!saved_voice_available && pipeline_ &&
+        selected_piper_voice_ >= 0 &&
+        selected_piper_voice_ < static_cast<int>(piper_voice_ids_.size()) &&
+        selected_piper_voice_ < static_cast<int>(piper_voice_installed_.size()) &&
+        piper_voice_installed_[selected_piper_voice_]) {
+        CloudTtsPipeline::EditableBookMetadata metadata;
+        metadata.title = book.title;
+        metadata.author = book.author;
+        metadata.series = book.series;
+        metadata.genre = book.genre;
+        metadata.series_index = book.series_index;
+        metadata.language = language;
+        metadata.piper_voice_id = piper_voice_ids_[selected_piper_voice_];
+        if (pipeline_->UpdateBookMetadata(book.book_id, metadata)) {
+            library_books_[selected_library_book_].piper_voice_id =
+                metadata.piper_voice_id;
         }
     }
 }
@@ -636,7 +775,9 @@ void TtsModalContent::JoinAudioWorker() {
 
 void TtsModalContent::ApplyAudioWorkerState() {
     bool should_refresh = false;
+    bool play_after = false;
     std::string worker_status;
+    std::string selected_book_id;
     {
         std::lock_guard<std::mutex> lock(audio_worker_mutex_);
         if (!audio_worker_refresh_pending_) {
@@ -644,100 +785,34 @@ void TtsModalContent::ApplyAudioWorkerState() {
         }
         audio_worker_refresh_pending_ = false;
         should_refresh = true;
+        play_after = audio_worker_play_after_;
+        audio_worker_play_after_ = false;
         worker_status = audio_worker_status_;
+        selected_book_id = std::move(audio_worker_selected_book_id_);
     }
 
     if (should_refresh) {
         RefreshLibrary();
+        if (!selected_book_id.empty()) {
+            for (size_t index = 0; index < library_books_.size(); ++index) {
+                if (library_books_[index].book_id == selected_book_id) {
+                    selected_library_book_ = static_cast<int>(index);
+                    SyncMetadataFieldsFromSelection();
+                    break;
+                }
+            }
+        }
         if (!worker_status.empty()) {
             status_ = worker_status;
         }
+        if (play_after && !selected_book_id.empty()) {
+            StartPlaybackFrom(SelectedStartChunkIndex(), true);
+        }
     }
 }
 
-void TtsModalContent::StartGenerateAudio(size_t lookahead_count) {
-    if (!pipeline_) {
-        status_ = "TTS pipeline is not available";
-        return;
-    }
-    const std::string book_id = SelectedBookId();
-    if (book_id.empty()) {
-        status_ = "No prepared book selected";
-        return;
-    }
-    const std::string voice_id = SelectedVoiceId();
-    if (voice_id.empty()) {
-        status_ = "No Piper voice selected";
-        return;
-    }
-    if (!pipeline_->PiperRuntimeInstalled()) {
-        status_ = "Piper runtime is not installed. Use Assistant Settings / TTS / Install Piper.";
-        return;
-    }
-    if (selected_piper_voice_ >= 0 &&
-        selected_piper_voice_ < static_cast<int>(piper_voice_installed_.size()) &&
-        !piper_voice_installed_[selected_piper_voice_]) {
-        status_ = "Selected voice is not installed. Use Assistant Settings / TTS to download it.";
-        return;
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(audio_worker_mutex_);
-        if (audio_worker_running_) {
-            status_ = "Audio generation is already running";
-            return;
-        }
-    }
-    JoinAudioWorker();
-
-    const size_t start_chunk = SelectedStartChunkIndex();
-    {
-        std::lock_guard<std::mutex> lock(audio_worker_mutex_);
-        audio_worker_running_ = true;
-        audio_worker_status_ = "Generating audio...";
-        status_ = "Generating audio...";
-    }
-
-    audio_worker_ = std::thread([this, book_id, voice_id, start_chunk, lookahead_count] {
-        std::string error;
-        CloudTtsPipeline::AudioGenerationResult result =
-            pipeline_->EnsureAudioLookahead(
-                book_id,
-                start_chunk,
-                voice_id,
-                lookahead_count,
-                &error);
-
-        std::ostringstream message;
-        message << "Audio: " << result.generated_chunks << " generated, "
-                << result.already_ready_chunks << " already ready";
-        if (result.failed_chunks > 0) {
-            message << ", " << result.failed_chunks << " failed";
-            if (!error.empty()) {
-                message << " - " << error;
-            }
-        }
-        const std::string final_status = message.str();
-        {
-            std::lock_guard<std::mutex> lock(audio_worker_mutex_);
-            audio_worker_running_ = false;
-            audio_worker_status_ = final_status;
-            audio_worker_refresh_pending_ = true;
-        }
-        NotifyUiRefresh();
-    });
-}
-
-
-void TtsModalContent::StartGenerateAllAudio() {
-    if (library_books_.empty() ||
-        selected_library_book_ < 0 ||
-        selected_library_book_ >= static_cast<int>(library_books_.size())) {
-        status_ = "No prepared book selected";
-        return;
-    }
-    const CloudTtsPipeline::BookInfo& book = library_books_[selected_library_book_];
-    StartGenerateAudio(book.total_chunks == 0 ? 1 : book.total_chunks);
+void TtsModalContent::TestCurrentChunk() {
+    StartPlaybackFrom(SelectedStartChunkIndex(), true);
 }
 
 void TtsModalContent::NotifyUiRefresh() {
@@ -760,7 +835,7 @@ void TtsModalContent::JoinPlaybackWorker() {
     }
 }
 
-void TtsModalContent::StartPlaybackFrom(size_t chunk_index) {
+void TtsModalContent::StartPlaybackFrom(size_t chunk_index, bool single_chunk) {
     if (!pipeline_) {
         status_ = "TTS pipeline is not available";
         return;
@@ -821,14 +896,15 @@ void TtsModalContent::StartPlaybackFrom(size_t chunk_index) {
         std::lock_guard<std::mutex> lock(playback_mutex_);
         playback_worker_running_ = true;
         playback_paused_ = false;
+        playback_has_position_ = true;
         playback_chunk_index_ = chunk_index;
         playback_status_ = "Starting playback";
         status_ = "Starting playback";
     }
 
     playback_worker_ = std::thread(
-        [this, book_id, voice_id, chunk_index, total_chunks = book.total_chunks] {
-            PlaybackLoop(book_id, voice_id, chunk_index, total_chunks);
+        [this, book_id, voice_id, chunk_index, total_chunks = book.total_chunks, single_chunk] {
+            PlaybackLoop(book_id, voice_id, chunk_index, total_chunks, single_chunk);
         });
     NotifyUiRefresh();
 }
@@ -837,7 +913,8 @@ void TtsModalContent::PlaybackLoop(
     std::string book_id,
     std::string voice_id,
     size_t start_chunk_index,
-    size_t total_chunks) {
+    size_t total_chunks,
+    bool single_chunk) {
     size_t index = start_chunk_index;
     std::string final_status;
 
@@ -873,8 +950,9 @@ void TtsModalContent::PlaybackLoop(
         {
             std::lock_guard<std::mutex> lock(playback_mutex_);
             playback_chunk_index_ = index;
-            playback_status_ = "Playing chunk " + std::to_string(index + 1) + "/" +
-                               std::to_string(total_chunks);
+            playback_status_ = "Chunk " + std::to_string(index + 1) + "/" +
+                               std::to_string(total_chunks) +
+                               " is ready. Playing...";
         }
         NotifyUiRefresh();
 
@@ -904,6 +982,9 @@ void TtsModalContent::PlaybackLoop(
 
         pipeline_->MarkChunkPlayed(book_id, index, voice_id, nullptr);
         ++index;
+        if (single_chunk) {
+            break;
+        }
     }
 
     const bool paused = playback_pause_requested_.load();
@@ -933,22 +1014,27 @@ void TtsModalContent::PlaybackLoop(
 }
 
 void TtsModalContent::Play() {
+    bool resume_paused = false;
+    size_t paused_chunk = 0;
     {
         std::lock_guard<std::mutex> lock(playback_mutex_);
         if (playback_worker_running_) {
             status_ = playback_status_.empty() ? "Playback is already running" : playback_status_;
             return;
         }
+        resume_paused = playback_paused_;
+        paused_chunk = playback_chunk_index_;
     }
 
-    size_t start_chunk = SelectedStartChunkIndex();
-    {
-        std::lock_guard<std::mutex> lock(playback_mutex_);
-        if (playback_paused_) {
-            start_chunk = playback_chunk_index_;
-        }
+    if (resume_paused) {
+        StartPlaybackFrom(paused_chunk);
+        return;
     }
-    StartPlaybackFrom(start_chunk);
+
+    // Use the same workflow as the Run tab. This refreshes the current cursor
+    // position, resolves the saved voice, reuses cached WAV files, and starts
+    // playback only after all required state is ready.
+    StartRunWorkflow(false, true);
 }
 
 void TtsModalContent::Pause() {
@@ -996,12 +1082,18 @@ void TtsModalContent::Next() {
             NotifyUiRefresh();
             return;
         }
-        next_chunk = playback_paused_ ? playback_chunk_index_ + 1 : SelectedStartChunkIndex() + 1;
+        if (playback_paused_) {
+            next_chunk = playback_chunk_index_ + 1;
+        } else if (playback_has_position_) {
+            next_chunk = playback_chunk_index_;
+        } else {
+            next_chunk = SelectedStartChunkIndex() + 1;
+        }
         playback_paused_ = false;
         should_start = true;
     }
     if (should_start) {
-        StartPlaybackFrom(next_chunk);
+        StartPlaybackFrom(next_chunk, true);
     }
 }
 
@@ -1040,8 +1132,50 @@ void TtsModalContent::ShowSelectedBookInfo() {
         status_ = "No prepared book selected";
         return;
     }
-    show_selected_book_info_ = !show_selected_book_info_;
-    status_ = show_selected_book_info_ ? "Book info shown" : "Book info hidden";
+    info_popup_pending_ = true;
+    status_ = "Opening book info";
+    NotifyUiRefresh();
+}
+
+void TtsModalContent::CloseSelectedBookInfo() {
+    show_selected_book_info_ = false;
+    info_popup_pending_ = false;
+    info_layer_index_ = 0;
+    if (library_book_menu_) {
+        library_book_menu_->TakeFocus();
+    }
+    status_ = "Book info closed";
+}
+
+void TtsModalContent::DeleteSelectedBook() {
+    if (!pipeline_) {
+        status_ = "TTS pipeline is not available";
+        return;
+    }
+    const std::string book_id = SelectedBookId();
+    if (book_id.empty()) {
+        status_ = "No prepared book selected";
+        return;
+    }
+    {
+        std::lock_guard<std::mutex> lock(audio_worker_mutex_);
+        if (audio_worker_running_) {
+            status_ = "Stop audio generation before deleting the book";
+            return;
+        }
+    }
+
+    Stop();
+    JoinPlaybackWorker();
+    std::string error;
+    if (!pipeline_->DeleteBook(book_id, &error)) {
+        status_ = error.empty() ? "Delete book failed" : "Delete book failed: " + error;
+        return;
+    }
+    show_selected_book_info_ = false;
+    info_layer_index_ = 0;
+    RefreshLibrary();
+    status_ = "Book and all TTS files deleted";
 }
 
 bool TtsModalContent::IsAudioWorkerRunning() const {
@@ -1087,11 +1221,22 @@ std::string TtsModalContent::HeaderStatus() const {
            std::to_string(book.prepared_chunks) + " ready";
 }
 
+std::string TtsModalContent::GetFooterText() const {
+    std::lock_guard<std::mutex> lock(playback_mutex_);
+    if (playback_worker_running_ || playback_paused_ ||
+        (!playback_status_.empty() && playback_status_ != "Playback stopped")) {
+        return playback_status_;
+    }
+    return status_;
+}
+
 ftxui::Element TtsModalContent::RenderTitle() {
     return ftxui::hbox({
         run_tab_button_->Render(),
         ftxui::text(" "),
         library_tab_button_->Render(),
+        ftxui::text(" "),
+        voice_tab_button_->Render(),
     });
 }
 
@@ -1173,7 +1318,11 @@ ftxui::Element TtsModalContent::RenderVoiceSelector() {
             theme));
     }
 
-    rows.push_back(save_voice_button_->Render());
+    rows.push_back(filler());
+    rows.push_back(hbox({
+        filler(),
+        save_voice_button_->Render(),
+    }));
     return vbox(std::move(rows)) | border;
 }
 
@@ -1185,8 +1334,6 @@ ftxui::Element TtsModalContent::RenderRunTab() {
         PanelTitle("Selected book", theme),
         hbox({
             run_refresh_library_button_->Render(),
-            text(" "),
-            prepare_current_file_button_->Render(),
         }),
         run_book_menu_->Render() |
             frame |
@@ -1197,20 +1344,14 @@ ftxui::Element TtsModalContent::RenderRunTab() {
 
     Element run_panel = vbox({
         PanelTitle("Run", theme),
-        paragraph("Prepare the current editor file as a TTS book. Select the book here, choose a voice for its saved language, then audio generation/playback can use that saved choice.") |
+        paragraph("Press Run to prepare or reuse the current editor file, find the cursor chunk, generate the current chunk plus the next two, and start playback.") |
             color(theme.modal_text_color),
         RenderSelectedBookSummary() |
             border |
             size(HEIGHT, LESS_THAN, 8),
-        RenderVoiceSelector() | flex,
-        separator() | color(theme.modal_border),
-        PanelTitle("Audio generation", theme),
+        PanelTitle("Current chunk test", theme),
         hbox({
             generate_current_button_->Render(),
-            text(" "),
-            generate_next_button_->Render(),
-            text(" "),
-            generate_all_button_->Render(),
             text(" "),
             clear_audio_cache_button_->Render(),
         }),
@@ -1259,7 +1400,7 @@ ftxui::Element TtsModalContent::RenderMetadataEditor() {
     const std::vector<std::string> genre_suggestions =
         FilterSuggestions(known_genres_, metadata_genre_);
 
-    Element metadata_column = vbox({
+    Element metadata_panel = vbox({
         PanelTitle("Metadata", theme),
         hbox({
             text(" Title: ") | bold | color(theme.modal_accent),
@@ -1284,35 +1425,24 @@ ftxui::Element TtsModalContent::RenderMetadataEditor() {
             series_index_input_->Render() | flex,
         }),
         save_metadata_button_->Render(),
-    }) | size(WIDTH, EQUAL, 38);
+    }) | border;
 
-    Element language_column = vbox({
+    Element language_panel = vbox({
         PanelTitle("Language", theme),
-        paragraph("The selected language controls which voices are available on the Run tab." ) |
+        paragraph("The selected language controls which voices are available on the Voice tab." ) |
             dim |
             color(theme.modal_text_color),
         language_menu_->Render() |
             frame |
             vscroll_indicator |
-            size(HEIGHT, LESS_THAN, 15) |
+            size(HEIGHT, LESS_THAN, 8) |
             border,
-    }) | flex;
+    }) | border;
 
-    Elements rows = {
-        hbox({
-            metadata_column | border,
-            text(" "),
-            language_column | border | flex,
-        }) | flex,
-    };
-
-    if (show_selected_book_info_) {
-        rows.push_back(RenderBookInfoPanel() |
-                       border |
-                       size(HEIGHT, LESS_THAN, 7));
-    }
-
-    return vbox(std::move(rows));
+    return vbox({
+        metadata_panel,
+        language_panel,
+    });
 }
 
 ftxui::Element TtsModalContent::RenderBookInfoPanel() const {
@@ -1336,6 +1466,8 @@ ftxui::Element TtsModalContent::RenderBookInfoPanel() const {
                    theme),
         StatusLine("Modified time", std::to_string(book.modified_time), theme),
         StatusLine("Last cursor line", std::to_string(book.last_cursor_line), theme),
+        separator() | color(theme.modal_border),
+        hbox({filler(), close_info_button_->Render()}),
     });
 }
 
@@ -1349,6 +1481,8 @@ ftxui::Element TtsModalContent::RenderLibraryTab() {
             library_refresh_library_button_->Render(),
             text(" "),
             info_button_->Render(),
+            text(" "),
+            delete_book_button_->Render(),
         }),
         library_book_menu_->Render() |
             frame |
@@ -1366,26 +1500,87 @@ ftxui::Element TtsModalContent::RenderLibraryTab() {
         color(theme.modal_input_fg);
 }
 
+ftxui::Element TtsModalContent::RenderVoiceTab() {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    return vbox({
+        RenderSelectedBookSummary() | border,
+        RenderVoiceSelector() | flex,
+    }) |
+        bgcolor(theme.modal_input_bg) |
+        color(theme.modal_input_fg);
+}
+
 ftxui::Element TtsModalContent::Render() {
     ApplyAudioWorkerState();
 
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
-    Element body = selected_tab_ == static_cast<int>(Tab::Run)
-        ? RenderRunTab()
-        : RenderLibraryTab();
+    Element body;
+    if (selected_tab_ == static_cast<int>(Tab::Run)) {
+        body = RenderRunTab();
+    } else if (selected_tab_ == static_cast<int>(Tab::Library)) {
+        body = RenderLibraryTab();
+    } else {
+        body = RenderVoiceTab();
+    }
 
-    return body |
+    body = body |
         bgcolor(theme.modal_input_bg) |
         color(theme.modal_input_fg) |
-        size(WIDTH, EQUAL, 108);
+        size(WIDTH, EQUAL, 118);
+
+    bool audio_running = false;
+    std::string audio_status;
+    {
+        std::lock_guard<std::mutex> lock(audio_worker_mutex_);
+        audio_running = audio_worker_running_;
+        audio_status = audio_worker_status_;
+    }
+    if (audio_running) {
+        Element progress = vbox({
+            hbox({
+                spinner(0, audio_worker_frame_.load()) | bold,
+                text("  " + (audio_status.empty() ? std::string("Preparing TTS...") : audio_status)) |
+                    bold | color(theme.modal_text_color),
+            }),
+            text("Preparing the current file and three audio chunks. Please wait.") |
+                dim | color(theme.modal_text_color),
+        }) |
+            border |
+            bgcolor(theme.modal_background) |
+            clear_under;
+        return dbox({
+            body,
+            vbox({filler(), hbox({filler(), progress, filler()}), filler()}),
+        });
+    }
+
+    if (!show_selected_book_info_) {
+        return body;
+    }
+    return dbox({
+        body,
+        vbox({
+            filler(),
+            hbox({
+                filler(),
+                RenderBookInfoPanel() |
+                    border |
+                    size(WIDTH, LESS_THAN, 94) |
+                    clear_under,
+                filler(),
+            }),
+            filler(),
+        }),
+    });
 }
 
 TtsModal::TtsModal(
     const Theme* theme,
     CloudTtsPipeline* pipeline,
-    std::function<void()> prepare_current_file,
+    std::function<void(bool)> prepare_current_file,
     std::function<void()> request_ui_refresh)
     : theme_(theme) {
     content_ = std::make_shared<TtsModalContent>(

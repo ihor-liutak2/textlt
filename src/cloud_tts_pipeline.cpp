@@ -355,7 +355,7 @@ bool CloudTtsPipeline::GenerateChunkAudio(
 
     const std::filesystem::path book_directory = BookDirectory(book_id);
     const std::filesystem::path chunks_path = book_directory / "chunks.json";
-    Json chunks_json = LoadJsonObject(chunks_path);
+    Json chunks_json = LoadJsonValue(chunks_path);
     if (!chunks_json.is_array() || chunk_index >= chunks_json.size()) {
         if (error) {
             *error = "Chunk index is out of range";
@@ -425,7 +425,7 @@ CloudTtsPipeline::AudioGenerationResult CloudTtsPipeline::EnsureAudioLookahead(
     }
 
     const std::filesystem::path chunks_path = BookDirectory(book_id) / "chunks.json";
-    const Json chunks_json = LoadJsonObject(chunks_path);
+    const Json chunks_json = LoadJsonValue(chunks_path);
     if (!chunks_json.is_array()) {
         if (error) {
             *error = "Cannot load chunks";
@@ -482,7 +482,7 @@ bool CloudTtsPipeline::ClearBookAudioCache(const std::string& book_id, std::stri
     std::filesystem::create_directories(audio_directory, create_error);
 
     const std::filesystem::path chunks_path = book_directory / "chunks.json";
-    Json chunks_json = LoadJsonObject(chunks_path);
+    Json chunks_json = LoadJsonValue(chunks_path);
     if (chunks_json.is_array()) {
         for (Json& chunk : chunks_json) {
             if (!chunk.is_object()) {
@@ -492,6 +492,35 @@ bool CloudTtsPipeline::ClearBookAudioCache(const std::string& book_id, std::stri
             chunk["audio_path"] = "";
         }
         WriteJsonAtomically(chunks_path, chunks_json);
+    }
+    return true;
+}
+
+bool CloudTtsPipeline::DeleteBook(const std::string& book_id, std::string* error) const {
+    if (book_id.empty() || SafePathSegment(book_id) != book_id ||
+        book_id.rfind("book_", 0) != 0) {
+        if (error) {
+            *error = "Invalid book id";
+        }
+        return false;
+    }
+
+    BookMetadata metadata;
+    if (!LoadBookMetadata(book_id, &metadata) || metadata.book_id != book_id) {
+        if (error) {
+            *error = "Book metadata is missing or invalid";
+        }
+        return false;
+    }
+
+    const std::filesystem::path book_directory = BookDirectory(book_id);
+    std::error_code remove_error;
+    const uintmax_t removed = std::filesystem::remove_all(book_directory, remove_error);
+    if (remove_error || removed == 0) {
+        if (error) {
+            *error = remove_error ? "Cannot delete book files" : "Book files were not found";
+        }
+        return false;
     }
     return true;
 }
@@ -523,7 +552,7 @@ bool CloudTtsPipeline::GetChunkAudioPath(
     }
 
     const std::filesystem::path chunks_path = BookDirectory(book_id) / "chunks.json";
-    const Json chunks_json = LoadJsonObject(chunks_path);
+    const Json chunks_json = LoadJsonValue(chunks_path);
     if (!chunks_json.is_array() || chunk_index >= chunks_json.size()) {
         if (error) {
             *error = "Chunk index is out of range";
@@ -569,7 +598,7 @@ bool CloudTtsPipeline::MarkChunkPlayed(
     }
 
     const std::filesystem::path chunks_path = BookDirectory(book_id) / "chunks.json";
-    Json chunks_json = LoadJsonObject(chunks_path);
+    Json chunks_json = LoadJsonValue(chunks_path);
     if (!chunks_json.is_array() || chunk_index >= chunks_json.size()) {
         if (error) {
             *error = "Chunk index is out of range";
@@ -616,7 +645,7 @@ uintmax_t CloudTtsPipeline::BookAudioCacheSize(const std::string& book_id) const
 }
 
 size_t CloudTtsPipeline::FindChunkIndexForLine(const std::string& book_id, size_t line) const {
-    const Json chunks_json = LoadJsonObject(BookDirectory(book_id) / "chunks.json");
+    const Json chunks_json = LoadJsonValue(BookDirectory(book_id) / "chunks.json");
     if (!chunks_json.is_array() || chunks_json.empty()) {
         return 0;
     }
@@ -637,19 +666,57 @@ size_t CloudTtsPipeline::FindChunkIndexForLine(const std::string& book_id, size_
 void CloudTtsPipeline::Submit(
     std::string entire_document_text,
     std::filesystem::path source_file_path,
-    size_t current_cursor_line) {
+    size_t current_cursor_line,
+    bool force_rebuild) {
     JoinWorker();
-    worker_ = std::thread([
+
+    const BookMetadata requested =
+        BuildBookMetadata(source_file_path, entire_document_text, current_cursor_line);
+    BookMetadata existing;
+    const std::filesystem::path existing_book_path =
+        BookDirectory(requested.book_id) / "book.json";
+    const std::filesystem::path existing_chunks_path =
+        BookDirectory(requested.book_id) / "chunks.json";
+    Json existing_chunks = LoadJsonValue(existing_chunks_path);
+    if (!force_rebuild && LoadBookMetadata(requested.book_id, &existing) &&
+        existing_chunks.is_array() && !existing_chunks.empty()) {
+        Json book_json = LoadJsonObject(existing_book_path);
+        book_json["last_cursor_line"] = current_cursor_line;
+        WriteJsonAtomically(existing_book_path, book_json);
+        std::lock_guard<std::mutex> lock(preparation_mutex_);
+        last_prepared_book_id_ = requested.book_id;
+        return;
+    }
+
+    worker_ = std::thread([this,
         text = std::move(entire_document_text),
         source_file_path = std::move(source_file_path),
         current_cursor_line] {
         // Chunk positions must always map to the full document, not to the
         // cursor position used to choose the initial TTS chunk.
         SourcePosition start_pos = {0, 0};
-        const BookMetadata book =
+        BookMetadata book =
             BuildBookMetadata(source_file_path, text, current_cursor_line);
-        WriteBook(book, BuildPreparedChunks(text, start_pos));
+        BookMetadata existing;
+        if (LoadBookMetadata(book.book_id, &existing)) {
+            book.title = existing.title;
+            book.author = existing.author;
+            book.series = existing.series;
+            book.genre = existing.genre;
+            book.series_index = existing.series_index;
+            book.language = existing.language;
+            book.piper_voice_id = existing.piper_voice_id;
+        }
+        const bool written = WriteBook(book, BuildPreparedChunks(text, start_pos));
+        std::lock_guard<std::mutex> lock(preparation_mutex_);
+        last_prepared_book_id_ = written ? book.book_id : std::string{};
     });
+}
+
+std::string CloudTtsPipeline::WaitForPendingPreparation() {
+    JoinWorker();
+    std::lock_guard<std::mutex> lock(preparation_mutex_);
+    return last_prepared_book_id_;
 }
 
 std::vector<CloudTtsPipeline::PreparedChunk> CloudTtsPipeline::BuildPreparedChunks(

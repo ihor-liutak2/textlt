@@ -24,7 +24,7 @@ public:
     TtsModalContent(
         const Theme* theme,
         CloudTtsPipeline* pipeline,
-        std::function<void()> prepare_current_file,
+        std::function<void(bool)> prepare_current_file,
         std::function<void()> request_ui_refresh);
 
     ftxui::Element Render() override;
@@ -33,11 +33,11 @@ public:
     ftxui::Component GetMainComponent() override { return renderer_; }
     std::string GetTitle() override { return "Text-to-Speech"; }
     ftxui::Element RenderTitle() override;
-    ModalSizePreference GetModalSizePreference() const override { return {110, 30}; }
+    ModalSizePreference GetModalSizePreference() const override { return {120, 30}; }
     ModalFrameStyle GetModalFrameStyle() const override {
         return ModalFrameStyle::TitleInBorder;
     }
-    std::string GetFooterText() const override { return status_; }
+    std::string GetFooterText() const override;
 
     void SetTheme(const Theme* theme) { theme_ = theme; }
     void Open();
@@ -55,32 +55,37 @@ private:
     enum class Tab {
         Run = 0,
         Library = 1,
+        Voice = 2,
     };
 
     ftxui::Component MakeTextButton(std::string label, std::function<void()> on_click);
     ftxui::Component MakeTabButton(std::string label, int tab_index);
     void SelectTab(int tab_index);
-    void PrepareCurrentFile();
+    void StartRunWorkflow(bool force_rebuild = false, bool play_after = true);
+    void TestCurrentChunk();
     void SyncMetadataFieldsFromSelection();
     void SaveSelectedMetadata();
+    void DeleteSelectedBook();
     void ShowSelectedBookInfo();
+    void CloseSelectedBookInfo();
     void RebuildMetadataOptions();
     void RebuildVoiceOptions();
+    void AutoSelectPreferredVoice();
     ftxui::Element RenderRunTab();
     ftxui::Element RenderLibraryTab();
+    ftxui::Element RenderVoiceTab();
     ftxui::Element RenderSelectedBookSummary() const;
     ftxui::Element RenderVoiceSelector();
     ftxui::Element RenderMetadataEditor();
     ftxui::Element RenderBookInfoPanel() const;
     void SaveSelectedVoice();
-    void StartGenerateAudio(size_t lookahead_count);
-    void StartGenerateAllAudio();
     void ClearSelectedAudioCache();
-    void StartPlaybackFrom(size_t chunk_index);
+    void StartPlaybackFrom(size_t chunk_index, bool single_chunk = false);
     void PlaybackLoop(std::string book_id,
                       std::string voice_id,
                       size_t start_chunk_index,
-                      size_t total_chunks);
+                      size_t total_chunks,
+                      bool single_chunk);
     void SetPlaybackStatus(std::string status);
     void NotifyUiRefresh();
     void JoinPlaybackWorker();
@@ -93,9 +98,10 @@ private:
 
     const Theme* theme_ = nullptr;
     CloudTtsPipeline* pipeline_ = nullptr;
-    std::function<void()> prepare_current_file_;
+    std::function<void(bool)> prepare_current_file_;
     std::function<void()> request_ui_refresh_;
     int selected_tab_ = static_cast<int>(Tab::Run);
+    int info_layer_index_ = 0;
     std::vector<CloudTtsPipeline::BookInfo> library_books_;
     std::vector<std::string> library_book_labels_ = {"No prepared books"};
     int selected_library_book_ = 0;
@@ -114,12 +120,16 @@ private:
     std::vector<bool> piper_voice_installed_;
     int selected_piper_voice_ = 0;
     bool show_selected_book_info_ = false;
+    bool info_popup_pending_ = false;
     std::string status_ = "TTS library not loaded";
     std::thread audio_worker_;
     mutable std::mutex audio_worker_mutex_;
     bool audio_worker_running_ = false;
     std::string audio_worker_status_;
     bool audio_worker_refresh_pending_ = false;
+    bool audio_worker_play_after_ = false;
+    std::string audio_worker_selected_book_id_;
+    std::atomic<int> audio_worker_frame_{0};
 
     std::thread playback_worker_;
     mutable std::mutex playback_mutex_;
@@ -128,28 +138,29 @@ private:
     std::atomic<bool> playback_next_requested_{false};
     bool playback_worker_running_ = false;
     bool playback_paused_ = false;
+    bool playback_has_position_ = false;
     size_t playback_chunk_index_ = 0;
     std::string playback_status_;
     TtsAudioPlayer audio_player_;
 
     ftxui::Component run_tab_button_;
     ftxui::Component library_tab_button_;
+    ftxui::Component voice_tab_button_;
     ftxui::Component tab_buttons_;
 
     ftxui::Component run_refresh_library_button_;
     ftxui::Component library_refresh_library_button_;
-    ftxui::Component prepare_current_file_button_;
     ftxui::Component save_metadata_button_;
     ftxui::Component save_voice_button_;
     ftxui::Component generate_current_button_;
-    ftxui::Component generate_next_button_;
-    ftxui::Component generate_all_button_;
     ftxui::Component play_button_;
     ftxui::Component pause_button_;
     ftxui::Component stop_button_;
     ftxui::Component next_button_;
     ftxui::Component clear_audio_cache_button_;
     ftxui::Component info_button_;
+    ftxui::Component delete_book_button_;
+    ftxui::Component close_info_button_;
     ftxui::Component run_book_menu_;
     ftxui::Component library_book_menu_;
     ftxui::Component title_input_;
@@ -162,6 +173,7 @@ private:
 
     ftxui::Component run_tab_container_;
     ftxui::Component library_tab_container_;
+    ftxui::Component voice_tab_container_;
     ftxui::Component tab_body_container_;
     ftxui::Component controls_;
     ftxui::Component renderer_;
@@ -172,7 +184,7 @@ public:
     TtsModal(
         const Theme* theme,
         CloudTtsPipeline* pipeline,
-        std::function<void()> prepare_current_file,
+        std::function<void(bool)> prepare_current_file,
         std::function<void()> request_ui_refresh);
 
     ftxui::Component View() const;
