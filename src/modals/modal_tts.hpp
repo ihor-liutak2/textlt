@@ -70,6 +70,7 @@ private:
     size_t SelectedStartChunkIndex() const;
     std::string SelectedAudioCacheSizeText() const;
     void JoinAudioWorker();
+    void ApplyAudioWorkerState();
 
     const Theme* theme_ = nullptr;
     CloudTtsPipeline* pipeline_ = nullptr;
@@ -98,6 +99,7 @@ private:
     mutable std::mutex audio_worker_mutex_;
     bool audio_worker_running_ = false;
     std::string audio_worker_status_;
+    bool audio_worker_refresh_pending_ = false;
 
     ftxui::Component run_tab_button_;
     ftxui::Component library_tab_button_;

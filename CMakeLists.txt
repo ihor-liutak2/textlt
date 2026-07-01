@@ -358,6 +358,17 @@ target_include_directories(textlt_remote_microsoft_drive_provider_test PRIVATE
 )
 
 
+
+add_executable(textlt_tts_pipeline_test
+  tests/tts_pipeline_test.cpp
+  src/cloud_tts_pipeline.cpp
+)
+
+target_include_directories(textlt_tts_pipeline_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+)
+
 target_link_libraries(textlt_keyboard_shortcuts_test PRIVATE ftxui::component)
 
 target_include_directories(textlt_text_importer_test PRIVATE
@@ -379,6 +390,7 @@ target_link_libraries(textlt_document_navigation_test PRIVATE ftxui::screen)
 add_test(NAME textlt_document_navigation_test COMMAND textlt_document_navigation_test)
 add_test(NAME textlt_text_importer_test COMMAND textlt_text_importer_test)
 add_test(NAME textlt_keyboard_shortcuts_test COMMAND textlt_keyboard_shortcuts_test)
+add_test(NAME textlt_tts_pipeline_test COMMAND textlt_tts_pipeline_test)
 add_test(NAME textlt_remote_path_test COMMAND textlt_remote_path_test)
 add_test(NAME textlt_remote_oauth_token_store_test COMMAND textlt_remote_oauth_token_store_test)
 add_test(NAME textlt_remote_http_client_test COMMAND textlt_remote_http_client_test)

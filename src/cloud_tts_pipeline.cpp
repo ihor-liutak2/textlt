@@ -624,7 +624,9 @@ void CloudTtsPipeline::Submit(
         text = std::move(entire_document_text),
         source_file_path = std::move(source_file_path),
         current_cursor_line] {
-        SourcePosition start_pos = {current_cursor_line, 0};
+        // Chunk positions must always map to the full document, not to the
+        // cursor position used to choose the initial TTS chunk.
+        SourcePosition start_pos = {0, 0};
         const BookMetadata book =
             BuildBookMetadata(source_file_path, text, current_cursor_line);
         WriteBook(book, BuildPreparedChunks(text, start_pos));

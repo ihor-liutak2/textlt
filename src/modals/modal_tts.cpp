@@ -613,6 +613,27 @@ void TtsModalContent::JoinAudioWorker() {
     }
 }
 
+void TtsModalContent::ApplyAudioWorkerState() {
+    bool should_refresh = false;
+    std::string worker_status;
+    {
+        std::lock_guard<std::mutex> lock(audio_worker_mutex_);
+        if (!audio_worker_refresh_pending_) {
+            return;
+        }
+        audio_worker_refresh_pending_ = false;
+        should_refresh = true;
+        worker_status = audio_worker_status_;
+    }
+
+    if (should_refresh) {
+        RefreshLibrary();
+        if (!worker_status.empty()) {
+            status_ = worker_status;
+        }
+    }
+}
+
 void TtsModalContent::StartGenerateAudio(size_t lookahead_count) {
     if (!pipeline_) {
         status_ = "TTS pipeline is not available";
@@ -676,12 +697,11 @@ void TtsModalContent::StartGenerateAudio(size_t lookahead_count) {
             }
         }
         const std::string final_status = message.str();
-        RefreshLibrary();
         {
             std::lock_guard<std::mutex> lock(audio_worker_mutex_);
             audio_worker_running_ = false;
             audio_worker_status_ = final_status;
-            status_ = audio_worker_status_;
+            audio_worker_refresh_pending_ = true;
         }
     });
 }
@@ -991,6 +1011,8 @@ ftxui::Element TtsModalContent::RenderLibraryTab() {
 }
 
 ftxui::Element TtsModalContent::Render() {
+    ApplyAudioWorkerState();
+
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
