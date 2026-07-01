@@ -173,7 +173,8 @@ TextltApp::TextltApp()
           },
           [this](const std::string& text) {
               WriteSystemClipboard(text);
-          }),
+          },
+          [this] { screen_.PostEvent(ftxui::Event::Custom); }),
       tts_modal_(
           &current_theme_,
           &cloud_tts_pipeline_,

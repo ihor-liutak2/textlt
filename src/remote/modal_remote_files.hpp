@@ -17,7 +17,9 @@
 #include "modals/modal_window.hpp"
 #include "remote/remote_config_store.hpp"
 #include "remote/remote_entry.hpp"
+#include "remote/remote_dropbox_provider.hpp"
 #include "remote/remote_local_provider.hpp"
+#include "remote/remote_provider.hpp"
 #include "remote/remote_sftp_provider.hpp"
 #include "theme.hpp"
 
@@ -59,6 +61,8 @@ private:
         Rename,
         MakeDirectory,
         Delete,
+        CopyToRemoteOverwrite,
+        CopyToLocalOverwrite,
     };
 
     struct PanelState {
@@ -98,6 +102,9 @@ private:
     void GoParent(PanelSide side);
     void CopyToRemote();
     void CopyToLocal();
+    void CopyToRemoteConfirmed(const RemoteEntry& entry, const std::string& remote_target);
+    void CopyToLocalConfirmed(const RemoteEntry& entry, const std::string& local_target);
+    void StartOverwriteConfirmation(PendingOperation operation, const RemoteEntry& entry, const std::string& target_path);
     void CopyActiveToOtherPanel();
     void OpenSelectedFile();
     bool UploadCachedLocalFile(const std::filesystem::path& local_path, std::string& status, std::string& error);
@@ -124,6 +131,7 @@ private:
     static std::string EntrySizeLabel(const RemoteEntry& entry);
     static std::string TrimForDisplay(const std::string& value, size_t width);
     static bool IsParentEntry(const RemoteEntry& entry);
+    bool PanelContainsName(PanelSide side, const std::string& name) const;
     static std::string LocalPathKey(const std::filesystem::path& path);
     std::filesystem::path TempDownloadPath(const std::string& name) const;
     void RememberCachedRemoteFile(
@@ -143,7 +151,7 @@ private:
     CloseCallback on_close_;
 
     RemoteLocalProvider local_provider_;
-    std::unique_ptr<RemoteSftpProvider> remote_provider_;
+    std::unique_ptr<IRemoteProvider> remote_provider_;
     std::vector<RemoteConnectionConfig> connections_;
     int selected_connection_ = 0;
 
@@ -156,6 +164,8 @@ private:
     std::string pending_input_label_;
     std::string pending_input_value_;
     int pending_input_cursor_ = 0;
+    RemoteEntry pending_copy_entry_;
+    std::string pending_copy_target_path_;
 
     struct CachedRemoteFile {
         std::filesystem::path local_path;

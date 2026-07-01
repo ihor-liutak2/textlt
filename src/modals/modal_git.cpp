@@ -1,6 +1,8 @@
 #include "modals/modal_git.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <future>
 #include <utility>
 
 #include "ftxui/component/component_options.hpp"
@@ -21,13 +23,15 @@ GitModalContent::GitModalContent(
     OpenFileCallback on_open_file,
     OpenCompareCallback on_open_compare,
     WriteClipboardCallback write_clipboard,
-    CloseCallback on_close)
+    CloseCallback on_close,
+    RequestRedrawCallback request_redraw)
     : theme_(theme),
       git_manager_(git_manager),
       on_open_file_(std::move(on_open_file)),
       on_open_compare_(std::move(on_open_compare)),
       write_clipboard_(std::move(write_clipboard)),
-      on_close_(std::move(on_close)) {
+      on_close_(std::move(on_close)),
+      request_redraw_(std::move(request_redraw)) {
     status_tab_button_ = MakeTabButton("Status", static_cast<int>(Tab::Status));
     diff_tab_button_ = MakeTabButton("Diff", static_cast<int>(Tab::Diff));
     commit_tab_button_ = MakeTabButton("Commit", static_cast<int>(Tab::Commit));
@@ -393,6 +397,116 @@ GitModalContent::GitModalContent(
         {primary_container, confirm_container_}, &confirm_layer_index_);
 }
 
+GitModalContent::~GitModalContent() {
+    if (operation_thread_.joinable()) {
+        operation_thread_.join();
+    }
+}
+
+void GitModalContent::StartBackgroundOperation(
+    BackgroundOperation operation,
+    std::string action,
+    std::function<GitManager::CommandResult()> command) {
+    if (operation_running_ || !command) {
+        return;
+    }
+    if (operation_thread_.joinable()) {
+        operation_thread_.join();
+    }
+
+    background_operation_ = operation;
+    operation_action_ = std::move(action);
+    operation_frame_ = 0;
+    operation_completed_ = false;
+    operation_running_ = true;
+    status_ = operation_action_ + " in progress...";
+    if (request_redraw_) {
+        request_redraw_();
+    }
+
+    operation_thread_ = std::thread([this, command = std::move(command)]() mutable {
+        auto future = std::async(std::launch::async, [command = std::move(command)]() mutable {
+            return command();
+        });
+        while (future.wait_for(std::chrono::milliseconds(100)) != std::future_status::ready) {
+            ++operation_frame_;
+            if (request_redraw_) {
+                request_redraw_();
+            }
+        }
+
+        GitManager::CommandResult result;
+        try {
+            result = future.get();
+        } catch (const std::exception& error) {
+            result.exit_code = -1;
+            result.output = error.what();
+        } catch (...) {
+            result.exit_code = -1;
+            result.output = "Unknown background Git error.";
+        }
+        {
+            std::lock_guard<std::mutex> lock(operation_mutex_);
+            operation_result_ = std::move(result);
+            operation_completed_ = true;
+        }
+        if (request_redraw_) {
+            request_redraw_();
+        }
+    });
+}
+
+void GitModalContent::ApplyBackgroundOperationCompletion() {
+    GitManager::CommandResult result;
+    {
+        std::lock_guard<std::mutex> lock(operation_mutex_);
+        if (!operation_completed_) {
+            return;
+        }
+        result = std::move(operation_result_);
+        operation_completed_ = false;
+    }
+
+    operation_running_ = false;
+    if (operation_thread_.joinable()) {
+        operation_thread_.join();
+    }
+
+    if (background_operation_ == BackgroundOperation::Commit) {
+        RunAndRefresh(operation_action_, result);
+        if (result.success()) {
+            commit_message_.clear();
+        }
+    } else {
+        server_output_ = result.output;
+        server_output_scroll_offset_ = 0;
+        SplitOutputLines(server_output_, &server_output_lines_);
+        if (background_operation_ == BackgroundOperation::CheckConnection) {
+            status_ = result.success() ? "Connection OK." : "Connection check failed.";
+        } else {
+            RunAndRefresh(operation_action_, result);
+        }
+    }
+    background_operation_ = BackgroundOperation::None;
+}
+
+ftxui::Element GitModalContent::RenderOperationOverlay() const {
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    return ftxui::vbox({
+        ftxui::hbox({
+            ftxui::spinner(0, operation_frame_.load()) | ftxui::bold,
+            ftxui::text("  " + operation_action_ + "...") |
+                ftxui::bold | ftxui::color(theme.modal_text_color),
+        }),
+        ftxui::text("Please wait. The Git operation is still running.") |
+            ftxui::dim | ftxui::color(theme.modal_text_color),
+    }) |
+        ftxui::border |
+        ftxui::bgcolor(theme.modal_background) |
+        ftxui::color(theme.modal_border) |
+        ftxui::clear_under;
+}
+
 ftxui::Component GitModalContent::MakeTextButton(
     std::string label,
     std::function<void()> on_click) {
@@ -494,6 +608,7 @@ ftxui::Element GitModalContent::RenderTitle() {
 }
 
 ftxui::Element GitModalContent::Render() {
+    ApplyBackgroundOperationCompletion();
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
     ftxui::Element body;
@@ -519,9 +634,13 @@ ftxui::Element GitModalContent::Render() {
         ftxui::bgcolor(theme.modal_background) |
         ftxui::color(theme.modal_foreground);
 
-    if (!confirm_active_) {
+    if (!confirm_active_ && !operation_running_) {
         return body;
     }
+
+    ftxui::Element overlay = operation_running_
+        ? RenderOperationOverlay()
+        : RenderConfirmOverlay();
 
     return ftxui::dbox({
         body,
@@ -529,7 +648,7 @@ ftxui::Element GitModalContent::Render() {
             ftxui::filler(),
             ftxui::hbox({
                 ftxui::filler(),
-                RenderConfirmOverlay(),
+                overlay,
                 ftxui::filler(),
             }),
             ftxui::filler(),
@@ -542,6 +661,10 @@ std::string GitModalContent::GetFooterText() const {
 }
 
 bool GitModalContent::HandleEvent(ftxui::Event event) {
+    ApplyBackgroundOperationCompletion();
+    if (operation_running_) {
+        return true;
+    }
     if (confirm_active_) {
         return HandleConfirmEvent(event);
     }
@@ -610,7 +733,8 @@ GitModal::GitModal(
     GitManager* git_manager,
     OpenFileCallback on_open_file,
     OpenCompareCallback on_open_compare,
-    WriteClipboardCallback write_clipboard)
+    WriteClipboardCallback write_clipboard,
+    GitModalContent::RequestRedrawCallback request_redraw)
     : theme_(theme) {
     content_ = std::make_shared<GitModalContent>(
         theme_,
@@ -618,7 +742,8 @@ GitModal::GitModal(
         std::move(on_open_file),
         std::move(on_open_compare),
         std::move(write_clipboard),
-        [this] { Close(); });
+        [this] { Close(); },
+        std::move(request_redraw));
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
 }
 

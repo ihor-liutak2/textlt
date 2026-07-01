@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <sstream>
 #include <utility>
 
@@ -38,6 +39,27 @@ bool SplitFindLine(const std::string& line, char& type, std::uintmax_t& size, st
     return !name.empty();
 }
 
+bool CommandAvailable(const std::string& executable) {
+#ifdef _WIN32
+    const std::string command = "where " + executable + " > NUL 2> NUL";
+#else
+    const std::string command = "command -v " + executable + " >/dev/null 2>/dev/null";
+#endif
+    return std::system(command.c_str()) == 0;
+}
+
+bool ContainsBatchUnsafeCharacter(const std::string& value) {
+    return value.find('\n') != std::string::npos || value.find('\r') != std::string::npos;
+}
+
+bool ValidateSftpBatchPath(const std::string& path, const std::string& label, std::string& error) {
+    if (ContainsBatchUnsafeCharacter(path)) {
+        error = label + " contains a newline. SFTP batch commands cannot safely handle that path.";
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 bool RemoteSftpProvider::Connect(const RemoteConnectionConfig& config, std::string& error) {
@@ -49,6 +71,14 @@ bool RemoteSftpProvider::Connect(const RemoteConnectionConfig& config, std::stri
     }
     if (Target().empty()) {
         error = "SFTP connection needs ssh_config_host or user/host.";
+        return false;
+    }
+    if (!CommandAvailable("ssh")) {
+        error = "Cannot find external ssh executable. Install OpenSSH client or add ssh to PATH.";
+        return false;
+    }
+    if (!CommandAvailable("sftp")) {
+        error = "Cannot find external sftp executable. Install OpenSSH client or add sftp to PATH.";
         return false;
     }
     error.clear();
@@ -151,6 +181,10 @@ bool RemoteSftpProvider::Download(
     const std::string& remote_path,
     const std::string& local_path,
     std::string& error) {
+    if (!ValidateSftpBatchPath(remote_path, "Remote path", error) ||
+        !ValidateSftpBatchPath(local_path, "Local path", error)) {
+        return false;
+    }
     std::string output;
     return RunSftpBatch(
         "get " + SftpQuote(remote_path) + " " + SftpQuote(local_path) + "\n",
@@ -162,6 +196,10 @@ bool RemoteSftpProvider::Upload(
     const std::string& local_path,
     const std::string& remote_path,
     std::string& error) {
+    if (!ValidateSftpBatchPath(local_path, "Local path", error) ||
+        !ValidateSftpBatchPath(remote_path, "Remote path", error)) {
+        return false;
+    }
     std::string output;
     return RunSftpBatch(
         "put " + SftpQuote(local_path) + " " + SftpQuote(remote_path) + "\n",
@@ -173,6 +211,10 @@ bool RemoteSftpProvider::DownloadDirectory(
     const std::string& remote_path,
     const std::string& local_path,
     std::string& error) {
+    if (!ValidateSftpBatchPath(remote_path, "Remote path", error) ||
+        !ValidateSftpBatchPath(local_path, "Local path", error)) {
+        return false;
+    }
     std::string output;
     return RunSftpBatch(
         "get -r " + SftpQuote(remote_path) + " " + SftpQuote(local_path) + "\n",
@@ -184,6 +226,10 @@ bool RemoteSftpProvider::UploadDirectory(
     const std::string& local_path,
     const std::string& remote_path,
     std::string& error) {
+    if (!ValidateSftpBatchPath(local_path, "Local path", error) ||
+        !ValidateSftpBatchPath(remote_path, "Remote path", error)) {
+        return false;
+    }
     std::string output;
     return RunSftpBatch(
         "put -r " + SftpQuote(local_path) + " " + SftpQuote(remote_path) + "\n",
@@ -195,6 +241,10 @@ bool RemoteSftpProvider::Rename(
     const std::string& old_path,
     const std::string& new_path,
     std::string& error) {
+    if (!ValidateSftpBatchPath(old_path, "Old remote path", error) ||
+        !ValidateSftpBatchPath(new_path, "New remote path", error)) {
+        return false;
+    }
     std::string output;
     return RunSftpBatch(
         "rename " + SftpQuote(old_path) + " " + SftpQuote(new_path) + "\n",
@@ -203,16 +253,25 @@ bool RemoteSftpProvider::Rename(
 }
 
 bool RemoteSftpProvider::RemoveFile(const std::string& path, std::string& error) {
+    if (!ValidateSftpBatchPath(path, "Remote path", error)) {
+        return false;
+    }
     std::string output;
     return RunSftpBatch("rm " + SftpQuote(path) + "\n", output, error);
 }
 
 bool RemoteSftpProvider::MakeDirectory(const std::string& path, std::string& error) {
+    if (!ValidateSftpBatchPath(path, "Remote path", error)) {
+        return false;
+    }
     std::string output;
     return RunSftpBatch("mkdir " + SftpQuote(path) + "\n", output, error);
 }
 
 bool RemoteSftpProvider::RemoveDirectory(const std::string& path, std::string& error) {
+    if (!ValidateSftpBatchPath(path, "Remote path", error)) {
+        return false;
+    }
     std::string output;
     return RunSftpBatch("rmdir " + SftpQuote(path) + "\n", output, error);
 }

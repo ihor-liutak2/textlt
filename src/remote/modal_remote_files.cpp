@@ -357,7 +357,7 @@ ftxui::Element RemoteFilesModalContent::RenderOperationRow() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     if (pending_operation_ == PendingOperation::None) {
         return hbox({
-            text(" Enter opens. Backspace goes up. F5 copies file/folder. Sync Last uploads cached remote file manually. ") |
+            text(" Enter opens. Backspace goes up. F5 copies file/folder. Existing targets require OVERWRITE confirmation. ") |
                 dim | color(theme.modal_text_color),
             filler(),
         });
@@ -478,20 +478,28 @@ bool RemoteFilesModalContent::EnsureRemoteProvider() {
     }
 
     const RemoteConnectionConfig& config = connections_[static_cast<size_t>(selected_connection_)];
-    if (config.type != RemoteConnectionType::Sftp) {
-        remote_provider_.reset();
-        remote_panel_.entries.clear();
-        remote_panel_.path = config.remote_root.empty() ? "/" : config.remote_root;
-        remote_panel_.path_input = remote_panel_.path;
-        SetPanelStatus(PanelSide::Remote, "Only SFTP is active in the file manager now. Cloud connections can be configured, but their providers need the next OAuth/API patch.", true);
-        return false;
+    std::unique_ptr<IRemoteProvider> provider;
+    switch (config.type) {
+        case RemoteConnectionType::Sftp:
+            provider = std::make_unique<RemoteSftpProvider>();
+            break;
+        case RemoteConnectionType::Dropbox:
+            provider = std::make_unique<RemoteDropboxProvider>();
+            break;
+        case RemoteConnectionType::GoogleDrive:
+        case RemoteConnectionType::MicrosoftDrive:
+            remote_provider_.reset();
+            remote_panel_.entries.clear();
+            remote_panel_.path = config.remote_root.empty() ? "/" : config.remote_root;
+            remote_panel_.path_input = remote_panel_.path;
+            SetPanelStatus(PanelSide::Remote, "This cloud type can be configured, but its file provider is not implemented yet. Dropbox and SFTP are active now.", true);
+            return false;
     }
 
-    auto provider = std::make_unique<RemoteSftpProvider>();
     std::string error;
-    if (!provider->Connect(config, error)) {
+    if (!provider || !provider->Connect(config, error)) {
         remote_provider_.reset();
-        SetPanelStatus(PanelSide::Remote, error, true);
+        SetPanelStatus(PanelSide::Remote, error.empty() ? "Cannot connect remote provider." : error, true);
         return false;
     }
     remote_provider_ = std::move(provider);
@@ -619,12 +627,27 @@ void RemoteFilesModalContent::CopyToRemote() {
     }
 
     const std::string remote_target = JoinRemotePath(remote_panel_.path, entry->name);
+    if (PanelContainsName(PanelSide::Remote, entry->name)) {
+        StartOverwriteConfirmation(PendingOperation::CopyToRemoteOverwrite, *entry, remote_target);
+        return;
+    }
+    CopyToRemoteConfirmed(*entry, remote_target);
+}
+
+void RemoteFilesModalContent::CopyToRemoteConfirmed(
+    const RemoteEntry& entry,
+    const std::string& remote_target) {
+    if (!EnsureRemoteProvider()) {
+        SetStatus("Remote provider is not available.", true);
+        return;
+    }
+
     std::string error;
     bool success = false;
-    if (entry->type == RemoteEntryType::Directory) {
-        success = remote_provider_->UploadDirectory(entry->path, remote_target, error);
-    } else if (entry->type == RemoteEntryType::File || entry->type == RemoteEntryType::Symlink) {
-        success = remote_provider_->Upload(entry->path, remote_target, error);
+    if (entry.type == RemoteEntryType::Directory) {
+        success = remote_provider_->UploadDirectory(entry.path, remote_target, error);
+    } else if (entry.type == RemoteEntryType::File || entry.type == RemoteEntryType::Symlink) {
+        success = remote_provider_->Upload(entry.path, remote_target, error);
     } else {
         SetStatus("Only files, symlinks, and directories can be uploaded.", true);
         return;
@@ -635,7 +658,7 @@ void RemoteFilesModalContent::CopyToRemote() {
         return;
     }
     LoadPanel(PanelSide::Remote, remote_panel_.path);
-    SetStatus((entry->type == RemoteEntryType::Directory ? "Uploaded folder: " : "Uploaded: ") + entry->name);
+    SetStatus((entry.type == RemoteEntryType::Directory ? "Uploaded folder: " : "Uploaded: ") + entry.name);
 }
 
 void RemoteFilesModalContent::CopyToLocal() {
@@ -651,12 +674,33 @@ void RemoteFilesModalContent::CopyToLocal() {
 
     const std::string local_target = FileManager::PathToUtf8(
         FileManager::PathFromUtf8(local_panel_.path) / FileManager::PathFromUtf8(entry->name));
+    std::error_code exists_error;
+    const bool target_exists = std::filesystem::exists(FileManager::PathFromUtf8(local_target), exists_error);
+    if (exists_error) {
+        SetStatus("Cannot check local target: " + exists_error.message(), true);
+        return;
+    }
+    if (target_exists) {
+        StartOverwriteConfirmation(PendingOperation::CopyToLocalOverwrite, *entry, local_target);
+        return;
+    }
+    CopyToLocalConfirmed(*entry, local_target);
+}
+
+void RemoteFilesModalContent::CopyToLocalConfirmed(
+    const RemoteEntry& entry,
+    const std::string& local_target) {
+    if (!remote_provider_) {
+        SetStatus("Remote provider is not available.", true);
+        return;
+    }
+
     std::string error;
     bool success = false;
-    if (entry->type == RemoteEntryType::Directory) {
-        success = remote_provider_->DownloadDirectory(entry->path, local_target, error);
-    } else if (entry->type == RemoteEntryType::File || entry->type == RemoteEntryType::Symlink) {
-        success = remote_provider_->Download(entry->path, local_target, error);
+    if (entry.type == RemoteEntryType::Directory) {
+        success = remote_provider_->DownloadDirectory(entry.path, local_target, error);
+    } else if (entry.type == RemoteEntryType::File || entry.type == RemoteEntryType::Symlink) {
+        success = remote_provider_->Download(entry.path, local_target, error);
     } else {
         SetStatus("Only files, symlinks, and directories can be downloaded.", true);
         return;
@@ -667,7 +711,26 @@ void RemoteFilesModalContent::CopyToLocal() {
         return;
     }
     LoadPanel(PanelSide::Local, local_panel_.path);
-    SetStatus((entry->type == RemoteEntryType::Directory ? "Downloaded folder: " : "Downloaded: ") + entry->name);
+    SetStatus((entry.type == RemoteEntryType::Directory ? "Downloaded folder: " : "Downloaded: ") + entry.name);
+}
+
+void RemoteFilesModalContent::StartOverwriteConfirmation(
+    PendingOperation operation,
+    const RemoteEntry& entry,
+    const std::string& target_path) {
+    pending_operation_ = operation;
+    pending_panel_ = operation == PendingOperation::CopyToRemoteOverwrite
+        ? PanelSide::Remote
+        : PanelSide::Local;
+    pending_copy_entry_ = entry;
+    pending_copy_target_path_ = target_path;
+    pending_input_label_ = "Type OVERWRITE";
+    pending_input_value_.clear();
+    pending_input_cursor_ = 0;
+    if (operation_input_) {
+        operation_input_->TakeFocus();
+    }
+    SetStatus("Target already exists: " + TrimForDisplay(target_path, 80) + ". Type OVERWRITE and Confirm to replace it.", true);
 }
 
 void RemoteFilesModalContent::CopyActiveToOtherPanel() {
@@ -749,12 +812,6 @@ bool RemoteFilesModalContent::UploadCachedLocalFile(
         return false;
     }
 
-    if (iter->connection.type != RemoteConnectionType::Sftp) {
-        error = "Only SFTP cached files can be synced now. Cloud sync needs the next OAuth/API provider patch.";
-        SetStatus(error, true);
-        return false;
-    }
-
     std::error_code exists_error;
     if (!std::filesystem::is_regular_file(iter->local_path, exists_error)) {
         error = exists_error ? exists_error.message() : "Cached local file does not exist.";
@@ -762,13 +819,23 @@ bool RemoteFilesModalContent::UploadCachedLocalFile(
         return false;
     }
 
-    RemoteSftpProvider provider;
-    if (!provider.Connect(iter->connection, error)) {
+    std::unique_ptr<IRemoteProvider> provider;
+    if (iter->connection.type == RemoteConnectionType::Sftp) {
+        provider = std::make_unique<RemoteSftpProvider>();
+    } else if (iter->connection.type == RemoteConnectionType::Dropbox) {
+        provider = std::make_unique<RemoteDropboxProvider>();
+    } else {
+        error = "Manual sync is implemented for SFTP and Dropbox cached files only.";
+        SetStatus(error, true);
+        return false;
+    }
+
+    if (!provider->Connect(iter->connection, error)) {
         SetStatus(error.empty() ? "Cannot connect to remote." : error, true);
         return false;
     }
 
-    if (!provider.Upload(FileManager::PathToUtf8(iter->local_path), iter->remote_path, error)) {
+    if (!provider->Upload(FileManager::PathToUtf8(iter->local_path), iter->remote_path, error)) {
         SetStatus(error.empty() ? "Remote upload failed." : error, true);
         return false;
     }
@@ -920,10 +987,11 @@ void RemoteFilesModalContent::StartDelete() {
     pending_input_label_ = "Type DELETE";
     pending_input_value_.clear();
     pending_input_cursor_ = 0;
+    pending_copy_target_path_ = entry->path;
     if (operation_input_) {
         operation_input_->TakeFocus();
     }
-    SetStatus("Deletion requires typing DELETE and pressing Confirm.");
+    SetStatus("Delete " + TrimForDisplay(entry->path, 80) + "? Type DELETE and press Confirm.", true);
 }
 
 void RemoteFilesModalContent::ConfirmPendingOperation() {
@@ -934,6 +1002,26 @@ void RemoteFilesModalContent::ConfirmPendingOperation() {
     IRemoteProvider* provider = Provider(pending_panel_);
     if (!provider) {
         SetStatus("Provider is not available.", true);
+        return;
+    }
+
+    if (pending_operation_ == PendingOperation::CopyToRemoteOverwrite ||
+        pending_operation_ == PendingOperation::CopyToLocalOverwrite) {
+        if (pending_input_value_ != "OVERWRITE") {
+            SetStatus("Type OVERWRITE to replace the existing target.", true);
+            return;
+        }
+
+        const PendingOperation operation = pending_operation_;
+        const RemoteEntry entry = pending_copy_entry_;
+        const std::string target_path = pending_copy_target_path_;
+        CancelPendingOperation();
+
+        if (operation == PendingOperation::CopyToRemoteOverwrite) {
+            CopyToRemoteConfirmed(entry, target_path);
+            return;
+        }
+        CopyToLocalConfirmed(entry, target_path);
         return;
     }
 
@@ -1007,6 +1095,8 @@ void RemoteFilesModalContent::CancelPendingOperation() {
     pending_input_label_.clear();
     pending_input_value_.clear();
     pending_input_cursor_ = 0;
+    pending_copy_entry_ = RemoteEntry{};
+    pending_copy_target_path_.clear();
 }
 
 RemoteEntry* RemoteFilesModalContent::SelectedEntry(PanelSide side) {
@@ -1076,6 +1166,13 @@ std::string RemoteFilesModalContent::TrimForDisplay(const std::string& value, si
 
 bool RemoteFilesModalContent::IsParentEntry(const RemoteEntry& entry) {
     return entry.name == "..";
+}
+
+bool RemoteFilesModalContent::PanelContainsName(PanelSide side, const std::string& name) const {
+    const PanelState& panel = Panel(side);
+    return std::any_of(panel.entries.begin(), panel.entries.end(), [&name](const RemoteEntry& entry) {
+        return !IsParentEntry(entry) && entry.name == name;
+    });
 }
 
 std::string RemoteFilesModalContent::LocalPathKey(const std::filesystem::path& path) {
@@ -1170,7 +1267,7 @@ RemoteFilesModal::RemoteFilesModal(
         [this] { Close(); });
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
     modal_->SetBodyFrameScrolling(false);
-    modal_->SetFooterText("SFTP uses external ssh/sftp. F5 copies active item, Sync Last manually uploads cached remote file, F6 renames, F7 mkdir, F8 deletes.");
+    modal_->SetFooterText("SFTP uses external ssh/sftp. F5 copies active item. Existing targets require OVERWRITE. Delete requires DELETE.");
 }
 
 ftxui::Component RemoteFilesModal::View() const {

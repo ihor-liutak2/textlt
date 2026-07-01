@@ -1,0 +1,55 @@
+--- tests/remote_path_test.cpp
++++ tests/remote_path_test.cpp
+@@ -0,0 +1,52 @@
++#include <cstdlib>
++#include <iostream>
++#include <string>
++
++#include "remote/remote_connection_config.hpp"
++
++namespace {
++
++void ExpectEqual(const std::string& name, const std::string& actual, const std::string& expected) {
++    if (actual == expected) {
++        return;
++    }
++    std::cerr << name << " expected [" << expected << "] but got [" << actual << "]\n";
++    std::exit(1);
++}
++
++void ExpectType(const std::string& name, textlt::RemoteConnectionType actual, textlt::RemoteConnectionType expected) {
++    if (actual == expected) {
++        return;
++    }
++    std::cerr << name << " returned wrong type\n";
++    std::exit(1);
++}
++
++} // namespace
++
++int main() {
++    using namespace textlt;
++
++    ExpectEqual("Normalize root", NormalizeRemoteDirectory(""), "/");
++    ExpectEqual("Normalize duplicate slashes", NormalizeRemoteDirectory("/a//b/./c"), "/a/b/c");
++    ExpectEqual("Normalize parent", NormalizeRemoteDirectory("/a/b/../c"), "/a/c");
++    ExpectEqual("Normalize relative", NormalizeRemoteDirectory("a/./b"), "a/b");
++
++    ExpectEqual("Join root", JoinRemotePath("/", "file.txt"), "/file.txt");
++    ExpectEqual("Join nested", JoinRemotePath("/a/b", "file.txt"), "/a/b/file.txt");
++    ExpectEqual("Join absolute", JoinRemotePath("/a/b", "/x/y.txt"), "/x/y.txt");
++
++    ExpectEqual("Parent root", RemoteParentPath("/"), "/");
++    ExpectEqual("Parent nested", RemoteParentPath("/a/b/file.txt"), "/a/b");
++    ExpectEqual("Parent relative", RemoteParentPath("file.txt"), ".");
++
++    ExpectEqual("Base root", RemoteBaseName("/"), "/");
++    ExpectEqual("Base nested", RemoteBaseName("/a/b/file.txt"), "file.txt");
++
++    ExpectType("SFTP type", RemoteConnectionTypeFromString("sftp"), RemoteConnectionType::Sftp);
++    ExpectType("Google type", RemoteConnectionTypeFromString("google-drive"), RemoteConnectionType::GoogleDrive);
++    ExpectType("OneDrive type", RemoteConnectionTypeFromString("onedrive"), RemoteConnectionType::MicrosoftDrive);
++    ExpectType("Dropbox type", RemoteConnectionTypeFromString("dropbox"), RemoteConnectionType::Dropbox);
++
++    return 0;
++}

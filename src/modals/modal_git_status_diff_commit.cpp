@@ -238,13 +238,12 @@ void GitModalContent::CommitStagedFiles() {
     RequestConfirm(
         "Confirm commit",
         "Commit staged files with the current commit message.",
-        "git commit -m "" + TrimForDisplay(message, 80) + """,
+        "git commit -m \"" + TrimForDisplay(message, 80) + "\"",
         [this, message] {
-            GitManager::CommandResult result = git_manager_->Commit(message);
-            RunAndRefresh("Commit", result);
-            if (result.success()) {
-                commit_message_.clear();
-            }
+            StartBackgroundOperation(
+                BackgroundOperation::Commit,
+                "Commit",
+                [this, message] { return git_manager_->Commit(message); });
         });
 }
 
@@ -366,7 +365,7 @@ ftxui::Element GitModalContent::RenderCommitTab() {
         staged_files_view |
             ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, 14) |
             ftxui::yflex,
-        ftxui::text(""),
+        ftxui::separator() | ftxui::color(theme.modal_border),
         ftxui::text("Commit message:") | ftxui::bold | ftxui::color(theme.modal_accent),
         commit_message_input_->Render() |
             ftxui::bgcolor(theme.modal_input_bg) |

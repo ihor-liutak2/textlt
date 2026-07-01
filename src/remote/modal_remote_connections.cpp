@@ -4,12 +4,15 @@
 #include <chrono>
 #include <cctype>
 #include <cstdlib>
+#include <filesystem>
 #include <sstream>
 #include <utility>
 
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/mouse.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "remote/remote_dropbox_provider.hpp"
+#include "remote/remote_oauth_token_store.hpp"
 #include "remote/remote_sftp_provider.hpp"
 
 namespace textlt {
@@ -195,6 +198,7 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     delete_button_ = MakeTextButton("Delete", [this] { DeleteSelected(); });
     save_button_ = MakeTextButton("Save", [this] { SaveFormToSelected(); });
     test_button_ = MakeTextButton("Test", [this] { TestSelected(); });
+    token_button_ = MakeTextButton("Token", [this] { PrepareTokenFile(); });
     sftp_type_button_ = MakeTextButton("SFTP", [this] { SelectType(RemoteConnectionType::Sftp); });
     google_type_button_ = MakeTextButton("Google", [this] { SelectType(RemoteConnectionType::GoogleDrive); });
     microsoft_type_button_ = MakeTextButton("Microsoft", [this] { SelectType(RemoteConnectionType::MicrosoftDrive); });
@@ -216,6 +220,7 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
             delete_button_,
             save_button_,
             test_button_,
+            token_button_,
             reload_button_,
             close_button_,
         }),
@@ -329,6 +334,7 @@ ftxui::Element RemoteConnectionsModalContent::Render() {
             delete_button_->Render(), text(" "),
             save_button_->Render(), text(" "),
             test_button_->Render(), text(" "),
+            token_button_->Render(), text(" "),
             reload_button_->Render(), text(" "),
             close_button_->Render(),
         }) | color(theme.modal_accent),
@@ -451,8 +457,8 @@ ftxui::Element RemoteConnectionsModalContent::RenderForm() {
             rows.push_back(field("Client secret", client_secret_input_));
             rows.push_back(field("Token file", token_file_input_));
             rows.push_back(field("Root folder ID", root_folder_id_input_));
-            rows.push_back(note("Google Drive config is saved now. File operations need the next CurlManager/OAuth provider patch."));
-            rows.push_back(note("Leave Root folder ID empty to use the Drive root."));
+            rows.push_back(note("Press Token to create/verify the token JSON placeholder."));
+            rows.push_back(note("Leave Root folder ID empty to use the Drive root. API file operations come next."));
             break;
         case RemoteConnectionType::MicrosoftDrive:
             rows.push_back(field("Account label", account_label_input_));
@@ -464,7 +470,7 @@ ftxui::Element RemoteConnectionsModalContent::RenderForm() {
             rows.push_back(field("Drive ID", drive_id_input_));
             rows.push_back(field("Remote root", remote_root_input_));
             rows.push_back(note("Use Tenant ID 'common' for personal accounts, or a tenant id for organization accounts."));
-            rows.push_back(note("OneDrive/SharePoint config is saved now. File operations need the next Graph API provider patch."));
+            rows.push_back(note("Press Token to create/verify the token JSON placeholder. Graph API file operations come next."));
             break;
         case RemoteConnectionType::Dropbox:
             rows.push_back(field("Account label", account_label_input_));
@@ -472,8 +478,8 @@ ftxui::Element RemoteConnectionsModalContent::RenderForm() {
             rows.push_back(field("App secret", app_secret_input_));
             rows.push_back(field("Token file", token_file_input_));
             rows.push_back(field("Remote root", remote_root_input_));
-            rows.push_back(note("Dropbox config is saved now. File operations need the next CurlManager/OAuth provider patch."));
-            rows.push_back(note("Remote root can be / or a folder path such as /TextLT."));
+            rows.push_back(note("Press Token to create/verify the token JSON placeholder."));
+            rows.push_back(note("Remote root can be / or /TextLT. Dropbox API file operations come next."));
             break;
     }
 
@@ -558,7 +564,7 @@ void RemoteConnectionsModalContent::ApplyTypeDefaults(RemoteConnectionType type)
             break;
         case RemoteConnectionType::GoogleDrive:
             if (token_file_value_.empty()) {
-                token_file_value_ = "~/.config/textlt/google_drive_token.json";
+                token_file_value_ = SuggestedTokenFile(type);
             }
             break;
         case RemoteConnectionType::MicrosoftDrive:
@@ -566,12 +572,12 @@ void RemoteConnectionsModalContent::ApplyTypeDefaults(RemoteConnectionType type)
                 tenant_id_value_ = "common";
             }
             if (token_file_value_.empty()) {
-                token_file_value_ = "~/.config/textlt/microsoft_drive_token.json";
+                token_file_value_ = SuggestedTokenFile(type);
             }
             break;
         case RemoteConnectionType::Dropbox:
             if (token_file_value_.empty()) {
-                token_file_value_ = "~/.config/textlt/dropbox_token.json";
+                token_file_value_ = SuggestedTokenFile(type);
             }
             break;
     }
@@ -641,6 +647,10 @@ void RemoteConnectionsModalContent::SaveFormToSelected() {
         SetStatus("SFTP connection needs Host or SSH config alias.", true);
         return;
     }
+    if (IsCloudRemoteConnectionType(config.type) && config.token_file.empty()) {
+        config.token_file = SuggestedTokenFile(config.type);
+        token_file_value_ = config.token_file;
+    }
     config_store_->AddOrUpdate(config);
     std::string error;
     if (!config_store_->Save(error)) {
@@ -709,12 +719,37 @@ void RemoteConnectionsModalContent::DeleteSelected() {
 
 void RemoteConnectionsModalContent::TestSelected() {
     RemoteConnectionConfig config = FormConfig();
-    if (config.type != RemoteConnectionType::Sftp) {
-        output_ = TypeDisplayName(config.type) +
-            " configuration can be saved. Connection testing and file operations for this type require the next OAuth/API provider patch.";
-        SetStatus("Configuration fields are available for " + TypeDisplayName(config.type) + ".");
+    if (config.type != RemoteConnectionType::Sftp && config.token_file.empty()) {
+        config.token_file = SuggestedTokenFile(config.type);
+        token_file_value_ = config.token_file;
+    }
+
+    if (config.type == RemoteConnectionType::Dropbox) {
+        RemoteDropboxProvider provider;
+        std::string error;
+        if (!provider.Connect(config, error)) {
+            output_ = DescribeRemoteOAuthTokenStatus(config) + "\n" + error;
+            SetStatus("Dropbox token is not ready.", true);
+            return;
+        }
+        std::string output;
+        if (!provider.TestConnection(output, error)) {
+            output_ = error;
+            SetStatus("Dropbox connection test failed.", true);
+            return;
+        }
+        output_ = output;
+        SetStatus("Dropbox connection test succeeded.");
         return;
     }
+
+    if (config.type != RemoteConnectionType::Sftp) {
+        output_ = DescribeRemoteOAuthTokenStatus(config) +
+            "\nOAuth login and REST file operations for this provider will use this token file in a later API patch.";
+        SetStatus("Checked token file for " + TypeDisplayName(config.type) + ".");
+        return;
+    }
+
     RemoteSftpProvider provider;
     std::string error;
     if (!provider.Connect(config, error)) {
@@ -730,6 +765,48 @@ void RemoteConnectionsModalContent::TestSelected() {
     }
     output_ = output;
     SetStatus("Connection test succeeded.");
+}
+
+void RemoteConnectionsModalContent::PrepareTokenFile() {
+    RemoteConnectionConfig config = FormConfig();
+    if (!IsCloudRemoteConnectionType(config.type)) {
+        output_ = "SFTP uses SSH keys / ssh-agent / ~/.ssh/config and does not need an OAuth token file.";
+        SetStatus("Token files are only used by Google, Microsoft, and Dropbox.");
+        return;
+    }
+    if (config.token_file.empty()) {
+        config.token_file = SuggestedTokenFile(config.type);
+        token_file_value_ = config.token_file;
+        token_file_cursor_ = static_cast<int>(token_file_value_.size());
+    }
+
+    const std::filesystem::path token_path = ExpandRemoteUserPath(config.token_file);
+    RemoteOAuthTokenStore token_store(token_path);
+    RemoteOAuthToken token;
+    std::string error;
+    if (token_store.Exists()) {
+        if (!token_store.Load(token, error)) {
+            output_ = error;
+            SetStatus("Token file is invalid.", true);
+            return;
+        }
+        output_ = DescribeRemoteOAuthTokenStatus(config);
+        SetStatus("Token file already exists.");
+        return;
+    }
+
+    token.provider = RemoteTokenProviderName(config.type);
+    token.account_label = config.account_label.empty() ? config.name : config.account_label;
+    token.token_type = "Bearer";
+    if (!token_store.Save(token, error)) {
+        output_ = error;
+        SetStatus("Cannot create token file.", true);
+        return;
+    }
+
+    output_ = "Created placeholder token file:\n" + token_path.string() +
+        "\nThe next OAuth/API patch will fill access_token and refresh_token.";
+    SetStatus("Token file prepared for " + TypeDisplayName(config.type) + ".");
 }
 
 void RemoteConnectionsModalContent::SelectConnection(int index) {
@@ -765,6 +842,17 @@ RemoteConnectionConfig RemoteConnectionsModalContent::FormConfig() const {
     return config;
 }
 
+std::string RemoteConnectionsModalContent::SuggestedTokenFile(RemoteConnectionType type) const {
+    std::string stable_name = account_label_value_;
+    if (stable_name.empty()) {
+        stable_name = name_value_;
+    }
+    if (stable_name.empty()) {
+        stable_name = id_value_;
+    }
+    return DefaultRemoteTokenPath(type, stable_name).string();
+}
+
 void RemoteConnectionsModalContent::SetStatus(std::string status, bool is_error) {
     status_ = std::move(status);
     status_is_error_ = is_error;
@@ -780,7 +868,7 @@ RemoteConnectionsModal::RemoteConnectionsModal(
         [this] { Close(); });
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
     modal_->SetBodyFrameScrolling(false);
-    modal_->SetFooterText("Choose SFTP, Google, Microsoft, or Dropbox. SFTP file operations are active now; cloud providers are saved for the next provider patch.");
+    modal_->SetFooterText("Choose SFTP, Google, Microsoft, or Dropbox. SFTP and Dropbox file operations are active now; Google/Microsoft are configuration-only.");
 }
 
 ftxui::Component RemoteConnectionsModal::View() const {

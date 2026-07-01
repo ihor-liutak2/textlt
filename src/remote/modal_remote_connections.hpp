@@ -53,9 +53,11 @@ private:
     void AddConnection();
     void DeleteSelected();
     void TestSelected();
+    void PrepareTokenFile();
     void SelectConnection(int index);
     RemoteConnectionConfig FormConfig() const;
     void SetStatus(std::string status, bool is_error = false);
+    std::string SuggestedTokenFile(RemoteConnectionType type) const;
 
     const Theme* theme_ = nullptr;
     RemoteConfigStore* config_store_ = nullptr;
@@ -129,6 +131,7 @@ private:
     ftxui::Component delete_button_;
     ftxui::Component save_button_;
     ftxui::Component test_button_;
+    ftxui::Component token_button_;
     ftxui::Component sftp_type_button_;
     ftxui::Component google_type_button_;
     ftxui::Component microsoft_type_button_;

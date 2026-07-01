@@ -192,22 +192,20 @@ void GitModalContent::CheckConnection() {
     if (!git_manager_) {
         return;
     }
-    GitManager::CommandResult result = git_manager_->CheckOriginConnection();
-    server_output_ = result.output;
-    server_output_scroll_offset_ = 0;
-    SplitOutputLines(server_output_, &server_output_lines_);
-    status_ = result.success() ? "Connection OK." : "Connection check failed.";
+    StartBackgroundOperation(
+        BackgroundOperation::CheckConnection,
+        "Check connection",
+        [this] { return git_manager_->CheckOriginConnection(); });
 }
 
 void GitModalContent::FetchServer() {
     if (!git_manager_) {
         return;
     }
-    GitManager::CommandResult result = git_manager_->FetchAllPrune();
-    server_output_ = result.output;
-    server_output_scroll_offset_ = 0;
-    SplitOutputLines(server_output_, &server_output_lines_);
-    RunAndRefresh("Fetch", result);
+    StartBackgroundOperation(
+        BackgroundOperation::Fetch,
+        "Fetch",
+        [this] { return git_manager_->FetchAllPrune(); });
 }
 
 void GitModalContent::PushServer() {
@@ -219,11 +217,10 @@ void GitModalContent::PushServer() {
         "Push current branch to the configured upstream.",
         "git push",
         [this] {
-            GitManager::CommandResult result = git_manager_->Push();
-            server_output_ = result.output;
-            server_output_scroll_offset_ = 0;
-            SplitOutputLines(server_output_, &server_output_lines_);
-            RunAndRefresh("Push", result);
+            StartBackgroundOperation(
+                BackgroundOperation::Push,
+                "Push",
+                [this] { return git_manager_->Push(); });
         });
 }
 
@@ -236,11 +233,10 @@ void GitModalContent::ForcePushWithLease() {
         "Force push with lease. This can rewrite remote history.",
         "git push --force-with-lease",
         [this] {
-            GitManager::CommandResult result = git_manager_->ForcePushWithLease();
-            server_output_ = result.output;
-            server_output_scroll_offset_ = 0;
-            SplitOutputLines(server_output_, &server_output_lines_);
-            RunAndRefresh("Force push with lease", result);
+            StartBackgroundOperation(
+                BackgroundOperation::ForcePush,
+                "Force push with lease",
+                [this] { return git_manager_->ForcePushWithLease(); });
         },
         "PUSH");
 }

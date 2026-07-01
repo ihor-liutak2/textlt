@@ -76,3 +76,50 @@ Passwords are not stored. Use one of these:
 - Identity file configured in the connection modal.
 
 The SFTP backend uses batch mode and `BatchMode=yes`, so interactive password prompts are intentionally not supported.
+
+## Patch 8 safety behavior
+
+Copy operations are safer now:
+
+- Uploading from Local to Remote checks whether the selected name already exists in the current remote panel.
+- Downloading from Remote to Local checks whether the local destination path already exists.
+- If a target exists, TextLT does not overwrite immediately. The operation asks the user to type `OVERWRITE` and press Confirm.
+- Delete still requires typing `DELETE` and now shows the exact path being deleted in the status line.
+
+The SFTP provider also checks for external `ssh` and `sftp` executables during connection setup and returns a clear error if they are missing. Paths containing newlines are rejected before building SFTP batch commands, because they cannot be safely represented in the current external `sftp -b -` command mode.
+
+## OAuth token files
+
+Google Drive, Microsoft OneDrive/SharePoint, and Dropbox now share a small token-file layer:
+
+- token files live under `~/.config/textlt/remote_tokens/` by default on Linux;
+- the connection modal can create a placeholder token JSON with the `Token` button;
+- `Test` for cloud connections validates the configured token file and reports whether it is only a placeholder or already contains an access/refresh token;
+- the connection config keeps the token-file path, but the future access/refresh tokens are stored in the token file itself.
+
+This patch does not perform OAuth login yet. The next cloud-provider patches should fill these token files through browser/device login and then use them from the Google Drive, Microsoft Graph, and Dropbox REST providers.
+
+## Patch 10 Dropbox backend
+
+Dropbox is now the first active cloud file-manager backend.
+
+The Dropbox provider uses the existing project libcurl dependency and Dropbox HTTP API endpoints. It does not add a new HTTP library.
+
+Supported Dropbox operations:
+
+- list folder;
+- download file;
+- upload file with overwrite mode;
+- recursive folder download;
+- recursive folder upload;
+- rename/move;
+- delete file or folder;
+- create folder;
+- open remote file through the same local cache used by SFTP;
+- manual `Sync Last` upload for cached Dropbox files.
+
+Dropbox root path is represented as `/` in TextLT and as an empty path string in the Dropbox API. The provider converts this internally.
+
+To use Dropbox files before a full OAuth login modal exists, the configured token file must contain an `access_token` value. The placeholder token created by the connection modal is not enough by itself.
+
+Google Drive and Microsoft OneDrive/SharePoint are still configuration-only at this step. Their providers should follow the same `IRemoteProvider` pattern in later patches.

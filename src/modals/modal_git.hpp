@@ -1,9 +1,12 @@
 #pragma once
 
+#include <atomic>
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "ftxui/component/component.hpp"
@@ -28,6 +31,7 @@ public:
         std::string& error)>;
     using WriteClipboardCallback = std::function<void(const std::string&)>;
     using CloseCallback = std::function<void()>;
+    using RequestRedrawCallback = std::function<void()>;
 
     GitModalContent(
         const Theme* theme,
@@ -35,7 +39,9 @@ public:
         OpenFileCallback on_open_file,
         OpenCompareCallback on_open_compare,
         WriteClipboardCallback write_clipboard,
-        CloseCallback on_close);
+        CloseCallback on_close,
+        RequestRedrawCallback request_redraw);
+    ~GitModalContent() override;
 
     ftxui::Element Render() override;
     ftxui::Component GetMainComponent() override { return container_; }
@@ -119,6 +125,14 @@ private:
     bool HandleConfirmEvent(ftxui::Event event);
     ftxui::Element RenderConfirmOverlay();
 
+    enum class BackgroundOperation { None, Commit, CheckConnection, Fetch, Push, ForcePush };
+    void StartBackgroundOperation(
+        BackgroundOperation operation,
+        std::string action,
+        std::function<GitManager::CommandResult()> command);
+    void ApplyBackgroundOperationCompletion();
+    ftxui::Element RenderOperationOverlay() const;
+
     void RunAndRefresh(const std::string& action, const GitManager::CommandResult& result);
     bool HasUncommittedChanges() const;
     bool HasStagedFiles() const;
@@ -158,6 +172,16 @@ private:
     OpenCompareCallback on_open_compare_;
     WriteClipboardCallback write_clipboard_;
     CloseCallback on_close_;
+    RequestRedrawCallback request_redraw_;
+
+    std::thread operation_thread_;
+    mutable std::mutex operation_mutex_;
+    std::atomic<bool> operation_running_{false};
+    bool operation_completed_ = false;
+    std::atomic<int> operation_frame_{0};
+    BackgroundOperation background_operation_ = BackgroundOperation::None;
+    std::string operation_action_;
+    GitManager::CommandResult operation_result_;
 
     int selected_tab_ = 0;
     std::string status_ = "Ready";
@@ -315,7 +339,8 @@ public:
         GitManager* git_manager,
         OpenFileCallback on_open_file,
         OpenCompareCallback on_open_compare,
-        WriteClipboardCallback write_clipboard);
+        WriteClipboardCallback write_clipboard,
+        GitModalContent::RequestRedrawCallback request_redraw = {});
 
     ftxui::Component View() const;
     void Open();
