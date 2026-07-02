@@ -459,6 +459,16 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
             FindPrevious();
             return true;
         }
+        if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'a')) {
+            if (find_input_->Focused()) {
+                find_input_cursor_position_ = static_cast<int>(find_query_.size());
+            } else if (replace_find_input_->Focused()) {
+                replace_find_input_cursor_position_ = static_cast<int>(find_query_.size());
+            } else if (replace_input_->Focused()) {
+                replace_input_cursor_position_ = static_cast<int>(replace_text_.size());
+            }
+            return true;
+        }
         return false;
     }
 
