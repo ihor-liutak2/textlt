@@ -1,6 +1,7 @@
 #include "editor_component.hpp"
 
 #include <algorithm>
+#include <fstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -21,6 +22,32 @@ constexpr size_t kMaxSafeViewportHeight = 300;
 ftxui::Element EditorComponent::RenderViewport() {
     UpdateScroll();
 
+    // DEBUG: dump what the renderer sees
+    {
+        static int render_count = 0;
+        if (++render_count % 30 == 1) {
+            std::ofstream dbg("/tmp/textlt_render.log", std::ios::app);
+            const size_t total_dbg = doc_ ? doc_->lines.size() : 0;
+            const size_t vh_dbg = VisibleHeight();
+            dbg << "RenderViewport: total_lines=" << total_dbg
+                << " visible_height=" << vh_dbg
+                << " scroll_y=" << scroll_y_
+                << " scroll_x=" << scroll_x_
+                << " cursor_row=" << (doc_ ? doc_->cursor_row : 0)
+                << " cursor_col=" << (doc_ ? doc_->cursor_col : 0)
+                << " editor_box=[" << editor_box_.x_min << "," << editor_box_.y_min
+                << "][" << editor_box_.x_max << "," << editor_box_.y_max << "]\n";
+            if (doc_) {
+                for (size_t i = 0; i < doc_->lines.size() && i < 40; ++i) {
+                    dbg << "  LINE " << i << ": [" << doc_->lines[i] << "]\n";
+                }
+                if (doc_->lines.size() > 40) {
+                    dbg << "  ... (" << doc_->lines.size() - 40 << " more lines)\n";
+                }
+            }
+        }
+    }
+
     ftxui::Elements lines_elements;
     const size_t visible_height = VisibleHeight();
     const size_t visible_width = VisibleTextWidth();
@@ -33,18 +60,21 @@ ftxui::Element EditorComponent::RenderViewport() {
 
     // Use doc_ state
     const size_t total_lines = doc_ ? doc_->lines.size() : 0;
-    const bool needs_scrollbar = total_lines > visible_height;
+    const size_t effective_total = (smart_word_wrap && doc_)
+        ? utils::WordWrapTotalVisualRows(doc_->lines, visible_width)
+        : total_lines;
+    const bool needs_scrollbar = effective_total > visible_height;
 
     const size_t slider_height = needs_scrollbar
     ? std::min(visible_height,
                std::max<size_t>(visible_height >= 2 ? 2 : 1,
-                                (visible_height * visible_height) / total_lines))
+                                (visible_height * visible_height) / effective_total))
     : visible_height;
     const size_t available_track_space = visible_height > slider_height
     ? visible_height - slider_height
     : 0;
-    const size_t slider_top = needs_scrollbar && (total_lines > visible_height)
-    ? (scroll_y_ * available_track_space) / (total_lines - visible_height)
+    const size_t slider_top = needs_scrollbar && (effective_total > visible_height)
+    ? (utils::WordWrapVisualRowAtLine(doc_->lines, scroll_y_, visible_width) * available_track_space) / (effective_total - visible_height)
     : 0;
 
     const auto bracket_origin = FindBracketNearCursor();
@@ -234,6 +264,7 @@ void EditorComponent::UpdateScroll() {
     if (!doc_) return;
 
     const size_t visible_height = VisibleHeight();
+    const bool smart_word_wrap = config_ && config_->smart_word_wrap;
     if (doc_->cursor_row >= scroll_y_ + visible_height) {
         scroll_y_ = doc_->cursor_row - visible_height + 1;
     }
@@ -241,8 +272,15 @@ void EditorComponent::UpdateScroll() {
         scroll_y_ = doc_->cursor_row;
     }
 
-    if (doc_->lines.size() <= visible_height) {
+    if (doc_->lines.size() <= visible_height && !smart_word_wrap) {
         scroll_y_ = 0;
+    } else if (smart_word_wrap) {
+        const size_t visible_width = VisibleTextWidth();
+        const size_t max_scroll_y = utils::WordWrapMaxScrollY(doc_->lines, visible_height, visible_width);
+        if (doc_->cursor_row > max_scroll_y) {
+            scroll_y_ = doc_->cursor_row;
+        }
+        scroll_y_ = std::min(scroll_y_, max_scroll_y);
     } else {
         const size_t max_scroll_y = doc_->lines.size() - visible_height;
         scroll_y_ = std::min(scroll_y_, max_scroll_y);

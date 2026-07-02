@@ -226,4 +226,52 @@ size_t FindWordDeleteEnd(const std::string& line, size_t cursor_x) {
     return index;
 }
 
+size_t WordWrapVisualRowAtLine(const std::vector<std::string>& lines,
+                               size_t line_index, size_t visible_width) {
+    size_t visual = 0;
+    for (size_t i = 0; i < line_index && i < lines.size(); ++i) {
+        auto segments = BuildUtf8WrapSegments(lines[i], visible_width);
+        visual += segments.empty() ? 1 : segments.size();
+    }
+    return visual;
+}
+
+size_t WordWrapLineAtVisualRow(const std::vector<std::string>& lines,
+                               size_t target_visual, size_t visible_width) {
+    size_t visual = 0;
+    for (size_t i = 0; i < lines.size(); ++i) {
+        auto segments = BuildUtf8WrapSegments(lines[i], visible_width);
+        size_t line_rows = segments.empty() ? 1 : segments.size();
+        if (visual + line_rows > target_visual) {
+            return i;
+        }
+        visual += line_rows;
+    }
+    return lines.empty() ? 0 : lines.size() - 1;
+}
+
+size_t WordWrapMaxScrollY(const std::vector<std::string>& lines,
+                          size_t visible_height, size_t visible_width) {
+    if (lines.empty()) return 0;
+    size_t visual_rows = 0;
+    for (size_t i = lines.size(); i > 0; --i) {
+        auto segments = BuildUtf8WrapSegments(lines[i - 1], visible_width);
+        visual_rows += segments.empty() ? 1 : segments.size();
+        if (visual_rows > visible_height) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+size_t WordWrapTotalVisualRows(const std::vector<std::string>& lines,
+                               size_t visible_width) {
+    size_t total = 0;
+    for (const auto& line : lines) {
+        auto segments = BuildUtf8WrapSegments(line, visible_width);
+        total += segments.empty() ? 1 : segments.size();
+    }
+    return total;
+}
+
 } // namespace textlt::utils

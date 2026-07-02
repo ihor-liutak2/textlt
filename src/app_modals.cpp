@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -349,6 +351,22 @@ bool TextltApp::InsertImportedText(
         active_action_ = error;
         screen_.PostEvent(ftxui::Event::Custom);
         return false;
+    }
+
+    // DEBUG: dump imported text to file
+    {
+        std::ofstream dbg("/tmp/textlt_inserted.txt", std::ios::trunc);
+        dbg << "Length: " << text.size() << " bytes, " << text.size() << " chars\n";
+        dbg << "---BEGIN---\n";
+        dbg << text;
+        dbg << "\n---END---\n";
+        // Show each line
+        std::istringstream ss(text);
+        std::string line;
+        int i = 0;
+        while (std::getline(ss, line)) {
+            dbg << "LINE " << i++ << ": [" << line << "]\n";
+        }
     }
 
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);

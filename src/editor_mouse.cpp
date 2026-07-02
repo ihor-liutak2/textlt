@@ -28,29 +28,39 @@ bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
     const bool inside_visible_viewport =
     mouse.x >= editor_box_.x_min && mouse.x <= editor_box_.x_max &&
     mouse.y >= viewport_y_min && mouse.y <= viewport_y_max;
-    const bool needs_scrollbar = doc_->lines.size() > visible_height;
-    const int scrollbar_x_min = editor_box_.x_max - kScrollbarColumns + 1;
-    const bool on_scrollbar_column =
-    needs_scrollbar &&
-    inside_visible_viewport &&
-    mouse.x >= scrollbar_x_min &&
-    mouse.x <= editor_box_.x_max;
 
-    auto max_scroll_y = [&]() {
-        return doc_->lines.size() > visible_height
-        ? doc_->lines.size() - visible_height
-        : 0;
+    const bool smart_word_wrap = config_ && config_->smart_word_wrap;
+    const size_t visible_width = VisibleTextWidth();
+    auto effective_total = [&]() -> size_t {
+        if (!smart_word_wrap) return doc_->lines.size();
+        return utils::WordWrapTotalVisualRows(doc_->lines, visible_width);
     };
-    auto scrollbar_thumb_height = [&]() {
-        if (doc_->lines.size() <= visible_height) {
+    auto max_scroll_y = [&]() -> size_t {
+        if (!smart_word_wrap) {
+            return doc_->lines.size() > visible_height
+                ? doc_->lines.size() - visible_height : 0;
+        }
+        return utils::WordWrapMaxScrollY(doc_->lines, visible_height, visible_width);
+    };
+    auto scrollbar_thumb_height = [&]() -> size_t {
+        const size_t eff = effective_total();
+        if (eff <= visible_height) {
             return visible_height;
         }
         return std::min(
             visible_height,
             std::max<size_t>(
                 visible_height >= 2 ? 2 : 1,
-                (visible_height * visible_height) / doc_->lines.size()));
+                (visible_height * visible_height) / eff));
     };
+
+    const bool needs_scrollbar = effective_total() > visible_height;
+    const int scrollbar_x_min = editor_box_.x_max - kScrollbarColumns + 1;
+    const bool on_scrollbar_column =
+    needs_scrollbar &&
+    inside_visible_viewport &&
+    mouse.x >= scrollbar_x_min &&
+    mouse.x <= editor_box_.x_max;
     auto clamp_cursor_to_visible_scroll = [&]() {
         if (doc_->cursor_row < scroll_y_) {
             doc_->cursor_row = scroll_y_;
@@ -61,8 +71,8 @@ bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
         }
     };
     auto jump_to_scrollbar_y = [&](int screen_y) {
-        const size_t max_scroll = max_scroll_y();
-        if (max_scroll == 0) {
+        const size_t eff = effective_total();
+        if (eff <= visible_height) {
             scroll_y_ = 0;
             return;
         }
@@ -82,13 +92,14 @@ bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
             relative_y - thumb_center_offset,
             0,
             static_cast<int>(available_track_space));
-        scroll_y_ =
-        (static_cast<size_t>(target_thumb_top) * max_scroll) / available_track_space;
+        const size_t target_visual_row =
+        (static_cast<size_t>(target_thumb_top) * (eff - visible_height)) / available_track_space;
+        scroll_y_ = utils::WordWrapLineAtVisualRow(doc_->lines, target_visual_row, visible_width);
         clamp_cursor_to_visible_scroll();
     };
     auto drag_scrollbar_to_y = [&](int screen_y) {
-        const size_t max_scroll = max_scroll_y();
-        if (max_scroll == 0) {
+        const size_t eff = effective_total();
+        if (eff <= visible_height) {
             scroll_y_ = 0;
             return;
         }
@@ -102,14 +113,17 @@ bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
             return;
         }
 
+        const size_t start_visual_row = utils::WordWrapVisualRowAtLine(
+            doc_->lines, drag_start_scroll_y_, visible_width);
         const int drag_delta_y = screen_y - drag_start_y_;
-        const long long scroll_delta =
-        (static_cast<long long>(drag_delta_y) * static_cast<long long>(max_scroll)) /
+        const long long visual_delta =
+        (static_cast<long long>(drag_delta_y) * static_cast<long long>(eff - visible_height)) /
         static_cast<long long>(available_track_space);
-        const long long target_scroll =
-        static_cast<long long>(drag_start_scroll_y_) + scroll_delta;
-        scroll_y_ = static_cast<size_t>(
-            std::clamp<long long>(target_scroll, 0, static_cast<long long>(max_scroll)));
+        const long long target_visual =
+        static_cast<long long>(start_visual_row) + visual_delta;
+        const size_t clamped_visual = static_cast<size_t>(
+            std::clamp<long long>(target_visual, 0, static_cast<long long>(eff - visible_height)));
+        scroll_y_ = utils::WordWrapLineAtVisualRow(doc_->lines, clamped_visual, visible_width);
         clamp_cursor_to_visible_scroll();
     };
 

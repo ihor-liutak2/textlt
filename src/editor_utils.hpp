@@ -43,4 +43,13 @@ std::vector<Utf8WrapSegment> BuildUtf8WrapSegments(const std::string& line, size
 size_t FindWordDeleteStart(const std::string& line, size_t cursor_x);
 size_t FindWordDeleteEnd(const std::string& line, size_t cursor_x);
 
+size_t WordWrapVisualRowAtLine(const std::vector<std::string>& lines,
+                               size_t line_index, size_t visible_width);
+size_t WordWrapLineAtVisualRow(const std::vector<std::string>& lines,
+                               size_t target_visual, size_t visible_width);
+size_t WordWrapMaxScrollY(const std::vector<std::string>& lines,
+                          size_t visible_height, size_t visible_width);
+size_t WordWrapTotalVisualRows(const std::vector<std::string>& lines,
+                               size_t visible_width);
+
 } // namespace textlt::utils
