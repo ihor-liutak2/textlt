@@ -31,15 +31,6 @@ bool Document::InsertText(const std::string& text) {
         }
     }
 
-    // DEBUG
-    {
-        std::ofstream dbg("/tmp/textlt_doc_insert.log", std::ios::app);
-        dbg << "InsertText: text.size=" << text.size()
-            << " inserted_lines.size=" << inserted_lines.size()
-            << " cursor_row=" << cursor_row << " cursor_col=" << cursor_col
-            << " lines_before=" << lines.size() << "\n";
-    }
-
     const size_t insertion_row = cursor_row;
     const std::string suffix = lines[insertion_row].substr(cursor_col);
     lines[insertion_row].erase(cursor_col);
@@ -56,22 +47,6 @@ bool Document::InsertText(const std::string& text) {
             std::make_move_iterator(inserted_lines.end()));
         cursor_row = insertion_row + inserted_lines.size() - 1;
         cursor_col = lines[cursor_row].size() - suffix.size();
-    }
-
-    // DEBUG
-    {
-        std::ofstream dbg("/tmp/textlt_doc_insert.log", std::ios::app);
-        dbg << "After insert: lines_after=" << lines.size()
-            << " cursor_row=" << cursor_row << "\n";
-        // Show lines around where table should be
-        for (size_t i = 0; i < lines.size(); ++i) {
-            const auto& l = lines[i];
-            if (l.find("1; 2; 3") != std::string::npos ||
-                l.find("6; 7; 7") != std::string::npos ||
-                l.find("Существует") != std::string::npos) {
-                dbg << "  FOUND LINE " << i << ": [" << l << "]\n";
-            }
-        }
     }
 
     is_dirty = true;

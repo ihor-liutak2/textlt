@@ -291,6 +291,10 @@ TextltApp::TextltApp()
                     pane_index < VisibleEditorPaneCount() &&
                     MainViewCanActivateEditorPane()) {
                     SetActiveEditorPane(pane_index);
+                    auto editor = std::static_pointer_cast<EditorComponent>(editor_pane_components_[pane_index]);
+                    if (editor) {
+                        editor->TakeFocus();
+                    }
                 }
                 return false;
             }));

@@ -22,32 +22,6 @@ constexpr size_t kMaxSafeViewportHeight = 300;
 ftxui::Element EditorComponent::RenderViewport() {
     UpdateScroll();
 
-    // DEBUG: dump what the renderer sees
-    {
-        static int render_count = 0;
-        if (++render_count % 30 == 1) {
-            std::ofstream dbg("/tmp/textlt_render.log", std::ios::app);
-            const size_t total_dbg = doc_ ? doc_->lines.size() : 0;
-            const size_t vh_dbg = VisibleHeight();
-            dbg << "RenderViewport: total_lines=" << total_dbg
-                << " visible_height=" << vh_dbg
-                << " scroll_y=" << scroll_y_
-                << " scroll_x=" << scroll_x_
-                << " cursor_row=" << (doc_ ? doc_->cursor_row : 0)
-                << " cursor_col=" << (doc_ ? doc_->cursor_col : 0)
-                << " editor_box=[" << editor_box_.x_min << "," << editor_box_.y_min
-                << "][" << editor_box_.x_max << "," << editor_box_.y_max << "]\n";
-            if (doc_) {
-                for (size_t i = 0; i < doc_->lines.size() && i < 40; ++i) {
-                    dbg << "  LINE " << i << ": [" << doc_->lines[i] << "]\n";
-                }
-                if (doc_->lines.size() > 40) {
-                    dbg << "  ... (" << doc_->lines.size() - 40 << " more lines)\n";
-                }
-            }
-        }
-    }
-
     ftxui::Elements lines_elements;
     const size_t visible_height = VisibleHeight();
     const size_t visible_width = VisibleTextWidth();
