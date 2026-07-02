@@ -371,14 +371,27 @@ namespace textlt {
         if (doc_) doc_->ClearSelection();
     }
 
-    void EditorComponent::InsertText(const std::string& text) {
+    void EditorComponent::InsertText(const std::string& text, bool keep_cursor) {
         if (text.empty() || !doc_) {
             return;
         }
 
         EndTypingGroup();
+        size_t insertion_row = doc_->cursor_row;
+        size_t insertion_col = doc_->cursor_col;
+        if (keep_cursor && doc_->HasSelection()) {
+            const auto ordered_selection = utils::OrderedSelection(
+                {doc_->selection.anchor_x, doc_->selection.anchor_y},
+                {doc_->cursor_col, doc_->cursor_row},
+                doc_->lines);
+            insertion_row = ordered_selection.first.y;
+            insertion_col = ordered_selection.first.x;
+        }
         if (doc_->InsertText(text)) {
             ClearSelection();
+            if (keep_cursor) {
+                doc_->SetCursorPosition(insertion_row, insertion_col);
+            }
             UpdateScroll();
         }
     }

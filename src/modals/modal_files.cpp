@@ -982,9 +982,6 @@ FileFilter FilesModalContent::FilterForMode() const {
         case FilesModalMode::Import:
             filter.extensions = {".docx", ".fb2", ".fb2.zip"};
             break;
-        case FilesModalMode::Export:
-            filter.extensions = {".txt", ".md"};
-            break;
         case FilesModalMode::None:
         case FilesModalMode::Open:
         case FilesModalMode::SaveAs:
@@ -1001,12 +998,11 @@ bool FilesModalContent::IsParentEntry(const FileEntry& entry) const {
 bool FilesModalContent::IsFileActionMode() const {
     return mode_ == FilesModalMode::Open ||
         mode_ == FilesModalMode::SaveAs ||
-        mode_ == FilesModalMode::Import ||
-        mode_ == FilesModalMode::Export;
+        mode_ == FilesModalMode::Import;
 }
 
 bool FilesModalContent::IsSaveLikeMode() const {
-    return mode_ == FilesModalMode::SaveAs || mode_ == FilesModalMode::Export;
+    return mode_ == FilesModalMode::SaveAs;
 }
 
 bool FilesModalContent::HandleEvent(ftxui::Event event) {
@@ -1471,8 +1467,6 @@ std::string FilesModalContent::ModeTitle() const {
             return "Save As";
         case FilesModalMode::Import:
             return "Import";
-        case FilesModalMode::Export:
-            return "Export";
         case FilesModalMode::Manage:
             return "Files";
         case FilesModalMode::None:
@@ -1489,8 +1483,6 @@ std::string FilesModalContent::FooterActionLabel() const {
             return "Save As";
         case FilesModalMode::Import:
             return "Import";
-        case FilesModalMode::Export:
-            return "Export";
         case FilesModalMode::Manage:
         case FilesModalMode::None:
             break;
@@ -1635,8 +1627,7 @@ void FilesModal::RebuildFooterButtons() {
 
     modal_->SetFooterButtons({
         {content_->Mode() == FilesModalMode::SaveAs ? "Save As" :
-            content_->Mode() == FilesModalMode::Import ? "Import" :
-            content_->Mode() == FilesModalMode::Export ? "Export" : "Open",
+            content_->Mode() == FilesModalMode::Import ? "Import" : "Open",
             [this] {
                 if (content_) {
                     content_->ConfirmSelected();

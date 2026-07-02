@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <filesystem>
-#include <fstream>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -194,28 +193,6 @@ bool TextltApp::ConfirmFilesModalAction(
             return false;
         }
         success = InsertImportedText(path, result.text, error);
-    } else if (mode == FilesModalMode::Export) {
-        const auto doc = ActiveDocument();
-        if (!doc) {
-            error = "No active document.";
-            active_action_ = error;
-            return false;
-        }
-
-        std::ofstream file(path, std::ios::binary);
-        if (!file) {
-            error = "Unable to open export file: " + path.string();
-            active_action_ = error;
-            return false;
-        }
-        file << doc->ToContent();
-        if (!file) {
-            error = "Unable to write export file: " + path.string();
-            active_action_ = error;
-            return false;
-        }
-        active_action_ = "Exported " + path.string();
-        success = true;
     } else {
         error = "No file action selected.";
         return false;

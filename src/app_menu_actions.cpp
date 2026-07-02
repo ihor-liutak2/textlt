@@ -163,14 +163,13 @@ void TextltApp::RunDropdownAction(int menu_index, int item_index) {
             case 2: OpenFilesModal(FilesModalMode::Open); return;
             case 3: OpenFilesModal(FilesModalMode::SaveAs); return;
             case 4: OpenFilesModal(FilesModalMode::Import); return;
-            case 5: OpenFilesModal(FilesModalMode::Export); return;
-            case 6: OpenRecentFilesModal(); return;
-            case 7: CloseCurrentFile(); return;
-            case 8: CloseAllOpenedFiles(); return;
-            case 9: SaveCurrentFile(); return;
-            case 10: SaveAllOpenedFiles(); return;
-            case 11: ToggleActiveFavorite(); return;
-            case 12: RequestExit(); return;
+            case 5: OpenRecentFilesModal(); return;
+            case 6: CloseCurrentFile(); return;
+            case 7: CloseAllOpenedFiles(); return;
+            case 8: SaveCurrentFile(); return;
+            case 9: SaveAllOpenedFiles(); return;
+            case 10: ToggleActiveFavorite(); return;
+            case 11: RequestExit(); return;
 
             default:
                 CloseDropdown();

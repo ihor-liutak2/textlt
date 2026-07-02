@@ -1,6 +1,7 @@
 #include "document.hpp"
 
 #include <algorithm>
+#include <iterator>
 
 #include "editor_utils.hpp"
 
@@ -16,20 +17,35 @@ bool Document::InsertText(const std::string& text) {
     if (HasSelection()) {
         DeleteSelectionWithoutSnapshot();
     }
+
+    std::vector<std::string> inserted_lines(1);
     for (char character : text) {
         if (character == '\r') {
             continue;
         }
         if (character == '\n') {
-            std::string next_line = lines[cursor_row].substr(cursor_col);
-            lines[cursor_row].erase(cursor_col);
-            lines.insert(lines.begin() + static_cast<std::ptrdiff_t>(cursor_row + 1), std::move(next_line));
-            ++cursor_row;
-            cursor_col = 0;
-            continue;
+            inserted_lines.emplace_back();
+        } else {
+            inserted_lines.back().push_back(character);
         }
-        lines[cursor_row].insert(cursor_col, std::string(1, character));
-        ++cursor_col;
+    }
+
+    const size_t insertion_row = cursor_row;
+    const std::string suffix = lines[insertion_row].substr(cursor_col);
+    lines[insertion_row].erase(cursor_col);
+    lines[insertion_row] += inserted_lines.front();
+
+    if (inserted_lines.size() == 1) {
+        cursor_col = lines[insertion_row].size();
+        lines[insertion_row] += suffix;
+    } else {
+        inserted_lines.back() += suffix;
+        lines.insert(
+            lines.begin() + static_cast<std::ptrdiff_t>(insertion_row + 1),
+            std::make_move_iterator(inserted_lines.begin() + 1),
+            std::make_move_iterator(inserted_lines.end()));
+        cursor_row = insertion_row + inserted_lines.size() - 1;
+        cursor_col = lines[cursor_row].size() - suffix.size();
     }
     is_dirty = true;
     return true;

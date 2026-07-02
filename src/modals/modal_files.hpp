@@ -25,7 +25,6 @@ enum class FilesModalMode {
     Open,
     SaveAs,
     Import,
-    Export,
     Manage,
 };
 

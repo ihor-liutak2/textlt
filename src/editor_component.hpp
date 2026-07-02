@@ -52,7 +52,7 @@ namespace textlt {
         std::string GetSelectedText() const;
         void DeleteSelection();
         void ClearSelection();
-        void InsertText(const std::string& text);
+        void InsertText(const std::string& text, bool keep_cursor = false);
         void ConvertTabsToSpaces();
         void Convert4To2Spaces();
         void Convert2To4Spaces();

@@ -197,7 +197,7 @@ void TextltApp::OpenFilesModal(FilesModalMode mode) {
 
     std::filesystem::path start_path = CurrentSidebarDirectory();
     std::string suggested_file_name;
-    if (mode == FilesModalMode::SaveAs || mode == FilesModalMode::Export) {
+    if (mode == FilesModalMode::SaveAs) {
         const std::string current_path =
             std::static_pointer_cast<EditorComponent>(text_editor_)->CurrentFilePath();
         if (!current_path.empty() &&
@@ -216,7 +216,7 @@ void TextltApp::OpenFilesModal(FilesModalMode mode) {
         std::string(mode == FilesModalMode::Open ? "Open" :
             mode == FilesModalMode::SaveAs ? "Save As" :
             mode == FilesModalMode::Import ? "Import" :
-            mode == FilesModalMode::Export ? "Export" : "Files") +
+            "Files") +
         " modal";
     SetActiveLayer(UiLayer::Files);
     screen_.PostEvent(ftxui::Event::Custom);
@@ -352,15 +352,17 @@ bool TextltApp::InsertImportedText(
     }
 
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-    editor_ptr->InsertText(text);
+    editor_ptr->InsertText(text, true);
 
     const std::string filename = path.filename().string();
     active_action_ = filename.empty()
         ? "Imported text"
         : "Imported text from " + filename;
 
-    FocusEditor();
-    screen_.PostEvent(ftxui::Event::Custom);
+    // The files modal closes after this callback returns. Do not switch the
+    // active component tree from inside its mouse/key event; the queued custom
+    // event from ConfirmFilesModalAction restores editor focus once the modal
+    // is fully closed.
     return true;
 }
 

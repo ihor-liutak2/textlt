@@ -506,7 +506,25 @@ void AppendDocxBlocks(const pugi::xml_node& container, std::string& output) {
         } else if (IsNode(child, "tbl")) {
             AppendDocxTable(child, output);
             AppendBlankLine(output);
-        } else if (IsAnyNode(child, {"sdt", "sdtContent", "body"})) {
+        } else if (IsNode(child, "AlternateContent")) {
+            // Word uses mc:AlternateContent around some tables and other blocks.
+            // Read one representation only, otherwise Choice and Fallback duplicate text.
+            pugi::xml_node representation;
+            for (pugi::xml_node candidate : child.children()) {
+                if (IsNode(candidate, "Choice")) {
+                    representation = candidate;
+                    break;
+                }
+                if (!representation && IsNode(candidate, "Fallback")) {
+                    representation = candidate;
+                }
+            }
+            if (representation) {
+                AppendDocxBlocks(representation, output);
+            }
+        } else if (child.type() == pugi::node_element) {
+            // Tables and paragraphs may be wrapped in customXml, smart tags,
+            // revision marks, or other Word-specific containers.
             AppendDocxBlocks(child, output);
         }
     }
@@ -533,7 +551,7 @@ std::string ExtractDocxCellText(const pugi::xml_node& cell) {
                 }
                 text += nested_table;
             }
-        } else if (IsAnyNode(child, {"sdt", "sdtContent"})) {
+        } else if (child.type() == pugi::node_element) {
             const std::string nested = NormalizeInlineWhitespace(ExtractDocxInlineText(child));
             if (!nested.empty()) {
                 if (!text.empty()) {
