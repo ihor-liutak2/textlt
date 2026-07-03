@@ -85,6 +85,65 @@ MenuBarComponent::MenuBarComponent(
           {" About textlt ", " Keyboard Shortcuts "},
           {" Exit "},
       }),
+      dropdown_command_ids_({
+          {
+              "file.new",
+              "file.files",
+              "file.open",
+              "file.save_as",
+              "file.import",
+              "file.recent",
+              "file.close",
+              "file.close_all",
+              "file.save",
+              "file.save_all",
+              "file.toggle_favorite",
+              "app.exit",
+          },
+          {
+              "edit.undo",
+              "edit.redo",
+              "edit.select_all",
+              "edit.cut",
+              "edit.copy",
+              "edit.paste",
+              "edit.toggle_comment",
+              "edit.toggle_case",
+              "edit.convert_indents_4_to_2",
+              "edit.convert_indents_2_to_4",
+              "edit.find",
+              "edit.replace",
+              "search.files",
+              "text_processors.open",
+          },
+          {
+              "view.toggle_line_numbers",
+              "sidebar.toggle_file_explorer",
+              "editor.toggle_smart_word_wrap",
+              "editor.toggle_syntax_highlighting",
+              "editor.toggle_auto_pairing",
+              "editor.toggle_auto_indent",
+              "editor.toggle_tab_size",
+              "editor.convert_tabs_to_spaces",
+              "theme.open",
+              "view.layout",
+          },
+          {
+              "tts.open_modal",
+              "ai.open_actions",
+              "assistant.open_settings",
+          },
+          {
+              "remote.files",
+              "remote.connections",
+          },
+          {
+              "git.open",
+              "git.settings",
+          },
+          {"app.about", "app.help"},
+          {"app.exit"},
+      }),
       on_action_(std::move(on_action)),
       theme_(theme) {
     
@@ -270,14 +329,28 @@ bool MenuBarComponent::OnEvent(ftxui::Event event) {
     }
     return true;
 }
+
+std::string MenuBarComponent::CommandIdAt(int menu_index, int item_index) const {
+    if (menu_index < 0 || item_index < 0) {
+        return "";
+    }
+    if (menu_index >= static_cast<int>(dropdown_command_ids_.size())) {
+        return "";
+    }
+    const auto& command_ids = dropdown_command_ids_[menu_index];
+    if (item_index >= static_cast<int>(command_ids.size())) {
+        return "";
+    }
+    return command_ids[item_index];
+}
     
     
 void MenuBarComponent::SetFileFavoriteLabel(bool is_favorite) {
-    if (dropdown_entries_.empty() || dropdown_entries_[0].size() <= 11) {
+    if (dropdown_entries_.empty() || dropdown_entries_[0].size() <= 10) {
         return;
     }
 
-    dropdown_entries_[0][11] = is_favorite
+    dropdown_entries_[0][10] = is_favorite
         ? " [X] Remove from Favorites "
         : " [ ] Add to Favorites ";
     RefreshCurrentDropdownEntries();

@@ -491,18 +491,15 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     }
 
     if (IsAltJShortcut(event)) {
-        OpenAiActionsModal();
-        return true;
+        return RunCommand("ai.open_actions");
     }
     if (IsAltSShortcut(event)) {
-        OpenAssistantSettingsModal();
-        return true;
+        return RunCommand("assistant.open_settings");
     }
 
     if (MatchesShortcut(event, ShortcutModifier::Alt, 'w') ||
         MatchesShortcut(event, ShortcutModifier::Ctrl, 'w')) {
-        CloseCurrentFile();
-        return true;
+        return RunCommand("file.close");
     }
 
     if (pending_sidebar_chord_) {
@@ -554,8 +551,7 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     }
 
     if (IsAltHShortcut(event)) {
-        OpenTtsModal();
-        return true;
+        return RunCommand("tts.open_modal");
     }
 
     const bool editor_is_focused = ActiveLayer() == UiLayer::Main && !sidebar_has_focus_;
@@ -629,49 +625,39 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
 
     // Global App Shortcuts (available when no modals are active)
     if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'q')) {
-        RequestExit();
-        return true;
+        return RunCommand("app.exit");
     }
     if (MatchesShortcut(event, ShortcutModifier::Ctrl, 's')) {
-        SaveCurrentFile();
-        return true;
+        return RunCommand("file.save");
     }
     if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'o')) {
-        OpenFilesModal(FilesModalMode::Open);
-        return true;
+        return RunCommand("file.open");
     }
 
     // Clipboard shortcuts (trigger dropdown actions)
     if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'c') ||
         event == ftxui::Event::Special("Ctrl+Shift+C") ||
         input == "Ctrl+Shift+C") {
-        RunDropdownAction(1, 4); // This will trigger copy.
-        screen_.PostEvent(ftxui::Event::Custom);
-        return true;
+        return RunCommand("edit.copy");
     }
     if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'x') ||
         event == ftxui::Event::Special("Ctrl+Shift+X") ||
         input == "Ctrl+Shift+X") {
-        RunDropdownAction(1, 3); // This will trigger cut.
-        screen_.PostEvent(ftxui::Event::Custom);
-        return true;
+        return RunCommand("edit.cut");
     }
     // Keep Ctrl+Shift+V for terminal configurations that reserve Ctrl+V.
     if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'v') ||
         event == ftxui::Event::Special("Ctrl+Shift+V") ||
         input == "Ctrl+Shift+V") {
-        RunDropdownAction(1, 5); // Index for "Paste"
-        return true;
+        return RunCommand("edit.paste");
     }
     
     // Shortcuts to open Find/Replace/Go-to-Line panels
     if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'f')) {
-        OpenFindPanel(false);
-        return true;
+        return RunCommand("edit.find");
     }
     if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'r')) {
-        OpenFindPanel(true);
-        return true;
+        return RunCommand("edit.replace");
     }
     if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'g')) {
         OpenGoToLinePanel();
@@ -680,8 +666,7 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
 
     // F-key shortcuts to open main menu dropdowns/dialogs
     if (event == ftxui::Event::F1) {
-        OpenHelpDialog();
-        return true;
+        return RunCommand("app.help");
     }
     if (event == ftxui::Event::F2) {
         menu_bar_->OpenDropdown(0);

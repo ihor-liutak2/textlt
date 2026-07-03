@@ -113,34 +113,15 @@ void TextltApp::UpdateOptionsMenuLabels() {
 
 
 void TextltApp::RunDropdownAction(int menu_index, int item_index) {
-    // Generate simple trace actions for debugging inside the app status-bar
-    active_action_ = "DEBUG: Menu=" + std::to_string(menu_index) +
-                    " Item=" + std::to_string(item_index);
-
-    // Sub-route requests explicitly based on the active dropdown catalog index
-    switch (menu_index) {
-        case 0: HandleFileMenu(item_index);     return;
-        case 1: HandleEditMenu(item_index);     return;
-        case 2: HandleOptionsMenu(item_index);  return;
-        case 3:
-            HandleAiMenu(item_index);
-            return;
-        case 4:
-            HandleRemoteMenu(item_index);
-            return;
-        case 5:
-            HandleGitMenu(item_index);
-            return;
-        case 6:
-            if (item_index == 0) {
-                OpenAboutDialog();
-            } else {
-                OpenHelpDialog();
-            }
-            return;
-        case 7: if (item_index == 0) RequestExit(); return;
-        default: CloseDropdown();                            return;
+    const std::string command_id = menu_bar_ ? menu_bar_->CommandIdAt(menu_index, item_index) : "";
+    if (command_id.empty()) {
+        active_action_ = "Unknown menu action";
+        CloseDropdown();
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
     }
+
+    RunCommand(command_id);
 }
     
     void TextltApp::HandleFileMenu(int item) {

@@ -227,41 +227,27 @@ TextltApp::TextltApp()
             this->RunDropdownAction(menu_index, item_index);
         },
         &current_theme_);
+    InitializeCommands();
 
     title_bar_open_tts_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
         "TTS",
-        [this] {
-            OpenTtsModal();
-            screen_.PostEvent(ftxui::Event::Custom);
-        },
+        [this] { RunCommand("tts.open_modal"); },
         &current_theme_));
     title_bar_tts_play_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
         "Play",
-        [this] {
-            tts_modal_.Play();
-            screen_.PostEvent(ftxui::Event::Custom);
-        },
+        [this] { RunCommand("tts.play"); },
         &current_theme_));
     title_bar_tts_pause_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
         "Pause",
-        [this] {
-            tts_modal_.Pause();
-            screen_.PostEvent(ftxui::Event::Custom);
-        },
+        [this] { RunCommand("tts.pause"); },
         &current_theme_));
     title_bar_tts_stop_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
         "Stop",
-        [this] {
-            tts_modal_.Stop();
-            screen_.PostEvent(ftxui::Event::Custom);
-        },
+        [this] { RunCommand("tts.stop"); },
         &current_theme_));
     title_bar_tts_next_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
         "Next",
-        [this] {
-            tts_modal_.Next();
-            screen_.PostEvent(ftxui::Event::Custom);
-        },
+        [this] { RunCommand("tts.next"); },
         &current_theme_));
     title_bar_component_ = ftxui::Renderer(
         ftxui::Container::Horizontal({

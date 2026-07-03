@@ -38,6 +38,7 @@ public:
     bool IsDropdownOpen() const { return active_dropdown_ >= 0; }
     int ActiveDropdown() const { return active_dropdown_; }
     int SelectedDropdownItem() const { return selected_dropdown_item_; }
+    std::string CommandIdAt(int menu_index, int item_index) const;
 
 private:
     void ActivateTopMenu();
@@ -48,6 +49,7 @@ private:
 
     std::vector<std::string> menu_entries_;
     std::vector<std::vector<std::string>> dropdown_entries_;
+    std::vector<std::vector<std::string>> dropdown_command_ids_;
     std::vector<std::string> current_dropdown_entries_;
     ActionCallback on_action_;
     const Theme* theme_ = nullptr;

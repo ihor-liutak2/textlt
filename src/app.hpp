@@ -8,6 +8,7 @@
 #include "ftxui/component/component.hpp"
 #include "ftxui/component/screen_interactive.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "app_command_registry.hpp"
 #include "cloud_tts_pipeline.hpp"
 #include "config_manager.hpp"
 #include "editor_component.hpp"
@@ -214,6 +215,8 @@ private:
     void ToggleActiveFavorite();
     void UpdateFileMenuLabels();
     void UpdateOptionsMenuLabels();
+    void InitializeCommands();
+    bool RunCommand(const std::string& command_id);
     void RefreshProjectSidebar();
     void RunDropdownAction(int menu_index, int item_index);
     ftxui::Element Render();
@@ -254,6 +257,7 @@ private:
     std::string ReadSystemClipboard();
     void WriteSystemClipboard(const std::string& text);
 
+    AppCommandRegistry command_registry_;
     ConfigManager config_manager_;
     EditorConfig editor_config_;
     OpenedConfigStore opened_config_store_;

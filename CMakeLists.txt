@@ -125,6 +125,8 @@ endif()
 
 add_executable(textlt
   src/app.cpp
+  src/app_command_registry.cpp
+  src/app_commands.cpp
   src/app_find_replace.cpp
   src/app_modals.cpp
   src/app_menu_actions.cpp
@@ -272,6 +274,11 @@ add_executable(textlt_keyboard_shortcuts_test
   tests/keyboard_shortcuts_test.cpp
 )
 
+add_executable(textlt_app_command_registry_test
+  tests/app_command_registry_test.cpp
+  src/app_command_registry.cpp
+)
+
 add_executable(textlt_remote_path_test
   tests/remote_path_test.cpp
   src/remote/remote_connection_config.cpp
@@ -284,6 +291,10 @@ add_executable(textlt_remote_oauth_token_store_test
 )
 
 target_include_directories(textlt_keyboard_shortcuts_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_include_directories(textlt_app_command_registry_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
@@ -414,6 +425,7 @@ target_link_libraries(textlt_document_navigation_test PRIVATE ftxui::screen)
 add_test(NAME textlt_document_navigation_test COMMAND textlt_document_navigation_test)
 add_test(NAME textlt_text_importer_test COMMAND textlt_text_importer_test)
 add_test(NAME textlt_keyboard_shortcuts_test COMMAND textlt_keyboard_shortcuts_test)
+add_test(NAME textlt_app_command_registry_test COMMAND textlt_app_command_registry_test)
 add_test(NAME textlt_tts_pipeline_test COMMAND textlt_tts_pipeline_test)
 add_test(NAME textlt_piper_manager_test COMMAND textlt_piper_manager_test)
 add_test(NAME textlt_tts_audio_player_test COMMAND textlt_tts_audio_player_test)
