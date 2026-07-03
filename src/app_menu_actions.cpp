@@ -340,6 +340,13 @@ void TextltApp::CommandTextProcessors() {
 }
 
 
+void TextltApp::CommandCustomProcessorBuilder() {
+    CloseDropdown();
+    OpenCustomProcessorBuilderModal();
+    active_action_ = "Custom Processor Builder";
+}
+
+
 void TextltApp::CommandViewToggleLineNumbers() {
     editor_config_.show_line_numbers = !editor_config_.show_line_numbers;
     active_action_ = editor_config_.show_line_numbers ? "Line numbers enabled" : "Line numbers disabled";

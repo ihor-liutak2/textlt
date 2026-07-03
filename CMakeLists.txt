@@ -139,6 +139,7 @@ add_executable(textlt
   src/shortcut_key.cpp
   src/shortcut_registry.cpp
   src/shortcut_store.cpp
+  src/custom_processor_builder.cpp
   src/cloud_tts_pipeline.cpp
   src/builtin_text_processors.cpp
   src/config_manager.cpp
@@ -182,6 +183,7 @@ add_executable(textlt
   src/modals/modal_search_files.cpp
   src/modals/modal_files.cpp
   src/modals/modal_keyboard_shortcuts.cpp
+  src/modals/modal_custom_processor_builder.cpp
   src/modals/modal_text_processors.cpp
   src/opened_config.cpp
   src/piper_manager.cpp
@@ -296,6 +298,15 @@ add_executable(textlt_shortcut_registry_test
   src/shortcut_registry.cpp
 )
 
+add_executable(textlt_custom_processor_builder_test
+  tests/custom_processor_builder_test.cpp
+  src/custom_processor_builder.cpp
+  src/text_parser_manager.cpp
+  src/text_parser_lua_engine.cpp
+  src/builtin_text_processors.cpp
+  src/text_transformer.cpp
+)
+
 add_executable(textlt_remote_path_test
   tests/remote_path_test.cpp
   src/remote/remote_connection_config.cpp
@@ -321,6 +332,11 @@ target_include_directories(textlt_app_command_registry_test PRIVATE
 
 target_include_directories(textlt_shortcut_registry_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_include_directories(textlt_custom_processor_builder_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
 
 target_include_directories(textlt_remote_path_test PRIVATE
@@ -431,6 +447,7 @@ target_link_libraries(textlt_tts_audio_player_test PRIVATE Threads::Threads)
 
 target_link_libraries(textlt_keyboard_shortcuts_test PRIVATE ftxui::component)
 target_link_libraries(textlt_shortcut_registry_test PRIVATE ftxui::component)
+target_link_libraries(textlt_custom_processor_builder_test PRIVATE lua54)
 
 target_include_directories(textlt_text_importer_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -454,6 +471,7 @@ add_test(NAME textlt_keyboard_shortcuts_test COMMAND textlt_keyboard_shortcuts_t
 add_test(NAME textlt_builtin_text_processors_test COMMAND textlt_builtin_text_processors_test)
 add_test(NAME textlt_app_command_registry_test COMMAND textlt_app_command_registry_test)
 add_test(NAME textlt_shortcut_registry_test COMMAND textlt_shortcut_registry_test)
+add_test(NAME textlt_custom_processor_builder_test COMMAND textlt_custom_processor_builder_test)
 add_test(NAME textlt_tts_pipeline_test COMMAND textlt_tts_pipeline_test)
 add_test(NAME textlt_piper_manager_test COMMAND textlt_piper_manager_test)
 add_test(NAME textlt_tts_audio_player_test COMMAND textlt_tts_audio_player_test)

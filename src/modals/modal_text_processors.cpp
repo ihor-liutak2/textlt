@@ -28,6 +28,7 @@ const std::vector<std::string> kProcessorGroups = {
     "Tables",
     "Markdown",
     "Analysis",
+    "User",
     "Custom",
 };
 std::string BracketLabel(const std::string& label) {

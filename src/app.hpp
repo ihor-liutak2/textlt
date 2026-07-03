@@ -20,6 +20,7 @@
 #include "modals/assistant_modals.hpp"
 #include "modals/help_dialog.hpp"
 #include "modals/modal_keyboard_shortcuts.hpp"
+#include "modals/modal_custom_processor_builder.hpp"
 #include "modals/modal_ai.hpp"
 #include "modals/modal_git.hpp"
 #include "modals/modal_git_settings.hpp"
@@ -79,6 +80,7 @@ private:
         Main,
         Help,
         KeyboardShortcuts,
+        CustomProcessorBuilder,
         Theme,
         Find,
         GoToLine,
@@ -157,6 +159,8 @@ private:
     void CloseHelpDialog();
     void OpenKeyboardShortcutsModal();
     void CloseKeyboardShortcutsModal();
+    void OpenCustomProcessorBuilderModal();
+    void CloseCustomProcessorBuilderModal();
     void OpenTtsModal();
     void CloseTtsModal();
     void OpenViewLayoutModal();
@@ -285,6 +289,7 @@ private:
     void CommandEditReplace();
     void CommandSearchFiles();
     void CommandTextProcessors();
+    void CommandCustomProcessorBuilder();
 
     void CommandViewToggleLineNumbers();
     void CommandSidebarToggleFileExplorer();
@@ -329,6 +334,7 @@ private:
     ftxui::Component sidebar_panel_;
     HelpDialog help_dialog_;
     KeyboardShortcutsModal keyboard_shortcuts_modal_;
+    CustomProcessorBuilderModal custom_processor_builder_modal_;
     RecentFilesHistory recent_files_history_;
     RecentFilesModal recent_files_modal_;
 

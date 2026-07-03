@@ -76,6 +76,10 @@ TextltApp::TextltApp()
           &shortcut_registry_,
           &command_registry_,
           [this](std::string& error) { return SaveShortcutOverrides(error); }),
+      custom_processor_builder_modal_(
+          &current_theme_,
+          [this] { return ReadSystemClipboard(); },
+          [this](const std::string& text) { WriteSystemClipboard(text); }),
       recent_files_modal_(
           &current_theme_,
           &recent_files_history_,
@@ -316,6 +320,7 @@ TextltApp::TextltApp()
             (!menu_bar_ || !menu_bar_->IsDropdownOpen()) &&
             !help_dialog_.IsOpen() &&
             !keyboard_shortcuts_modal_.IsOpen() &&
+            !custom_processor_builder_modal_.IsOpen() &&
             !recent_files_modal_.IsOpen() &&
             !search_files_modal_.IsOpen() &&
             !files_modal_.IsOpen() &&
@@ -469,6 +474,7 @@ TextltApp::TextltApp()
         main_container_,
         help_dialog_.View(),
         keyboard_shortcuts_modal_.View(),
+        custom_processor_builder_modal_.View(),
         theme_dialog_.View(),
         find_panel_container_,
         goto_line_input_component_,

@@ -79,6 +79,7 @@ MenuBarComponent::MenuBarComponent(
               {" Git Settings... ", "git.settings"},
               {" ───────────────────────── ", "", true},
               {" Text Processors...", "text_processors.open"},
+              {" Custom Processor Builder...", "custom_processor_builder.open"},
           },
           {
               {" About textlt ", "app.about"},

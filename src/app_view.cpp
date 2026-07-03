@@ -257,6 +257,9 @@ ftxui::Element TextltApp::Render() {
     if (keyboard_shortcuts_modal_.IsOpen()) {
         layers.push_back(keyboard_shortcuts_modal_.View()->Render() | clear_under | center);
     }
+    if (custom_processor_builder_modal_.IsOpen()) {
+        layers.push_back(custom_processor_builder_modal_.View()->Render() | clear_under | center);
+    }
     if (recent_files_modal_.IsOpen()) {
         layers.push_back(recent_files_modal_.View()->Render() | clear_under | center);
     }
@@ -406,6 +409,7 @@ bool TextltApp::ActiveModalIsOpen() const {
         case UiLayer::Main: return true;
         case UiLayer::Help: return help_dialog_.IsOpen();
         case UiLayer::KeyboardShortcuts: return keyboard_shortcuts_modal_.IsOpen();
+        case UiLayer::CustomProcessorBuilder: return custom_processor_builder_modal_.IsOpen();
         case UiLayer::Theme: return theme_dialog_.IsOpen();
         case UiLayer::Find: return current_search_mode_ != SearchMode::None;
         case UiLayer::GoToLine: return show_goto_line_bar_;
@@ -440,6 +444,14 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     if (ActiveLayer() == UiLayer::KeyboardShortcuts) {
         if (event == ftxui::Event::Escape) {
             CloseKeyboardShortcutsModal();
+            return true;
+        }
+        return false;
+    }
+
+    if (ActiveLayer() == UiLayer::CustomProcessorBuilder) {
+        if (event == ftxui::Event::Escape) {
+            CloseCustomProcessorBuilderModal();
             return true;
         }
         return false;

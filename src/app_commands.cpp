@@ -63,6 +63,7 @@ void TextltApp::InitializeCommands() {
     add("edit.replace", "Replace", "Edit", "Ctrl+R", [this] { CommandEditReplace(); });
     add("search.files", "Search in Files", "Edit", "", [this] { CommandSearchFiles(); });
     add("text_processors.open", "Text Processors", "Edit", "", [this] { CommandTextProcessors(); });
+    add("custom_processor_builder.open", "Custom Processor Builder", "Text Processors", "", [this] { CommandCustomProcessorBuilder(); });
     add("editor.go_to_line", "Go to Line", "Edit", "Ctrl+G", [this] { OpenGoToLinePanel(); });
 
     add("view.toggle_line_numbers", "Toggle Line Numbers", "Options", "", [this] { CommandViewToggleLineNumbers(); });

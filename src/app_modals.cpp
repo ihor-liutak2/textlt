@@ -176,6 +176,25 @@ void TextltApp::CloseKeyboardShortcutsModal() {
 }
 
 
+void TextltApp::OpenCustomProcessorBuilderModal() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+    custom_processor_builder_modal_.Open();
+    active_action_ = "Opened Custom Processor Builder";
+    SetActiveLayer(UiLayer::CustomProcessorBuilder);
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CloseCustomProcessorBuilderModal() {
+    custom_processor_builder_modal_.Close();
+    SetActiveLayer(UiLayer::Main);
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
 void TextltApp::OpenRecentFilesModal() {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
