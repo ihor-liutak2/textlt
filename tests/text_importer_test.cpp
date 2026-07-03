@@ -5,6 +5,7 @@
 
 #include <cassert>
 #include <filesystem>
+#include <fstream>
 #include <string>
 
 namespace {
@@ -76,6 +77,34 @@ void WriteDocxZip(
     assert(archive_write_free(writer) == ARCHIVE_OK);
 }
 
+void WriteOdtZip(
+    const std::filesystem::path& path,
+    const std::string& content_xml) {
+    archive* writer = archive_write_new();
+    assert(writer);
+    assert(archive_write_set_format_zip(writer) == ARCHIVE_OK);
+    assert(archive_write_open_filename(writer, path.string().c_str()) == ARCHIVE_OK);
+
+    auto write_entry = [&](const char* name, const std::string& data) {
+        archive_entry* e = archive_entry_new();
+        assert(e);
+        archive_entry_set_pathname(e, name);
+        archive_entry_set_filetype(e, AE_IFREG);
+        archive_entry_set_perm(e, 0644);
+        archive_entry_set_size(e, static_cast<la_int64_t>(data.size()));
+        assert(archive_write_header(writer, e) == ARCHIVE_OK);
+        assert(archive_write_data(writer, data.data(), data.size()) ==
+               static_cast<la_ssize_t>(data.size()));
+        archive_entry_free(e);
+    };
+
+    write_entry("mimetype", "application/vnd.oasis.opendocument.text");
+    write_entry("content.xml", content_xml);
+
+    assert(archive_write_close(writer) == ARCHIVE_OK);
+    assert(archive_write_free(writer) == ARCHIVE_OK);
+}
+
 } // namespace
 
 int main() {
@@ -85,6 +114,11 @@ int main() {
     assert(TextImporter::DetectFormat("book.fb2.zip") == TextImportFormat::Fb2Zip);
     assert(TextImporter::DetectFormat("BOOK.FB2.ZIP") == TextImportFormat::Fb2Zip);
     assert(TextImporter::DetectFormat("book.zip") == TextImportFormat::Unsupported);
+    assert(TextImporter::DetectFormat("notes.rtf") == TextImportFormat::Rtf);
+    assert(TextImporter::DetectFormat("notes.RTF") == TextImportFormat::Rtf);
+    assert(TextImporter::DetectFormat("book.odt") == TextImportFormat::Odt);
+    assert(TextImporter::DetectFormat("template.ott") == TextImportFormat::Odt);
+    assert(TextImporter::DetectFormat("google_doc.gdoc") == TextImportFormat::GoogleDocShortcut);
 
     // FB2 zip test
     const std::filesystem::path archive_path =
@@ -249,6 +283,74 @@ int main() {
     assert(docx_nested.success);
     assert(docx_nested.text.find("OuterCell") != std::string::npos);
     assert(docx_nested.text.find("NestedCell") != std::string::npos);
+
+
+    // RTF: unicode text, paragraphs, tabs, and ignored metadata
+    const std::filesystem::path rtf_path =
+        std::filesystem::temp_directory_path() / "textlt_text_importer_test.rtf";
+    {
+        std::ofstream rtf_file(rtf_path, std::ios::binary);
+        rtf_file
+            << R"({\rtf1\ansi\ansicpg1251{\fonttbl{\f0 Times;}})"
+            << R"(First\tab line\par )"
+            << R"(Unicode \u1055?\u1088?\u1080?\u1074?\u1110?\u1090?\par )"
+            << R"({\info{\title Hidden title}}Visible})";
+    }
+
+    const textlt::TextImportResult rtf_result = TextImporter().ImportFile(rtf_path);
+    std::filesystem::remove(rtf_path);
+
+    assert(rtf_result.success);
+    assert(rtf_result.text.find("First line") != std::string::npos);
+    assert(rtf_result.text.find("Привіт") != std::string::npos);
+    assert(rtf_result.text.find("Visible") != std::string::npos);
+    assert(rtf_result.text.find("Hidden title") == std::string::npos);
+
+    // ODT: paragraphs and tables
+    const std::filesystem::path odt_path =
+        std::filesystem::temp_directory_path() / "textlt_text_importer_test.odt";
+    WriteOdtZip(
+        odt_path,
+        R"(<?xml version="1.0" encoding="UTF-8"?>)"
+        R"(<office:document-content)"
+        R"( xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0")"
+        R"( xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0")"
+        R"( xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0">)"
+        R"(<office:body><office:text>)"
+        R"(<text:h>ODT title</text:h>)"
+        R"(<text:p>Before table</text:p>)"
+        R"(<table:table>)"
+        R"(<table:table-row>)"
+        R"(<table:table-cell><text:p>Cell A</text:p></table:table-cell>)"
+        R"(<table:table-cell><text:p>Cell B</text:p></table:table-cell>)"
+        R"(</table:table-row>)"
+        R"(</table:table>)"
+        R"(<text:p>After table</text:p>)"
+        R"(</office:text></office:body>)"
+        R"(</office:document-content>)");
+
+    const textlt::TextImportResult odt_result = TextImporter().ImportFile(odt_path);
+    std::filesystem::remove(odt_path);
+
+    assert(odt_result.success);
+    assert(odt_result.text.find("ODT title") != std::string::npos);
+    assert(odt_result.text.find("Before table") != std::string::npos);
+    assert(odt_result.text.find("Cell A; Cell B") != std::string::npos);
+    assert(odt_result.text.find("After table") != std::string::npos);
+
+    // Local .gdoc files are shortcuts. Real Google Docs import works through Google Drive export.
+    const std::filesystem::path gdoc_path =
+        std::filesystem::temp_directory_path() / "textlt_text_importer_test.gdoc";
+    {
+        std::ofstream gdoc_file(gdoc_path, std::ios::binary);
+        gdoc_file << R"({"url":"https://docs.google.com/document/d/example/edit"})";
+    }
+
+    const textlt::TextImportResult gdoc_result = TextImporter().ImportFile(gdoc_path);
+    std::filesystem::remove(gdoc_path);
+
+    assert(!gdoc_result.success);
+    assert(gdoc_result.error.find("Google Drive connection") != std::string::npos);
 
     return 0;
 }

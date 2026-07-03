@@ -126,6 +126,29 @@ std::string Cp1251ToUtf8(const std::string& input) {
     return output;
 }
 
+
+uint32_t Cp1252CodePoint(unsigned char c) {
+    static constexpr std::array<uint32_t, 32> cp1252_80_9f = {{
+        0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021,
+        0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, 0x008D, 0x017D, 0x008F,
+        0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014,
+        0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x009D, 0x017E, 0x0178,
+    }};
+
+    if (c < 0x80 || c >= 0xA0) {
+        return c;
+    }
+    return cp1252_80_9f[c - 0x80];
+}
+
+void AppendCodepageByte(std::string& output, unsigned char value, int codepage) {
+    if (codepage == 1251) {
+        AppendUtf8CodePoint(output, Cp1251CodePoint(value));
+        return;
+    }
+    AppendUtf8CodePoint(output, Cp1252CodePoint(value));
+}
+
 std::string ReadWholeFile(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary);
     if (!file) {
@@ -697,6 +720,390 @@ void AppendFb2Node(const pugi::xml_node& node, std::string& output) {
     }
 }
 
+
+bool IsRtfDestinationControl(const std::string& word) {
+    static const char* ignored_destinations[] = {
+        "fonttbl", "colortbl", "stylesheet", "info", "pict", "object",
+        "header", "footer", "headerl", "headerr", "headerf",
+        "footerl", "footerr", "footerf", "annotation", "atnid",
+        "generator", "datafield", "datastore", "themedata", "colorschememapping",
+        "xmlnstbl", "listtable", "listoverridetable", "rsidtbl", "revtbl",
+        "latentstyles", "pnseclvl", "fontemb", "fontfile", "filetbl",
+        "fldinst", "shp", "nonshppict", "stylesheet", "userprops",
+    };
+
+    for (const char* value : ignored_destinations) {
+        if (word == value) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int HexValue(char c) {
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+    if (c >= 'a' && c <= 'f') {
+        return c - 'a' + 10;
+    }
+    if (c >= 'A' && c <= 'F') {
+        return c - 'A' + 10;
+    }
+    return -1;
+}
+
+std::string NormalizeImportedPlainText(const std::string& text) {
+    std::string output;
+    bool previous_blank = false;
+
+    for (const std::string& raw_line : SplitLines(text)) {
+        const std::string line = NormalizeInlineWhitespace(raw_line);
+        if (line.empty()) {
+            if (!output.empty() && !previous_blank) {
+                AppendBlankLine(output);
+                previous_blank = true;
+            }
+            continue;
+        }
+        AppendLine(output, line);
+        previous_blank = false;
+    }
+
+    return TrimTrailingNewlines(output);
+}
+
+std::string ParseRtfDocument(const std::string& rtf) {
+    struct RtfState {
+        bool skip_destination = false;
+        int unicode_skip_count = 1;
+        int codepage = 1252;
+    };
+
+    std::vector<RtfState> stack(1);
+    std::string output;
+    int pending_fallback_skip = 0;
+
+    auto append_text_byte = [&](unsigned char value) {
+        if (stack.back().skip_destination) {
+            return;
+        }
+        AppendCodepageByte(output, value, stack.back().codepage);
+    };
+
+    auto append_code_point = [&](uint32_t value) {
+        if (!stack.back().skip_destination) {
+            AppendUtf8CodePoint(output, value);
+        }
+    };
+
+    for (size_t i = 0; i < rtf.size(); ++i) {
+        const unsigned char current = static_cast<unsigned char>(rtf[i]);
+
+        if (current == '{') {
+            stack.push_back(stack.back());
+            pending_fallback_skip = 0;
+            continue;
+        }
+        if (current == '}') {
+            if (stack.size() > 1) {
+                stack.pop_back();
+            }
+            pending_fallback_skip = 0;
+            continue;
+        }
+        if (current == '\\') {
+            if (i + 1 >= rtf.size()) {
+                break;
+            }
+            const char next = rtf[++i];
+
+            if (next == '\\' || next == '{' || next == '}') {
+                if (pending_fallback_skip > 0) {
+                    --pending_fallback_skip;
+                } else {
+                    append_text_byte(static_cast<unsigned char>(next));
+                }
+                continue;
+            }
+            if (next == '\'') {
+                if (i + 2 < rtf.size()) {
+                    const int high = HexValue(rtf[i + 1]);
+                    const int low = HexValue(rtf[i + 2]);
+                    if (high >= 0 && low >= 0) {
+                        if (pending_fallback_skip > 0) {
+                            --pending_fallback_skip;
+                        } else {
+                            append_text_byte(static_cast<unsigned char>((high << 4) | low));
+                        }
+                        i += 2;
+                    }
+                }
+                continue;
+            }
+            if (next == '*') {
+                stack.back().skip_destination = true;
+                continue;
+            }
+            if (!std::isalpha(static_cast<unsigned char>(next))) {
+                if (pending_fallback_skip > 0) {
+                    --pending_fallback_skip;
+                    continue;
+                }
+                if (stack.back().skip_destination) {
+                    continue;
+                }
+                switch (next) {
+                    case '~': output.push_back(' '); break;
+                    case '-': output.push_back('-'); break;
+                    case '_': output.push_back('-'); break;
+                    default: break;
+                }
+                continue;
+            }
+
+            std::string word;
+            word.push_back(next);
+            while (i + 1 < rtf.size() && std::isalpha(static_cast<unsigned char>(rtf[i + 1]))) {
+                word.push_back(rtf[++i]);
+            }
+
+            bool has_parameter = false;
+            int parameter_sign = 1;
+            int parameter = 0;
+            if (i + 1 < rtf.size() && rtf[i + 1] == '-') {
+                parameter_sign = -1;
+                has_parameter = true;
+                ++i;
+            }
+            while (i + 1 < rtf.size() && std::isdigit(static_cast<unsigned char>(rtf[i + 1]))) {
+                has_parameter = true;
+                parameter = parameter * 10 + (rtf[++i] - '0');
+            }
+            parameter *= parameter_sign;
+            if (i + 1 < rtf.size() && rtf[i + 1] == ' ') {
+                ++i;
+            }
+
+            if (IsRtfDestinationControl(word)) {
+                stack.back().skip_destination = true;
+            }
+            if (word == "ansicpg" && has_parameter) {
+                stack.back().codepage = parameter;
+            } else if (word == "uc" && has_parameter) {
+                stack.back().unicode_skip_count = std::max(0, parameter);
+            }
+
+            if (stack.back().skip_destination) {
+                continue;
+            }
+
+            if (word == "par" || word == "line") {
+                output.push_back('\n');
+            } else if (word == "page") {
+                AppendBlankLine(output);
+            } else if (word == "tab") {
+                output.push_back('\t');
+            } else if (word == "emdash") {
+                AppendUtf8CodePoint(output, 0x2014);
+            } else if (word == "endash") {
+                AppendUtf8CodePoint(output, 0x2013);
+            } else if (word == "bullet") {
+                AppendUtf8CodePoint(output, 0x2022);
+            } else if (word == "lquote") {
+                AppendUtf8CodePoint(output, 0x2018);
+            } else if (word == "rquote") {
+                AppendUtf8CodePoint(output, 0x2019);
+            } else if (word == "ldblquote") {
+                AppendUtf8CodePoint(output, 0x201C);
+            } else if (word == "rdblquote") {
+                AppendUtf8CodePoint(output, 0x201D);
+            } else if (word == "u" && has_parameter) {
+                int value = parameter;
+                if (value < 0) {
+                    value += 65536;
+                }
+                append_code_point(static_cast<uint32_t>(value));
+                pending_fallback_skip = stack.back().unicode_skip_count;
+            }
+            continue;
+        }
+
+        if (pending_fallback_skip > 0) {
+            --pending_fallback_skip;
+            continue;
+        }
+        if (current == '\r' || current == '\n') {
+            continue;
+        }
+        append_text_byte(current);
+    }
+
+    return NormalizeImportedPlainText(output);
+}
+
+int AttributeIntByLocalName(const pugi::xml_node& node, const std::string& local_name, int fallback) {
+    for (pugi::xml_attribute attribute : node.attributes()) {
+        std::string name = attribute.name();
+        const size_t separator = name.find(':');
+        if (separator != std::string::npos) {
+            name = name.substr(separator + 1);
+        }
+        if (name == local_name) {
+            return std::max(1, attribute.as_int(fallback));
+        }
+    }
+    return fallback;
+}
+
+std::string ExtractOdtInlineText(const pugi::xml_node& node) {
+    std::string text;
+
+    for (pugi::xml_node child : node.children()) {
+        if (child.type() == pugi::node_pcdata || child.type() == pugi::node_cdata) {
+            text += child.value();
+            continue;
+        }
+        if (child.type() != pugi::node_element) {
+            continue;
+        }
+
+        const std::string local_name = LocalName(child);
+        if (local_name == "line-break") {
+            text.push_back('\n');
+        } else if (local_name == "tab") {
+            text.push_back('\t');
+        } else if (local_name == "s") {
+            const int count = AttributeIntByLocalName(child, "c", 1);
+            text.append(static_cast<size_t>(count), ' ');
+        } else if (local_name == "soft-page-break") {
+            // Page breaks are layout hints and should not appear in imported plain text.
+        } else if (local_name == "note" || local_name == "annotation") {
+            // Keep the main document readable. Notes can be imported later as metadata if needed.
+        } else {
+            text += ExtractOdtInlineText(child);
+        }
+    }
+
+    return text;
+}
+
+std::string ExtractOdtCellText(const pugi::xml_node& cell);
+
+void AppendOdtTable(const pugi::xml_node& table, std::string& output) {
+    for (pugi::xml_node row : table.children()) {
+        if (!IsNode(row, "table-row")) {
+            continue;
+        }
+
+        std::vector<std::string> cells;
+        for (pugi::xml_node cell : row.children()) {
+            if (!IsAnyNode(cell, {"table-cell", "covered-table-cell"})) {
+                continue;
+            }
+            const int repeat = AttributeIntByLocalName(cell, "number-columns-repeated", 1);
+            const std::string cell_text = ExtractOdtCellText(cell);
+            for (int i = 0; i < repeat; ++i) {
+                cells.push_back(cell_text);
+            }
+        }
+
+        const std::string row_text = JoinCells(cells);
+        if (!row_text.empty()) {
+            AppendLine(output, row_text);
+        }
+    }
+}
+
+void AppendOdtBlocks(const pugi::xml_node& container, std::string& output) {
+    for (pugi::xml_node child : container.children()) {
+        if (child.type() != pugi::node_element) {
+            continue;
+        }
+
+        const std::string local_name = LocalName(child);
+        if (local_name == "p" || local_name == "h") {
+            const std::string paragraph = NormalizeInlineWhitespace(ExtractOdtInlineText(child));
+            if (!paragraph.empty()) {
+                AppendLine(output, paragraph);
+            } else {
+                AppendBlankLine(output);
+            }
+        } else if (local_name == "table") {
+            AppendOdtTable(child, output);
+            AppendBlankLine(output);
+        } else if (local_name == "list-item") {
+            std::string item_text;
+            AppendOdtBlocks(child, item_text);
+            item_text = NormalizeImportedPlainText(item_text);
+            if (!item_text.empty()) {
+                AppendLine(output, "- " + item_text);
+            }
+        } else if (IsAnyNode(child, {"text", "body", "section", "list", "span", "a", "tracked-changes"})) {
+            AppendOdtBlocks(child, output);
+        } else {
+            AppendOdtBlocks(child, output);
+        }
+    }
+}
+
+std::string ExtractOdtCellText(const pugi::xml_node& cell) {
+    std::string text;
+    for (pugi::xml_node child : cell.children()) {
+        if (IsNode(child, "p") || IsNode(child, "h")) {
+            const std::string paragraph = NormalizeInlineWhitespace(ExtractOdtInlineText(child));
+            if (!paragraph.empty()) {
+                if (!text.empty()) {
+                    text.push_back(' ');
+                }
+                text += paragraph;
+            }
+        } else if (IsNode(child, "table")) {
+            std::string nested_table;
+            AppendOdtTable(child, nested_table);
+            nested_table = NormalizeInlineWhitespace(nested_table);
+            if (!nested_table.empty()) {
+                if (!text.empty()) {
+                    text.push_back(' ');
+                }
+                text += nested_table;
+            }
+        } else if (child.type() == pugi::node_element) {
+            std::string nested;
+            AppendOdtBlocks(child, nested);
+            nested = NormalizeImportedPlainText(nested);
+            if (!nested.empty()) {
+                if (!text.empty()) {
+                    text.push_back(' ');
+                }
+                text += nested;
+            }
+        }
+    }
+    return text;
+}
+
+std::string ParseOdtContentXml(const std::string& xml) {
+    pugi::xml_document document;
+    const pugi::xml_parse_result parse_result = document.load_buffer(
+        xml.data(),
+        xml.size(),
+        pugi::parse_default | pugi::parse_ws_pcdata_single,
+        pugi::encoding_auto);
+    if (!parse_result) {
+        throw std::runtime_error(std::string("Unable to parse ODT XML: ") + parse_result.description());
+    }
+
+    pugi::xml_node text_node = FindFirstDescendantByLocalName(document, "text");
+    if (!text_node) {
+        throw std::runtime_error("Unable to parse ODT XML: office:text was not found.");
+    }
+
+    std::string output;
+    AppendOdtBlocks(text_node, output);
+    return TrimTrailingNewlines(output);
+}
+
 std::string ParseFb2Xml(const std::string& xml) {
     const std::string normalized_xml = NormalizeXmlInputEncoding(xml);
 
@@ -767,6 +1174,15 @@ TextImportResult TextImporter::ImportFile(const std::filesystem::path& path) con
         }
         if (format == TextImportFormat::Docx) {
             return ImportDocxFile(path);
+        }
+        if (format == TextImportFormat::Rtf) {
+            return ImportRtfFile(path);
+        }
+        if (format == TextImportFormat::Odt) {
+            return ImportOdtFile(path);
+        }
+        if (format == TextImportFormat::GoogleDocShortcut) {
+            return ImportGoogleDocShortcut(path);
         }
 
         return {false, "", "Unsupported import file type: " + path.string()};
@@ -857,6 +1273,15 @@ TextImportFormat TextImporter::DetectFormat(const std::filesystem::path& path) {
     if (extension == ".docx") {
         return TextImportFormat::Docx;
     }
+    if (extension == ".rtf") {
+        return TextImportFormat::Rtf;
+    }
+    if (extension == ".odt" || extension == ".ott") {
+        return TextImportFormat::Odt;
+    }
+    if (extension == ".gdoc") {
+        return TextImportFormat::GoogleDocShortcut;
+    }
     return TextImportFormat::Unsupported;
 }
 
@@ -885,6 +1310,41 @@ TextImportResult TextImporter::ImportDocxFile(const std::filesystem::path& path)
     try {
         const std::string document_xml = ReadArchiveEntry(path, "word/document.xml");
         return {true, ParseDocxDocumentXml(document_xml), ""};
+    } catch (const std::exception& e) {
+        return {false, "", e.what()};
+    }
+}
+
+
+TextImportResult TextImporter::ImportRtfFile(const std::filesystem::path& path) const {
+    try {
+        return {true, ParseRtfDocument(ReadWholeFile(path)), ""};
+    } catch (const std::exception& e) {
+        return {false, "", e.what()};
+    }
+}
+
+TextImportResult TextImporter::ImportOdtFile(const std::filesystem::path& path) const {
+    try {
+        const std::string content_xml = ReadArchiveEntry(path, "content.xml");
+        return {true, ParseOdtContentXml(content_xml), ""};
+    } catch (const std::exception& e) {
+        return {false, "", e.what()};
+    }
+}
+
+TextImportResult TextImporter::ImportGoogleDocShortcut(const std::filesystem::path& path) const {
+    try {
+        const std::string shortcut = ReadWholeFile(path);
+        const bool looks_like_gdoc = shortcut.find("docs.google.com") != std::string::npos ||
+            shortcut.find("application/vnd.google-apps.document") != std::string::npos;
+        if (!looks_like_gdoc) {
+            return {false, "", "The .gdoc file is not a Google Docs shortcut."};
+        }
+        return {
+            false,
+            "",
+            "Local .gdoc files are shortcuts, not document content. Open the Google Drive connection in Remote Files and open the Google Doc there; TextLT will export it as plain text."};
     } catch (const std::exception& e) {
         return {false, "", e.what()};
     }

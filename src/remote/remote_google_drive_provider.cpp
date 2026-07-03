@@ -21,7 +21,9 @@ namespace {
 constexpr const char* kDriveApiHost = "https://www.googleapis.com/drive/v3";
 constexpr const char* kDriveUploadHost = "https://www.googleapis.com/upload/drive/v3";
 constexpr const char* kGoogleFolderMimeType = "application/vnd.google-apps.folder";
+constexpr const char* kGoogleDocsMimeType = "application/vnd.google-apps.document";
 constexpr const char* kGoogleAppsMimePrefix = "application/vnd.google-apps.";
+constexpr const char* kGoogleDocsPlainTextExportMimeType = "text/plain";
 constexpr const char* kUserAgent = "textlt/1.0";
 
 using HttpResult = RemoteHttpResponse;
@@ -187,7 +189,7 @@ RemoteEntryType GoogleEntryType(const std::string& mime_type) {
         return RemoteEntryType::Directory;
     }
     if (RemoteGoogleDriveProvider::IsGoogleWorkspaceMimeType(mime_type)) {
-        return RemoteEntryType::Other;
+        return RemoteEntryType::File;
     }
     return RemoteEntryType::File;
 }
@@ -406,8 +408,24 @@ bool RemoteGoogleDriveProvider::Download(
         return false;
     }
     if (IsGoogleWorkspaceMimeType(item.mime_type)) {
-        error = "Google Workspace documents cannot be downloaded with alt=media in this first provider version. Export support will be a later patch.";
-        return false;
+        if (!IsGoogleDocsMimeType(item.mime_type)) {
+            error = "Only Google Docs export is supported for Google Workspace files. Sheets, Slides, and Forms need a separate importer/export rule.";
+            return false;
+        }
+
+        std::string export_url = std::string(kDriveApiHost) + "/files/" + UrlEncode(item.id) + "/export?supportsAllDrives=true";
+        export_url = WithParameter(export_url, "mimeType", kGoogleDocsPlainTextExportMimeType);
+        HttpResult export_result = DownloadToFile(
+            export_url,
+            access_token_,
+            token_type_,
+            std::filesystem::path(local_path));
+        if (!export_result.ok) {
+            error = BuildHttpError("Google Docs plain text export failed.", export_result);
+            return false;
+        }
+        error.clear();
+        return true;
     }
 
     std::string url = std::string(kDriveApiHost) + "/files/" + UrlEncode(item.id) + "?alt=media&supportsAllDrives=true";
@@ -641,6 +659,10 @@ std::string RemoteGoogleDriveProvider::GoogleRootIdFromConfig(const RemoteConnec
 
 bool RemoteGoogleDriveProvider::IsGoogleWorkspaceMimeType(const std::string& mime_type) {
     return mime_type.rfind(kGoogleAppsMimePrefix, 0) == 0 && mime_type != kGoogleFolderMimeType;
+}
+
+bool RemoteGoogleDriveProvider::IsGoogleDocsMimeType(const std::string& mime_type) {
+    return mime_type == kGoogleDocsMimeType;
 }
 
 bool RemoteGoogleDriveProvider::EnsureConnected(std::string& error) const {

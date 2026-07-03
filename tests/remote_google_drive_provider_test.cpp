@@ -47,8 +47,10 @@ int main() {
     ExpectEqual(RemoteGoogleDriveProvider::GoogleRootIdFromConfig(config), "abc123", "configured root id");
 
     ExpectTrue(RemoteGoogleDriveProvider::IsGoogleWorkspaceMimeType("application/vnd.google-apps.document"), "google doc mime");
+    ExpectTrue(RemoteGoogleDriveProvider::IsGoogleDocsMimeType("application/vnd.google-apps.document"), "google docs mime");
     ExpectTrue(RemoteGoogleDriveProvider::IsGoogleWorkspaceMimeType("application/vnd.google-apps.spreadsheet"), "google sheet mime");
     ExpectFalse(RemoteGoogleDriveProvider::IsGoogleWorkspaceMimeType("application/vnd.google-apps.folder"), "folder is not exported doc");
+    ExpectFalse(RemoteGoogleDriveProvider::IsGoogleDocsMimeType("application/vnd.google-apps.spreadsheet"), "google sheet is not docs mime");
     ExpectFalse(RemoteGoogleDriveProvider::IsGoogleWorkspaceMimeType("text/plain"), "plain file mime");
 
     return 0;

@@ -35,6 +35,7 @@ public:
     static std::string GoogleRemotePathFromDisplayPath(const std::string& path);
     static std::string GoogleRootIdFromConfig(const RemoteConnectionConfig& config);
     static bool IsGoogleWorkspaceMimeType(const std::string& mime_type);
+    static bool IsGoogleDocsMimeType(const std::string& mime_type);
 
 private:
     bool EnsureConnected(std::string& error) const;

@@ -11,6 +11,9 @@ enum class TextImportFormat {
     Fb2,
     Fb2Zip,
     Docx,
+    Rtf,
+    Odt,
+    GoogleDocShortcut,
 };
 
 enum class TextImportEntryKind {
@@ -47,6 +50,9 @@ private:
     TextImportResult ImportFb2File(const std::filesystem::path& path) const;
     TextImportResult ImportFb2ZipFile(const std::filesystem::path& path) const;
     TextImportResult ImportDocxFile(const std::filesystem::path& path) const;
+    TextImportResult ImportRtfFile(const std::filesystem::path& path) const;
+    TextImportResult ImportOdtFile(const std::filesystem::path& path) const;
+    TextImportResult ImportGoogleDocShortcut(const std::filesystem::path& path) const;
 };
 
 } // namespace textlt

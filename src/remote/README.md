@@ -132,6 +132,7 @@ Supported Google Drive operations:
 
 - list folder;
 - download ordinary binary files with `alt=media`;
+- export Google Docs (`application/vnd.google-apps.document`) as `text/plain` when opening or downloading from the remote panel;
 - upload new files with multipart upload;
 - overwrite existing ordinary files with media upload;
 - recursive folder download;
@@ -141,6 +142,8 @@ Supported Google Drive operations:
 - create folders;
 - open remote file through the same local cache used by SFTP and Dropbox;
 - manual `Sync Last` upload for cached Google Drive files.
+
+Google Workspace files other than Google Docs, such as Sheets, Slides, and Forms, still need separate export rules.
 
 Google Drive root path is represented as `/` in TextLT. If `Root folder ID` is empty, the provider uses the Drive `root` alias. If `Root folder ID` is set, `/` in the TextLT remote panel maps to that configured folder.
 
