@@ -172,6 +172,14 @@ ftxui::Element ModalWindow::RenderBody(const Theme& theme) {
 ftxui::Element ModalWindow::RenderFooter(const Theme& theme) {
     using namespace ftxui;
 
+    if (content_ && content_->HasCustomFooter()) {
+        return content_->RenderCustomFooter() |
+            bgcolor(theme.modal_background) |
+            color(theme.modal_text_color) |
+            size(WIDTH, EQUAL, BodyWidth()) |
+            size(HEIGHT, EQUAL, std::max(1, content_->GetCustomFooterHeight()));
+    }
+
     Elements row;
     const std::string footer_text =
         content_ && !content_->GetFooterText().empty()
@@ -234,7 +242,9 @@ int ModalWindow::BodyHeight() const {
             used_rows += 2;
         }
         if (show_footer_) {
-            used_rows += 2;
+            used_rows += 1 + (content_ && content_->HasCustomFooter()
+                ? std::max(1, content_->GetCustomFooterHeight())
+                : 1);
         }
         return std::max(1, modal_height - used_rows);
     }

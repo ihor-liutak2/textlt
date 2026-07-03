@@ -136,6 +136,9 @@ add_executable(textlt
   src/app_workspace.cpp
   src/app_resources.cpp
   src/app_view.cpp
+  src/shortcut_key.cpp
+  src/shortcut_registry.cpp
+  src/shortcut_store.cpp
   src/cloud_tts_pipeline.cpp
   src/builtin_text_processors.cpp
   src/config_manager.cpp
@@ -144,6 +147,7 @@ add_executable(textlt
   src/editor_component.cpp
   src/editor_events.cpp
   src/editor_input_controller.cpp
+  src/editor_keymap.cpp
   src/editor_mouse.cpp
   src/editor_utils.cpp
   src/editor_viewport.cpp
@@ -177,6 +181,7 @@ add_executable(textlt
   src/modals/unsaved_changes_dialog.cpp
   src/modals/modal_search_files.cpp
   src/modals/modal_files.cpp
+  src/modals/modal_keyboard_shortcuts.cpp
   src/modals/modal_text_processors.cpp
   src/opened_config.cpp
   src/piper_manager.cpp
@@ -285,6 +290,12 @@ add_executable(textlt_app_command_registry_test
   src/app_command_registry.cpp
 )
 
+add_executable(textlt_shortcut_registry_test
+  tests/shortcut_registry_test.cpp
+  src/shortcut_key.cpp
+  src/shortcut_registry.cpp
+)
+
 add_executable(textlt_remote_path_test
   tests/remote_path_test.cpp
   src/remote/remote_connection_config.cpp
@@ -305,6 +316,10 @@ target_include_directories(textlt_builtin_text_processors_test PRIVATE
 )
 
 target_include_directories(textlt_app_command_registry_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_include_directories(textlt_shortcut_registry_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
@@ -415,6 +430,7 @@ target_include_directories(textlt_tts_audio_player_test PRIVATE
 target_link_libraries(textlt_tts_audio_player_test PRIVATE Threads::Threads)
 
 target_link_libraries(textlt_keyboard_shortcuts_test PRIVATE ftxui::component)
+target_link_libraries(textlt_shortcut_registry_test PRIVATE ftxui::component)
 
 target_include_directories(textlt_text_importer_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -437,6 +453,7 @@ add_test(NAME textlt_text_importer_test COMMAND textlt_text_importer_test)
 add_test(NAME textlt_keyboard_shortcuts_test COMMAND textlt_keyboard_shortcuts_test)
 add_test(NAME textlt_builtin_text_processors_test COMMAND textlt_builtin_text_processors_test)
 add_test(NAME textlt_app_command_registry_test COMMAND textlt_app_command_registry_test)
+add_test(NAME textlt_shortcut_registry_test COMMAND textlt_shortcut_registry_test)
 add_test(NAME textlt_tts_pipeline_test COMMAND textlt_tts_pipeline_test)
 add_test(NAME textlt_piper_manager_test COMMAND textlt_piper_manager_test)
 add_test(NAME textlt_tts_audio_player_test COMMAND textlt_tts_audio_player_test)

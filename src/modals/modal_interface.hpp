@@ -45,6 +45,12 @@ public:
 
     // Allows modal content to provide live footer status text.
     virtual std::string GetFooterText() const { return {}; }
+
+    // Complex modals may provide a multi-row footer. Existing modals continue
+    // to use ModalWindow's standard single-row footer by default.
+    virtual bool HasCustomFooter() const { return false; }
+    virtual int GetCustomFooterHeight() const { return 1; }
+    virtual ftxui::Element RenderCustomFooter() { return ftxui::text(""); }
 };
 
 } // namespace textlt

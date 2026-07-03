@@ -162,7 +162,7 @@ void FilesModalContent::RebuildComponents() {
         &pending_operation_input_value_,
         "name",
         operation_option);
-    confirm_yes_button_ = MakeTextButton("Yes", [this] {
+    confirm_yes_button_ = MakeTextButton("Confirm", [this] {
         ConfirmPendingOperation();
     });
     confirm_cancel_button_ = MakeTextButton("Cancel", [this] {
@@ -173,7 +173,7 @@ void FilesModalContent::RebuildComponents() {
         ftxui::Renderer([this] { return RenderEntryList(); }),
         [this](ftxui::Event event) { return HandleEvent(event); });
 
-    container_ = ftxui::Container::Vertical({
+    auto primary_container = ftxui::Container::Vertical({
         ftxui::Container::Horizontal({
             home_button_,
             documents_button_,
@@ -194,13 +194,31 @@ void FilesModalContent::RebuildComponents() {
             cut_button_,
             paste_button_,
         }),
-        ftxui::Container::Horizontal({
-            operation_input_,
-            confirm_yes_button_,
-            confirm_cancel_button_,
-        }),
         entry_list_component_,
     });
+    operation_container_ = ftxui::CatchEvent(
+        ftxui::Container::Vertical({
+            operation_input_,
+            ftxui::Container::Horizontal({
+                confirm_yes_button_,
+                confirm_cancel_button_,
+            }),
+        }),
+        [this](ftxui::Event event) {
+            if (IsEscapeEvent(event)) {
+                CancelPendingOperation();
+                SetStatus("Operation canceled.");
+                return true;
+            }
+            if ((event == ftxui::Event::Return || event.input() == "\x0A") &&
+                !PendingOperationNeedsInput()) {
+                ConfirmPendingOperation();
+                return true;
+            }
+            return false;
+        });
+    container_ = ftxui::Container::Tab(
+        {primary_container, operation_container_}, &operation_layer_index_);
 }
 
 void FilesModalContent::Open(
@@ -552,6 +570,7 @@ void FilesModalContent::StartNameOperation(
     pending_operation_input_cursor_ = static_cast<int>(pending_operation_input_value_.size());
     pending_operation_paths_.clear();
     pending_operation_message_ = std::move(message);
+    operation_layer_index_ = 1;
     status_is_error_ = false;
     status_ = "Confirm operation or cancel.";
     if (operation_input_) {
@@ -568,6 +587,7 @@ void FilesModalContent::StartConfirmOperation(
     pending_operation_input_cursor_ = 0;
     pending_operation_paths_.clear();
     pending_operation_message_ = std::move(message);
+    operation_layer_index_ = 1;
     status_is_error_ = false;
     status_ = "Confirm operation or cancel.";
     if (confirm_yes_button_) {
@@ -577,6 +597,7 @@ void FilesModalContent::StartConfirmOperation(
 
 void FilesModalContent::CancelPendingOperation() {
     pending_operation_ = PendingFileOperation::None;
+    operation_layer_index_ = 0;
     pending_operation_message_.clear();
     pending_operation_input_label_.clear();
     pending_operation_input_value_.clear();
@@ -1045,6 +1066,9 @@ bool FilesModalContent::HandleEvent(ftxui::Event event) {
             SetStatus("Operation canceled.");
             return true;
         }
+        // Confirmation is modal: do not allow navigation or file actions
+        // behind the popup until it is confirmed or cancelled.
+        return true;
     }
 
     if (IsShiftArrowDownEvent(event)) {
@@ -1285,37 +1309,33 @@ ftxui::Element FilesModalContent::RenderOperationButtons() {
     });
 }
 
-ftxui::Element FilesModalContent::RenderConfirmRow() {
+ftxui::Element FilesModalContent::RenderConfirmOverlay() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    if (!HasPendingOperation()) {
-        return text(" ") | color(theme.modal_text_color);
-    }
-
-    Elements row;
-    row.push_back(
-        text(" " + PendingOperationActionLabel() + ": ") |
-        bold |
-        color(theme.modal_accent));
-    row.push_back(
-        text(TrimForDisplay(pending_operation_message_, 36)) |
-        color(theme.modal_text_color));
+    Elements rows = {
+        text("Confirm " + PendingOperationActionLabel()) | bold,
+        separator(),
+        paragraph(pending_operation_message_) | color(theme.modal_text_color),
+    };
 
     if (PendingOperationNeedsInput()) {
-        row.push_back(text(" ") | color(theme.modal_text_color));
-        row.push_back(
-            text(pending_operation_input_label_ + ": ") |
-            color(theme.modal_accent));
-        row.push_back(operation_input_->Render() |
-            size(WIDTH, EQUAL, 28) |
+        rows.push_back(text(pending_operation_input_label_ + ":") | color(theme.modal_accent));
+        rows.push_back(operation_input_->Render() |
+            border |
+            size(WIDTH, EQUAL, 42) |
             bgcolor(theme.modal_input_bg));
     }
 
-    row.push_back(text(" "));
-    row.push_back(confirm_yes_button_->Render());
-    row.push_back(text(" "));
-    row.push_back(confirm_cancel_button_->Render());
-    return hbox(std::move(row));
+    rows.push_back(hbox({
+        confirm_yes_button_->Render(),
+        text(" "),
+        confirm_cancel_button_->Render(),
+    }));
+    return vbox(std::move(rows)) |
+        size(WIDTH, LESS_THAN, 66) |
+        border |
+        bgcolor(theme.modal_background) |
+        color(theme.modal_foreground);
 }
 
 ftxui::Element FilesModalContent::RenderEntryList() {
@@ -1446,17 +1466,26 @@ ftxui::Element FilesModalContent::Render() {
     }
     rows.push_back(separator() | color(theme.modal_border));
     rows.push_back(RenderOperationButtons());
-    rows.push_back(text(" "));
-    rows.push_back(RenderConfirmRow());
     rows.push_back(separator() | color(theme.modal_border));
     rows.push_back(RenderEntryList());
     rows.push_back(separator() | color(theme.modal_border));
     rows.push_back(RenderSelectionSummary());
     rows.push_back(RenderStatusSummary());
 
-    return vbox(std::move(rows)) |
+    Element body = vbox(std::move(rows)) |
         bgcolor(theme.modal_background) |
         color(theme.modal_text_color);
+    if (!HasPendingOperation()) {
+        return body;
+    }
+    return dbox({
+        body,
+        vbox({
+            filler(),
+            hbox({filler(), RenderConfirmOverlay(), filler()}),
+            filler(),
+        }),
+    });
 }
 
 std::string FilesModalContent::ModeTitle() const {

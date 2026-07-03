@@ -259,21 +259,7 @@ void GitModalContent::RebuildBranchLabels() {
 ftxui::Element GitModalContent::RenderBranchesTab() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     return ftxui::vbox({
-        ftxui::hbox({
-            ftxui::text("Local branches") | ftxui::bold | ftxui::color(theme.modal_accent),
-            ftxui::filler(),
-            checkout_button_->Render(),
-            ftxui::text(" "),
-            merge_button_->Render(),
-            ftxui::text(" "),
-            rebase_button_->Render(),
-            ftxui::text(" "),
-            rename_button_->Render(),
-            ftxui::text(" "),
-            delete_branch_button_->Render(),
-            ftxui::text(" "),
-            update_button_->Render(),
-        }),
+        ftxui::text("Local branches") | ftxui::bold | ftxui::color(theme.modal_accent),
         ftxui::separator() | ftxui::color(theme.modal_border),
         branch_labels_.empty()
             ? (ftxui::text("No local branches.") | ftxui::color(theme.modal_text_color) | ftxui::frame | ftxui::yflex)
@@ -292,17 +278,7 @@ ftxui::Element GitModalContent::RenderBranchesTab() {
 ftxui::Element GitModalContent::RenderServerTab() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     return ftxui::vbox({
-        ftxui::hbox({
-            check_connection_button_->Render(),
-            ftxui::text(" "),
-            fetch_button_->Render(),
-            ftxui::text(" "),
-            push_button_->Render(),
-            ftxui::text(" "),
-            force_push_button_->Render(),
-            ftxui::filler(),
-            ftxui::text("origin") | ftxui::dim | ftxui::color(theme.modal_text_color),
-        }),
+        ftxui::text("Remote: origin") | ftxui::dim | ftxui::color(theme.modal_text_color),
         ftxui::separator() | ftxui::color(theme.modal_border),
         RenderTextLines(server_output_lines_, "No server command output yet.", server_output_scroll_offset_) | ftxui::yflex,
     });

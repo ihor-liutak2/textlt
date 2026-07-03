@@ -147,7 +147,7 @@ private:
     ftxui::Element RenderFileNameInput();
     ftxui::Element RenderSelectionSummary() const;
     ftxui::Element RenderStatusSummary() const;
-    ftxui::Element RenderConfirmRow();
+    ftxui::Element RenderConfirmOverlay();
 
     std::string ModeTitle() const;
     std::string FooterActionLabel() const;
@@ -188,6 +188,7 @@ private:
     std::string pending_operation_input_value_;
     int pending_operation_input_cursor_ = 0;
     std::vector<std::filesystem::path> pending_operation_paths_;
+    int operation_layer_index_ = 0;
 
     std::chrono::steady_clock::time_point last_entry_click_time_{};
     int last_clicked_entry_ = -1;
@@ -211,6 +212,7 @@ private:
     ftxui::Component operation_input_;
     ftxui::Component confirm_yes_button_;
     ftxui::Component confirm_cancel_button_;
+    ftxui::Component operation_container_;
     ftxui::Component entry_list_component_;
     ftxui::Component container_;
 };

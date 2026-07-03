@@ -41,16 +41,24 @@ public:
     std::string CommandIdAt(int menu_index, int item_index) const;
 
 private:
+    struct DropdownItem {
+        std::string label;
+        std::string command_id;
+        bool separator = false;
+    };
+
     void ActivateTopMenu();
     void HandleDropdownAction();
     void RefreshCurrentDropdownEntries();
     void RebuildDropdownComponents();
+    bool IsCurrentSeparator(int item_index) const;
     int DropdownX() const;
 
     std::vector<std::string> menu_entries_;
-    std::vector<std::vector<std::string>> dropdown_entries_;
-    std::vector<std::vector<std::string>> dropdown_command_ids_;
+    std::vector<std::vector<DropdownItem>> dropdown_items_;
     std::vector<std::string> current_dropdown_entries_;
+    std::vector<std::string> current_dropdown_command_ids_;
+    std::vector<bool> current_dropdown_separators_;
     ActionCallback on_action_;
     const Theme* theme_ = nullptr;
 

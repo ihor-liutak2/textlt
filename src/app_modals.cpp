@@ -157,6 +157,25 @@ void TextltApp::CloseHelpDialog() {
 }
 
 
+void TextltApp::OpenKeyboardShortcutsModal() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+    keyboard_shortcuts_modal_.Open();
+    active_action_ = "Opened Keyboard Shortcuts";
+    SetActiveLayer(UiLayer::KeyboardShortcuts);
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CloseKeyboardShortcutsModal() {
+    keyboard_shortcuts_modal_.Close();
+    SetActiveLayer(UiLayer::Main);
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
 void TextltApp::OpenRecentFilesModal() {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();

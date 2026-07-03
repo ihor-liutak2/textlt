@@ -254,6 +254,9 @@ ftxui::Element TextltApp::Render() {
     if (help_dialog_.IsOpen()) {
         layers.push_back(help_dialog_.View()->Render() | clear_under | center);
     }
+    if (keyboard_shortcuts_modal_.IsOpen()) {
+        layers.push_back(keyboard_shortcuts_modal_.View()->Render() | clear_under | center);
+    }
     if (recent_files_modal_.IsOpen()) {
         layers.push_back(recent_files_modal_.View()->Render() | clear_under | center);
     }
@@ -402,6 +405,7 @@ bool TextltApp::ActiveModalIsOpen() const {
     switch (ActiveLayer()) {
         case UiLayer::Main: return true;
         case UiLayer::Help: return help_dialog_.IsOpen();
+        case UiLayer::KeyboardShortcuts: return keyboard_shortcuts_modal_.IsOpen();
         case UiLayer::Theme: return theme_dialog_.IsOpen();
         case UiLayer::Find: return current_search_mode_ != SearchMode::None;
         case UiLayer::GoToLine: return show_goto_line_bar_;
@@ -431,6 +435,14 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     // handling the next event.
     if (ActiveLayer() != UiLayer::Main && !ActiveModalIsOpen()) {
         FocusEditor();
+    }
+
+    if (ActiveLayer() == UiLayer::KeyboardShortcuts) {
+        if (event == ftxui::Event::Escape) {
+            CloseKeyboardShortcutsModal();
+            return true;
+        }
+        return false;
     }
 
     if (ActiveLayer() == UiLayer::GoToLine) {
@@ -490,17 +502,6 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         return false;
     }
 
-    if (IsAltJShortcut(event)) {
-        return RunCommand("ai.open_actions");
-    }
-    if (IsAltSShortcut(event)) {
-        return RunCommand("assistant.open_settings");
-    }
-
-    if (MatchesShortcut(event, ShortcutModifier::Alt, 'w') ||
-        MatchesShortcut(event, ShortcutModifier::Ctrl, 'w')) {
-        return RunCommand("file.close");
-    }
 
     if (pending_sidebar_chord_) {
         pending_sidebar_chord_ = false;
@@ -547,8 +548,8 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         }
     }
 
-    if (IsAltHShortcut(event)) {
-        return RunCommand("tts.open_modal");
+    if (RunMenuShortcut(event)) {
+        return true;
     }
 
     const bool editor_is_focused = ActiveLayer() == UiLayer::Main && !sidebar_has_focus_;
@@ -559,39 +560,7 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
             return true;
         }
 
-        if (IsLineManipulationShortcut(event)) {
-            auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-            if (editor_ptr && editor_ptr->IsReadOnly()) {
-                active_action_ = "Document is read-only";
-                screen_.PostEvent(ftxui::Event::Custom);
-                return true;
-            }
-            if (text_editor_->OnEvent(event)) {
-                screen_.PostEvent(ftxui::Event::Custom);
-                return true;
-            }
-            return false;
-        }
-        if (IsWordDeleteBackwardShortcut(event)) {
-            auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-            if (editor_ptr && editor_ptr->IsReadOnly()) {
-                active_action_ = "Document is read-only";
-                screen_.PostEvent(ftxui::Event::Custom);
-                return true;
-            }
-            editor_ptr->DeleteWordBackward();
-            screen_.PostEvent(ftxui::Event::Custom);
-            return true;
-        }
-        if (IsWordDeleteForwardShortcut(event)) {
-            auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-            if (editor_ptr && editor_ptr->IsReadOnly()) {
-                active_action_ = "Document is read-only";
-                screen_.PostEvent(ftxui::Event::Custom);
-                return true;
-            }
-            editor_ptr->DeleteWordForward();
-            screen_.PostEvent(ftxui::Event::Custom);
+        if (RunTextShortcut(event)) {
             return true;
         }
         // Handle Enter key for new line insertion in the editor
@@ -606,54 +575,10 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
             screen_.PostEvent(ftxui::Event::Custom);
             return true;
         }
-        // Ctrl+A (Select All)
-        if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'a')) {
-            return RunCommand("edit.select_all");
-        }
         // Pass all other editor-specific events (characters, navigation, etc.) to the editor.
         if (text_editor_->OnEvent(event)) {
             return true;
         }
-    }
-
-    // Global App Shortcuts (available when no modals are active)
-    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'q')) {
-        return RunCommand("app.exit");
-    }
-    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 's')) {
-        return RunCommand("file.save");
-    }
-    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'o')) {
-        return RunCommand("file.open");
-    }
-
-    // Clipboard shortcuts (trigger dropdown actions)
-    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'c') ||
-        event == ftxui::Event::Special("Ctrl+Shift+C") ||
-        input == "Ctrl+Shift+C") {
-        return RunCommand("edit.copy");
-    }
-    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'x') ||
-        event == ftxui::Event::Special("Ctrl+Shift+X") ||
-        input == "Ctrl+Shift+X") {
-        return RunCommand("edit.cut");
-    }
-    // Keep Ctrl+Shift+V for terminal configurations that reserve Ctrl+V.
-    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'v') ||
-        event == ftxui::Event::Special("Ctrl+Shift+V") ||
-        input == "Ctrl+Shift+V") {
-        return RunCommand("edit.paste");
-    }
-    
-    // Shortcuts to open Find/Replace/Go-to-Line panels
-    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'f')) {
-        return RunCommand("edit.find");
-    }
-    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'r')) {
-        return RunCommand("edit.replace");
-    }
-    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'g')) {
-        return RunCommand("editor.go_to_line");
     }
 
     // F-key shortcuts to open main menu dropdowns/dialogs

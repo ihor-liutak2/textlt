@@ -140,14 +140,6 @@ bool IsNavigationEvent(const ftxui::Event& event, NavigationAction* action) {
         *action = NavigationAction::PageDown;
         return true;
     }
-    if (event == ftxui::Event::ArrowLeftCtrl) {
-        *action = NavigationAction::WordLeft;
-        return true;
-    }
-    if (event == ftxui::Event::ArrowRightCtrl) {
-        *action = NavigationAction::WordRight;
-        return true;
-    }
     if (event == ftxui::Event::ArrowUpCtrl ||
         event.input() == "Ctrl+Up" ||
         event.input() == "\x1B[1;5A" ||
@@ -290,48 +282,6 @@ bool IsPrintableRawTextInput(const ftxui::Event& event) {
 bool EditorInputController::HandleEvent(EditorComponent& editor, ftxui::Event event) {
     const std::string& input = event.input();
     const bool read_only = editor.IsReadOnly();
-    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'z')) {
-        if (!read_only) {
-            editor.Undo();
-        }
-        return true;
-    }
-    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'y')) {
-        if (!read_only) {
-            editor.Redo();
-        }
-        return true;
-    }
-    if (MatchesShortcut(event, ShortcutModifier::Ctrl, '/')) {
-        if (!read_only) {
-            editor.ToggleComment();
-        }
-        return true;
-    }
-    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 't')) {
-        if (!read_only) {
-            editor.ToggleCase();
-        }
-        return true;
-    }
-
-    if (IsDuplicateLinesEvent(event)) {
-        return read_only || editor.DuplicateLines();
-    }
-    if (IsMoveLinesUpEvent(event)) {
-        return read_only || editor.MoveLinesUp();
-    }
-    if (IsMoveLinesDownEvent(event)) {
-        return read_only || editor.MoveLinesDown();
-    }
-
-    if (IsShiftTabEvent(event)) {
-        if (!read_only) {
-            editor.OutdentLines();
-        }
-        return true;
-    }
-
     if (event == ftxui::Event::Tab) {
         if (read_only) {
             return true;
@@ -344,20 +294,6 @@ bool EditorInputController::HandleEvent(EditorComponent& editor, ftxui::Event ev
         const int configured_tab_size = editor.config_ ? editor.config_->tab_size : 4;
         const size_t tab_size = configured_tab_size == 2 ? 2 : 4;
         editor.InsertText(std::string(tab_size, ' '));
-        return true;
-    }
-
-    if (IsWordDeleteBackwardEvent(event)) {
-        if (!read_only) {
-            editor.DeleteWordBackward();
-        }
-        return true;
-    }
-
-    if (IsCtrlDeleteEvent(event)) {
-        if (!read_only) {
-            editor.DeleteWordForward();
-        }
         return true;
     }
 
@@ -434,8 +370,8 @@ bool EditorInputController::HandleEvent(EditorComponent& editor, ftxui::Event ev
     }
 
     NavigationAction action = NavigationAction::Left;
-    const bool extend_selection = IsShiftNavigationEvent(event, &action);
-    if (extend_selection || IsNavigationEvent(event, &action)) {
+    const bool extend_selection = false;
+    if (IsNavigationEvent(event, &action)) {
         editor.EndTypingGroup();
         if (extend_selection) {
             editor.BeginSelection();

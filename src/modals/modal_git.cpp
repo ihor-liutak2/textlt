@@ -660,6 +660,47 @@ std::string GitModalContent::GetFooterText() const {
     return status_.empty() ? "Git" : status_;
 }
 
+ftxui::Element GitModalContent::RenderCustomFooter() {
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    ftxui::Elements actions;
+    const auto add = [&actions](const ftxui::Component& button) {
+        if (!actions.empty()) {
+            actions.push_back(ftxui::text(" "));
+        }
+        actions.push_back(button->Render());
+    };
+
+    const Tab tab = static_cast<Tab>(selected_tab_);
+    if (tab == Tab::Status) {
+        add(refresh_button_); add(open_button_); add(stage_all_button_);
+        add(unstage_all_button_); add(copy_paths_button_);
+    } else if (tab == Tab::Diff) {
+        add(working_diff_button_); add(staged_diff_button_);
+        add(refresh_diff_button_); add(copy_diff_button_);
+    } else if (tab == Tab::Commit) {
+        add(commit_button_);
+    } else if (tab == Tab::Branches) {
+        add(checkout_button_); add(merge_button_); add(rebase_button_);
+        add(rename_button_); add(delete_branch_button_); add(update_button_);
+    } else if (tab == Tab::Remote) {
+        add(refresh_remote_button_); add(checkout_remote_button_); add(delete_remote_button_);
+    } else if (tab == Tab::Tags) {
+        add(create_tag_button_); add(delete_tag_button_); add(push_tag_button_);
+        add(push_all_tags_button_); add(fetch_tags_button_);
+    } else if (tab == Tab::Server) {
+        add(check_connection_button_); add(fetch_button_); add(push_button_); add(force_push_button_);
+    } else if (tab == Tab::Compare) {
+        add(refresh_compare_refs_button_); add(refresh_compare_files_button_);
+        add(open_compare_side_button_); add(open_compare_diff_button_); add(copy_compare_diff_button_);
+    }
+
+    return ftxui::vbox({
+        ftxui::text(" " + GetFooterText()) | ftxui::dim | ftxui::color(theme.modal_text_color),
+        ftxui::separator() | ftxui::color(theme.modal_border),
+        ftxui::hbox(std::move(actions)),
+    });
+}
+
 bool GitModalContent::HandleEvent(ftxui::Event event) {
     ApplyBackgroundOperationCompletion();
     if (operation_running_) {

@@ -299,19 +299,7 @@ ftxui::Element GitModalContent::RenderStatusTab() {
         ftxui::text("Repo: " + (RepositoryPath().empty() ? "-" : RepositoryPath().generic_string())) |
             ftxui::color(theme.modal_text_color),
         ftxui::text(""),
-        ftxui::hbox({
-            ftxui::text("Files:") | ftxui::bold | ftxui::color(theme.modal_accent),
-            ftxui::filler(),
-            refresh_button_->Render(),
-            ftxui::text(" "),
-            open_button_->Render(),
-            ftxui::text(" "),
-            stage_all_button_->Render(),
-            ftxui::text(" "),
-            unstage_all_button_->Render(),
-            ftxui::text(" "),
-            copy_paths_button_->Render(),
-        }),
+        ftxui::text("Files:") | ftxui::bold | ftxui::color(theme.modal_accent),
         ftxui::separator() | ftxui::color(theme.modal_border),
         status_labels_.empty()
             ? (ftxui::text("Working tree clean.") | ftxui::color(theme.modal_text_color) | ftxui::frame | ftxui::yflex)
@@ -328,14 +316,6 @@ ftxui::Element GitModalContent::RenderDiffTab() {
                 ftxui::color(theme.modal_text_color),
             ftxui::text("  Mode: " + std::string(diff_staged_ ? "Staged" : "Working")) |
                 ftxui::color(theme.modal_text_color) | ftxui::dim,
-            ftxui::filler(),
-            working_diff_button_->Render(),
-            ftxui::text(" "),
-            staged_diff_button_->Render(),
-            ftxui::text(" "),
-            refresh_diff_button_->Render(),
-            ftxui::text(" "),
-            copy_diff_button_->Render(),
         }),
         ftxui::separator() | ftxui::color(theme.modal_border),
         RenderTextLines(diff_lines_, "No diff loaded.", diff_scroll_offset_) | ftxui::yflex,
@@ -370,10 +350,6 @@ ftxui::Element GitModalContent::RenderCommitTab() {
             ftxui::color(theme.modal_input_fg) |
             ftxui::frame |
             ftxui::size(ftxui::HEIGHT, ftxui::EQUAL, 5),
-        ftxui::hbox({
-            ftxui::filler(),
-            commit_button_->Render(),
-        }),
     });
 }
 

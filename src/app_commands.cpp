@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "ftxui/component/event.hpp"
+#include "shortcut_key.hpp"
 
 namespace textlt {
 namespace {
@@ -65,7 +66,7 @@ void TextltApp::InitializeCommands() {
     add("editor.go_to_line", "Go to Line", "Edit", "Ctrl+G", [this] { OpenGoToLinePanel(); });
 
     add("view.toggle_line_numbers", "Toggle Line Numbers", "Options", "", [this] { CommandViewToggleLineNumbers(); });
-    add("sidebar.toggle_file_explorer", "Toggle File Explorer", "Options", "Ctrl+B", [this] { CommandSidebarToggleFileExplorer(); });
+    add("sidebar.toggle_file_explorer", "Toggle File Explorer", "Options", "", [this] { CommandSidebarToggleFileExplorer(); });
     add("sidebar.ctrl_b_file_explorer", "File Explorer Focus Toggle", "Options", "Ctrl+B", [this] { HandleCtrlBFileExplorer(); });
     add("sidebar.show_opened_files", "Opened Files Sidebar", "Options", "Alt+B, O", [this] { ShowOpenedFilesSidebar(); });
     add("sidebar.toggle_opened_project", "Toggle File Explorer Tab", "Options", "Alt+B", [this] { ToggleSidebarOpenedProject(); });
@@ -93,8 +94,57 @@ void TextltApp::InitializeCommands() {
     add("git.settings", "Git Settings", "Git", "", [this] { OpenGitSettingsModal(); });
 
     add("app.about", "About textlt", "Help", "", [this] { OpenAboutDialog(); });
-    add("app.help", "Keyboard Shortcuts", "Help", "F1", [this] { OpenHelpDialog(); });
+    add("app.help", "Keyboard Shortcuts", "Help", "F1", [this] { OpenKeyboardShortcutsModal(); });
     add("app.exit", "Exit", "Application", "Ctrl+Q", [this] { RequestExit(); });
+}
+
+void TextltApp::InitializeMenuShortcuts() {
+    for (const AppCommand& command : command_registry_.Commands()) {
+        std::string first_shortcut;
+        if (!command.shortcut.empty()) {
+            first_shortcut = command.shortcut;
+            const size_t slash_pos = first_shortcut.find(" / ");
+            if (slash_pos != std::string::npos) {
+                first_shortcut = first_shortcut.substr(0, slash_pos);
+            }
+            if (!ParseShortcutKey(first_shortcut)) {
+                first_shortcut.clear();
+            }
+        }
+        shortcut_registry_.RegisterDefault({
+            ShortcutContext::Menu,
+            command.id,
+            command.title,
+            command.category,
+            first_shortcut,
+        });
+    }
+}
+
+void TextltApp::InitializeTextShortcuts() {
+    for (const ShortcutBindingDefinition& definition : EditorKeymap::DefaultBindings()) {
+        shortcut_registry_.RegisterDefault(definition);
+    }
+}
+
+bool TextltApp::SaveShortcutOverrides(std::string& error) {
+    return shortcut_store_.Save(shortcut_registry_.Overrides(), &error);
+}
+
+bool TextltApp::RunMenuShortcut(ftxui::Event event) {
+    const std::string command_id = shortcut_registry_.MatchAction(ShortcutContext::Menu, event);
+    if (command_id.empty()) {
+        return false;
+    }
+    return RunCommand(command_id);
+}
+
+bool TextltApp::RunTextShortcut(ftxui::Event event) {
+    const std::string action_id = shortcut_registry_.MatchAction(ShortcutContext::Text, event);
+    if (action_id.empty()) {
+        return false;
+    }
+    return editor_keymap_.RunAction(*this, action_id);
 }
 
 bool TextltApp::RunCommand(const std::string& command_id) {

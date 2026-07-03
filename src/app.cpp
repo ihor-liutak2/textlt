@@ -71,6 +71,11 @@ TextltApp::TextltApp()
           &git_manager_,
           &editor_config_)),
       help_dialog_(&current_theme_),
+      keyboard_shortcuts_modal_(
+          &current_theme_,
+          &shortcut_registry_,
+          &command_registry_,
+          [this](std::string& error) { return SaveShortcutOverrides(error); }),
       recent_files_modal_(
           &current_theme_,
           &recent_files_history_,
@@ -228,6 +233,9 @@ TextltApp::TextltApp()
         },
         &current_theme_);
     InitializeCommands();
+    InitializeMenuShortcuts();
+    InitializeTextShortcuts();
+    shortcut_registry_.SetOverrides(shortcut_store_.Load());
 
     title_bar_open_tts_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
         "TTS",
@@ -307,6 +315,7 @@ TextltApp::TextltApp()
             ActiveLayer() == UiLayer::Main &&
             (!menu_bar_ || !menu_bar_->IsDropdownOpen()) &&
             !help_dialog_.IsOpen() &&
+            !keyboard_shortcuts_modal_.IsOpen() &&
             !recent_files_modal_.IsOpen() &&
             !search_files_modal_.IsOpen() &&
             !files_modal_.IsOpen() &&
@@ -459,6 +468,7 @@ TextltApp::TextltApp()
     root_container_ = ftxui::Container::Tab({
         main_container_,
         help_dialog_.View(),
+        keyboard_shortcuts_modal_.View(),
         theme_dialog_.View(),
         find_panel_container_,
         goto_line_input_component_,

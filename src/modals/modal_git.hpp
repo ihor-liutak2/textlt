@@ -50,6 +50,9 @@ public:
     ModalSizePreference GetModalSizePreference() const override { return {118, 34}; }
     ModalFrameStyle GetModalFrameStyle() const override { return ModalFrameStyle::TitleInBorder; }
     std::string GetFooterText() const override;
+    bool HasCustomFooter() const override { return true; }
+    int GetCustomFooterHeight() const override { return 3; }
+    ftxui::Element RenderCustomFooter() override;
 
     void SetTheme(const Theme* theme) { theme_ = theme; }
     void Open();

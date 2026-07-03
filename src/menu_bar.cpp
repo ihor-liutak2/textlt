@@ -20,129 +20,73 @@ MenuBarComponent::MenuBarComponent(
           " File ",
           " Edit ",
           " Options ",
-          " AI ",
-          " Remote ",
-          " Git ",
+          " Tools ",
           " Help ",
           " Exit ",
       }),
-      dropdown_entries_({
+      dropdown_items_({
           {
-              " New ",
-              " Files... ",
-              " Open...            (Ctrl+O) ",
-              " Save As... ",
-              " Import... ",
-              " Recent Files ",
-              " Close       (Alt+W / Ctrl+W) ",
-              " Close All ",
-              " Save               (Ctrl+S) ",
-              " Save All ",
-              " [ ] Add to Favorites ",
-              " Exit               (Ctrl+Q) ",
+              {" New ", "file.new"},
+              {" Files... ", "file.files"},
+              {" Open...            (Ctrl+O) ", "file.open"},
+              {" Save As... ", "file.save_as"},
+              {" Import... ", "file.import"},
+              {" Recent Files ", "file.recent"},
+              {" Close       (Alt+W / Ctrl+W) ", "file.close"},
+              {" Close All ", "file.close_all"},
+              {" Save               (Ctrl+S) ", "file.save"},
+              {" Save All ", "file.save_all"},
+              {" [ ] Add to Favorites ", "file.toggle_favorite"},
+              {" Exit               (Ctrl+Q) ", "app.exit"},
           },
           {
-              " Undo               (Ctrl+Z) ",
-              " Redo               (Ctrl+Y) ",
-              " Select All         (Ctrl+A) ",
-              " Cut                (Ctrl+X) ",
-              " Copy               (Ctrl+C) ",
-              " Paste              (Ctrl+V) ",
-              " Toggle Comment     (Ctrl+/) ",
-              " Toggle Case        (Ctrl+T) ",
-              " Convert Indents: 4 -> 2 Spaces ",
-              " Convert Indents: 2 -> 4 Spaces ",
-              " Find...            (Ctrl+F) ",
-              " Replace...         (Ctrl+R) ",
-              " Search in Files...",
-              " Text Processors...",
+              {" Undo               (Ctrl+Z) ", "edit.undo"},
+              {" Redo               (Ctrl+Y) ", "edit.redo"},
+              {" Select All         (Ctrl+A) ", "edit.select_all"},
+              {" Cut                (Ctrl+X) ", "edit.cut"},
+              {" Copy               (Ctrl+C) ", "edit.copy"},
+              {" Paste              (Ctrl+V) ", "edit.paste"},
+              {" Toggle Comment     (Ctrl+/) ", "edit.toggle_comment"},
+              {" Toggle Case        (Ctrl+T) ", "edit.toggle_case"},
+              {" Convert Indents: 4 -> 2 Spaces ", "edit.convert_indents_4_to_2"},
+              {" Convert Indents: 2 -> 4 Spaces ", "edit.convert_indents_2_to_4"},
+              {" Find...            (Ctrl+F) ", "edit.find"},
+              {" Replace...         (Ctrl+R) ", "edit.replace"},
+              {" Search in Files...", "search.files"},
+              {" Text Processors...", "text_processors.open"},
           },
           {
-              " Toggle Line Numbers ",
-              " Toggle File Explorer (Ctrl+B) ",
-              " Smart Word Wrap [ ] ",
-              " Syntax Highlighting [X] ",
-              " Auto Pairing [X] ",
-              " Smart Auto-Indent [X] ",
-              " Tab Size: 4 spaces ",
-              " Convert Tabs to Spaces ",
-              " Theme... ",
-              " View Layout... ",
+              {" Toggle Line Numbers ", "view.toggle_line_numbers"},
+              {" Toggle File Explorer (Ctrl+B) ", "sidebar.toggle_file_explorer"},
+              {" Smart Word Wrap [ ] ", "editor.toggle_smart_word_wrap"},
+              {" Syntax Highlighting [X] ", "editor.toggle_syntax_highlighting"},
+              {" Auto Pairing [X] ", "editor.toggle_auto_pairing"},
+              {" Smart Auto-Indent [X] ", "editor.toggle_auto_indent"},
+              {" Tab Size: 4 spaces ", "editor.toggle_tab_size"},
+              {" Convert Tabs to Spaces ", "editor.convert_tabs_to_spaces"},
+              {" Theme... ", "theme.open"},
+              {" View Layout... ", "view.layout"},
           },
           {
-              " TTS                 (Alt+H) ",
-              " AI Actions          (Alt+J) ",
-              " Assistant Settings  (Alt+S) ",
+              {" TTS                 (Alt+H) ", "tts.open_modal"},
+              {" AI Actions          (Alt+J) ", "ai.open_actions"},
+              {" Assistant Settings  (Alt+S) ", "assistant.open_settings"},
+              {" ───────────────────────── ", "", true},
+              {" Remote Files... ", "remote.files"},
+              {" Remote Connections... ", "remote.connections"},
+              {" ───────────────────────── ", "", true},
+              {" Git... ", "git.open"},
+              {" Git Settings... ", "git.settings"},
+              {" ───────────────────────── ", "", true},
+              {" Text Processors...", "text_processors.open"},
           },
           {
-              " Remote Files... ",
-              " Remote Connections... ",
+              {" About textlt ", "app.about"},
+              {" Keyboard Shortcuts ", "app.help"},
           },
           {
-              " Git... ",
-              " Git Settings... ",
+              {" Exit ", "app.exit"},
           },
-          {" About textlt ", " Keyboard Shortcuts "},
-          {" Exit "},
-      }),
-      dropdown_command_ids_({
-          {
-              "file.new",
-              "file.files",
-              "file.open",
-              "file.save_as",
-              "file.import",
-              "file.recent",
-              "file.close",
-              "file.close_all",
-              "file.save",
-              "file.save_all",
-              "file.toggle_favorite",
-              "app.exit",
-          },
-          {
-              "edit.undo",
-              "edit.redo",
-              "edit.select_all",
-              "edit.cut",
-              "edit.copy",
-              "edit.paste",
-              "edit.toggle_comment",
-              "edit.toggle_case",
-              "edit.convert_indents_4_to_2",
-              "edit.convert_indents_2_to_4",
-              "edit.find",
-              "edit.replace",
-              "search.files",
-              "text_processors.open",
-          },
-          {
-              "view.toggle_line_numbers",
-              "sidebar.toggle_file_explorer",
-              "editor.toggle_smart_word_wrap",
-              "editor.toggle_syntax_highlighting",
-              "editor.toggle_auto_pairing",
-              "editor.toggle_auto_indent",
-              "editor.toggle_tab_size",
-              "editor.convert_tabs_to_spaces",
-              "theme.open",
-              "view.layout",
-          },
-          {
-              "tts.open_modal",
-              "ai.open_actions",
-              "assistant.open_settings",
-          },
-          {
-              "remote.files",
-              "remote.connections",
-          },
-          {
-              "git.open",
-              "git.settings",
-          },
-          {"app.about", "app.help"},
-          {"app.exit"},
       }),
       on_action_(std::move(on_action)),
       theme_(theme) {
@@ -181,6 +125,16 @@ void MenuBarComponent::RebuildDropdownComponents() {
     dropdown_buttons_.reserve(current_dropdown_entries_.size());
 
     for (size_t index = 0; index < current_dropdown_entries_.size(); ++index) {
+        if (IsCurrentSeparator(static_cast<int>(index))) {
+            dropdown_buttons_.push_back(ftxui::Renderer([this, index] {
+                const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+                return ftxui::text(current_dropdown_entries_[index]) |
+                       ftxui::color(theme.menu_foreground) |
+                       ftxui::dim;
+            }));
+            continue;
+        }
+
         ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
         option.label = current_dropdown_entries_[index];
         option.on_click = [this, index] {
@@ -207,6 +161,7 @@ void MenuBarComponent::RebuildDropdownComponents() {
         menu_container_->Add(dropdown_menu_);
     }
 }
+
 
 ftxui::Element MenuBarComponent::Render() {
     using namespace ftxui;
@@ -334,23 +289,27 @@ std::string MenuBarComponent::CommandIdAt(int menu_index, int item_index) const 
     if (menu_index < 0 || item_index < 0) {
         return "";
     }
-    if (menu_index >= static_cast<int>(dropdown_command_ids_.size())) {
+    if (menu_index >= static_cast<int>(dropdown_items_.size())) {
         return "";
     }
-    const auto& command_ids = dropdown_command_ids_[menu_index];
-    if (item_index >= static_cast<int>(command_ids.size())) {
+    const auto& items = dropdown_items_[menu_index];
+    if (item_index >= static_cast<int>(items.size())) {
         return "";
     }
-    return command_ids[item_index];
+    if (items[item_index].separator) {
+        return "";
+    }
+    return items[item_index].command_id;
 }
+
     
     
 void MenuBarComponent::SetFileFavoriteLabel(bool is_favorite) {
-    if (dropdown_entries_.empty() || dropdown_entries_[0].size() <= 10) {
+    if (dropdown_items_.empty() || dropdown_items_[0].size() <= 10) {
         return;
     }
 
-    dropdown_entries_[0][10] = is_favorite
+    dropdown_items_[0][10].label = is_favorite
         ? " [X] Remove from Favorites "
         : " [ ] Add to Favorites ";
     RefreshCurrentDropdownEntries();
@@ -362,23 +321,23 @@ void MenuBarComponent::SetOptionLabels(
     bool auto_pairing,
     bool auto_indent,
     int tab_size) {
-    if (dropdown_entries_.size() <= 2 || dropdown_entries_[2].size() <= 6) {
+    if (dropdown_items_.size() <= 2 || dropdown_items_[2].size() <= 6) {
         return;
     }
 
-    dropdown_entries_[2][2] = smart_word_wrap
+    dropdown_items_[2][2].label = smart_word_wrap
         ? " Smart Word Wrap [X] "
         : " Smart Word Wrap [ ] ";
-    dropdown_entries_[2][3] = syntax_highlighting
+    dropdown_items_[2][3].label = syntax_highlighting
         ? " Syntax Highlighting [X] "
         : " Syntax Highlighting [ ] ";
-    dropdown_entries_[2][4] = auto_pairing
+    dropdown_items_[2][4].label = auto_pairing
         ? " Auto Pairing [X] "
         : " Auto Pairing [ ] ";
-    dropdown_entries_[2][5] = auto_indent
+    dropdown_items_[2][5].label = auto_indent
         ? " Smart Auto-Indent [X] "
         : " Smart Auto-Indent [ ] ";
-    dropdown_entries_[2][6] =
+    dropdown_items_[2][6].label =
         " Tab Size: " + std::to_string(tab_size) + " spaces ";
     RefreshCurrentDropdownEntries();
 }
@@ -388,7 +347,7 @@ void MenuBarComponent::CloseDropdown() {
 }
 
 void MenuBarComponent::OpenDropdown(int menu_index) {
-    if (menu_index < 0 || menu_index >= static_cast<int>(dropdown_entries_.size())) {
+    if (menu_index < 0 || menu_index >= static_cast<int>(dropdown_items_.size())) {
         CloseDropdown();
         return;
     }
@@ -411,6 +370,10 @@ void MenuBarComponent::HandleDropdownAction() {
         return;
     }
 
+    if (IsCurrentSeparator(selected_dropdown_item_)) {
+        return;
+    }
+
     if (on_action_) {
         on_action_(active_dropdown_, selected_dropdown_item_);
     }
@@ -418,27 +381,64 @@ void MenuBarComponent::HandleDropdownAction() {
 }
 
 void MenuBarComponent::RefreshCurrentDropdownEntries() {
-    if (dropdown_entries_.empty()) {
+    if (dropdown_items_.empty()) {
         current_dropdown_entries_.clear();
+        current_dropdown_command_ids_.clear();
+        current_dropdown_separators_.clear();
         return;
     }
 
     const int menu_index = std::clamp(
         active_dropdown_ >= 0 ? active_dropdown_ : selected_menu_item_,
         0,
-        static_cast<int>(dropdown_entries_.size()) - 1);
-    const std::vector<std::string>& next_entries = dropdown_entries_[menu_index];
-    if (current_dropdown_entries_ == next_entries) {
+        static_cast<int>(dropdown_items_.size()) - 1);
+    const std::vector<DropdownItem>& next_items = dropdown_items_[menu_index];
+
+    std::vector<std::string> next_entries;
+    std::vector<std::string> next_command_ids;
+    std::vector<bool> next_separators;
+    next_entries.reserve(next_items.size());
+    next_command_ids.reserve(next_items.size());
+    next_separators.reserve(next_items.size());
+    for (const DropdownItem& item : next_items) {
+        next_entries.push_back(item.label);
+        next_command_ids.push_back(item.command_id);
+        next_separators.push_back(item.separator);
+    }
+
+    if (current_dropdown_entries_ == next_entries &&
+        current_dropdown_command_ids_ == next_command_ids &&
+        current_dropdown_separators_ == next_separators) {
         return;
     }
-    current_dropdown_entries_ = next_entries;
+    current_dropdown_entries_ = std::move(next_entries);
+    current_dropdown_command_ids_ = std::move(next_command_ids);
+    current_dropdown_separators_ = std::move(next_separators);
+
     if (selected_dropdown_item_ >= static_cast<int>(current_dropdown_entries_.size())) {
         selected_dropdown_item_ = 0;
+    }
+    if (IsCurrentSeparator(selected_dropdown_item_)) {
+        selected_dropdown_item_ = 0;
+        while (selected_dropdown_item_ < static_cast<int>(current_dropdown_separators_.size()) &&
+               current_dropdown_separators_[selected_dropdown_item_]) {
+            ++selected_dropdown_item_;
+        }
+        if (selected_dropdown_item_ >= static_cast<int>(current_dropdown_separators_.size())) {
+            selected_dropdown_item_ = 0;
+        }
     }
     if (dropdown_menu_) {
         RebuildDropdownComponents();
     }
 }
+
+bool MenuBarComponent::IsCurrentSeparator(int item_index) const {
+    return item_index >= 0 &&
+           item_index < static_cast<int>(current_dropdown_separators_.size()) &&
+           current_dropdown_separators_[item_index];
+}
+
 
 // Returns the X-coordinate for the current active dropdown
 int MenuBarComponent::DropdownX() const {

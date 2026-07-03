@@ -267,19 +267,7 @@ ftxui::Element GitModalContent::RenderCompareTab() {
         : "-";
 
     return ftxui::vbox({
-        ftxui::hbox({
-            ftxui::text("Compare refs and files") | ftxui::bold | ftxui::color(theme.modal_accent),
-            ftxui::filler(),
-            refresh_compare_refs_button_->Render(),
-            ftxui::text(" "),
-            refresh_compare_files_button_->Render(),
-            ftxui::text(" "),
-            open_compare_side_button_->Render(),
-            ftxui::text(" "),
-            open_compare_diff_button_->Render(),
-            ftxui::text(" "),
-            copy_compare_diff_button_->Render(),
-        }),
+        ftxui::text("Compare refs and files") | ftxui::bold | ftxui::color(theme.modal_accent),
         ftxui::separator() | ftxui::color(theme.modal_border),
         ftxui::hbox({
             ftxui::vbox({

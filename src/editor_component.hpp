@@ -16,8 +16,11 @@
 
 namespace textlt {
 
+    class EditorKeymap;
+
     class EditorComponent : public ftxui::ComponentBase {
         friend class EditorInputController;
+        friend class EditorKeymap;
 
     public:
         EditorComponent(EditorConfig* config, const Theme* theme);

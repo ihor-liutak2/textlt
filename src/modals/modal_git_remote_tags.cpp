@@ -221,15 +221,7 @@ void GitModalContent::RebuildTagLabels() {
 ftxui::Element GitModalContent::RenderRemoteTab() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     return ftxui::vbox({
-        ftxui::hbox({
-            ftxui::text("Remote branches") | ftxui::bold | ftxui::color(theme.modal_accent),
-            ftxui::filler(),
-            refresh_remote_button_->Render(),
-            ftxui::text(" "),
-            checkout_remote_button_->Render(),
-            ftxui::text(" "),
-            delete_remote_button_->Render(),
-        }),
+        ftxui::text("Remote branches") | ftxui::bold | ftxui::color(theme.modal_accent),
         ftxui::separator() | ftxui::color(theme.modal_border),
         ftxui::hbox({
             ftxui::text("Search: ") | ftxui::color(theme.modal_text_color),
@@ -262,19 +254,7 @@ ftxui::Element GitModalContent::RenderTagsTab() {
     }) | ftxui::yflex;
 
     return ftxui::vbox({
-        ftxui::hbox({
-            ftxui::text("Tags") | ftxui::bold | ftxui::color(theme.modal_accent),
-            ftxui::filler(),
-            create_tag_button_->Render(),
-            ftxui::text(" "),
-            delete_tag_button_->Render(),
-            ftxui::text(" "),
-            push_tag_button_->Render(),
-            ftxui::text(" "),
-            push_all_tags_button_->Render(),
-            ftxui::text(" "),
-            fetch_tags_button_->Render(),
-        }),
+        ftxui::text("Tags") | ftxui::bold | ftxui::color(theme.modal_accent),
         ftxui::separator() | ftxui::color(theme.modal_border),
         ftxui::hbox({
             ftxui::text("Search: ") | ftxui::color(theme.modal_text_color),

@@ -9,13 +9,17 @@
 #include "ftxui/component/screen_interactive.hpp"
 #include "ftxui/dom/elements.hpp"
 #include "app_command_registry.hpp"
+#include "shortcut_registry.hpp"
+#include "shortcut_store.hpp"
 #include "cloud_tts_pipeline.hpp"
 #include "config_manager.hpp"
 #include "editor_component.hpp"
+#include "editor_keymap.hpp"
 #include "editor_config.hpp"
 #include "git_manager.hpp"
 #include "modals/assistant_modals.hpp"
 #include "modals/help_dialog.hpp"
+#include "modals/modal_keyboard_shortcuts.hpp"
 #include "modals/modal_ai.hpp"
 #include "modals/modal_git.hpp"
 #include "modals/modal_git_settings.hpp"
@@ -39,6 +43,7 @@
 namespace textlt {
 
 class TextltApp {
+    friend class EditorKeymap;
 public:
     TextltApp();
     explicit TextltApp(const std::vector<std::string>& files_to_open);
@@ -73,6 +78,7 @@ private:
     enum class UiLayer {
         Main,
         Help,
+        KeyboardShortcuts,
         Theme,
         Find,
         GoToLine,
@@ -149,6 +155,8 @@ private:
     void OpenAboutDialog();
     void OpenHelpDialog();
     void CloseHelpDialog();
+    void OpenKeyboardShortcutsModal();
+    void CloseKeyboardShortcutsModal();
     void OpenTtsModal();
     void CloseTtsModal();
     void OpenViewLayoutModal();
@@ -216,7 +224,12 @@ private:
     void UpdateFileMenuLabels();
     void UpdateOptionsMenuLabels();
     void InitializeCommands();
+    void InitializeMenuShortcuts();
+    void InitializeTextShortcuts();
+    bool SaveShortcutOverrides(std::string& error);
     bool RunCommand(const std::string& command_id);
+    bool RunMenuShortcut(ftxui::Event event);
+    bool RunTextShortcut(ftxui::Event event);
     void RefreshProjectSidebar();
     void RunDropdownAction(int menu_index, int item_index);
     ftxui::Element Render();
@@ -294,6 +307,9 @@ private:
     void WriteSystemClipboard(const std::string& text);
 
     AppCommandRegistry command_registry_;
+    ShortcutStore shortcut_store_;
+    ShortcutRegistry shortcut_registry_;
+    EditorKeymap editor_keymap_;
     ConfigManager config_manager_;
     EditorConfig editor_config_;
     OpenedConfigStore opened_config_store_;
@@ -312,6 +328,7 @@ private:
     ftxui::Component editor_workspace_container_;
     ftxui::Component sidebar_panel_;
     HelpDialog help_dialog_;
+    KeyboardShortcutsModal keyboard_shortcuts_modal_;
     RecentFilesHistory recent_files_history_;
     RecentFilesModal recent_files_modal_;
 
