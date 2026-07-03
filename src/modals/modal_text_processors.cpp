@@ -225,6 +225,7 @@ void TextProcessorsModalContent::Reload() {
         return;
     }
 
+    EnsureActiveGroupIsAvailable();
     RebuildParserList();
     status_ = "Loaded " + std::to_string(manager_.GetParsers().size()) +
         " text processors from user configuration.";
@@ -413,12 +414,7 @@ void TextProcessorsModalContent::SetScope(TextParserScope scope) {
     }
 
     active_scope_ = scope;
-    if (active_group_ != "All") {
-        const std::vector<std::string> groups = AvailableGroupsForCurrentScope();
-        if (std::find(groups.begin(), groups.end(), active_group_) == groups.end()) {
-            active_group_ = "All";
-        }
-    }
+    EnsureActiveGroupIsAvailable();
     report_text_.clear();
     selected_parser_ = 0;
     parser_list_top_row_ = 0;
@@ -439,11 +435,13 @@ void TextProcessorsModalContent::SetGroup(std::string group) {
         return;
     }
     active_group_ = std::move(group);
+    EnsureActiveGroupIsAvailable();
     selected_parser_ = 0;
     parser_list_top_row_ = 0;
     report_text_.clear();
     RebuildParserList();
-    status_ = "Showing " + active_group_ + " processors.";
+    status_ = "Showing " + active_group_ + " processors: " +
+        std::to_string(filtered_parsers_.size()) + ".";
     status_is_error_ = false;
 }
 
@@ -719,29 +717,47 @@ ftxui::Element TextProcessorsModalContent::RenderGroupTabs() const {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     const std::vector<std::string> available_groups = AvailableGroupsForCurrentScope();
 
-    Elements items;
-    items.push_back(text(" Group: ") | bold | color(theme.modal_accent));
-    for (size_t index = 0; index < kProcessorGroups.size(); ++index) {
+    auto group_visible = [&](const std::string& group) {
+        return group == "All" ||
+            std::find(available_groups.begin(), available_groups.end(), group) != available_groups.end();
+    };
+
+    auto render_group_button = [&](size_t index) -> Element {
         const std::string& group = kProcessorGroups[index];
-        if (group != "All" &&
-            std::find(available_groups.begin(), available_groups.end(), group) == available_groups.end()) {
-            continue;
-        }
-        if (items.size() > 1) {
-            items.push_back(text(" "));
-        }
         if (active_group_ == group) {
-            items.push_back(text(BracketLabel(group)) |
+            return text(BracketLabel(group)) |
                 bgcolor(theme.modal_selected_item_bg) |
-                color(theme.modal_selected_item_fg));
-        } else if (index < group_tab_buttons_.size() && group_tab_buttons_[index]) {
-            items.push_back(group_tab_buttons_[index]->Render());
-        } else {
-            items.push_back(text(BracketLabel(group)) | color(theme.modal_accent));
+                color(theme.modal_selected_item_fg);
         }
-    }
-    items.push_back(filler());
-    return hbox(std::move(items));
+        if (index < group_tab_buttons_.size() && group_tab_buttons_[index]) {
+            return group_tab_buttons_[index]->Render();
+        }
+        return text(BracketLabel(group)) | color(theme.modal_accent);
+    };
+
+    auto build_row = [&](size_t begin, size_t end, const std::string& label) {
+        Elements items;
+        items.push_back(text(label) | bold | color(theme.modal_accent));
+        bool has_group = false;
+        for (size_t index = begin; index < end && index < kProcessorGroups.size(); ++index) {
+            const std::string& group = kProcessorGroups[index];
+            if (!group_visible(group)) {
+                continue;
+            }
+            if (has_group) {
+                items.push_back(text(" "));
+            }
+            items.push_back(render_group_button(index));
+            has_group = true;
+        }
+        items.push_back(filler());
+        return hbox(std::move(items));
+    };
+
+    return vbox({
+        build_row(0, 6, " Group: "),
+        build_row(6, kProcessorGroups.size(), "        "),
+    });
 }
 
 ftxui::Element TextProcessorsModalContent::RenderSelectedParserInfo() const {
@@ -1059,6 +1075,23 @@ std::vector<std::string> TextProcessorsModalContent::AvailableGroupsForCurrentSc
         }
     }
     return ordered;
+}
+
+void TextProcessorsModalContent::EnsureActiveGroupIsAvailable() {
+    if (active_group_.empty()) {
+        active_group_ = "All";
+        return;
+    }
+    if (active_group_ == "All") {
+        return;
+    }
+
+    const std::vector<std::string> groups = AvailableGroupsForCurrentScope();
+    if (std::find(groups.begin(), groups.end(), active_group_) != groups.end()) {
+        return;
+    }
+
+    active_group_ = "All";
 }
 
 std::string TextProcessorsModalContent::NormalizedParamType(const std::string& type) const {

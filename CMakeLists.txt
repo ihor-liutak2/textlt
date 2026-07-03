@@ -274,6 +274,12 @@ add_executable(textlt_keyboard_shortcuts_test
   tests/keyboard_shortcuts_test.cpp
 )
 
+add_executable(textlt_builtin_text_processors_test
+  tests/builtin_text_processors_test.cpp
+  src/builtin_text_processors.cpp
+  src/text_transformer.cpp
+)
+
 add_executable(textlt_app_command_registry_test
   tests/app_command_registry_test.cpp
   src/app_command_registry.cpp
@@ -291,6 +297,10 @@ add_executable(textlt_remote_oauth_token_store_test
 )
 
 target_include_directories(textlt_keyboard_shortcuts_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_include_directories(textlt_builtin_text_processors_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
@@ -425,6 +435,7 @@ target_link_libraries(textlt_document_navigation_test PRIVATE ftxui::screen)
 add_test(NAME textlt_document_navigation_test COMMAND textlt_document_navigation_test)
 add_test(NAME textlt_text_importer_test COMMAND textlt_text_importer_test)
 add_test(NAME textlt_keyboard_shortcuts_test COMMAND textlt_keyboard_shortcuts_test)
+add_test(NAME textlt_builtin_text_processors_test COMMAND textlt_builtin_text_processors_test)
 add_test(NAME textlt_app_command_registry_test COMMAND textlt_app_command_registry_test)
 add_test(NAME textlt_tts_pipeline_test COMMAND textlt_tts_pipeline_test)
 add_test(NAME textlt_piper_manager_test COMMAND textlt_piper_manager_test)

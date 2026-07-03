@@ -91,6 +91,7 @@ private:
     std::string ScopeLabel(TextParserScope scope) const;
     std::string ScopeDisplay(TextParserScope scope) const;
     std::vector<std::string> AvailableGroupsForCurrentScope() const;
+    void EnsureActiveGroupIsAvailable();
     std::string NormalizedParamType(const std::string& type) const;
     std::string ParamHintText() const;
 

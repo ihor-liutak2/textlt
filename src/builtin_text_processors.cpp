@@ -850,6 +850,22 @@ TextParserDefinition AnalysisDefinition(
       std::move(params));
 }
 
+TextParserDefinition ReportBuiltinDefinition(
+    std::string id,
+    std::string name,
+    std::string description,
+    std::string group,
+    std::vector<TextParserParam> params = {}) {
+  return MakeBuiltinDefinition(
+      std::move(id),
+      std::move(name),
+      std::move(description),
+      TextParserScope::Text,
+      std::move(group),
+      TextParserOutput::Report,
+      std::move(params));
+}
+
 BuiltinTextProcessorResult RunTransformer(
     const std::string& input_text,
     const std::function<transform::TransformResult(
@@ -2310,6 +2326,1085 @@ BuiltinTextProcessorResult AnalyzeCharacterInventory(const std::string& input_te
   return ReportResult(report.str());
 }
 
+
+bool IsLatinLetter(std::uint32_t codepoint) {
+  return IsAsciiLower(codepoint) || IsAsciiUpper(codepoint);
+}
+
+bool IsCyrillicLetterCodepoint(std::uint32_t codepoint) {
+  return IsCyrillicLower(codepoint) || IsCyrillicUpper(codepoint);
+}
+
+bool IsWordCodepoint(std::uint32_t codepoint) {
+  return IsLetterOrDigitCodepoint(codepoint) || codepoint == 0x2019 || codepoint == 0x02BC;
+}
+
+bool IsPunctuationRequiringNoSpaceBefore(std::uint32_t codepoint) {
+  return codepoint == '.' || codepoint == ',' || codepoint == ';' ||
+      codepoint == ':' || codepoint == '!' || codepoint == '?' ||
+      codepoint == 0x2026;
+}
+
+bool IsOpeningBracketCodepoint(std::uint32_t codepoint) {
+  return codepoint == '(' || codepoint == '[' || codepoint == '{' ||
+      codepoint == 0x00AB || codepoint == 0x201E || codepoint == 0x201C;
+}
+
+bool IsClosingBracketCodepoint(std::uint32_t codepoint) {
+  return codepoint == ')' || codepoint == ']' || codepoint == '}' ||
+      codepoint == 0x00BB || codepoint == 0x201D;
+}
+
+bool IsWordBoundaryCodepoint(std::uint32_t codepoint) {
+  return !IsWordCodepoint(codepoint);
+}
+
+std::vector<std::uint32_t> TextToCodepoints(const std::string& input_text) {
+  return DecodeUtf8(input_text);
+}
+
+std::string CodepointsToText(const std::vector<std::uint32_t>& codepoints) {
+  std::string output;
+  for (std::uint32_t codepoint : codepoints) {
+    output += EncodeUtf8(codepoint);
+  }
+  return output;
+}
+
+std::string CodepointToText(std::uint32_t codepoint) {
+  return EncodeUtf8(codepoint);
+}
+
+std::string NormalizeMarkdownLineText(std::string line) {
+  return TrimSpacesFromLine(CollapseHorizontalSpacesInLine(line));
+}
+
+std::vector<std::string> SplitSemicolonCells(const std::string& line) {
+  std::vector<std::string> cells;
+  std::string current;
+  for (char ch : line) {
+    if (ch == ';') {
+      cells.push_back(TrimSpacesFromLine(current));
+      current.clear();
+      continue;
+    }
+    current.push_back(ch);
+  }
+  cells.push_back(TrimSpacesFromLine(current));
+  return cells;
+}
+
+std::string JoinSemicolonCells(const std::vector<std::string>& cells) {
+  std::string output;
+  for (std::size_t index = 0; index < cells.size(); ++index) {
+    if (index > 0) {
+      output += "; ";
+    }
+    output += TrimSpacesFromLine(CollapseHorizontalSpacesInLine(cells[index]));
+  }
+  return output;
+}
+
+bool AllCellsEmpty(const std::string& line) {
+  for (const std::string& cell : SplitSemicolonCells(line)) {
+    if (!TrimSpacesFromLine(cell).empty()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+std::string RemoveMarkdownListMarker(std::string line) {
+  line = TrimSpacesFromLine(std::move(line));
+  if (line.size() >= 2 && (line[0] == '-' || line[0] == '*' || line[0] == '+') && line[1] == ' ') {
+    return TrimSpacesFromLine(line.substr(2));
+  }
+
+  std::size_t index = 0;
+  while (index < line.size() && std::isdigit(static_cast<unsigned char>(line[index])) != 0) {
+    ++index;
+  }
+  if (index > 0 && index + 1 < line.size() && line[index] == '.' && line[index + 1] == ' ') {
+    return TrimSpacesFromLine(line.substr(index + 2));
+  }
+
+  return line;
+}
+
+bool IsNumberedMarkdownLine(const std::string& line) {
+  const std::string trimmed = TrimSpacesFromLine(line);
+  std::size_t index = 0;
+  while (index < trimmed.size() && std::isdigit(static_cast<unsigned char>(trimmed[index])) != 0) {
+    ++index;
+  }
+  return index > 0 && index + 1 < trimmed.size() && trimmed[index] == '.' && trimmed[index + 1] == ' ';
+}
+
+std::string StripMarkdownInlineFormatting(const std::string& input_text) {
+  std::string output;
+  output.reserve(input_text.size());
+  bool inside_link_text = false;
+  bool skipping_link_url = false;
+  int link_parentheses = 0;
+
+  for (std::size_t index = 0; index < input_text.size(); ++index) {
+    const char ch = input_text[index];
+    if (skipping_link_url) {
+      if (ch == '(') {
+        ++link_parentheses;
+      } else if (ch == ')') {
+        if (link_parentheses == 0) {
+          skipping_link_url = false;
+        } else {
+          --link_parentheses;
+        }
+      }
+      continue;
+    }
+
+    if (ch == '[') {
+      inside_link_text = true;
+      continue;
+    }
+    if (inside_link_text && ch == ']') {
+      inside_link_text = false;
+      if (index + 1 < input_text.size() && input_text[index + 1] == '(') {
+        skipping_link_url = true;
+        link_parentheses = 0;
+        ++index;
+      }
+      continue;
+    }
+
+    if (ch == '*' || ch == '_' || ch == '`') {
+      continue;
+    }
+
+    output.push_back(ch);
+  }
+  return output;
+}
+
+std::vector<std::string> ExtractWords(const std::string& text) {
+  std::vector<std::string> words;
+  std::string current;
+  for (std::uint32_t codepoint : DecodeUtf8(text)) {
+    if (IsWordCodepoint(codepoint)) {
+      current += EncodeUtf8(ToLowerCodepoint(codepoint));
+      continue;
+    }
+    if (!current.empty()) {
+      words.push_back(current);
+      current.clear();
+    }
+  }
+  if (!current.empty()) {
+    words.push_back(current);
+  }
+  return words;
+}
+
+std::string MakeTextPreview(const std::string& text, std::size_t max_codepoints) {
+  std::string output;
+  std::size_t count = 0;
+  for (std::uint32_t codepoint : DecodeUtf8(text)) {
+    if (count >= max_codepoints) {
+      output += "...";
+      break;
+    }
+    if (codepoint == '\n' || codepoint == '\r' || codepoint == '\t') {
+      output.push_back(' ');
+    } else {
+      output += EncodeUtf8(codepoint);
+    }
+    ++count;
+  }
+  return TrimSpacesFromLine(output);
+}
+
+BuiltinTextProcessorResult NormalizeQuotes(const std::string& input_text) {
+  std::string output;
+  output.reserve(input_text.size());
+  bool open_quote = true;
+  bool changed = false;
+
+  for (std::uint32_t codepoint : DecodeUtf8(input_text)) {
+    if (codepoint == '\n' || codepoint == '\r') {
+      output += EncodeUtf8(codepoint);
+      open_quote = true;
+      continue;
+    }
+
+    const bool double_quote = codepoint == '"' || codepoint == 0x201C || codepoint == 0x201D ||
+        codepoint == 0x201E || codepoint == 0x00AB || codepoint == 0x00BB;
+    if (double_quote) {
+      output += open_quote ? "«" : "»";
+      open_quote = !open_quote;
+      if ((open_quote && codepoint != 0x00BB) || (!open_quote && codepoint != 0x00AB)) {
+        changed = true;
+      }
+      continue;
+    }
+
+    output += EncodeUtf8(codepoint);
+  }
+
+  if (!changed && output == input_text) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(output);
+}
+
+BuiltinTextProcessorResult NormalizeDashes(const std::string& input_text) {
+  std::string output;
+  output.reserve(input_text.size());
+  bool changed = false;
+
+  for (std::size_t index = 0; index < input_text.size();) {
+    if (index + 1 < input_text.size() && input_text[index] == '-' && input_text[index + 1] == '-') {
+      output += "—";
+      index += 2;
+      changed = true;
+      continue;
+    }
+
+    const std::vector<std::uint32_t> one = DecodeUtf8(input_text.substr(index, 4));
+    if (!one.empty() && (one[0] == 0x2013 || one[0] == 0x2212)) {
+      output += "—";
+      index += EncodeUtf8(one[0]).size();
+      changed = true;
+      continue;
+    }
+
+    output.push_back(input_text[index]);
+    ++index;
+  }
+
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(output);
+}
+
+BuiltinTextProcessorResult NormalizeEllipsis(const std::string& input_text) {
+  std::string output;
+  output.reserve(input_text.size());
+  bool changed = false;
+
+  for (std::size_t index = 0; index < input_text.size();) {
+    if (index + 2 < input_text.size() && input_text[index] == '.' &&
+        input_text[index + 1] == '.' && input_text[index + 2] == '.') {
+      output += "…";
+      index += 3;
+      changed = true;
+      continue;
+    }
+    output.push_back(input_text[index]);
+    ++index;
+  }
+
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(output);
+}
+
+BuiltinTextProcessorResult FixPunctuationSpaces(const std::string& input_text) {
+  const std::vector<std::uint32_t> codepoints = TextToCodepoints(input_text);
+  std::vector<std::uint32_t> output;
+  output.reserve(codepoints.size());
+  bool changed = false;
+
+  for (std::size_t index = 0; index < codepoints.size(); ++index) {
+    const std::uint32_t codepoint = codepoints[index];
+    if (codepoint == ' ' || codepoint == '\t' || codepoint == 0x00A0) {
+      std::size_t next = index;
+      while (next + 1 < codepoints.size() &&
+             (codepoints[next + 1] == ' ' || codepoints[next + 1] == '\t' || codepoints[next + 1] == 0x00A0)) {
+        ++next;
+      }
+      if (next + 1 < codepoints.size() && IsPunctuationRequiringNoSpaceBefore(codepoints[next + 1])) {
+        index = next;
+        changed = true;
+        continue;
+      }
+      if (!output.empty() && output.back() == 0x2014) {
+        index = next;
+        changed = true;
+        continue;
+      }
+      output.push_back(' ');
+      if (codepoint != ' ' || next != index) {
+        changed = true;
+      }
+      index = next;
+      continue;
+    }
+
+    if (codepoint == 0x2014) {
+      while (!output.empty() && output.back() == ' ') {
+        output.pop_back();
+        changed = true;
+      }
+      if (!output.empty() && output.back() != '\n') {
+        output.push_back(' ');
+      }
+      output.push_back(codepoint);
+      if (index + 1 < codepoints.size() && codepoints[index + 1] != ' ' && codepoints[index + 1] != '\n') {
+        output.push_back(' ');
+        changed = true;
+      }
+      continue;
+    }
+
+    output.push_back(codepoint);
+    if (IsPunctuationRequiringNoSpaceBefore(codepoint) && index + 1 < codepoints.size()) {
+      const std::uint32_t next = codepoints[index + 1];
+      if (next != ' ' && next != '\n' && next != '\r' && !IsClosingBracketCodepoint(next) &&
+          !IsPunctuationRequiringNoSpaceBefore(next)) {
+        output.push_back(' ');
+        changed = true;
+      }
+    }
+  }
+
+  const std::string result = CodepointsToText(output);
+  if (!changed && result == input_text) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(result);
+}
+
+BuiltinTextProcessorResult NormalizeUkrainianApostrophe(const std::string& input_text) {
+  const std::vector<std::uint32_t> codepoints = TextToCodepoints(input_text);
+  std::vector<std::uint32_t> output;
+  output.reserve(codepoints.size());
+  bool changed = false;
+
+  for (std::size_t index = 0; index < codepoints.size(); ++index) {
+    const std::uint32_t codepoint = codepoints[index];
+    const bool apostrophe_like = codepoint == '\'' || codepoint == 0x2018 || codepoint == 0x2019 ||
+        codepoint == 0x02BC || codepoint == 0x0060 || codepoint == 0x00B4;
+    if (apostrophe_like && index > 0 && index + 1 < codepoints.size() &&
+        IsCyrillicLetterCodepoint(codepoints[index - 1]) && IsCyrillicLetterCodepoint(codepoints[index + 1])) {
+      output.push_back(0x2019);
+      if (codepoint != 0x2019) {
+        changed = true;
+      }
+      continue;
+    }
+    output.push_back(codepoint);
+  }
+
+  const std::string result = CodepointsToText(output);
+  if (!changed && result == input_text) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(result);
+}
+
+BuiltinTextProcessorResult NormalizeDialogueDashes(const std::string& input_text) {
+  std::vector<std::string> lines = SplitLines(input_text);
+  bool changed = false;
+  for (std::string& line : lines) {
+    std::string trimmed_left = TrimLeadingSpacesFromLine(line);
+    const std::size_t leading = line.size() - trimmed_left.size();
+    if (trimmed_left.empty()) {
+      continue;
+    }
+    if (trimmed_left.rfind("-", 0) == 0 || trimmed_left.rfind("–", 0) == 0 || trimmed_left.rfind("—", 0) == 0) {
+      std::string rest;
+      if (trimmed_left.rfind("—", 0) == 0 || trimmed_left.rfind("–", 0) == 0) {
+        rest = trimmed_left.substr(3);
+      } else {
+        rest = trimmed_left.substr(1);
+      }
+      rest = TrimLeadingSpacesFromLine(rest);
+      const std::string updated = std::string(leading, ' ') + "— " + rest;
+      if (updated != line) {
+        line = updated;
+        changed = true;
+      }
+    }
+  }
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(JoinLinesPreservingFinalNewline(lines, HasFinalNewline(input_text)));
+}
+
+BuiltinTextProcessorResult NormalizeUkrainianPunctuation(const std::string& input_text) {
+  BuiltinTextProcessorResult result = NormalizeEllipsis(input_text);
+  result = NormalizeDashes(result.text);
+  result = NormalizeQuotes(result.text);
+  result = NormalizeUkrainianApostrophe(result.text);
+  result = NormalizeDialogueDashes(result.text);
+  return FixPunctuationSpaces(result.text);
+}
+
+BuiltinTextProcessorResult NormalizeSemicolonRows(const std::string& input_text) {
+  std::vector<std::string> lines = SplitLines(input_text);
+  bool changed = false;
+  for (std::string& line : lines) {
+    if (line.find(';') == std::string::npos) {
+      continue;
+    }
+    const std::string updated = JoinSemicolonCells(SplitSemicolonCells(line));
+    if (updated != line) {
+      line = updated;
+      changed = true;
+    }
+  }
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(JoinLinesPreservingFinalNewline(lines, HasFinalNewline(input_text)));
+}
+
+BuiltinTextProcessorResult TabsToSemicolonRows(const std::string& input_text) {
+  std::vector<std::string> lines = SplitLines(input_text);
+  bool changed = false;
+  for (std::string& line : lines) {
+    if (line.find('\t') == std::string::npos) {
+      continue;
+    }
+    std::vector<std::string> cells;
+    std::string current;
+    for (char ch : line) {
+      if (ch == '\t') {
+        cells.push_back(current);
+        current.clear();
+      } else {
+        current.push_back(ch);
+      }
+    }
+    cells.push_back(current);
+    line = JoinSemicolonCells(cells);
+    changed = true;
+  }
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(JoinLinesPreservingFinalNewline(lines, HasFinalNewline(input_text)));
+}
+
+BuiltinTextProcessorResult MultiSpaceColumnsToSemicolonRows(
+    const std::string& input_text,
+    std::size_t min_spaces) {
+  std::vector<std::string> lines = SplitLines(input_text);
+  bool changed = false;
+  for (std::string& line : lines) {
+    std::string output;
+    std::size_t index = 0;
+    bool line_changed = false;
+    while (index < line.size()) {
+      if (line[index] == ' ') {
+        std::size_t end = index;
+        while (end < line.size() && line[end] == ' ') {
+          ++end;
+        }
+        const std::size_t count = end - index;
+        if (count >= min_spaces && !TrimSpacesFromLine(output).empty() && end < line.size()) {
+          output += "; ";
+          line_changed = true;
+        } else {
+          output.append(count, ' ');
+        }
+        index = end;
+        continue;
+      }
+      output.push_back(line[index]);
+      ++index;
+    }
+    if (line_changed) {
+      line = JoinSemicolonCells(SplitSemicolonCells(output));
+      changed = true;
+    }
+  }
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(JoinLinesPreservingFinalNewline(lines, HasFinalNewline(input_text)));
+}
+
+BuiltinTextProcessorResult RemoveEmptyTableRows(const std::string& input_text) {
+  std::vector<std::string> output;
+  bool changed = false;
+  for (const std::string& line : SplitLines(input_text)) {
+    if (line.find(';') != std::string::npos && AllCellsEmpty(line)) {
+      changed = true;
+      continue;
+    }
+    output.push_back(line);
+  }
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(JoinLinesPreservingFinalNewline(output, HasFinalNewline(input_text)));
+}
+
+BuiltinTextProcessorResult RemoveDuplicateTableRows(const std::string& input_text) {
+  std::vector<std::string> output;
+  std::unordered_set<std::string> seen;
+  bool changed = false;
+  for (const std::string& line : SplitLines(input_text)) {
+    if (line.find(';') == std::string::npos) {
+      output.push_back(line);
+      continue;
+    }
+    const std::string normalized = JoinSemicolonCells(SplitSemicolonCells(line));
+    if (!seen.insert(ToLowerAscii(normalized)).second) {
+      changed = true;
+      continue;
+    }
+    output.push_back(normalized);
+    if (normalized != line) {
+      changed = true;
+    }
+  }
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(JoinLinesPreservingFinalNewline(output, HasFinalNewline(input_text)));
+}
+
+BuiltinTextProcessorResult ExtractTableColumn(
+    const std::string& input_text,
+    std::size_t column) {
+  std::vector<std::string> output;
+  bool changed = false;
+  for (const std::string& line : SplitLines(input_text)) {
+    if (line.find(';') == std::string::npos) {
+      output.push_back(line);
+      continue;
+    }
+    const std::vector<std::string> cells = SplitSemicolonCells(line);
+    output.push_back(column <= cells.size() ? TrimSpacesFromLine(cells[column - 1]) : "");
+    changed = true;
+  }
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(JoinLinesPreservingFinalNewline(output, HasFinalNewline(input_text)));
+}
+
+BuiltinTextProcessorResult RemoveTableColumn(
+    const std::string& input_text,
+    std::size_t column) {
+  std::vector<std::string> lines = SplitLines(input_text);
+  bool changed = false;
+  for (std::string& line : lines) {
+    if (line.find(';') == std::string::npos) {
+      continue;
+    }
+    std::vector<std::string> cells = SplitSemicolonCells(line);
+    if (column == 0 || column > cells.size()) {
+      continue;
+    }
+    cells.erase(cells.begin() + static_cast<std::ptrdiff_t>(column - 1));
+    line = JoinSemicolonCells(cells);
+    changed = true;
+  }
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(JoinLinesPreservingFinalNewline(lines, HasFinalNewline(input_text)));
+}
+
+BuiltinTextProcessorResult MarkdownAddHeading(const std::string& input_text, std::size_t level) {
+  std::vector<std::string> lines = SplitLines(input_text);
+  bool changed = false;
+  const std::string marker(level, '#');
+  for (std::string& line : lines) {
+    if (IsBlankLine(line)) {
+      continue;
+    }
+    std::string text = NormalizeMarkdownLineText(line);
+    while (!text.empty() && text[0] == '#') {
+      text.erase(text.begin());
+    }
+    text = TrimSpacesFromLine(std::move(text));
+    const std::string updated = marker + " " + text;
+    if (updated != line) {
+      line = updated;
+      changed = true;
+    }
+  }
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(JoinLinesPreservingFinalNewline(lines, HasFinalNewline(input_text)));
+}
+
+BuiltinTextProcessorResult MarkdownRemoveHeadings(const std::string& input_text) {
+  std::vector<std::string> lines = SplitLines(input_text);
+  bool changed = false;
+  for (std::string& line : lines) {
+    std::string trimmed = TrimSpacesFromLine(line);
+    std::size_t index = 0;
+    while (index < trimmed.size() && trimmed[index] == '#') {
+      ++index;
+    }
+    if (index > 0 && index <= 6 && index < trimmed.size() && trimmed[index] == ' ') {
+      line = TrimSpacesFromLine(trimmed.substr(index + 1));
+      changed = true;
+    }
+  }
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(JoinLinesPreservingFinalNewline(lines, HasFinalNewline(input_text)));
+}
+
+BuiltinTextProcessorResult MarkdownBulletList(const std::string& input_text) {
+  std::vector<std::string> lines = SplitLines(input_text);
+  bool changed = false;
+  for (std::string& line : lines) {
+    if (IsBlankLine(line)) {
+      continue;
+    }
+    const std::string updated = "- " + RemoveMarkdownListMarker(line);
+    if (updated != line) {
+      line = updated;
+      changed = true;
+    }
+  }
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(JoinLinesPreservingFinalNewline(lines, HasFinalNewline(input_text)));
+}
+
+BuiltinTextProcessorResult MarkdownNumberedList(const std::string& input_text) {
+  std::vector<std::string> lines = SplitLines(input_text);
+  bool changed = false;
+  std::size_t number = 1;
+  for (std::string& line : lines) {
+    if (IsBlankLine(line)) {
+      continue;
+    }
+    const std::string updated = std::to_string(number) + ". " + RemoveMarkdownListMarker(line);
+    ++number;
+    if (updated != line) {
+      line = updated;
+      changed = true;
+    }
+  }
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(JoinLinesPreservingFinalNewline(lines, HasFinalNewline(input_text)));
+}
+
+BuiltinTextProcessorResult MarkdownRenumberList(const std::string& input_text) {
+  std::vector<std::string> lines = SplitLines(input_text);
+  bool changed = false;
+  std::size_t number = 1;
+  for (std::string& line : lines) {
+    if (!IsNumberedMarkdownLine(line)) {
+      continue;
+    }
+    const std::string updated = std::to_string(number) + ". " + RemoveMarkdownListMarker(line);
+    ++number;
+    if (updated != line) {
+      line = updated;
+      changed = true;
+    }
+  }
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(JoinLinesPreservingFinalNewline(lines, HasFinalNewline(input_text)));
+}
+
+BuiltinTextProcessorResult MarkdownQuoteBlock(const std::string& input_text) {
+  std::vector<std::string> lines = SplitLines(input_text);
+  bool changed = false;
+  for (std::string& line : lines) {
+    if (IsBlankLine(line)) {
+      continue;
+    }
+    std::string trimmed = TrimSpacesFromLine(line);
+    if (trimmed.rfind(">", 0) == 0) {
+      trimmed = TrimSpacesFromLine(trimmed.substr(1));
+    }
+    const std::string updated = "> " + trimmed;
+    if (updated != line) {
+      line = updated;
+      changed = true;
+    }
+  }
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(JoinLinesPreservingFinalNewline(lines, HasFinalNewline(input_text)));
+}
+
+BuiltinTextProcessorResult MarkdownWrap(const std::string& input_text, const std::string& marker) {
+  if (input_text.empty()) {
+    return SuccessResult(input_text);
+  }
+  if (input_text.rfind(marker, 0) == 0 && input_text.size() >= marker.size() * 2 &&
+      input_text.compare(input_text.size() - marker.size(), marker.size(), marker) == 0) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(marker + input_text + marker);
+}
+
+BuiltinTextProcessorResult MarkdownStripFormatting(const std::string& input_text) {
+  std::vector<std::string> lines = SplitLines(input_text);
+  bool changed = false;
+  for (std::string& line : lines) {
+    std::string stripped = TrimSpacesFromLine(line);
+    while (!stripped.empty() && stripped[0] == '>') {
+      stripped = TrimSpacesFromLine(stripped.substr(1));
+    }
+    std::size_t heading = 0;
+    while (heading < stripped.size() && stripped[heading] == '#') {
+      ++heading;
+    }
+    if (heading > 0 && heading <= 6 && heading < stripped.size() && stripped[heading] == ' ') {
+      stripped = TrimSpacesFromLine(stripped.substr(heading + 1));
+    }
+    stripped = RemoveMarkdownListMarker(stripped);
+    stripped = StripMarkdownInlineFormatting(stripped);
+    if (stripped != line) {
+      line = stripped;
+      changed = true;
+    }
+  }
+  if (!changed) {
+    return SuccessResult(input_text);
+  }
+  return SuccessResult(JoinLinesPreservingFinalNewline(lines, HasFinalNewline(input_text)));
+}
+
+BuiltinTextProcessorResult MarkdownExtractHeadings(const std::string& input_text) {
+  std::ostringstream report;
+  report << "Markdown headings\n";
+  std::size_t count = 0;
+  const std::vector<std::string> lines = SplitLines(input_text);
+  for (std::size_t line_index = 0; line_index < lines.size(); ++line_index) {
+    const std::string trimmed = TrimSpacesFromLine(lines[line_index]);
+    std::size_t level = 0;
+    while (level < trimmed.size() && trimmed[level] == '#') {
+      ++level;
+    }
+    if (level == 0 || level > 6 || level >= trimmed.size() || trimmed[level] != ' ') {
+      continue;
+    }
+    ++count;
+    report << "Line " << (line_index + 1) << ": H" << level << " " << trimmed.substr(level + 1) << '\n';
+  }
+  report << "Total: " << count << '\n';
+  return ReportResult(report.str());
+}
+
+BuiltinTextProcessorResult MarkdownGenerateToc(const std::string& input_text) {
+  std::ostringstream toc;
+  const std::vector<std::string> lines = SplitLines(input_text);
+  std::size_t count = 0;
+  for (const std::string& line : lines) {
+    const std::string trimmed = TrimSpacesFromLine(line);
+    std::size_t level = 0;
+    while (level < trimmed.size() && trimmed[level] == '#') {
+      ++level;
+    }
+    if (level == 0 || level > 6 || level >= trimmed.size() || trimmed[level] != ' ') {
+      continue;
+    }
+    const std::string title = TrimSpacesFromLine(trimmed.substr(level + 1));
+    const std::string indent((level - 1) * 2, ' ');
+    toc << indent << "- " << title << '\n';
+    ++count;
+  }
+  if (count == 0) {
+    toc << "No Markdown headings found.\n";
+  }
+  return ReportResult(toc.str());
+}
+
+BuiltinTextProcessorResult AnalyzeMixedCyrillicLatin(const std::string& input_text) {
+  std::ostringstream report;
+  report << "Mixed Cyrillic/Latin words\n";
+  std::string current;
+  bool has_latin = false;
+  bool has_cyrillic = false;
+  std::size_t count = 0;
+  std::size_t line = 1;
+
+  auto flush = [&]() {
+    if (!current.empty() && has_latin && has_cyrillic) {
+      ++count;
+      if (count <= 50) {
+        report << "Line " << line << ": " << current << '\n';
+      }
+    }
+    current.clear();
+    has_latin = false;
+    has_cyrillic = false;
+  };
+
+  for (std::uint32_t codepoint : DecodeUtf8(input_text)) {
+    if (codepoint == '\n') {
+      flush();
+      ++line;
+      continue;
+    }
+    if (IsWordCodepoint(codepoint)) {
+      current += EncodeUtf8(codepoint);
+      has_latin = has_latin || IsLatinLetter(codepoint);
+      has_cyrillic = has_cyrillic || IsCyrillicLetterCodepoint(codepoint);
+      continue;
+    }
+    flush();
+  }
+  flush();
+
+  report << "Total: " << count << '\n';
+  if (count > 50) {
+    report << "Shown first 50 matches only.\n";
+  }
+  return ReportResult(report.str());
+}
+
+BuiltinTextProcessorResult AnalyzeWordFrequency(
+    const std::string& input_text,
+    std::size_t top_count,
+    std::size_t min_length) {
+  std::unordered_map<std::string, std::size_t> counts;
+  for (const std::string& word : ExtractWords(input_text)) {
+    if (CountCodepoints(word) >= min_length) {
+      ++counts[word];
+    }
+  }
+  std::vector<std::pair<std::string, std::size_t>> items(counts.begin(), counts.end());
+  std::sort(items.begin(), items.end(), [](const auto& left, const auto& right) {
+    if (left.second != right.second) {
+      return left.second > right.second;
+    }
+    return left.first < right.first;
+  });
+
+  std::ostringstream report;
+  report << "Word frequency\n";
+  const std::size_t limit = std::min(top_count, items.size());
+  for (std::size_t index = 0; index < limit; ++index) {
+    report << items[index].first << ": " << items[index].second << '\n';
+  }
+  report << "Unique words: " << items.size() << '\n';
+  return ReportResult(report.str());
+}
+
+BuiltinTextProcessorResult AnalyzeLongSentences(
+    const std::string& input_text,
+    std::size_t max_sentence_length) {
+  std::ostringstream report;
+  report << "Long sentences over " << max_sentence_length << " characters\n";
+  std::string sentence;
+  std::size_t count = 0;
+  std::size_t line = 1;
+  std::size_t sentence_start_line = 1;
+  for (std::uint32_t codepoint : DecodeUtf8(input_text)) {
+    if (sentence.empty() && !IsHorizontalSpaceCodepoint(codepoint)) {
+      sentence_start_line = line;
+    }
+    sentence += EncodeUtf8(codepoint);
+    if (codepoint == '\n') {
+      ++line;
+    }
+    if (IsSentenceEndCodepoint(codepoint)) {
+      const std::string trimmed = TrimSpacesFromLine(sentence);
+      const std::size_t length = CountCodepoints(trimmed);
+      if (length > max_sentence_length) {
+        ++count;
+        if (count <= 30) {
+          report << "Line " << sentence_start_line << ": " << length << " chars: "
+                 << MakeTextPreview(trimmed, 120) << '\n';
+        }
+      }
+      sentence.clear();
+    }
+  }
+  const std::string trimmed = TrimSpacesFromLine(sentence);
+  if (!trimmed.empty() && CountCodepoints(trimmed) > max_sentence_length) {
+    ++count;
+    if (count <= 30) {
+      report << "Line " << sentence_start_line << ": " << CountCodepoints(trimmed)
+             << " chars: " << MakeTextPreview(trimmed, 120) << '\n';
+    }
+  }
+  report << "Total: " << count << '\n';
+  if (count > 30) {
+    report << "Shown first 30 sentences only.\n";
+  }
+  return ReportResult(report.str());
+}
+
+BuiltinTextProcessorResult AnalyzeRepeatedWords(const std::string& input_text) {
+  std::ostringstream report;
+  report << "Repeated adjacent words\n";
+  std::string previous;
+  std::string current;
+  std::size_t line = 1;
+  std::size_t count = 0;
+
+  auto flush = [&]() {
+    if (current.empty()) {
+      return;
+    }
+    if (!previous.empty() && current == previous) {
+      ++count;
+      if (count <= 50) {
+        report << "Line " << line << ": " << current << '\n';
+      }
+    }
+    previous = current;
+    current.clear();
+  };
+
+  for (std::uint32_t codepoint : DecodeUtf8(input_text)) {
+    if (codepoint == '\n') {
+      flush();
+      previous.clear();
+      ++line;
+      continue;
+    }
+    if (IsWordCodepoint(codepoint)) {
+      current += EncodeUtf8(ToLowerCodepoint(codepoint));
+      continue;
+    }
+    flush();
+  }
+  flush();
+  report << "Total: " << count << '\n';
+  if (count > 50) {
+    report << "Shown first 50 matches only.\n";
+  }
+  return ReportResult(report.str());
+}
+
+BuiltinTextProcessorResult AnalyzeUnbalancedQuotes(const std::string& input_text) {
+  std::size_t straight = 0;
+  std::size_t guillemet_open = 0;
+  std::size_t guillemet_close = 0;
+  std::size_t curly_open = 0;
+  std::size_t curly_close = 0;
+  for (std::uint32_t codepoint : DecodeUtf8(input_text)) {
+    if (codepoint == '"') {
+      ++straight;
+    } else if (codepoint == 0x00AB) {
+      ++guillemet_open;
+    } else if (codepoint == 0x00BB) {
+      ++guillemet_close;
+    } else if (codepoint == 0x201C || codepoint == 0x201E) {
+      ++curly_open;
+    } else if (codepoint == 0x201D) {
+      ++curly_close;
+    }
+  }
+  std::ostringstream report;
+  report << "Unbalanced quotes\n";
+  report << "Straight double quotes: " << straight << " (" << (straight % 2 == 0 ? "balanced" : "odd") << ")\n";
+  report << "Guillemets: « " << guillemet_open << ", » " << guillemet_close
+         << " (" << (guillemet_open == guillemet_close ? "balanced" : "unbalanced") << ")\n";
+  report << "Curly double quotes: open " << curly_open << ", close " << curly_close
+         << " (" << (curly_open == curly_close ? "balanced" : "unbalanced") << ")\n";
+  return ReportResult(report.str());
+}
+
+BuiltinTextProcessorResult AnalyzeUnbalancedBrackets(const std::string& input_text) {
+  std::vector<std::pair<std::uint32_t, std::size_t>> stack;
+  std::ostringstream report;
+  report << "Unbalanced brackets\n";
+  std::size_t line = 1;
+  std::size_t issues = 0;
+
+  auto expected_close = [](std::uint32_t open) {
+    if (open == '(') return static_cast<std::uint32_t>(')');
+    if (open == '[') return static_cast<std::uint32_t>(']');
+    if (open == '{') return static_cast<std::uint32_t>('}');
+    return static_cast<std::uint32_t>(0);
+  };
+
+  for (std::uint32_t codepoint : DecodeUtf8(input_text)) {
+    if (codepoint == '\n') {
+      ++line;
+      continue;
+    }
+    if (codepoint == '(' || codepoint == '[' || codepoint == '{') {
+      stack.push_back({codepoint, line});
+      continue;
+    }
+    if (codepoint == ')' || codepoint == ']' || codepoint == '}') {
+      if (stack.empty() || expected_close(stack.back().first) != codepoint) {
+        ++issues;
+        if (issues <= 50) {
+          report << "Line " << line << ": unexpected " << CodepointToText(codepoint) << '\n';
+        }
+      } else {
+        stack.pop_back();
+      }
+    }
+  }
+
+  for (const auto& item : stack) {
+    ++issues;
+    if (issues <= 50) {
+      report << "Line " << item.second << ": unclosed " << CodepointToText(item.first) << '\n';
+    }
+  }
+  report << "Total issues: " << issues << '\n';
+  return ReportResult(report.str());
+}
+
+BuiltinTextProcessorResult AnalyzeSuspiciousPunctuation(const std::string& input_text) {
+  const std::vector<std::uint32_t> codepoints = DecodeUtf8(input_text);
+  std::ostringstream report;
+  report << "Suspicious punctuation\n";
+  std::size_t line = 1;
+  std::size_t issues = 0;
+  for (std::size_t index = 0; index < codepoints.size(); ++index) {
+    const std::uint32_t codepoint = codepoints[index];
+    if (codepoint == '\n') {
+      ++line;
+      continue;
+    }
+
+    bool suspicious = false;
+    std::string message;
+    if (index + 1 < codepoints.size() && codepoint == codepoints[index + 1] &&
+        (codepoint == ',' || codepoint == ';' || codepoint == ':' || codepoint == '!' || codepoint == '?')) {
+      suspicious = true;
+      message = "repeated punctuation " + CodepointToText(codepoint) + CodepointToText(codepoint);
+    } else if (index + 1 < codepoints.size() && codepoint == '.' && codepoints[index + 1] == '.' &&
+               !(index + 2 < codepoints.size() && codepoints[index + 2] == '.')) {
+      suspicious = true;
+      message = "double dot";
+    } else if (codepoint == ' ' && index + 1 < codepoints.size() &&
+               IsPunctuationRequiringNoSpaceBefore(codepoints[index + 1])) {
+      suspicious = true;
+      message = "space before punctuation";
+    } else if (IsPunctuationRequiringNoSpaceBefore(codepoint) && index + 1 < codepoints.size() &&
+               IsWordCodepoint(codepoints[index + 1])) {
+      suspicious = true;
+      message = "missing space after punctuation";
+    }
+
+    if (suspicious) {
+      ++issues;
+      if (issues <= 50) {
+        report << "Line " << line << ": " << message << '\n';
+      }
+    }
+  }
+  report << "Total: " << issues << '\n';
+  if (issues > 50) {
+    report << "Shown first 50 issues only.\n";
+  }
+  return ReportResult(report.str());
+}
+
 }  // namespace
 
 std::vector<TextParserDefinition> CreateBuiltinTextProcessors() {
@@ -2649,6 +3744,156 @@ std::vector<TextParserDefinition> CreateBuiltinTextProcessors() {
               "Min characters",
               "160",
               "Merged paragraph target length in characters.")}),
+      TextBuiltinDefinition(
+          "builtin_punctuation_normalize_quotes",
+          "Normalize quotes",
+          "Converts straight and curly double quotes to Ukrainian guillemets.",
+          "Punctuation"),
+      TextBuiltinDefinition(
+          "builtin_punctuation_normalize_dashes",
+          "Normalize dashes",
+          "Converts double hyphens and en dashes to em dashes.",
+          "Punctuation"),
+      TextBuiltinDefinition(
+          "builtin_punctuation_normalize_ellipsis",
+          "Normalize ellipsis",
+          "Converts three dots to the ellipsis character.",
+          "Punctuation"),
+      TextBuiltinDefinition(
+          "builtin_punctuation_fix_spaces",
+          "Fix punctuation spaces",
+          "Removes spaces before punctuation, normalizes spaces after punctuation, and spaces em dashes.",
+          "Punctuation"),
+      TextBuiltinDefinition(
+          "builtin_punctuation_normalize_ukrainian_apostrophe",
+          "Normalize Ukrainian apostrophe",
+          "Normalizes apostrophe-like characters between Cyrillic letters to the typographic apostrophe.",
+          "Punctuation"),
+      TextBuiltinDefinition(
+          "builtin_punctuation_normalize_dialogue_dashes",
+          "Normalize dialogue dashes",
+          "Turns leading hyphens or en dashes in dialogue lines into em dashes.",
+          "Punctuation"),
+      TextBuiltinDefinition(
+          "builtin_punctuation_normalize_ukrainian",
+          "Normalize Ukrainian punctuation",
+          "Runs safe quote, dash, ellipsis, apostrophe, dialogue dash, and spacing normalization.",
+          "Punctuation"),
+      TextBuiltinDefinition(
+          "builtin_table_normalize_semicolon_rows",
+          "Normalize semicolon rows",
+          "Trims cells and formats semicolon-separated table rows as cell; cell; cell.",
+          "Tables"),
+      TextBuiltinDefinition(
+          "builtin_table_trim_cells",
+          "Trim table cells",
+          "Trims cells in semicolon-separated table rows.",
+          "Tables"),
+      TextBuiltinDefinition(
+          "builtin_table_tabs_to_semicolon_rows",
+          "Tabs to semicolon rows",
+          "Converts tab-separated rows to semicolon-separated table rows.",
+          "Tables"),
+      TextBuiltinDefinition(
+          "builtin_table_multispace_to_semicolon_rows",
+          "Multi-space columns to semicolon rows",
+          "Converts columns separated by repeated spaces to semicolon-separated rows.",
+          "Tables",
+          {IntegerParam(
+              "min_spaces",
+              "Min spaces",
+              "2",
+              "Minimum consecutive spaces treated as a column separator.")}),
+      TextBuiltinDefinition(
+          "builtin_table_remove_empty_rows",
+          "Remove empty table rows",
+          "Removes semicolon-separated rows where every cell is empty.",
+          "Tables"),
+      TextBuiltinDefinition(
+          "builtin_table_remove_duplicate_rows",
+          "Remove duplicate table rows",
+          "Normalizes semicolon rows and removes duplicate table rows.",
+          "Tables"),
+      TextBuiltinDefinition(
+          "builtin_table_extract_column",
+          "Extract table column",
+          "Extracts a one-based column from semicolon-separated table rows.",
+          "Tables",
+          {IntegerParam(
+              "column",
+              "Column",
+              "1",
+              "One-based column number to extract.")}),
+      TextBuiltinDefinition(
+          "builtin_table_remove_column",
+          "Remove table column",
+          "Removes a one-based column from semicolon-separated table rows.",
+          "Tables",
+          {IntegerParam(
+              "column",
+              "Column",
+              "1",
+              "One-based column number to remove.")}),
+      TextBuiltinDefinition(
+          "builtin_markdown_add_heading",
+          "Add Markdown heading",
+          "Adds a Markdown heading marker to every non-empty line.",
+          "Markdown",
+          {IntegerParam(
+              "level",
+              "Level",
+              "2",
+              "Heading level from 1 to 6.")}),
+      TextBuiltinDefinition(
+          "builtin_markdown_remove_headings",
+          "Remove Markdown headings",
+          "Removes Markdown heading markers from selected lines.",
+          "Markdown"),
+      TextBuiltinDefinition(
+          "builtin_markdown_bullet_list",
+          "Convert to bullet list",
+          "Converts non-empty lines to a Markdown bullet list.",
+          "Markdown"),
+      TextBuiltinDefinition(
+          "builtin_markdown_numbered_list",
+          "Convert to numbered list",
+          "Converts non-empty lines to a Markdown numbered list.",
+          "Markdown"),
+      TextBuiltinDefinition(
+          "builtin_markdown_renumber_list",
+          "Renumber numbered list",
+          "Renumbers existing Markdown numbered list items.",
+          "Markdown"),
+      TextBuiltinDefinition(
+          "builtin_markdown_quote_block",
+          "Quote block",
+          "Converts non-empty lines to a Markdown quote block.",
+          "Markdown"),
+      TextBuiltinDefinition(
+          "builtin_markdown_bold",
+          "Bold selection",
+          "Wraps selected text in Markdown bold markers.",
+          "Markdown"),
+      TextBuiltinDefinition(
+          "builtin_markdown_italic",
+          "Italic selection",
+          "Wraps selected text in Markdown italic markers.",
+          "Markdown"),
+      TextBuiltinDefinition(
+          "builtin_markdown_strip_formatting",
+          "Strip Markdown formatting",
+          "Removes common Markdown headings, list markers, quotes, links, and inline formatting.",
+          "Markdown"),
+      ReportBuiltinDefinition(
+          "builtin_markdown_extract_headings",
+          "Extract Markdown headings",
+          "Reports Markdown headings and line numbers.",
+          "Markdown"),
+      ReportBuiltinDefinition(
+          "builtin_markdown_generate_toc",
+          "Generate Markdown TOC",
+          "Builds a plain Markdown table of contents from headings.",
+          "Markdown"),
       AnalysisDefinition(
           "builtin_analysis_text_statistics",
           "Text statistics",
@@ -2693,6 +3938,49 @@ std::vector<TextParserDefinition> CreateBuiltinTextProcessors() {
           "builtin_analysis_character_inventory",
           "Non-ASCII inventory",
           "Reports non-ASCII characters and their counts."),
+      AnalysisDefinition(
+          "builtin_analysis_mixed_cyrillic_latin",
+          "Mixed Cyrillic/Latin report",
+          "Reports words that contain both Cyrillic and Latin letters."),
+      AnalysisDefinition(
+          "builtin_analysis_word_frequency",
+          "Word frequency",
+          "Reports the most frequent words.",
+          {IntegerParam(
+               "top_count",
+               "Top count",
+               "30",
+               "Maximum number of words to show."),
+           IntegerParam(
+               "min_length",
+               "Min length",
+               "2",
+               "Minimum word length in characters.")}),
+      AnalysisDefinition(
+          "builtin_analysis_long_sentences",
+          "Long sentence report",
+          "Reports sentences longer than the selected maximum length.",
+          {IntegerParam(
+              "max_sentence_length",
+              "Max sentence length",
+              "180",
+              "Sentences longer than this value will be reported.")}),
+      AnalysisDefinition(
+          "builtin_analysis_repeated_words",
+          "Repeated words report",
+          "Reports adjacent repeated words."),
+      AnalysisDefinition(
+          "builtin_analysis_unbalanced_quotes",
+          "Unbalanced quotes report",
+          "Reports likely unbalanced quote characters."),
+      AnalysisDefinition(
+          "builtin_analysis_unbalanced_brackets",
+          "Unbalanced brackets report",
+          "Reports likely unbalanced brackets."),
+      AnalysisDefinition(
+          "builtin_analysis_suspicious_punctuation",
+          "Suspicious punctuation report",
+          "Reports repeated punctuation, spaces before punctuation, and missing spaces after punctuation."),
   };
 }
 
@@ -3041,6 +4329,169 @@ BuiltinTextProcessorResult ApplyBuiltinTextProcessor(
 
   if (definition.builtin_id == "builtin_analysis_character_inventory") {
     return AnalyzeCharacterInventory(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_punctuation_normalize_quotes") {
+    return NormalizeQuotes(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_punctuation_normalize_dashes") {
+    return NormalizeDashes(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_punctuation_normalize_ellipsis") {
+    return NormalizeEllipsis(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_punctuation_fix_spaces") {
+    return FixPunctuationSpaces(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_punctuation_normalize_ukrainian_apostrophe") {
+    return NormalizeUkrainianApostrophe(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_punctuation_normalize_dialogue_dashes") {
+    return NormalizeDialogueDashes(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_punctuation_normalize_ukrainian") {
+    return NormalizeUkrainianPunctuation(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_table_normalize_semicolon_rows" ||
+      definition.builtin_id == "builtin_table_trim_cells") {
+    return NormalizeSemicolonRows(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_table_tabs_to_semicolon_rows") {
+    return TabsToSemicolonRows(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_table_multispace_to_semicolon_rows") {
+    std::size_t min_spaces = 2;
+    std::string error;
+    if (!ParsePositiveSize(params, "min_spaces", 2, 32, min_spaces, error)) {
+      return {false, {}, error};
+    }
+    return MultiSpaceColumnsToSemicolonRows(input_text, min_spaces);
+  }
+
+  if (definition.builtin_id == "builtin_table_remove_empty_rows") {
+    return RemoveEmptyTableRows(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_table_remove_duplicate_rows") {
+    return RemoveDuplicateTableRows(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_table_extract_column") {
+    std::size_t column = 1;
+    std::string error;
+    if (!ParsePositiveSize(params, "column", 1, 10000, column, error)) {
+      return {false, {}, error};
+    }
+    return ExtractTableColumn(input_text, column);
+  }
+
+  if (definition.builtin_id == "builtin_table_remove_column") {
+    std::size_t column = 1;
+    std::string error;
+    if (!ParsePositiveSize(params, "column", 1, 10000, column, error)) {
+      return {false, {}, error};
+    }
+    return RemoveTableColumn(input_text, column);
+  }
+
+  if (definition.builtin_id == "builtin_markdown_add_heading") {
+    std::size_t level = 2;
+    std::string error;
+    if (!ParsePositiveSize(params, "level", 1, 6, level, error)) {
+      return {false, {}, error};
+    }
+    return MarkdownAddHeading(input_text, level);
+  }
+
+  if (definition.builtin_id == "builtin_markdown_remove_headings") {
+    return MarkdownRemoveHeadings(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_markdown_bullet_list") {
+    return MarkdownBulletList(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_markdown_numbered_list") {
+    return MarkdownNumberedList(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_markdown_renumber_list") {
+    return MarkdownRenumberList(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_markdown_quote_block") {
+    return MarkdownQuoteBlock(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_markdown_bold") {
+    return MarkdownWrap(input_text, "**");
+  }
+
+  if (definition.builtin_id == "builtin_markdown_italic") {
+    return MarkdownWrap(input_text, "*");
+  }
+
+  if (definition.builtin_id == "builtin_markdown_strip_formatting") {
+    return MarkdownStripFormatting(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_markdown_extract_headings") {
+    return MarkdownExtractHeadings(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_markdown_generate_toc") {
+    return MarkdownGenerateToc(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_analysis_mixed_cyrillic_latin") {
+    return AnalyzeMixedCyrillicLatin(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_analysis_word_frequency") {
+    std::size_t top_count = 30;
+    std::size_t min_length = 2;
+    std::string error;
+    if (!ParsePositiveSize(params, "top_count", 1, 1000, top_count, error)) {
+      return {false, {}, error};
+    }
+    if (!ParsePositiveSize(params, "min_length", 1, 1000, min_length, error)) {
+      return {false, {}, error};
+    }
+    return AnalyzeWordFrequency(input_text, top_count, min_length);
+  }
+
+  if (definition.builtin_id == "builtin_analysis_long_sentences") {
+    std::size_t max_sentence_length = 180;
+    std::string error;
+    if (!ParsePositiveSize(params, "max_sentence_length", 1, 100000, max_sentence_length, error)) {
+      return {false, {}, error};
+    }
+    return AnalyzeLongSentences(input_text, max_sentence_length);
+  }
+
+  if (definition.builtin_id == "builtin_analysis_repeated_words") {
+    return AnalyzeRepeatedWords(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_analysis_unbalanced_quotes") {
+    return AnalyzeUnbalancedQuotes(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_analysis_unbalanced_brackets") {
+    return AnalyzeUnbalancedBrackets(input_text);
+  }
+
+  if (definition.builtin_id == "builtin_analysis_suspicious_punctuation") {
+    return AnalyzeSuspiciousPunctuation(input_text);
   }
 
   return {false, {}, "Unknown built-in text processor: " + definition.builtin_id};
