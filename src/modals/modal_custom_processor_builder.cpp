@@ -49,7 +49,23 @@ CustomProcessorBuilderModalContent::CustomProcessorBuilderModalContent(
         return TextButtonElement(state.label, theme, state.focused || state.active);
     };
 
-    group_menu_ = ftxui::Menu(&group_labels_, &selected_group_, menu_option);
+    group_row1_size_ = static_cast<int>(group_labels_.size() + 1) / 2;
+    group_labels_row1_.assign(group_labels_.begin(),
+                              group_labels_.begin() + group_row1_size_);
+    group_labels_row2_.assign(group_labels_.begin() + group_row1_size_,
+                              group_labels_.end());
+
+    auto row1_option = menu_option;
+    row1_option.on_enter = [this] {
+        selected_group_ = selected_group_row1_;
+    };
+    auto row2_option = menu_option;
+    row2_option.on_enter = [this] {
+        selected_group_ = group_row1_size_ + selected_group_row2_;
+    };
+
+    group_menu_row1_ = ftxui::Menu(&group_labels_row1_, &selected_group_row1_, row1_option);
+    group_menu_row2_ = ftxui::Menu(&group_labels_row2_, &selected_group_row2_, row2_option);
     scope_menu_ = ftxui::Menu(&scope_labels_, &selected_scope_, menu_option);
     output_menu_ = ftxui::Menu(&output_labels_, &selected_output_, menu_option);
 
@@ -84,7 +100,8 @@ CustomProcessorBuilderModalContent::CustomProcessorBuilderModalContent(
     });
 
     container_ = ftxui::Container::Vertical({
-        group_menu_,
+        group_menu_row1_,
+        group_menu_row2_,
         scope_menu_,
         output_menu_,
         request_input_,
@@ -109,6 +126,9 @@ ftxui::Component CustomProcessorBuilderModalContent::MakeTextButton(
 void CustomProcessorBuilderModalContent::Open() {
     status_ = "Describe the processor, copy the AI prompt, paste the JSON result, then save.";
     status_is_error_ = false;
+    selected_group_row1_ = std::clamp(selected_group_, 0, group_row1_size_ - 1);
+    selected_group_row2_ = std::clamp(selected_group_ - group_row1_size_, 0,
+                                      std::max(0, static_cast<int>(group_labels_row2_.size()) - 1));
     if (request_input_) {
         request_input_->TakeFocus();
     }
@@ -126,10 +146,11 @@ CustomProcessorPromptRequest CustomProcessorBuilderModalContent::CurrentPromptRe
 }
 
 std::string CustomProcessorBuilderModalContent::SelectedGroup() const {
-    if (selected_group_ < 0 || selected_group_ >= static_cast<int>(group_labels_.size())) {
+    int index = selected_group_;
+    if (index < 0 || index >= static_cast<int>(group_labels_.size())) {
         return "User";
     }
-    return group_labels_[selected_group_];
+    return group_labels_[index];
 }
 
 std::string CustomProcessorBuilderModalContent::SelectedScope() const {
@@ -229,6 +250,9 @@ void CustomProcessorBuilderModalContent::ClearFields() {
     json_text_.clear();
     request_cursor_ = 0;
     json_cursor_ = 0;
+    selected_group_ = 0;
+    selected_group_row1_ = 0;
+    selected_group_row2_ = 0;
     has_last_copied_prompt_request_ = false;
     last_copied_prompt_request_ = CustomProcessorPromptRequest{};
     status_ = "Cleared custom processor builder fields.";
@@ -263,7 +287,8 @@ ftxui::Element CustomProcessorBuilderModalContent::RenderMetadata() const {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     return vbox({
         SectionTitle("Metadata", theme),
-        hbox({text("Group: ") | size(WIDTH, EQUAL, 8), group_menu_->Render()}),
+        hbox({text("Group: ") | size(WIDTH, EQUAL, 8), group_menu_row1_->Render()}),
+        hbox({text("         ") | size(WIDTH, EQUAL, 8), group_menu_row2_->Render()}),
         hbox({text("Scope: ") | size(WIDTH, EQUAL, 8), scope_menu_->Render()}),
         hbox({text("Output: ") | size(WIDTH, EQUAL, 8), output_menu_->Render()}),
     });
@@ -278,7 +303,8 @@ ftxui::Element CustomProcessorBuilderModalContent::RenderInputs() const {
             request_input_->Render() |
                 border |
                 size(WIDTH, EQUAL, 52) |
-                size(HEIGHT, EQUAL, 9),
+                size(HEIGHT, EQUAL, 9) |
+                yframe,
         }),
         text(" "),
         vbox({
@@ -341,6 +367,7 @@ ftxui::Element CustomProcessorBuilderModalContent::Render() {
         RenderActions(),
         separator(),
         RenderHelp(),
+        separator(),
         RenderStatus(),
     }) | color(theme.modal_text_color);
 }

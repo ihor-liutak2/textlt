@@ -64,11 +64,16 @@ private:
     CloseCallback close_callback_;
 
     std::vector<std::string> group_labels_;
+    std::vector<std::string> group_labels_row1_;
+    std::vector<std::string> group_labels_row2_;
     std::vector<std::string> scope_labels_;
     std::vector<std::string> output_labels_;
     int selected_group_ = 0;
+    int selected_group_row1_ = 0;
+    int selected_group_row2_ = 0;
     int selected_scope_ = 0;
     int selected_output_ = 0;
+    int group_row1_size_ = 0;
 
     std::string request_text_;
     std::string json_text_;
@@ -80,6 +85,8 @@ private:
     bool has_last_copied_prompt_request_ = false;
 
     ftxui::Component group_menu_;
+    ftxui::Component group_menu_row1_;
+    ftxui::Component group_menu_row2_;
     ftxui::Component scope_menu_;
     ftxui::Component output_menu_;
     ftxui::Component request_input_;

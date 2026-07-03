@@ -117,9 +117,34 @@ TextProcessorsModalContent::TextProcessorsModalContent(
         group_tab_buttons_.push_back(MakeTextButton(group, [this, group] { SetGroup(group); }));
     }
 
-    processor_grid_component_ = ftxui::Renderer([this] {
-        return RenderProcessorGrid();
-    });
+    processor_grid_component_ = ftxui::CatchEvent(
+        ftxui::Renderer([this] {
+            return RenderProcessorGrid();
+        }),
+        [this](ftxui::Event event) {
+            if (event.is_mouse()) {
+                const ftxui::Mouse& mouse = event.mouse();
+                if (mouse.button == ftxui::Mouse::WheelDown) {
+                    MoveParserSelection(3);
+                    return true;
+                }
+                if (mouse.button == ftxui::Mouse::WheelUp) {
+                    MoveParserSelection(-3);
+                    return true;
+                }
+                if (mouse.button == ftxui::Mouse::Left &&
+                    mouse.motion == ftxui::Mouse::Pressed) {
+                    for (int index = 0; index < processor_cell_count_; ++index) {
+                        if (processor_cell_indices_[index] >= 0 &&
+                            processor_cell_boxes_[index].Contain(mouse.x, mouse.y)) {
+                            MoveParserSelectionToIndex(processor_cell_indices_[index]);
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        });
 
     for (size_t index = 0; index < 4; ++index) {
         ftxui::InputOption option;
