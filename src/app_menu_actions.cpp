@@ -124,294 +124,329 @@ void TextltApp::RunDropdownAction(int menu_index, int item_index) {
     RunCommand(command_id);
 }
     
-    void TextltApp::HandleFileMenu(int item) {
-        auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-
-        switch (item) {
-            case 0: // New File
-                PersistActiveFavoriteCursor();
-                {
-                    auto doc = std::make_shared<Document>();
-                    doc->Reset();
-                    AddOpenDocument(doc);
-                }
-                PersistOpenedDocuments();
-                active_action_ = "New file";
-                screen_.PostEvent(ftxui::Event::Custom);
-                break;
-
-            case 1: OpenFilesModal(FilesModalMode::Manage); return;
-            case 2: OpenFilesModal(FilesModalMode::Open); return;
-            case 3: OpenFilesModal(FilesModalMode::SaveAs); return;
-            case 4: OpenFilesModal(FilesModalMode::Import); return;
-            case 5: OpenRecentFilesModal(); return;
-            case 6: CloseCurrentFile(); return;
-            case 7: CloseAllOpenedFiles(); return;
-            case 8: SaveCurrentFile(); return;
-            case 9: SaveAllOpenedFiles(); return;
-            case 10: ToggleActiveFavorite(); return;
-            case 11: RequestExit(); return;
-
-            default:
-                CloseDropdown();
-                return;
-        }
-        CloseDropdown();
-        FocusEditor();
+void TextltApp::CommandFileNew() {
+    PersistActiveFavoriteCursor();
+    auto doc = std::make_shared<Document>();
+    doc->Reset();
+    AddOpenDocument(doc);
+    PersistOpenedDocuments();
+    active_action_ = "New file";
+    CloseDropdown();
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
 }
 
 
-void TextltApp::HandleEditMenu(int item) {
+void TextltApp::CommandFileManageFiles() {
+    OpenFilesModal(FilesModalMode::Manage);
+}
+
+
+void TextltApp::CommandFileOpen() {
+    OpenFilesModal(FilesModalMode::Open);
+}
+
+
+void TextltApp::CommandFileSaveAs() {
+    OpenFilesModal(FilesModalMode::SaveAs);
+}
+
+
+void TextltApp::CommandFileImport() {
+    OpenFilesModal(FilesModalMode::Import);
+}
+
+
+void TextltApp::CommandFileRecent() {
+    OpenRecentFilesModal();
+}
+
+
+void TextltApp::CommandFileClose() {
+    CloseCurrentFile();
+}
+
+
+void TextltApp::CommandFileCloseAll() {
+    CloseAllOpenedFiles();
+}
+
+
+void TextltApp::CommandFileSave() {
+    SaveCurrentFile();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CommandFileSaveAll() {
+    SaveAllOpenedFiles();
+}
+
+
+void TextltApp::CommandFileToggleFavorite() {
+    ToggleActiveFavorite();
+}
+
+
+void TextltApp::CommandEditUndo() {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    FocusEditor();
+    editor_ptr->Undo();
+    active_action_ = "Undo";
+    CloseDropdown();
+}
 
-    if (item == 0) { // Undo
-        FocusEditor();
-        editor_ptr->Undo();
-        active_action_ = "Undo";
-        CloseDropdown();
-        return;
-    }
 
-    if (item == 1) { // Redo
-        FocusEditor();
-        editor_ptr->Redo();
-        active_action_ = "Redo";
-        CloseDropdown();
-        return;
-    }
+void TextltApp::CommandEditRedo() {
+    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    FocusEditor();
+    editor_ptr->Redo();
+    active_action_ = "Redo";
+    CloseDropdown();
+}
 
-    if (item == 2) { // Select All
-        FocusEditor();
-        editor_ptr->SelectAll();
-        active_action_ = "Selected all text";
-        CloseDropdown();
-        screen_.PostEvent(ftxui::Event::Custom);
-        return;
-    }
 
-    if (item == 3) { // Cut
-        FocusEditor();
-        if (editor_ptr->HasSelection()) {
-            // Priority 1: Cut only the user's active Shift-selection
-            std::string selected_text = editor_ptr->GetSelectedText();
-            WriteSystemClipboard(selected_text);
-            editor_ptr->DeleteSelection();
-            active_action_ = "Cut selection to clipboard";
+void TextltApp::CommandEditSelectAll() {
+    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    FocusEditor();
+    editor_ptr->SelectAll();
+    active_action_ = "Selected all text";
+    CloseDropdown();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CommandEditCut() {
+    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    FocusEditor();
+    if (editor_ptr->HasSelection()) {
+        const std::string selected_text = editor_ptr->GetSelectedText();
+        WriteSystemClipboard(selected_text);
+        editor_ptr->DeleteSelection();
+        active_action_ = "Cut selection to clipboard";
+    } else {
+        const std::string current_line = editor_ptr->GetCurrentLineText();
+        if (!current_line.empty()) {
+            WriteSystemClipboard(current_line);
+            editor_ptr->DeleteCurrentLine();
+            active_action_ = "Cut line to clipboard";
         } else {
-            // Priority 2: Fallback to original behavior (cut entire line)
-            std::string current_line = editor_ptr->GetCurrentLineText();
-            if (!current_line.empty()) {
-                WriteSystemClipboard(current_line);
-                editor_ptr->DeleteCurrentLine();
-                active_action_ = "Cut line to clipboard";
-            } else {
-                active_action_ = "Nothing to cut";
-            }
+            active_action_ = "Nothing to cut";
         }
-        CloseDropdown();
-        return;
     }
-    
-    if (item == 4) { // Copy
-        if (editor_ptr->HasSelection()) {
-            // Priority 1: Copy only the active Shift-selection
-            std::string selected_text = editor_ptr->GetSelectedText();
-            WriteSystemClipboard(selected_text);
-            active_action_ = "Copied selection to clipboard";
+    CloseDropdown();
+}
+
+
+void TextltApp::CommandEditCopy() {
+    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    if (editor_ptr->HasSelection()) {
+        const std::string selected_text = editor_ptr->GetSelectedText();
+        WriteSystemClipboard(selected_text);
+        active_action_ = "Copied selection to clipboard";
+    } else {
+        const std::string current_line = editor_ptr->GetCurrentLineText();
+        if (!current_line.empty()) {
+            WriteSystemClipboard(current_line);
+            active_action_ = "Copied line to clipboard";
         } else {
-            // Priority 2: Fallback to original behavior (copy entire line)
-            std::string current_line = editor_ptr->GetCurrentLineText();
-            if (!current_line.empty()) {
-                WriteSystemClipboard(current_line);
-                active_action_ = "Copied line to clipboard";
-            } else {
-                active_action_ = "Nothing to copy";
-            }
+            active_action_ = "Nothing to copy";
         }
-        CloseDropdown();
-        return;
     }
-    
-    if (item == 5) { // Paste stream
-        CloseDropdown();
-        FocusEditor();
+    CloseDropdown();
+}
 
-        std::string clipboard_text = ReadSystemClipboard();
-        if (!clipboard_text.empty()) {
-            active_action_ = "Pasted text (" + std::to_string(clipboard_text.size()) + " chars)";
-            editor_ptr->InsertText(clipboard_text);
-        } else {
-            active_action_ = "Clipboard empty.";
-        }
-        return;
+
+void TextltApp::CommandEditPaste() {
+    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    CloseDropdown();
+    FocusEditor();
+
+    const std::string clipboard_text = ReadSystemClipboard();
+    if (!clipboard_text.empty()) {
+        active_action_ = "Pasted text (" + std::to_string(clipboard_text.size()) + " chars)";
+        editor_ptr->InsertText(clipboard_text);
+    } else {
+        active_action_ = "Clipboard empty.";
     }
+}
 
-    if (item == 6) { // Toggle Comment
-        FocusEditor();
-        editor_ptr->ToggleComment();
-        active_action_ = "Toggle Comment";
-        CloseDropdown();
-        screen_.PostEvent(ftxui::Event::Custom);
-        return;
-    }
 
-    if (item == 7) { // Toggle Case
-        FocusEditor();
-        editor_ptr->ToggleCase();
-        active_action_ = "Toggle Case";
-        CloseDropdown();
-        screen_.PostEvent(ftxui::Event::Custom);
-        return;
-    }
+void TextltApp::CommandEditToggleComment() {
+    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    FocusEditor();
+    editor_ptr->ToggleComment();
+    active_action_ = "Toggle Comment";
+    CloseDropdown();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
 
-    if (item == 8) { // Convert Indents: 4 -> 2 Spaces
-        FocusEditor();
-        editor_ptr->Convert4To2Spaces();
-        active_action_ = "Converted leading indents from 4 to 2 spaces";
-        CloseDropdown();
-        screen_.PostEvent(ftxui::Event::Custom);
-        return;
-    }
 
-    if (item == 9) { // Convert Indents: 2 -> 4 Spaces
-        FocusEditor();
-        editor_ptr->Convert2To4Spaces();
-        active_action_ = "Converted leading indents from 2 to 4 spaces";
-        CloseDropdown();
-        screen_.PostEvent(ftxui::Event::Custom);
-        return;
-    }
+void TextltApp::CommandEditToggleCase() {
+    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    FocusEditor();
+    editor_ptr->ToggleCase();
+    active_action_ = "Toggle Case";
+    CloseDropdown();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
 
-    if (item == 10) { // Find...
-        CloseDropdown();
-        OpenFindPanel(false);
-        active_action_ = "Find";
-        return;
-    }
 
-    if (item == 11) { // Replace...
-        CloseDropdown();
-        OpenFindPanel(true);
-        active_action_ = "Replace";
-        return;
-    }
+void TextltApp::CommandEditConvertIndents4To2() {
+    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    FocusEditor();
+    editor_ptr->Convert4To2Spaces();
+    active_action_ = "Converted leading indents from 4 to 2 spaces";
+    CloseDropdown();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
 
-    if (item == 12) { // Search in Files...
-        CloseDropdown();
-        OpenSearchFilesModal();
-        active_action_ = "Search in Files";
-        return;
-    }
 
-    if (item == 13) { // Text Processors...
-        CloseDropdown();
-        OpenTextProcessorsModal();
-        active_action_ = "Text Processors";
-        return;
-    }
+void TextltApp::CommandEditConvertIndents2To4() {
+    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    FocusEditor();
+    editor_ptr->Convert2To4Spaces();
+    active_action_ = "Converted leading indents from 2 to 4 spaces";
+    CloseDropdown();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
 
+
+void TextltApp::CommandEditFind() {
+    CloseDropdown();
+    OpenFindPanel(false);
+    active_action_ = "Find";
+}
+
+
+void TextltApp::CommandEditReplace() {
+    CloseDropdown();
+    OpenFindPanel(true);
+    active_action_ = "Replace";
+}
+
+
+void TextltApp::CommandSearchFiles() {
+    CloseDropdown();
+    OpenSearchFilesModal();
+    active_action_ = "Search in Files";
+}
+
+
+void TextltApp::CommandTextProcessors() {
+    CloseDropdown();
+    OpenTextProcessorsModal();
+    active_action_ = "Text Processors";
+}
+
+
+void TextltApp::CommandViewToggleLineNumbers() {
+    editor_config_.show_line_numbers = !editor_config_.show_line_numbers;
+    active_action_ = editor_config_.show_line_numbers ? "Line numbers enabled" : "Line numbers disabled";
+    SaveConfig();
     CloseDropdown();
 }
 
 
-void TextltApp::HandleAiMenu(int item) {
-    switch (item) {
-        case 0:
-            OpenTtsModal();
-            return;
-        case 1:
-            OpenAiActionsModal();
-            return;
-        case 2:
-            OpenAssistantSettingsModal();
-            return;
-        default:
-            CloseDropdown();
-            return;
-    }
-}
-
-
-void TextltApp::HandleRemoteMenu(int item) {
-    if (item == 0) {
-        OpenRemoteFilesModal();
-        return;
-    }
-    if (item == 1) {
-        OpenRemoteConnectionsModal();
-        return;
-    }
-
+void TextltApp::CommandSidebarToggleFileExplorer() {
+    ToggleFileExplorer();
     CloseDropdown();
 }
 
 
-void TextltApp::HandleGitMenu(int item) {
-    if (item == 0) {
-        OpenGitModal();
-        return;
-    }
-    if (item == 1) {
-        OpenGitSettingsModal();
-        return;
-    }
-
+void TextltApp::CommandEditorToggleSmartWordWrap() {
+    editor_config_.smart_word_wrap = !editor_config_.smart_word_wrap;
+    active_action_ = editor_config_.smart_word_wrap ? "Smart Word Wrap enabled" : "Smart Word Wrap disabled";
+    UpdateOptionsMenuLabels();
+    SaveConfig();
     CloseDropdown();
+    screen_.PostEvent(ftxui::Event::Custom);
 }
 
 
-void TextltApp::HandleOptionsMenu(int item) {
-    if (item == 0) {
-        editor_config_.show_line_numbers = !editor_config_.show_line_numbers;
-        active_action_ = editor_config_.show_line_numbers ? "Line numbers enabled" : "Line numbers disabled";
-        SaveConfig();
-    } else if (item == 1) {
-        ToggleFileExplorer();
-    } else if (item == 2) {
-        editor_config_.smart_word_wrap = !editor_config_.smart_word_wrap;
-        active_action_ = editor_config_.smart_word_wrap ? "Smart Word Wrap enabled" : "Smart Word Wrap disabled";
-        UpdateOptionsMenuLabels();
-        SaveConfig();
-        screen_.PostEvent(ftxui::Event::Custom);
-    } else if (item == 3) {
-        editor_config_.syntax_highlighting = !editor_config_.syntax_highlighting;
-        active_action_ = editor_config_.syntax_highlighting ? "Syntax Highlighting enabled" : "Syntax Highlighting disabled";
-        UpdateOptionsMenuLabels();
-        SaveConfig();
-        screen_.PostEvent(ftxui::Event::Custom);
-    } else if (item == 4) {
-        editor_config_.auto_pairing = !editor_config_.auto_pairing;
-        active_action_ = editor_config_.auto_pairing ? "Auto Pairing enabled" : "Auto Pairing disabled";
-        UpdateOptionsMenuLabels();
-        SaveConfig();
-        screen_.PostEvent(ftxui::Event::Custom);
-    } else if (item == 5) {
-        editor_config_.auto_indent = !editor_config_.auto_indent;
-        active_action_ = editor_config_.auto_indent ? "Smart Auto-Indent enabled" : "Smart Auto-Indent disabled";
-        UpdateOptionsMenuLabels();
-        SaveConfig();
-        screen_.PostEvent(ftxui::Event::Custom);
-    } else if (item == 6) {
-        editor_config_.tab_size = editor_config_.tab_size == 2 ? 4 : 2;
-        active_action_ = "Tab size set to " + std::to_string(editor_config_.tab_size) + " spaces";
-        UpdateOptionsMenuLabels();
-        SaveConfig();
-        screen_.PostEvent(ftxui::Event::Custom);
-    } else if (item == 7) {
-        auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-        editor_ptr->ConvertTabsToSpaces();
-        active_action_ = "Converted tabs to spaces";
-        screen_.PostEvent(ftxui::Event::Custom);
-    } else if (item == 8) {
-        OpenThemeDialog();
-        return;
-    } else if (item == 9) {
-        OpenViewLayoutModal();
-        return;
-    }
+void TextltApp::CommandEditorToggleSyntaxHighlighting() {
+    editor_config_.syntax_highlighting = !editor_config_.syntax_highlighting;
+    active_action_ = editor_config_.syntax_highlighting ? "Syntax Highlighting enabled" : "Syntax Highlighting disabled";
+    UpdateOptionsMenuLabels();
+    SaveConfig();
     CloseDropdown();
+    screen_.PostEvent(ftxui::Event::Custom);
 }
-    
+
+
+void TextltApp::CommandEditorToggleAutoPairing() {
+    editor_config_.auto_pairing = !editor_config_.auto_pairing;
+    active_action_ = editor_config_.auto_pairing ? "Auto Pairing enabled" : "Auto Pairing disabled";
+    UpdateOptionsMenuLabels();
+    SaveConfig();
+    CloseDropdown();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CommandEditorToggleAutoIndent() {
+    editor_config_.auto_indent = !editor_config_.auto_indent;
+    active_action_ = editor_config_.auto_indent ? "Smart Auto-Indent enabled" : "Smart Auto-Indent disabled";
+    UpdateOptionsMenuLabels();
+    SaveConfig();
+    CloseDropdown();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CommandEditorToggleTabSize() {
+    editor_config_.tab_size = editor_config_.tab_size == 2 ? 4 : 2;
+    active_action_ = "Tab size set to " + std::to_string(editor_config_.tab_size) + " spaces";
+    UpdateOptionsMenuLabels();
+    SaveConfig();
+    CloseDropdown();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CommandEditorConvertTabsToSpaces() {
+    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    editor_ptr->ConvertTabsToSpaces();
+    active_action_ = "Converted tabs to spaces";
+    CloseDropdown();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CommandThemeOpen() {
+    OpenThemeDialog();
+}
+
+
+void TextltApp::CommandViewLayoutOpen() {
+    OpenViewLayoutModal();
+}
+
+
+void TextltApp::CommandTtsPlay() {
+    tts_modal_.Play();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CommandTtsPause() {
+    tts_modal_.Pause();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CommandTtsStop() {
+    tts_modal_.Stop();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CommandTtsNext() {
+    tts_modal_.Next();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
 std::string TextltApp::ReadSystemClipboard() {
     std::string clipboard_text;
     char buffer[256];

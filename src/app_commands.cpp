@@ -36,61 +36,53 @@ void TextltApp::InitializeCommands() {
         command_registry_.Register(MakeCommand(id, title, category, shortcut, std::move(run)));
     };
 
-    add("file.new", "New", "File", "", [this] { HandleFileMenu(0); });
-    add("file.files", "Files", "File", "", [this] { HandleFileMenu(1); });
-    add("file.open", "Open", "File", "Ctrl+O", [this] { HandleFileMenu(2); });
-    add("file.save_as", "Save As", "File", "", [this] { HandleFileMenu(3); });
-    add("file.import", "Import", "File", "", [this] { HandleFileMenu(4); });
-    add("file.recent", "Recent Files", "File", "", [this] { HandleFileMenu(5); });
-    add("file.close", "Close", "File", "Alt+W / Ctrl+W", [this] { HandleFileMenu(6); });
-    add("file.close_all", "Close All", "File", "", [this] { HandleFileMenu(7); });
-    add("file.save", "Save", "File", "Ctrl+S", [this] { HandleFileMenu(8); });
-    add("file.save_all", "Save All", "File", "", [this] { HandleFileMenu(9); });
-    add("file.toggle_favorite", "Toggle Favorite", "File", "", [this] { HandleFileMenu(10); });
+    add("file.new", "New", "File", "", [this] { CommandFileNew(); });
+    add("file.files", "Files", "File", "", [this] { CommandFileManageFiles(); });
+    add("file.open", "Open", "File", "Ctrl+O", [this] { CommandFileOpen(); });
+    add("file.save_as", "Save As", "File", "", [this] { CommandFileSaveAs(); });
+    add("file.import", "Import", "File", "", [this] { CommandFileImport(); });
+    add("file.recent", "Recent Files", "File", "", [this] { CommandFileRecent(); });
+    add("file.close", "Close", "File", "Alt+W / Ctrl+W", [this] { CommandFileClose(); });
+    add("file.close_all", "Close All", "File", "", [this] { CommandFileCloseAll(); });
+    add("file.save", "Save", "File", "Ctrl+S", [this] { CommandFileSave(); });
+    add("file.save_all", "Save All", "File", "", [this] { CommandFileSaveAll(); });
+    add("file.toggle_favorite", "Toggle Favorite", "File", "", [this] { CommandFileToggleFavorite(); });
 
-    add("edit.undo", "Undo", "Edit", "Ctrl+Z", [this] { HandleEditMenu(0); });
-    add("edit.redo", "Redo", "Edit", "Ctrl+Y", [this] { HandleEditMenu(1); });
-    add("edit.select_all", "Select All", "Edit", "Ctrl+A", [this] { HandleEditMenu(2); });
-    add("edit.cut", "Cut", "Edit", "Ctrl+X", [this] { HandleEditMenu(3); });
-    add("edit.copy", "Copy", "Edit", "Ctrl+C", [this] { HandleEditMenu(4); });
-    add("edit.paste", "Paste", "Edit", "Ctrl+V", [this] { HandleEditMenu(5); });
-    add("edit.toggle_comment", "Toggle Comment", "Edit", "Ctrl+/", [this] { HandleEditMenu(6); });
-    add("edit.toggle_case", "Toggle Case", "Edit", "Ctrl+T", [this] { HandleEditMenu(7); });
-    add("edit.convert_indents_4_to_2", "Convert Indents 4 to 2", "Edit", "", [this] { HandleEditMenu(8); });
-    add("edit.convert_indents_2_to_4", "Convert Indents 2 to 4", "Edit", "", [this] { HandleEditMenu(9); });
-    add("edit.find", "Find", "Edit", "Ctrl+F", [this] { HandleEditMenu(10); });
-    add("edit.replace", "Replace", "Edit", "Ctrl+R", [this] { HandleEditMenu(11); });
-    add("search.files", "Search in Files", "Edit", "", [this] { HandleEditMenu(12); });
-    add("text_processors.open", "Text Processors", "Edit", "", [this] { HandleEditMenu(13); });
+    add("edit.undo", "Undo", "Edit", "Ctrl+Z", [this] { CommandEditUndo(); });
+    add("edit.redo", "Redo", "Edit", "Ctrl+Y", [this] { CommandEditRedo(); });
+    add("edit.select_all", "Select All", "Edit", "Ctrl+A", [this] { CommandEditSelectAll(); });
+    add("edit.cut", "Cut", "Edit", "Ctrl+X", [this] { CommandEditCut(); });
+    add("edit.copy", "Copy", "Edit", "Ctrl+C", [this] { CommandEditCopy(); });
+    add("edit.paste", "Paste", "Edit", "Ctrl+V", [this] { CommandEditPaste(); });
+    add("edit.toggle_comment", "Toggle Comment", "Edit", "Ctrl+/", [this] { CommandEditToggleComment(); });
+    add("edit.toggle_case", "Toggle Case", "Edit", "Ctrl+T", [this] { CommandEditToggleCase(); });
+    add("edit.convert_indents_4_to_2", "Convert Indents 4 to 2", "Edit", "", [this] { CommandEditConvertIndents4To2(); });
+    add("edit.convert_indents_2_to_4", "Convert Indents 2 to 4", "Edit", "", [this] { CommandEditConvertIndents2To4(); });
+    add("edit.find", "Find", "Edit", "Ctrl+F", [this] { CommandEditFind(); });
+    add("edit.replace", "Replace", "Edit", "Ctrl+R", [this] { CommandEditReplace(); });
+    add("search.files", "Search in Files", "Edit", "", [this] { CommandSearchFiles(); });
+    add("text_processors.open", "Text Processors", "Edit", "", [this] { CommandTextProcessors(); });
+    add("editor.go_to_line", "Go to Line", "Edit", "Ctrl+G", [this] { OpenGoToLinePanel(); });
 
-    add("view.toggle_line_numbers", "Toggle Line Numbers", "Options", "", [this] { HandleOptionsMenu(0); });
-    add("sidebar.toggle_file_explorer", "Toggle File Explorer", "Options", "Ctrl+B", [this] { HandleOptionsMenu(1); });
-    add("editor.toggle_smart_word_wrap", "Toggle Smart Word Wrap", "Options", "", [this] { HandleOptionsMenu(2); });
-    add("editor.toggle_syntax_highlighting", "Toggle Syntax Highlighting", "Options", "", [this] { HandleOptionsMenu(3); });
-    add("editor.toggle_auto_pairing", "Toggle Auto Pairing", "Options", "", [this] { HandleOptionsMenu(4); });
-    add("editor.toggle_auto_indent", "Toggle Auto Indent", "Options", "", [this] { HandleOptionsMenu(5); });
-    add("editor.toggle_tab_size", "Toggle Tab Size", "Options", "", [this] { HandleOptionsMenu(6); });
-    add("editor.convert_tabs_to_spaces", "Convert Tabs to Spaces", "Options", "", [this] { HandleOptionsMenu(7); });
-    add("theme.open", "Theme", "Options", "", [this] { HandleOptionsMenu(8); });
-    add("view.layout", "View Layout", "Options", "", [this] { HandleOptionsMenu(9); });
+    add("view.toggle_line_numbers", "Toggle Line Numbers", "Options", "", [this] { CommandViewToggleLineNumbers(); });
+    add("sidebar.toggle_file_explorer", "Toggle File Explorer", "Options", "Ctrl+B", [this] { CommandSidebarToggleFileExplorer(); });
+    add("sidebar.ctrl_b_file_explorer", "File Explorer Focus Toggle", "Options", "Ctrl+B", [this] { HandleCtrlBFileExplorer(); });
+    add("sidebar.show_opened_files", "Opened Files Sidebar", "Options", "Alt+B, O", [this] { ShowOpenedFilesSidebar(); });
+    add("sidebar.toggle_opened_project", "Toggle File Explorer Tab", "Options", "Alt+B", [this] { ToggleSidebarOpenedProject(); });
+    add("editor.toggle_smart_word_wrap", "Toggle Smart Word Wrap", "Options", "", [this] { CommandEditorToggleSmartWordWrap(); });
+    add("editor.toggle_syntax_highlighting", "Toggle Syntax Highlighting", "Options", "", [this] { CommandEditorToggleSyntaxHighlighting(); });
+    add("editor.toggle_auto_pairing", "Toggle Auto Pairing", "Options", "", [this] { CommandEditorToggleAutoPairing(); });
+    add("editor.toggle_auto_indent", "Toggle Auto Indent", "Options", "", [this] { CommandEditorToggleAutoIndent(); });
+    add("editor.toggle_tab_size", "Toggle Tab Size", "Options", "", [this] { CommandEditorToggleTabSize(); });
+    add("editor.convert_tabs_to_spaces", "Convert Tabs to Spaces", "Options", "", [this] { CommandEditorConvertTabsToSpaces(); });
+    add("theme.open", "Theme", "Options", "", [this] { CommandThemeOpen(); });
+    add("view.layout", "View Layout", "Options", "", [this] { CommandViewLayoutOpen(); });
 
     add("tts.open_modal", "TTS", "AI", "Alt+H", [this] { OpenTtsModal(); });
-    add("tts.play", "Play TTS", "TTS", "", [this] {
-        tts_modal_.Play();
-        screen_.PostEvent(ftxui::Event::Custom);
-    });
-    add("tts.pause", "Pause TTS", "TTS", "", [this] {
-        tts_modal_.Pause();
-        screen_.PostEvent(ftxui::Event::Custom);
-    });
-    add("tts.stop", "Stop TTS", "TTS", "", [this] {
-        tts_modal_.Stop();
-        screen_.PostEvent(ftxui::Event::Custom);
-    });
-    add("tts.next", "Next TTS Chunk", "TTS", "", [this] {
-        tts_modal_.Next();
-        screen_.PostEvent(ftxui::Event::Custom);
-    });
+    add("tts.play", "Play TTS", "TTS", "", [this] { CommandTtsPlay(); });
+    add("tts.pause", "Pause TTS", "TTS", "", [this] { CommandTtsPause(); });
+    add("tts.stop", "Stop TTS", "TTS", "", [this] { CommandTtsStop(); });
+    add("tts.next", "Next TTS Chunk", "TTS", "", [this] { CommandTtsNext(); });
     add("ai.open_actions", "AI Actions", "AI", "Alt+J", [this] { OpenAiActionsModal(); });
     add("assistant.open_settings", "Assistant Settings", "AI", "Alt+S", [this] { OpenAssistantSettingsModal(); });
 

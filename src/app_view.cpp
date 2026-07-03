@@ -505,21 +505,18 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
     if (pending_sidebar_chord_) {
         pending_sidebar_chord_ = false;
         if (IsOpenedSidebarChordKey(event)) {
-            ShowOpenedFilesSidebar();
-            return true;
+            return RunCommand("sidebar.show_opened_files");
         }
     }
 
     if (IsAltBShortcut(event)) {
         pending_sidebar_chord_ = false;
-        ToggleSidebarOpenedProject();
-        return true;
+        return RunCommand("sidebar.toggle_opened_project");
     }
 
     if (IsCtrlBShortcut(event)) {
         pending_sidebar_chord_ = true;
-        HandleCtrlBFileExplorer();
-        return true;
+        return RunCommand("sidebar.ctrl_b_file_explorer");
     }
 
     if (IsAltRightShortcut(event)) {
@@ -611,11 +608,7 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         }
         // Ctrl+A (Select All)
         if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'a')) {
-            auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-            editor_ptr->SelectAll();
-            active_action_ = "Selected all text";
-            screen_.PostEvent(ftxui::Event::Custom);
-            return true;
+            return RunCommand("edit.select_all");
         }
         // Pass all other editor-specific events (characters, navigation, etc.) to the editor.
         if (text_editor_->OnEvent(event)) {
@@ -660,8 +653,7 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
         return RunCommand("edit.replace");
     }
     if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'g')) {
-        OpenGoToLinePanel();
-        return true;
+        return RunCommand("editor.go_to_line");
     }
 
     // F-key shortcuts to open main menu dropdowns/dialogs

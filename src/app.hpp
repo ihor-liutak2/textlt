@@ -245,14 +245,50 @@ private:
     bool HandleTerminalBracketedPaste(ftxui::Event event);
     std::string FindMatchStatus() const;
     
-    // Sub-routers for handling dropdown actions by category
-    void HandleFileMenu(int item);
-    void HandleEditMenu(int item);
-    void HandleOptionsMenu(int item);
-    void HandleAiMenu(int item);
-    void HandleRemoteMenu(int item);
-    void HandleGitMenu(int item);
-    
+    // Built-in command actions. UI surfaces and shortcuts call these through command IDs.
+    void CommandFileNew();
+    void CommandFileManageFiles();
+    void CommandFileOpen();
+    void CommandFileSaveAs();
+    void CommandFileImport();
+    void CommandFileRecent();
+    void CommandFileClose();
+    void CommandFileCloseAll();
+    void CommandFileSave();
+    void CommandFileSaveAll();
+    void CommandFileToggleFavorite();
+
+    void CommandEditUndo();
+    void CommandEditRedo();
+    void CommandEditSelectAll();
+    void CommandEditCut();
+    void CommandEditCopy();
+    void CommandEditPaste();
+    void CommandEditToggleComment();
+    void CommandEditToggleCase();
+    void CommandEditConvertIndents4To2();
+    void CommandEditConvertIndents2To4();
+    void CommandEditFind();
+    void CommandEditReplace();
+    void CommandSearchFiles();
+    void CommandTextProcessors();
+
+    void CommandViewToggleLineNumbers();
+    void CommandSidebarToggleFileExplorer();
+    void CommandEditorToggleSmartWordWrap();
+    void CommandEditorToggleSyntaxHighlighting();
+    void CommandEditorToggleAutoPairing();
+    void CommandEditorToggleAutoIndent();
+    void CommandEditorToggleTabSize();
+    void CommandEditorConvertTabsToSpaces();
+    void CommandThemeOpen();
+    void CommandViewLayoutOpen();
+
+    void CommandTtsPlay();
+    void CommandTtsPause();
+    void CommandTtsStop();
+    void CommandTtsNext();
+
     // Platform-specific clipboard abstraction utilities
     std::string ReadSystemClipboard();
     void WriteSystemClipboard(const std::string& text);
