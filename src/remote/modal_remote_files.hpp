@@ -48,6 +48,9 @@ public:
     std::string GetTitle() override { return "Remote Files"; }
     ModalSizePreference GetModalSizePreference() const override { return {120, 32}; }
     std::string GetFooterText() const override { return status_; }
+    bool HasCustomFooter() const override { return !error_footer_.empty(); }
+    int GetCustomFooterHeight() const override;
+    ftxui::Element RenderCustomFooter() override;
 
     void Open();
     void Close();
@@ -181,6 +184,7 @@ private:
 
     std::string status_ = "Ready.";
     bool status_is_error_ = false;
+    std::string error_footer_;
 
     ftxui::Component prev_connection_button_;
     ftxui::Component next_connection_button_;
@@ -195,6 +199,7 @@ private:
     ftxui::Component rename_button_;
     ftxui::Component delete_button_;
     ftxui::Component close_button_;
+    ftxui::Component copy_error_button_;
     ftxui::Component local_path_input_;
     ftxui::Component remote_path_input_;
     ftxui::Component local_list_component_;

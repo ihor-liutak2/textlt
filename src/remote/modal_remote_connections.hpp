@@ -13,6 +13,7 @@
 #include "modals/modal_interface.hpp"
 #include "modals/modal_window.hpp"
 #include "remote/remote_config_store.hpp"
+#include "remote/remote_oauth_flow.hpp"
 #include "theme.hpp"
 
 namespace textlt {
@@ -61,6 +62,8 @@ private:
     void OpenHelp();
     void CloseHelp();
     void CopyHelpUrl();
+    void AuthorizeConnection();
+    void SubmitRedirectUrl();
     bool HandleHelpEvent(ftxui::Event event);
     std::vector<ftxui::Component> GetVisibleInputs();
     int FindFocusedInputIndex(const std::vector<ftxui::Component>& inputs);
@@ -119,6 +122,10 @@ private:
     bool status_is_error_ = false;
     std::string output_;
     bool help_active_ = false;
+    bool authorize_pending_ = false;
+    OAuthFlowConfig pending_oauth_config_;
+    std::string redirect_url_value_;
+    int redirect_url_cursor_ = 0;
 
     ftxui::Component list_component_;
     ftxui::Component name_input_;
@@ -149,8 +156,14 @@ private:
     ftxui::Component reload_button_;
     ftxui::Component close_button_;
     ftxui::Component help_button_;
+    ftxui::Component authorize_button_;
     ftxui::Component help_close_button_;
     ftxui::Component copy_url_button_;
+    ftxui::Component redirect_url_input_;
+    ftxui::Component submit_redirect_button_;
+    ftxui::Component cancel_authorize_button_;
+    ftxui::Component authorize_container_;
+    int authorize_layer_index_ = 0;
     ftxui::Component help_container_;
     int help_layer_index_ = 0;
     ftxui::Component container_;

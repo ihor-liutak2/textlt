@@ -92,6 +92,16 @@ RemoteFilesModalContent::RemoteFilesModalContent(
             on_close_();
         }
     });
+    copy_error_button_ = MakeTextButton("Copy Error", [this] {
+        if (error_footer_.empty()) {
+            SetStatus("No error to copy.");
+            return;
+        }
+        if (copy_text_) {
+            copy_text_(error_footer_);
+        }
+        SetStatus("Error copied to clipboard.");
+    });
 
     local_path_input_ = MakePathInput(PanelSide::Local);
     remote_path_input_ = MakePathInput(PanelSide::Remote);
@@ -121,6 +131,7 @@ RemoteFilesModalContent::RemoteFilesModalContent(
             next_connection_button_,
             refresh_button_,
             close_button_,
+            copy_error_button_,
         }),
         ftxui::Container::Horizontal({
             copy_to_remote_button_,
@@ -242,7 +253,8 @@ ftxui::Element RemoteFilesModalContent::Render() {
             prev_connection_button_->Render(), text(" "),
             next_connection_button_->Render(), text(" "),
             refresh_button_->Render(), text(" "),
-            close_button_->Render(),
+            close_button_->Render(), text(" "),
+            copy_error_button_->Render(),
         }),
         hbox({
             copy_to_remote_button_->Render(), text(" "),
@@ -388,6 +400,16 @@ bool RemoteFilesModalContent::HandlePanelEvent(PanelSide side, ftxui::Event even
     }
     if (IsBackspaceEvent(event)) {
         GoParent(side);
+        return true;
+    }
+    if (event.is_mouse() &&
+        event.mouse().button == ftxui::Mouse::WheelDown) {
+        SelectEntry(side, panel.selected + 3);
+        return true;
+    }
+    if (event.is_mouse() &&
+        event.mouse().button == ftxui::Mouse::WheelUp) {
+        SelectEntry(side, panel.selected - 3);
         return true;
     }
     if (event.is_mouse() &&
@@ -554,6 +576,7 @@ void RemoteFilesModalContent::LoadRemotePathFromInput() {
 }
 
 void RemoteFilesModalContent::RefreshAll() {
+    error_footer_.clear();
     LoadPanel(PanelSide::Local, local_panel_.path);
     if (EnsureRemoteProvider()) {
         LoadPanel(PanelSide::Remote, remote_panel_.path);
@@ -567,6 +590,11 @@ void RemoteFilesModalContent::RefreshActive() {
 
 void RemoteFilesModalContent::SelectPanel(PanelSide side) {
     active_panel_ = side;
+    if (side == PanelSide::Local && local_list_component_) {
+        local_list_component_->TakeFocus();
+    } else if (side == PanelSide::Remote && remote_list_component_) {
+        remote_list_component_->TakeFocus();
+    }
 }
 
 void RemoteFilesModalContent::SelectEntry(PanelSide side, int index) {
@@ -1246,6 +1274,45 @@ void RemoteFilesModalContent::SetPanelStatus(PanelSide side, std::string status,
     PanelState& panel = Panel(side);
     panel.status = std::move(status);
     panel.status_is_error = is_error;
+    if (is_error) {
+        error_footer_ = panel.status;
+    } else if (side == PanelSide::Remote) {
+        error_footer_.clear();
+    }
+}
+
+int RemoteFilesModalContent::GetCustomFooterHeight() const {
+    if (error_footer_.empty()) {
+        return 1;
+    }
+    // Count newlines plus one for the first line
+    int lines = 1;
+    for (char ch : error_footer_) {
+        if (ch == '\n') {
+            ++lines;
+        }
+    }
+    return lines;
+}
+
+ftxui::Element RemoteFilesModalContent::RenderCustomFooter() {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    if (error_footer_.empty()) {
+        return text(" " + status_ + " ") |
+            dim |
+            color(theme.modal_text_color);
+    }
+    Elements lines;
+    std::istringstream stream(error_footer_);
+    std::string line;
+    while (std::getline(stream, line)) {
+        lines.push_back(text(" " + line + " ") |
+            color(ftxui::Color::Red));
+    }
+    const int width = GetModalSizePreference().width - 2;
+    return vbox(std::move(lines)) |
+        size(WIDTH, EQUAL, std::max(1, width));
 }
 
 RemoteFilesModal::RemoteFilesModal(
@@ -1266,7 +1333,6 @@ RemoteFilesModal::RemoteFilesModal(
         [this] { Close(); });
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
     modal_->SetBodyFrameScrolling(false);
-    modal_->SetFooterText("SFTP uses external ssh/sftp. F5 copies active item. Existing targets require OVERWRITE. Delete requires DELETE.");
 }
 
 ftxui::Component RemoteFilesModal::View() const {

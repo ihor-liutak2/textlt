@@ -15,6 +15,7 @@
 #include "remote/remote_dropbox_provider.hpp"
 #include "remote/remote_google_drive_provider.hpp"
 #include "remote/remote_microsoft_drive_provider.hpp"
+#include "remote/remote_oauth_flow.hpp"
 #include "remote/remote_oauth_token_store.hpp"
 #include "remote/remote_sftp_provider.hpp"
 
@@ -204,6 +205,17 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     dropbox_type_button_ = MakeTextButton("Dropbox", [this] { SelectType(RemoteConnectionType::Dropbox); });
     reload_button_ = MakeTextButton("Reload", [this] { Reload(); });
     help_button_ = MakeTextButton("Help Connect", [this] { OpenHelp(); });
+    authorize_button_ = MakeTextButton("Authorize", [this] { AuthorizeConnection(); });
+
+    auto redirect_option = base_option;
+    redirect_option.cursor_position = &redirect_url_cursor_;
+    redirect_url_input_ = ftxui::Input(&redirect_url_value_, "paste redirect URL here", redirect_option);
+    submit_redirect_button_ = MakeTextButton("Submit", [this] { SubmitRedirectUrl(); });
+    cancel_authorize_button_ = MakeTextButton("Cancel", [this] {
+        authorize_pending_ = false;
+        authorize_layer_index_ = 0;
+        SetStatus("Authorization cancelled.");
+    });
     close_button_ = MakeTextButton("Close", [this] {
         if (on_close_) {
             on_close_();
@@ -247,6 +259,7 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     form_fields.push_back(app_key_input_);
     form_fields.push_back(app_secret_input_);
     form_fields.push_back(help_button_);
+    form_fields.push_back(authorize_button_);
 
     ftxui::Components form_area;
     form_area.push_back(list_component_);
@@ -257,6 +270,26 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     main_children.push_back(ftxui::Container::Horizontal(type_buttons));
     main_children.push_back(ftxui::Container::Horizontal(form_area));
     auto main_container = ftxui::Container::Vertical(main_children);
+    main_container = ftxui::CatchEvent(main_container, [this](ftxui::Event event) {
+        if (event == ftxui::Event::ArrowDown || event == ftxui::Event::ArrowUp) {
+            auto inputs = GetVisibleInputs();
+            if (inputs.empty()) {
+                return false;
+            }
+            int focused = FindFocusedInputIndex(inputs);
+            if (event == ftxui::Event::ArrowDown) {
+                int next = (focused + 1) % static_cast<int>(inputs.size());
+                inputs[next]->TakeFocus();
+            } else {
+                int prev = (focused <= 0)
+                    ? static_cast<int>(inputs.size()) - 1
+                    : focused - 1;
+                inputs[prev]->TakeFocus();
+            }
+            return true;
+        }
+        return false;
+    });
 
     help_close_button_ = MakeTextButton("Close", [this] { CloseHelp(); });
     copy_url_button_ = MakeTextButton("Copy URL", [this] { CopyHelpUrl(); });
@@ -264,9 +297,19 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     help_children.push_back(copy_url_button_);
     help_children.push_back(help_close_button_);
     help_container_ = ftxui::Container::Horizontal(help_children);
+
+    ftxui::Components authorize_children;
+    authorize_children.push_back(redirect_url_input_);
+    authorize_children.push_back(submit_redirect_button_);
+    authorize_children.push_back(cancel_authorize_button_);
+    authorize_container_ = ftxui::Container::Vertical({
+        ftxui::Container::Horizontal(authorize_children),
+    });
+
     ftxui::Components tab_children;
     tab_children.push_back(main_container);
     tab_children.push_back(help_container_);
+    tab_children.push_back(authorize_container_);
     container_ = ftxui::Container::Tab(
         tab_children, &help_layer_index_);
     Reload();
@@ -294,7 +337,9 @@ ftxui::Component RemoteConnectionsModalContent::MakeTextButton(
 void RemoteConnectionsModalContent::Open() {
     Reload();
     help_active_ = false;
+    authorize_pending_ = false;
     help_layer_index_ = 0;
+    authorize_layer_index_ = 0;
     if (name_input_) {
         name_input_->TakeFocus();
     }
@@ -305,7 +350,9 @@ void RemoteConnectionsModalContent::Close() {
     status_ = "Ready.";
     status_is_error_ = false;
     help_active_ = false;
+    authorize_pending_ = false;
     help_layer_index_ = 0;
+    authorize_layer_index_ = 0;
 }
 
 void RemoteConnectionsModalContent::Reload() {
@@ -369,25 +416,62 @@ ftxui::Element RemoteConnectionsModalContent::Render() {
                     border,
             }),
             separator(),
-            RenderForm() | size(WIDTH, EQUAL, 70),
+            RenderForm() | size(WIDTH, EQUAL, 70) | yframe | vscroll_indicator,
         }),
         separator() | color(theme.modal_border),
         RenderOutput(),
     }) | bgcolor(theme.modal_background) | color(theme.modal_text_color);
 
-    if (!help_active_) {
-        return body;
+    if (help_active_) {
+        ftxui::Element overlay = RenderHelpOverlay();
+        ftxui::Element centered = ftxui::vbox(
+            ftxui::filler(),
+            ftxui::hbox(filler(), overlay, filler()),
+            ftxui::filler());
+        ftxui::Elements layers;
+        layers.push_back(body);
+        layers.push_back(centered);
+        return dbox(std::move(layers));
     }
 
-    ftxui::Element overlay = RenderHelpOverlay();
-    ftxui::Element centered = ftxui::vbox(
-        ftxui::filler(),
-        ftxui::hbox(filler(), overlay, filler()),
-        ftxui::filler());
-    ftxui::Elements layers;
-    layers.push_back(body);
-    layers.push_back(centered);
-    return dbox(std::move(layers));
+    if (authorize_pending_) {
+        ftxui::Element auth_overlay = ftxui::vbox({
+            ftxui::text(" Paste the redirect URL or access token ") |
+                bold | color(theme.modal_accent),
+            ftxui::separator() | color(theme.modal_border),
+            ftxui::text(" The authorization URL was copied to your clipboard.") | color(theme.modal_text_color),
+            ftxui::text(" Open it in your browser, authorize, then copy the") | color(theme.modal_text_color),
+            ftxui::text(" redirect URL from the address bar and paste it below.") | color(theme.modal_text_color),
+            ftxui::text(" Or paste a raw access token from the Dropbox app console.") | color(theme.modal_text_color),
+            ftxui::text(""),
+            redirect_url_input_->Render() |
+                bgcolor(theme.modal_input_bg) |
+                color(theme.modal_input_fg),
+            ftxui::text(""),
+            ftxui::hbox({
+                ftxui::filler(),
+                submit_redirect_button_->Render(),
+                ftxui::text(" "),
+                cancel_authorize_button_->Render(),
+            }),
+        }) |
+            ftxui::size(WIDTH, LESS_THAN, 70) |
+            ftxui::border |
+            bgcolor(theme.modal_background) |
+            color(theme.modal_border) |
+            ftxui::clear_under;
+
+        ftxui::Element centered = ftxui::vbox(
+            ftxui::filler(),
+            ftxui::hbox(filler(), auth_overlay, filler()),
+            ftxui::filler());
+        ftxui::Elements layers;
+        layers.push_back(body);
+        layers.push_back(centered);
+        return dbox(std::move(layers));
+    }
+
+    return body;
 }
 
 ftxui::Element RemoteConnectionsModalContent::RenderConnectionList() {
@@ -490,8 +574,12 @@ ftxui::Element RemoteConnectionsModalContent::RenderForm() {
             rows.push_back(field("Client ID", client_id_input_));
             rows.push_back(field("Client secret", client_secret_input_));
             rows.push_back(field("Root folder ID", root_folder_id_input_));
-            rows.push_back(note("Press Token to create/verify the token JSON placeholder."));
+            rows.push_back(note("Press Authorize to open Google login in your browser."));
             rows.push_back(note("Leave Root folder ID empty to use the Drive root. Google Drive file operations are active now."));
+            rows.push_back(ftxui::hbox({
+                ftxui::filler(),
+                authorize_button_->Render(),
+            }));
             break;
         case RemoteConnectionType::MicrosoftDrive:
             rows.push_back(field("Account label", account_label_input_));
@@ -502,17 +590,23 @@ ftxui::Element RemoteConnectionsModalContent::RenderForm() {
             rows.push_back(field("Drive ID", drive_id_input_));
             rows.push_back(field("Remote root", remote_root_input_));
             rows.push_back(note("Use Tenant ID 'common' for personal accounts, or a tenant id for organization accounts."));
-            rows.push_back(note("Press Token to create/verify the token JSON placeholder. Graph API file operations come next."));
+            rows.push_back(note("Press Authorize to open Microsoft login in your browser."));
+            rows.push_back(ftxui::hbox({
+                ftxui::filler(),
+                authorize_button_->Render(),
+            }));
             break;
         case RemoteConnectionType::Dropbox:
             rows.push_back(field("Account label", account_label_input_));
             rows.push_back(field("App key", app_key_input_));
             rows.push_back(field("App secret", app_secret_input_));
             rows.push_back(field("Remote root", remote_root_input_));
-            rows.push_back(note("Press Token to create/verify the token JSON placeholder."));
+            rows.push_back(note("Press Authorize to open Dropbox login in your browser."));
             rows.push_back(note("Remote root can be / or /TextLT. Dropbox file operations are active now."));
             rows.push_back(ftxui::hbox({
                 ftxui::filler(),
+                authorize_button_->Render(),
+                text(" "),
                 help_button_->Render(),
             }));
             break;
@@ -586,7 +680,9 @@ void RemoteConnectionsModalContent::SelectType(RemoteConnectionType type) {
     output_.clear();
     SetStatus("Editing " + TypeDisplayName(type) + " connection fields.");
     help_active_ = false;
+    authorize_pending_ = false;
     help_layer_index_ = 0;
+    authorize_layer_index_ = 0;
 }
 
 void RemoteConnectionsModalContent::ApplyTypeDefaults(RemoteConnectionType type) {
@@ -882,6 +978,155 @@ void RemoteConnectionsModalContent::PrepareTokenFile() {
     SetStatus("Token file prepared for " + TypeDisplayName(config.type) + ".");
 }
 
+void RemoteConnectionsModalContent::AuthorizeConnection() {
+    RemoteConnectionConfig config = FormConfig();
+    if (!IsCloudRemoteConnectionType(config.type)) {
+        SetStatus("Authorization is only available for Google, Microsoft, and Dropbox.", true);
+        return;
+    }
+
+    OAuthFlowConfig oauth;
+
+    switch (config.type) {
+        case RemoteConnectionType::Dropbox:
+            oauth.authorize_url = "https://www.dropbox.com/oauth2/authorize";
+            oauth.token_url = "https://api.dropboxapi.com/oauth2/token";
+            oauth.client_id = config.app_key;
+            oauth.client_secret = config.app_secret;
+            oauth.scope = "account_info.read files.metadata.read files.content.read files.content.write";
+            break;
+        case RemoteConnectionType::GoogleDrive:
+            oauth.authorize_url = "https://accounts.google.com/o/oauth2/v2/auth";
+            oauth.token_url = "https://oauth2.googleapis.com/token";
+            oauth.client_id = config.client_id;
+            oauth.client_secret = config.client_secret;
+            oauth.scope = "https://www.googleapis.com/auth/drive";
+            break;
+        case RemoteConnectionType::MicrosoftDrive: {
+            const std::string tenant = config.tenant_id.empty() ? "common" : config.tenant_id;
+            oauth.authorize_url = "https://login.microsoftonline.com/" + tenant + "/oauth2/v2.0/authorize";
+            oauth.token_url = "https://login.microsoftonline.com/" + tenant + "/oauth2/v2.0/token";
+            oauth.client_id = config.client_id;
+            oauth.client_secret = config.client_secret;
+            oauth.scope = "offline_access Files.ReadWrite.All";
+            break;
+        }
+        default:
+            return;
+    }
+
+    if (oauth.client_id.empty() || oauth.client_secret.empty()) {
+        SetStatus("Fill in the credentials (app key/secret or client id/secret) first.", true);
+        return;
+    }
+
+    if (config.token_file.empty()) {
+        config.token_file = SuggestedTokenFile(config.type);
+        token_file_value_ = config.token_file;
+    }
+
+    OAuthFlow flow;
+    std::string auth_url = flow.BuildAuthorizeUrl(oauth);
+
+    if (write_clipboard_) {
+        write_clipboard_(auth_url);
+    }
+
+    pending_oauth_config_ = oauth;
+    authorize_pending_ = true;
+    authorize_layer_index_ = 2;
+    redirect_url_value_.clear();
+    if (redirect_url_input_) {
+        redirect_url_input_->TakeFocus();
+    }
+
+    output_ = "Authorization URL copied to clipboard.\n"
+              "Steps:\n"
+              "1. In Dropbox app settings, add redirect URI:\n"
+              "  " + oauth.redirect_uri + "\n"
+              "2. Add scopes: account_info.read files.metadata.read\n"
+              "   files.content.read files.content.write\n"
+              "3. Generate access token on the Dropbox site\n"
+              "4. Open the URL below in your browser, authorize,\n"
+              "   and paste the redirect URL from the address bar.\n"
+              "URL: " + auth_url;
+    SetStatus("Paste the redirect URL from your browser and press Submit.");
+}
+
+void RemoteConnectionsModalContent::SubmitRedirectUrl() {
+    if (!authorize_pending_) {
+        return;
+    }
+
+    const std::string& input = redirect_url_value_;
+
+    // Check if the input looks like a raw access token (not a URL).
+    // Dropbox generated access tokens are short strings like "sl.xxxxx..."
+    // with no scheme or query parameters.  Authorization redirect URLs contain
+    // "://".
+    const bool looks_like_url = input.find("://") != std::string::npos;
+
+    authorize_pending_ = false;
+    authorize_layer_index_ = 0;
+
+    RemoteConnectionConfig config = FormConfig();
+    if (config.token_file.empty()) {
+        config.token_file = SuggestedTokenFile(config.type);
+        token_file_value_ = config.token_file;
+    }
+
+    std::string account = config.account_label.empty() ? config.name : config.account_label;
+    const std::string provider_name = RemoteTokenProviderName(config.type);
+
+    if (looks_like_url) {
+        // Normal OAuth redirect URL — extract the authorization code and exchange it.
+        OAuthFlow flow;
+        std::string code = flow.ExtractCodeFromRedirectUrl(input);
+        if (code.empty()) {
+            SetStatus("Could not extract authorization code from the URL. Paste the full redirect URL.", true);
+            return;
+        }
+
+        SetStatus("Exchanging authorization code for tokens...");
+
+        OAuthTokenExchangeResult exchange = flow.ExchangeCodeForToken(pending_oauth_config_, code);
+        if (!exchange.ok) {
+            output_ = exchange.error;
+            SetStatus("Token exchange failed: " + exchange.error, true);
+            return;
+        }
+
+        if (!flow.SaveToken(pending_oauth_config_, provider_name,
+                            account, exchange, config.token_file)) {
+            SetStatus("Failed to save token file.", true);
+            return;
+        }
+    } else {
+        // Treat the input as a raw access token (e.g. from the Dropbox app console).
+        if (input.empty()) {
+            SetStatus("Paste a redirect URL or a raw access token.", true);
+            return;
+        }
+
+        RemoteOAuthToken token;
+        token.provider = provider_name;
+        token.account_label = account;
+        token.access_token = input;
+        token.token_type = "Bearer";
+
+        RemoteOAuthTokenStore store(ExpandRemoteUserPath(config.token_file));
+        std::string error;
+        if (!store.Save(token, error)) {
+            output_ = error;
+            SetStatus("Failed to save token file.", true);
+            return;
+        }
+    }
+
+    output_ = DescribeRemoteOAuthTokenStatus(config);
+    SetStatus("Authorization complete for " + TypeDisplayName(config.type) + ".");
+}
+
 void RemoteConnectionsModalContent::OpenHelp() {
     help_active_ = true;
     help_layer_index_ = 1;
@@ -915,6 +1160,16 @@ bool RemoteConnectionsModalContent::HandleHelpEvent(ftxui::Event event) {
 bool RemoteConnectionsModalContent::HandleEvent(ftxui::Event event) {
     if (help_active_) {
         return HandleHelpEvent(std::move(event));
+    }
+
+    if (authorize_pending_) {
+        if (event == ftxui::Event::Escape) {
+            authorize_pending_ = false;
+            authorize_layer_index_ = 0;
+            SetStatus("Authorization cancelled.");
+            return true;
+        }
+        return authorize_container_ ? authorize_container_->OnEvent(event) : false;
     }
 
     if (event == ftxui::Event::ArrowDown || event == ftxui::Event::ArrowUp) {
@@ -1047,7 +1302,9 @@ ftxui::Element RemoteConnectionsModalContent::RenderHelpOverlay() {
     rows.push_back(text(" 3. Copy the App key and App secret.") | color(theme.modal_text_color));
     rows.push_back(text(" 4. Paste them into the fields above.") | color(theme.modal_text_color));
     rows.push_back(text(" 5. Press Token to generate the token file.") | color(theme.modal_text_color));
-    rows.push_back(text(" 6. Press Test to verify the connection.") | color(theme.modal_text_color));
+    rows.push_back(text(" 6. Press Authorize to paste a token or redirect URL.") | color(theme.modal_text_color));
+    rows.push_back(text("    You can paste a generated access token from the app console.") | color(theme.modal_text_color));
+    rows.push_back(text(" 7. Press Test to verify the connection.") | color(theme.modal_text_color));
     rows.push_back(text(""));
     rows.push_back(text(" Dropbox app console: dropbox.com/developers/apps") |
                    color(theme.modal_text_color));

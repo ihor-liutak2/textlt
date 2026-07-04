@@ -74,6 +74,28 @@ bool ContainsControlNewline(const std::string& value) {
     return value.find('\n') != std::string::npos || value.find('\r') != std::string::npos;
 }
 
+std::string StripCurlProgressBars(const std::string& text) {
+    std::string result;
+    std::istringstream stream(text);
+    std::string line;
+    while (std::getline(stream, line)) {
+        bool is_progress = true;
+        for (char ch : line) {
+            if (ch != '#' && ch != '=' && ch != ' ' && ch != '\r') {
+                is_progress = false;
+                break;
+            }
+        }
+        if (!is_progress || line.empty()) {
+            if (!result.empty()) {
+                result += '\n';
+            }
+            result += line;
+        }
+    }
+    return result;
+}
+
 bool ValidateCurlConfigValue(const std::string& label, const std::string& value, std::string& error) {
     if (ContainsControlNewline(value)) {
         error = label + " cannot contain newline characters.";
@@ -282,7 +304,7 @@ RemoteHttpResponse RemoteHttpClient::RunCurl(
 
     response.ok = command_result.exit_code == 0 && response.status_code >= 200 && response.status_code < 300;
     if (!response.ok) {
-        response.error = command_result.error;
+        response.error = StripCurlProgressBars(command_result.error);
         if (response.error.empty() && command_result.exit_code != 0) {
             response.error = "curl exited with code " + std::to_string(command_result.exit_code) + ".";
         }

@@ -56,6 +56,26 @@ std::string AuthorizationHeader(const std::string& token_type, const std::string
     return "Authorization: " + (token_type.empty() ? "Bearer" : token_type) + " " + access_token;
 }
 
+std::string DropboxScopeErrorHint(const std::string& body) {
+    const Json parsed = Json::parse(body, nullptr, false);
+    if (parsed.is_discarded() || !parsed.is_object()) {
+        return {};
+    }
+    const auto error_iter = parsed.find("error");
+    if (error_iter == parsed.end() || !error_iter->is_object()) {
+        return {};
+    }
+    const std::string tag = JsonString(*error_iter, ".tag");
+    if (tag != "missing_scope") {
+        return {};
+    }
+    const std::string required = JsonString(*error_iter, "required_scope");
+    if (required.empty()) {
+        return "Dropbox token is missing required permissions. Re-authorize with the required scopes in the Dropbox developer console.";
+    }
+    return "Dropbox token is missing scope: " + required + ". Add it in the Dropbox developer console and re-authorize.";
+}
+
 HttpResult PostJson(
     const std::string& url,
     const std::string& access_token,
@@ -203,7 +223,8 @@ bool RemoteDropboxProvider::TestConnection(std::string& output, std::string& err
         token_type_,
         Json(nullptr));
     if (!result.ok) {
-        error = BuildHttpError("Dropbox connection test failed.", result);
+        const std::string hint = DropboxScopeErrorHint(result.body);
+        error = hint.empty() ? BuildHttpError("Dropbox connection test failed.", result) : hint;
         return false;
     }
 
@@ -252,7 +273,8 @@ bool RemoteDropboxProvider::List(
             token_type_,
             request);
         if (!result.ok) {
-            error = BuildHttpError("Cannot list Dropbox directory.", result);
+            const std::string hint = DropboxScopeErrorHint(result.body);
+            error = hint.empty() ? BuildHttpError("Cannot list Dropbox directory.", result) : hint;
             return false;
         }
 
@@ -317,7 +339,8 @@ bool RemoteDropboxProvider::Download(
         api_arg,
         std::filesystem::path(local_path));
     if (!result.ok) {
-        error = BuildHttpError("Dropbox download failed.", result);
+        const std::string hint = DropboxScopeErrorHint(result.body);
+        error = hint.empty() ? BuildHttpError("Dropbox download failed.", result) : hint;
         return false;
     }
     error.clear();
@@ -352,7 +375,8 @@ bool RemoteDropboxProvider::Upload(
         api_arg,
         std::filesystem::path(local_path));
     if (!result.ok) {
-        error = BuildHttpError("Dropbox upload failed.", result);
+        const std::string hint = DropboxScopeErrorHint(result.body);
+        error = hint.empty() ? BuildHttpError("Dropbox upload failed.", result) : hint;
         return false;
     }
     error.clear();
@@ -453,7 +477,8 @@ bool RemoteDropboxProvider::Rename(
         token_type_,
         request);
     if (!result.ok) {
-        error = BuildHttpError("Dropbox rename failed.", result);
+        const std::string hint = DropboxScopeErrorHint(result.body);
+        error = hint.empty() ? BuildHttpError("Dropbox rename failed.", result) : hint;
         return false;
     }
     error.clear();
@@ -478,7 +503,8 @@ bool RemoteDropboxProvider::MakeDirectory(const std::string& path, std::string& 
         token_type_,
         request);
     if (!result.ok) {
-        error = BuildHttpError("Dropbox mkdir failed.", result);
+        const std::string hint = DropboxScopeErrorHint(result.body);
+        error = hint.empty() ? BuildHttpError("Dropbox mkdir failed.", result) : hint;
         return false;
     }
     error.clear();
@@ -527,7 +553,8 @@ bool RemoteDropboxProvider::DeletePath(const std::string& path, std::string& err
         token_type_,
         request);
     if (!result.ok) {
-        error = BuildHttpError("Dropbox delete failed.", result);
+        const std::string hint = DropboxScopeErrorHint(result.body);
+        error = hint.empty() ? BuildHttpError("Dropbox delete failed.", result) : hint;
         return false;
     }
     error.clear();

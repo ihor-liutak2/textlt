@@ -204,6 +204,7 @@ add_executable(textlt
   src/remote/remote_oauth_token_store.cpp
   src/remote/remote_http_client.cpp
   src/remote/remote_dropbox_provider.cpp
+  src/remote/remote_oauth_flow.cpp
   src/remote/remote_google_drive_provider.cpp
   src/remote/remote_microsoft_drive_provider.cpp
   src/remote/remote_command_runner.cpp
