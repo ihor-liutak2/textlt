@@ -656,7 +656,10 @@ size_t CloudTtsPipeline::FindChunkIndexForLine(const std::string& book_id, size_
         }
         const size_t start_line = JsonSize(chunk, "start_line", 0);
         const size_t end_line = JsonSize(chunk, "end_line", start_line);
-        if (line >= start_line && line <= end_line) {
+        const bool contains_line = (end_line > start_line)
+            ? (line >= start_line && line < end_line)
+            : (line >= start_line && line <= end_line);
+        if (contains_line) {
             return index;
         }
     }

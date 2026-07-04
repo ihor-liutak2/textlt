@@ -62,6 +62,8 @@ private:
     void CloseHelp();
     void CopyHelpUrl();
     bool HandleHelpEvent(ftxui::Event event);
+    std::vector<ftxui::Component> GetVisibleInputs();
+    int FindFocusedInputIndex(const std::vector<ftxui::Component>& inputs);
     void SelectConnection(int index);
     RemoteConnectionConfig FormConfig() const;
     void SetStatus(std::string status, bool is_error = false);
@@ -107,7 +109,6 @@ private:
     int client_id_cursor_ = 0;
     int client_secret_cursor_ = 0;
     int tenant_id_cursor_ = 0;
-    int token_file_cursor_ = 0;
     int root_folder_id_cursor_ = 0;
     int site_id_cursor_ = 0;
     int drive_id_cursor_ = 0;
@@ -131,7 +132,6 @@ private:
     ftxui::Component client_id_input_;
     ftxui::Component client_secret_input_;
     ftxui::Component tenant_id_input_;
-    ftxui::Component token_file_input_;
     ftxui::Component root_folder_id_input_;
     ftxui::Component site_id_input_;
     ftxui::Component drive_id_input_;

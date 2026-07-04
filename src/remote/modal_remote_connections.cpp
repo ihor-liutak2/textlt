@@ -173,10 +173,6 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     tenant_option.cursor_position = &tenant_id_cursor_;
     tenant_id_input_ = ftxui::Input(&tenant_id_value_, "common / organizations / tenant id", tenant_option);
 
-    ftxui::InputOption token_option = base_option;
-    token_option.cursor_position = &token_file_cursor_;
-    token_file_input_ = ftxui::Input(&token_file_value_, "token json path", token_option);
-
     ftxui::InputOption root_folder_option = base_option;
     root_folder_option.cursor_position = &root_folder_id_cursor_;
     root_folder_id_input_ = ftxui::Input(&root_folder_id_value_, "root folder id", root_folder_option);
@@ -245,7 +241,6 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     form_fields.push_back(client_id_input_);
     form_fields.push_back(client_secret_input_);
     form_fields.push_back(tenant_id_input_);
-    form_fields.push_back(token_file_input_);
     form_fields.push_back(root_folder_id_input_);
     form_fields.push_back(site_id_input_);
     form_fields.push_back(drive_id_input_);
@@ -494,7 +489,6 @@ ftxui::Element RemoteConnectionsModalContent::RenderForm() {
             rows.push_back(field("Account label", account_label_input_));
             rows.push_back(field("Client ID", client_id_input_));
             rows.push_back(field("Client secret", client_secret_input_));
-            rows.push_back(field("Token file", token_file_input_));
             rows.push_back(field("Root folder ID", root_folder_id_input_));
             rows.push_back(note("Press Token to create/verify the token JSON placeholder."));
             rows.push_back(note("Leave Root folder ID empty to use the Drive root. Google Drive file operations are active now."));
@@ -504,7 +498,6 @@ ftxui::Element RemoteConnectionsModalContent::RenderForm() {
             rows.push_back(field("Tenant ID", tenant_id_input_));
             rows.push_back(field("Client ID", client_id_input_));
             rows.push_back(field("Client secret", client_secret_input_));
-            rows.push_back(field("Token file", token_file_input_));
             rows.push_back(field("Site ID", site_id_input_));
             rows.push_back(field("Drive ID", drive_id_input_));
             rows.push_back(field("Remote root", remote_root_input_));
@@ -515,7 +508,6 @@ ftxui::Element RemoteConnectionsModalContent::RenderForm() {
             rows.push_back(field("Account label", account_label_input_));
             rows.push_back(field("App key", app_key_input_));
             rows.push_back(field("App secret", app_secret_input_));
-            rows.push_back(field("Token file", token_file_input_));
             rows.push_back(field("Remote root", remote_root_input_));
             rows.push_back(note("Press Token to create/verify the token JSON placeholder."));
             rows.push_back(note("Remote root can be / or /TextLT. Dropbox file operations are active now."));
@@ -666,7 +658,6 @@ void RemoteConnectionsModalContent::LoadSelectedIntoForm() {
     client_id_cursor_ = static_cast<int>(client_id_value_.size());
     client_secret_cursor_ = static_cast<int>(client_secret_value_.size());
     tenant_id_cursor_ = static_cast<int>(tenant_id_value_.size());
-    token_file_cursor_ = static_cast<int>(token_file_value_.size());
     root_folder_id_cursor_ = static_cast<int>(root_folder_id_value_.size());
     site_id_cursor_ = static_cast<int>(site_id_value_.size());
     drive_id_cursor_ = static_cast<int>(drive_id_value_.size());
@@ -860,7 +851,6 @@ void RemoteConnectionsModalContent::PrepareTokenFile() {
     if (config.token_file.empty()) {
         config.token_file = SuggestedTokenFile(config.type);
         token_file_value_ = config.token_file;
-        token_file_cursor_ = static_cast<int>(token_file_value_.size());
     }
 
     const std::filesystem::path token_path = ExpandRemoteUserPath(config.token_file);
@@ -926,7 +916,74 @@ bool RemoteConnectionsModalContent::HandleEvent(ftxui::Event event) {
     if (help_active_) {
         return HandleHelpEvent(std::move(event));
     }
+
+    if (event == ftxui::Event::ArrowDown || event == ftxui::Event::ArrowUp) {
+        auto inputs = GetVisibleInputs();
+        if (inputs.empty()) {
+            return false;
+        }
+        int focused = FindFocusedInputIndex(inputs);
+        if (event == ftxui::Event::ArrowDown) {
+            int next = (focused + 1) % static_cast<int>(inputs.size());
+            inputs[next]->TakeFocus();
+        } else {
+            int prev = (focused <= 0)
+                ? static_cast<int>(inputs.size()) - 1
+                : focused - 1;
+            inputs[prev]->TakeFocus();
+        }
+        return true;
+    }
+
     return false;
+}
+
+std::vector<ftxui::Component> RemoteConnectionsModalContent::GetVisibleInputs() {
+    std::vector<ftxui::Component> inputs;
+    inputs.push_back(name_input_);
+
+    switch (CurrentType()) {
+        case RemoteConnectionType::Sftp:
+            inputs.push_back(host_input_);
+            inputs.push_back(port_input_);
+            inputs.push_back(user_input_);
+            inputs.push_back(remote_root_input_);
+            inputs.push_back(identity_file_input_);
+            inputs.push_back(ssh_config_host_input_);
+            break;
+        case RemoteConnectionType::GoogleDrive:
+            inputs.push_back(account_label_input_);
+            inputs.push_back(client_id_input_);
+            inputs.push_back(client_secret_input_);
+            inputs.push_back(root_folder_id_input_);
+            break;
+        case RemoteConnectionType::MicrosoftDrive:
+            inputs.push_back(account_label_input_);
+            inputs.push_back(tenant_id_input_);
+            inputs.push_back(client_id_input_);
+            inputs.push_back(client_secret_input_);
+            inputs.push_back(site_id_input_);
+            inputs.push_back(drive_id_input_);
+            inputs.push_back(remote_root_input_);
+            break;
+        case RemoteConnectionType::Dropbox:
+            inputs.push_back(account_label_input_);
+            inputs.push_back(app_key_input_);
+            inputs.push_back(app_secret_input_);
+            inputs.push_back(remote_root_input_);
+            break;
+    }
+    return inputs;
+}
+
+int RemoteConnectionsModalContent::FindFocusedInputIndex(
+    const std::vector<ftxui::Component>& inputs) {
+    for (int i = 0; i < static_cast<int>(inputs.size()); ++i) {
+        if (inputs[i] && inputs[i]->Focused()) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 void RemoteConnectionsModalContent::SelectConnection(int index) {

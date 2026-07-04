@@ -7,6 +7,10 @@ bool EditorComponent::OnEvent(ftxui::Event event) {
         return true;
     }
 
+    if (event == ftxui::Event::Escape) {
+        return true;
+    }
+
     if (input_controller_.HandleEvent(*this, event)) {
         return true;
     }
