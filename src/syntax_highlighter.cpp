@@ -13,6 +13,7 @@ namespace textlt {
 namespace {
 
 enum class Language {
+    Assembly,
     Bash,
     Blade,
     CMake,
@@ -21,7 +22,9 @@ enum class Language {
     Css,
     Dart,
     Dockerfile,
+    Elixir,
     Env,
+    Erlang,
     Graphql,
     Hcl,
     Ini,
@@ -30,6 +33,7 @@ enum class Language {
     Javascript,
     Jsx,
     Json,
+    Julia,
     Jsonc,
     Kotlin,
     Less,
@@ -37,13 +41,17 @@ enum class Language {
     Go,
     Markdown,
     Makefile,
+    Matlab,
     Php,
+    Perl,
     Plain,
     Powershell,
     Python,
+    R,
     Ruby,
     Rust,
     Sass,
+    Scala,
     Scss,
     Sql,
     Swift,
@@ -55,6 +63,7 @@ enum class Language {
     Astro,
     Xml,
     Yaml,
+    Zig,
 };
 
 std::string BaseName(const std::string& path) {
@@ -90,6 +99,9 @@ Language LanguageFromPath(const std::string& path) {
     if (filename == ".bashrc" || filename == ".profile") {
         return Language::Bash;
     }
+    if (filename == ".Rprofile") {
+        return Language::R;
+    }
     if (filename.size() >= 10 &&
         filename.compare(filename.size() - 10, 10, ".blade.php") == 0) {
         return Language::Blade;
@@ -99,6 +111,9 @@ Language LanguageFromPath(const std::string& path) {
         (filename.size() >= 4 &&
          filename.compare(filename.size() - 4, 4, ".env") == 0)) {
         return Language::Env;
+    }
+    if (extension == ".asm") {
+        return Language::Assembly;
     }
     if (extension == ".conf" || extension == ".ini") {
         return Language::Ini;
@@ -123,6 +138,12 @@ Language LanguageFromPath(const std::string& path) {
     }
     if (extension == ".dart") {
         return Language::Dart;
+    }
+    if (extension == ".ex" || extension == ".exs") {
+        return Language::Elixir;
+    }
+    if (extension == ".erl" || extension == ".hrl") {
+        return Language::Erlang;
     }
     if (extension == ".gql" || extension == ".graphql") {
         return Language::Graphql;
@@ -159,20 +180,29 @@ Language LanguageFromPath(const std::string& path) {
     if (extension == ".jsonc") {
         return Language::Jsonc;
     }
+    if (extension == ".jl") {
+        return Language::Julia;
+    }
     if (extension == ".kt" || extension == ".kts") {
         return Language::Kotlin;
     }
     if (extension == ".lua") {
         return Language::Lua;
     }
-    if (extension == ".md" || extension == ".markdown") {
+    if (extension == ".md" || extension == ".markdown" || extension == ".Rmd") {
         return Language::Markdown;
     }
     if (extension == ".mk" || extension == ".mak") {
         return Language::Makefile;
     }
+    if (extension == ".m") {
+        return Language::Matlab;
+    }
     if (extension == ".php") {
         return Language::Php;
+    }
+    if (extension == ".pl" || extension == ".pm" || extension == ".perl") {
+        return Language::Perl;
     }
     if (extension == ".ps1" || extension == ".psm1" || extension == ".psd1") {
         return Language::Powershell;
@@ -180,11 +210,20 @@ Language LanguageFromPath(const std::string& path) {
     if (extension == ".py") {
         return Language::Python;
     }
+    if (extension == ".r" || extension == ".R") {
+        return Language::R;
+    }
     if (extension == ".rb") {
         return Language::Ruby;
     }
     if (extension == ".rs") {
         return Language::Rust;
+    }
+    if (extension == ".s" || extension == ".S") {
+        return Language::Assembly;
+    }
+    if (extension == ".scala" || extension == ".sbt") {
+        return Language::Scala;
     }
     if (extension == ".sql") {
         return Language::Sql;
@@ -215,6 +254,9 @@ Language LanguageFromPath(const std::string& path) {
     }
     if (extension == ".tf" || extension == ".tfvars") {
         return Language::Hcl;
+    }
+    if (extension == ".zig") {
+        return Language::Zig;
     }
     if (extension == ".c" || extension == ".cc" || extension == ".cpp" ||
         extension == ".cxx" || extension == ".h" || extension == ".hh" ||
@@ -256,6 +298,8 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
     const std::string& file_path,
     TokenizationContext* context) {
     switch (LanguageFromPath(file_path)) {
+        case Language::Assembly:
+            return lexers::TokenizeAssembly(line);
         case Language::Bash:
             return lexers::TokenizeBash(line);
         case Language::Blade:
@@ -272,8 +316,12 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             return lexers::TokenizeDart(line);
         case Language::Dockerfile:
             return lexers::TokenizeDockerfile(line);
+        case Language::Elixir:
+            return lexers::TokenizeElixir(line);
         case Language::Env:
             return lexers::TokenizeEnv(line);
+        case Language::Erlang:
+            return lexers::TokenizeErlang(line);
         case Language::Graphql:
             return lexers::TokenizeGraphql(line);
         case Language::Go:
@@ -292,6 +340,8 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             return lexers::TokenizeJson(line);
         case Language::Jsonc:
             return lexers::TokenizeJsonc(line);
+        case Language::Julia:
+            return lexers::TokenizeJulia(line);
         case Language::Kotlin:
             return lexers::TokenizeKotlin(line);
         case Language::Less:
@@ -304,18 +354,26 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             return lexers::TokenizeMarkdown(line);
         case Language::Makefile:
             return lexers::TokenizeMakefile(line);
+        case Language::Matlab:
+            return lexers::TokenizeMatlab(line);
         case Language::Php:
             return lexers::TokenizePhp(line, context);
+        case Language::Perl:
+            return lexers::TokenizePerl(line);
         case Language::Powershell:
             return lexers::TokenizePowershell(line);
         case Language::Python:
             return lexers::TokenizePython(line);
+        case Language::R:
+            return lexers::TokenizeR(line);
         case Language::Ruby:
             return lexers::TokenizeRuby(line);
         case Language::Rust:
             return lexers::TokenizeRust(line);
         case Language::Sass:
             return lexers::TokenizeSass(line);
+        case Language::Scala:
+            return lexers::TokenizeScala(line);
         case Language::Scss:
             return lexers::TokenizeScss(line);
         case Language::Sql:
@@ -338,6 +396,8 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             return lexers::TokenizeXml(line);
         case Language::Yaml:
             return lexers::TokenizeYaml(line);
+        case Language::Zig:
+            return lexers::TokenizeZig(line);
         case Language::Plain:
             return TokenizePlain(line);
     }

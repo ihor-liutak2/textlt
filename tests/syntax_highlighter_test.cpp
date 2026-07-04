@@ -124,5 +124,87 @@ int main() {
                               "CXXFLAGS",
                               Style::Type));
 
+
+    assert(ContainsStyledText("result <- function(x) x + 1",
+                              "sample.R",
+                              "function",
+                              Style::Keyword));
+    assert(ContainsStyledText("result <- data.frame(value = TRUE)",
+                              "sample.R",
+                              "TRUE",
+                              Style::Type));
+
+    assert(ContainsStyledText("function greet(name::String)",
+                              "sample.jl",
+                              "function",
+                              Style::Keyword));
+    assert(ContainsStyledText("function greet(name::String)",
+                              "sample.jl",
+                              "String",
+                              Style::Type));
+
+    assert(ContainsStyledText("const allocator = std.heap.page_allocator;",
+                              "sample.zig",
+                              "const",
+                              Style::Keyword));
+    assert(ContainsStyledText("fn main() void {",
+                              "sample.zig",
+                              "void",
+                              Style::Type));
+
+    assert(ContainsStyledText("my $name = 'TextLT';",
+                              "sample.pl",
+                              "my",
+                              Style::Keyword));
+    assert(ContainsStyledText("my $name = 'TextLT';",
+                              "sample.pl",
+                              "$name",
+                              Style::Type));
+
+    assert(ContainsStyledText("object Main extends App",
+                              "sample.scala",
+                              "object",
+                              Style::Keyword));
+    assert(ContainsStyledText("val name: String = \"TextLT\"",
+                              "sample.scala",
+                              "String",
+                              Style::Type));
+
+    assert(ContainsStyledText("defmodule TextLT.Demo do",
+                              "sample.ex",
+                              "defmodule",
+                              Style::Keyword));
+    assert(ContainsStyledText("{:ok, value}",
+                              "sample.ex",
+                              ":ok",
+                              Style::Type));
+
+    assert(ContainsStyledText("case Value of",
+                              "sample.erl",
+                              "case",
+                              Style::Keyword));
+    assert(ContainsStyledText("case Value of",
+                              "sample.erl",
+                              "Value",
+                              Style::Type));
+
+    assert(ContainsStyledText("mov eax, 1 ; exit",
+                              "sample.asm",
+                              "mov",
+                              Style::Keyword));
+    assert(ContainsStyledText("mov eax, 1 ; exit",
+                              "sample.asm",
+                              "eax",
+                              Style::Type));
+
+    assert(ContainsStyledText("function y = square(x)",
+                              "sample.m",
+                              "function",
+                              Style::Keyword));
+    assert(ContainsStyledText("plot(x, y) % draw chart",
+                              "sample.m",
+                              "% draw chart",
+                              Style::Comment));
+
     return 0;
 }
