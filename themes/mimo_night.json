@@ -1,0 +1,40 @@
+{
+  "name": "Mimo Night",
+
+  "background": "#0B0F12",
+  "foreground": "#E7E8EA",
+
+  "header": "#131A20",
+  "menu_background": "#090D10",
+  "menu_foreground": "#D8DEE4",
+  "status": "#10161B",
+
+  "editor_text": "#E7E8EA",
+
+  "syntax_keyword": "#FF7A1A",
+  "syntax_type": "#42D6C9",
+  "syntax_string": "#F6C453",
+  "syntax_number": "#C678DD",
+  "syntax_comment": "#687480",
+
+  "gutter": "#56616C",
+  "cursor": "#FF8A1C",
+
+  "selection_bg": "#573149",
+  "selection_fg": "#FFF4FA",
+
+  "match_bg": "#263B4A",
+  "active_match_bg": "#FF8A1C",
+
+  "modal_background": "#10161B",
+  "modal_foreground": "#E7E8EA",
+  "modal_border": "#FF8A1C",
+  "modal_accent": "#C25289",
+  "modal_text_color": "#D8DEE4",
+
+  "modal_input_bg": "#080C0F",
+  "modal_input_fg": "#F2F4F6",
+
+  "modal_selected_item_bg": "#C25289",
+  "modal_selected_item_fg": "#FFF4FA"
+}

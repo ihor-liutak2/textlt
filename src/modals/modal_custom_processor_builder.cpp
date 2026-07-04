@@ -49,6 +49,8 @@ CustomProcessorBuilderModalContent::CustomProcessorBuilderModalContent(
         return TextButtonElement(state.label, theme, state.focused || state.active);
     };
 
+    tab_buttons_ = ftxui::Menu(&tab_labels_, &selected_tab_, menu_option);
+
     group_row1_size_ = static_cast<int>(group_labels_.size() + 1) / 2;
     group_labels_row1_.assign(group_labels_.begin(),
                               group_labels_.begin() + group_row1_size_);
@@ -87,6 +89,14 @@ CustomProcessorBuilderModalContent::CustomProcessorBuilderModalContent(
     };
     json_input_ = ftxui::Input(&json_text_, "Paste AI JSON object here", json_option);
 
+    auto processor_option = ftxui::MenuOption::Vertical();
+    processor_option.entries_option.transform = [this](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return TextButtonElement(state.label, theme, state.focused || state.active);
+    };
+    processor_labels_ = {"No editable user processors"};
+    processor_menu_ = ftxui::Menu(&processor_labels_, &selected_processor_, processor_option);
+
     copy_prompt_button_ = MakeTextButton("Copy AI Prompt", [this] { CopyPrompt(); });
     paste_json_button_ = MakeTextButton("Paste JSON", [this] { PasteJson(); });
     validate_button_ = MakeTextButton("Validate", [this] { ValidateJson(); });
@@ -97,6 +107,14 @@ CustomProcessorBuilderModalContent::CustomProcessorBuilderModalContent(
             close_callback_();
         }
     });
+    manage_close_button_ = MakeTextButton("Close", [this] {
+        if (close_callback_) {
+            close_callback_();
+        }
+    });
+    edit_processor_button_ = MakeTextButton("Edit", [this] { EditSelectedProcessor(); });
+    delete_processor_button_ = MakeTextButton("Delete", [this] { DeleteSelectedProcessor(); });
+    reload_processors_button_ = MakeTextButton("Reload", [this] { ReloadManageList(); });
 
     button_container_ = ftxui::Container::Horizontal({
         copy_prompt_button_,
@@ -107,7 +125,14 @@ CustomProcessorBuilderModalContent::CustomProcessorBuilderModalContent(
         close_button_,
     });
 
-    container_ = ftxui::Container::Vertical({
+    manage_button_container_ = ftxui::Container::Horizontal({
+        edit_processor_button_,
+        delete_processor_button_,
+        reload_processors_button_,
+        manage_close_button_,
+    });
+
+    create_tab_container_ = ftxui::Container::Vertical({
         group_menu_row1_,
         group_menu_row2_,
         scope_menu_,
@@ -115,6 +140,21 @@ CustomProcessorBuilderModalContent::CustomProcessorBuilderModalContent(
         request_input_,
         json_input_,
         button_container_,
+    });
+
+    manage_tab_container_ = ftxui::Container::Vertical({
+        processor_menu_,
+        manage_button_container_,
+    });
+
+    tab_body_container_ = ftxui::Container::Tab({
+        create_tab_container_,
+        manage_tab_container_,
+    }, &selected_tab_);
+
+    container_ = ftxui::Container::Vertical({
+        tab_buttons_,
+        tab_body_container_,
     });
 }
 
@@ -132,11 +172,18 @@ ftxui::Component CustomProcessorBuilderModalContent::MakeTextButton(
 }
 
 void CustomProcessorBuilderModalContent::Open() {
+    selected_tab_ = 0;
     status_ = "Describe the processor, copy the AI prompt, paste the JSON result, then save.";
     status_is_error_ = false;
+    pending_delete_id_.clear();
     selected_group_row1_ = std::clamp(selected_group_, 0, group_row1_size_ - 1);
     selected_group_row2_ = std::clamp(selected_group_ - group_row1_size_, 0,
                                       std::max(0, static_cast<int>(group_labels_row2_.size()) - 1));
+    ReloadManageList();
+    selected_tab_ = 0;
+    if (!status_is_error_) {
+        status_ = "Describe the processor, copy the AI prompt, paste the JSON result, then save.";
+    }
     if (request_input_) {
         request_input_->TakeFocus();
     }
@@ -249,6 +296,7 @@ void CustomProcessorBuilderModalContent::SaveProcessor() {
         return;
     }
 
+    ReloadManageList();
     status_ = "Saved custom processor: " + result.name + " (" + result.id + ").";
     status_is_error_ = false;
 }
@@ -270,6 +318,119 @@ void CustomProcessorBuilderModalContent::ClearFields() {
     }
 }
 
+
+void CustomProcessorBuilderModalContent::ReloadManageList() {
+    std::string error;
+    const std::filesystem::path default_processors_directory = FindTextProcessorsDirectory();
+    if (!default_processors_directory.empty()) {
+        TextParserManager manager;
+        (void)manager.EnsureUserConfiguration(default_processors_directory, error);
+    }
+    if (error.empty()) {
+        editable_processors_ = ListEditableCustomProcessors(error);
+    } else {
+        editable_processors_.clear();
+    }
+    processor_labels_.clear();
+    if (!error.empty()) {
+        processor_labels_.push_back("Cannot load custom processors");
+        selected_processor_ = 0;
+        status_ = error;
+        status_is_error_ = true;
+        pending_delete_id_.clear();
+        return;
+    }
+
+    if (editable_processors_.empty()) {
+        processor_labels_.push_back("No editable user processors");
+        selected_processor_ = 0;
+    } else {
+        for (const CustomProcessorSummary& processor : editable_processors_) {
+            const std::string name = processor.name.empty() ? processor.id : processor.name;
+            processor_labels_.push_back(name + " (" + processor.id + ")");
+        }
+        selected_processor_ = std::clamp(
+            selected_processor_, 0, static_cast<int>(editable_processors_.size()) - 1);
+    }
+
+    pending_delete_id_.clear();
+    status_ = "Loaded editable custom processors.";
+    status_is_error_ = false;
+}
+
+bool CustomProcessorBuilderModalContent::HasSelectedProcessor() const {
+    return selected_processor_ >= 0 &&
+           selected_processor_ < static_cast<int>(editable_processors_.size());
+}
+
+const CustomProcessorSummary* CustomProcessorBuilderModalContent::SelectedProcessor() const {
+    if (!HasSelectedProcessor()) {
+        return nullptr;
+    }
+    return &editable_processors_[static_cast<size_t>(selected_processor_)];
+}
+
+void CustomProcessorBuilderModalContent::EditSelectedProcessor() {
+    const CustomProcessorSummary* selected = SelectedProcessor();
+    if (selected == nullptr) {
+        status_ = "Select an editable user processor first.";
+        status_is_error_ = true;
+        return;
+    }
+
+    const CustomProcessorLoadResult result = LoadCustomProcessorForEditing(selected->id);
+    if (!result.success) {
+        status_ = result.error.empty() ? "Cannot load processor for editing." : result.error;
+        status_is_error_ = true;
+        return;
+    }
+
+    request_text_ = "Editing existing processor: " + result.id;
+    request_cursor_ = static_cast<int>(request_text_.size());
+    json_text_ = result.json_text;
+    json_cursor_ = static_cast<int>(json_text_.size());
+    selected_tab_ = 0;
+    pending_delete_id_.clear();
+    status_ = "Loaded processor for editing: " + result.name + " (" + result.id + ").";
+    status_is_error_ = false;
+    if (json_input_) {
+        json_input_->TakeFocus();
+    }
+}
+
+void CustomProcessorBuilderModalContent::DeleteSelectedProcessor() {
+    const CustomProcessorSummary* selected = SelectedProcessor();
+    if (selected == nullptr) {
+        status_ = "Select an editable user processor first.";
+        status_is_error_ = true;
+        return;
+    }
+
+    if (pending_delete_id_ != selected->id) {
+        pending_delete_id_ = selected->id;
+        status_ = "Press Delete again to confirm deleting " + selected->id + ".";
+        status_is_error_ = true;
+        return;
+    }
+
+    const CustomProcessorDeleteResult result = DeleteCustomProcessor(selected->id);
+    pending_delete_id_.clear();
+    if (!result.success) {
+        status_ = result.error.empty() ? "Cannot delete custom processor." : result.error;
+        status_is_error_ = true;
+        ReloadManageList();
+        if (result.error.empty()) {
+            status_ = "Cannot delete custom processor.";
+            status_is_error_ = true;
+        }
+        return;
+    }
+
+    ReloadManageList();
+    status_ = "Deleted custom processor: " + result.name + " (" + result.id + ").";
+    status_is_error_ = false;
+}
+
 bool CustomProcessorBuilderModalContent::HandleEvent(ftxui::Event event) {
     if (event == ftxui::Event::Escape) {
         if (close_callback_) {
@@ -277,6 +438,25 @@ bool CustomProcessorBuilderModalContent::HandleEvent(ftxui::Event event) {
         }
         return true;
     }
+
+    if (selected_tab_ == 1) {
+        if (event == ftxui::Event::Return || event.input() == "\x0A") {
+            EditSelectedProcessor();
+            return true;
+        }
+        if (event == ftxui::Event::Delete) {
+            DeleteSelectedProcessor();
+            return true;
+        }
+        if (event.input() == "r" || event.input() == "R") {
+            ReloadManageList();
+            return true;
+        }
+        if (event == ftxui::Event::ArrowUp || event == ftxui::Event::ArrowDown) {
+            pending_delete_id_.clear();
+        }
+    }
+
     return false;
 }
 
@@ -287,6 +467,81 @@ ftxui::Element CustomProcessorBuilderModalContent::RenderTitle() {
         text(" Custom Processor Builder ") | bold | color(theme.modal_foreground),
         filler(),
         text("AI prompt → JSON → local Lua processor") | color(theme.modal_text_color),
+    });
+}
+
+
+ftxui::Element CustomProcessorBuilderModalContent::RenderTabs() const {
+    using namespace ftxui;
+    return tab_buttons_->Render();
+}
+
+ftxui::Element CustomProcessorBuilderModalContent::RenderCreateTab() const {
+    using namespace ftxui;
+    return vbox({
+        RenderMetadata(),
+        separator(),
+        RenderInputs(),
+        separator(),
+        RenderActions(),
+        separator(),
+        RenderHelp(),
+    });
+}
+
+ftxui::Element CustomProcessorBuilderModalContent::RenderManageTab() const {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    return vbox({
+        hbox({
+            vbox({
+                SectionTitle("Editable user Lua processors", theme),
+                processor_menu_->Render() |
+                    border |
+                    size(WIDTH, EQUAL, 48) |
+                    size(HEIGHT, EQUAL, 12),
+            }),
+            text(" "),
+            RenderProcessorDetails() |
+                border |
+                size(WIDTH, EQUAL, 58) |
+                size(HEIGHT, EQUAL, 12),
+        }),
+        separator(),
+        manage_button_container_->Render(),
+        separator(),
+        text("Enter/Edit loads selected processor into Create tab. Delete requires pressing Delete twice.") |
+            dim |
+            color(theme.modal_text_color),
+        text("Only user_ Lua processors are editable. Built-in and locked processors are hidden.") |
+            dim |
+            color(theme.modal_text_color),
+    });
+}
+
+ftxui::Element CustomProcessorBuilderModalContent::RenderProcessorDetails() const {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    const CustomProcessorSummary* selected = SelectedProcessor();
+    if (selected == nullptr) {
+        return vbox({
+            SectionTitle("Details", theme),
+            text("No editable processor selected.") | color(theme.modal_text_color),
+        });
+    }
+
+    return vbox({
+        SectionTitle("Details", theme),
+        text("id: " + selected->id) | color(theme.modal_text_color),
+        text("name: " + selected->name) | color(theme.modal_text_color),
+        text("group: " + selected->group) | color(theme.modal_text_color),
+        text("scope: " + selected->scope) | color(theme.modal_text_color),
+        text("output: " + selected->output) | color(theme.modal_text_color),
+        text("script: " + selected->script_path.generic_string()) |
+            color(theme.modal_text_color),
+        separator(),
+        paragraph(selected->description.empty() ? "No description." : selected->description) |
+            color(theme.modal_text_color),
     });
 }
 
@@ -368,13 +623,9 @@ ftxui::Element CustomProcessorBuilderModalContent::Render() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     return vbox({
-        RenderMetadata(),
+        RenderTabs(),
         separator(),
-        RenderInputs(),
-        separator(),
-        RenderActions(),
-        separator(),
-        RenderHelp(),
+        selected_tab_ == 1 ? RenderManageTab() : RenderCreateTab(),
         separator(),
         RenderStatus(),
     }) | color(theme.modal_text_color);

@@ -49,9 +49,18 @@ private:
     void ValidateJson();
     void SaveProcessor();
     void ClearFields();
+    void ReloadManageList();
+    void EditSelectedProcessor();
+    void DeleteSelectedProcessor();
+    bool HasSelectedProcessor() const;
+    const CustomProcessorSummary* SelectedProcessor() const;
     std::string SelectedGroup() const;
     std::string SelectedScope() const;
     std::string SelectedOutput() const;
+    ftxui::Element RenderTabs() const;
+    ftxui::Element RenderCreateTab() const;
+    ftxui::Element RenderManageTab() const;
+    ftxui::Element RenderProcessorDetails() const;
     ftxui::Element RenderMetadata() const;
     ftxui::Element RenderInputs() const;
     ftxui::Element RenderActions() const;
@@ -68,6 +77,8 @@ private:
     std::vector<std::string> group_labels_row2_;
     std::vector<std::string> scope_labels_;
     std::vector<std::string> output_labels_;
+    std::vector<std::string> tab_labels_ = {"Create", "Manage"};
+    int selected_tab_ = 0;
     int selected_group_ = 0;
     int selected_group_row1_ = 0;
     int selected_group_row2_ = 0;
@@ -81,9 +92,14 @@ private:
     int json_cursor_ = 0;
     std::string status_ = "Describe the processor, copy the AI prompt, paste the JSON result, then save.";
     bool status_is_error_ = false;
+    std::vector<CustomProcessorSummary> editable_processors_;
+    std::vector<std::string> processor_labels_;
+    int selected_processor_ = 0;
+    std::string pending_delete_id_;
     CustomProcessorPromptRequest last_copied_prompt_request_;
     bool has_last_copied_prompt_request_ = false;
 
+    ftxui::Component tab_buttons_;
     ftxui::Component group_menu_;
     ftxui::Component group_menu_row1_;
     ftxui::Component group_menu_row2_;
@@ -97,7 +113,16 @@ private:
     ftxui::Component save_button_;
     ftxui::Component clear_button_;
     ftxui::Component close_button_;
+    ftxui::Component manage_close_button_;
     ftxui::Component button_container_;
+    ftxui::Component processor_menu_;
+    ftxui::Component edit_processor_button_;
+    ftxui::Component delete_processor_button_;
+    ftxui::Component reload_processors_button_;
+    ftxui::Component manage_button_container_;
+    ftxui::Component create_tab_container_;
+    ftxui::Component manage_tab_container_;
+    ftxui::Component tab_body_container_;
     ftxui::Component container_;
 };
 

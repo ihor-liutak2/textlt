@@ -401,6 +401,101 @@ bool ReplaceOrAppendParser(Json& root, const Json& parser_json, const std::strin
     return true;
 }
 
+
+bool IsEditableUserProcessor(const Json& parser_json, std::string& id, std::string& error) {
+    error.clear();
+    id = JsonString(parser_json, "id");
+    if (id.rfind("user_", 0) != 0) {
+        return false;
+    }
+    if (!IsSafeId(id)) {
+        error = "Invalid processor id in config: " + id;
+        return false;
+    }
+    const std::string engine = ToLowerCopy(JsonString(parser_json, "engine", "lua"));
+    if (engine == "builtin" || JsonBool(parser_json, "locked", false)) {
+        return false;
+    }
+    return true;
+}
+
+fs::path ResolveUserScriptPath(const Json& parser_json) {
+    const fs::path script = fs::path(JsonString(parser_json, "script"));
+    if (script.empty()) {
+        return {};
+    }
+    if (script.is_absolute()) {
+        return script;
+    }
+    return TextParserManager::UserConfigDirectory() / script;
+}
+
+bool ReadUserProcessorRoot(Json& root, std::string& error) {
+    const fs::path config_path = TextParserManager::UserConfigFilePath();
+    const std::string config_text = ReadTextFile(config_path, error);
+    if (!error.empty()) {
+        return false;
+    }
+    try {
+        root = Json::parse(config_text);
+    } catch (const std::exception& ex) {
+        error = std::string("Cannot parse user text parser config: ") + ex.what();
+        return false;
+    }
+    if (!root.contains("parsers") || !root.at("parsers").is_array()) {
+        error = "Text parser config must contain parsers array.";
+        return false;
+    }
+    return true;
+}
+
+const Json* FindEditableProcessorJson(
+    const Json& root,
+    const std::string& processor_id,
+    std::string& error) {
+    if (!IsSafeId(processor_id)) {
+        error = "Invalid processor id: " + processor_id;
+        return nullptr;
+    }
+    for (const auto& parser_json : root.at("parsers")) {
+        if (!parser_json.is_object()) {
+            continue;
+        }
+        const std::string id = JsonString(parser_json, "id");
+        if (id != processor_id) {
+            continue;
+        }
+        std::string editable_id;
+        std::string editable_error;
+        if (!IsEditableUserProcessor(parser_json, editable_id, editable_error)) {
+            error = editable_error.empty()
+                ? "Processor is not editable: " + processor_id
+                : editable_error;
+            return nullptr;
+        }
+        return &parser_json;
+    }
+    error = "Processor not found: " + processor_id;
+    return nullptr;
+}
+
+Json BuildProcessorEditJson(const Json& parser_json, const std::string& lua) {
+    Json editable = Json::object();
+    editable["id"] = JsonString(parser_json, "id");
+    editable["name"] = JsonString(parser_json, "name");
+    editable["group"] = JsonString(parser_json, "group", "User");
+    editable["scope"] = NormalizeScopeValue(JsonString(parser_json, "scope", "text"));
+    editable["output"] = NormalizeOutputValue(JsonString(parser_json, "output", "replace_text"));
+    editable["description"] = JsonString(parser_json, "description", "");
+    editable["repeat_default"] = JsonInt(parser_json, "repeat_default", 1);
+    editable["params"] = parser_json.contains("params") && parser_json.at("params").is_array()
+        ? parser_json.at("params")
+        : Json::array();
+    editable["pinned"] = JsonBool(parser_json, "pinned", false);
+    editable["lua"] = lua;
+    return editable;
+}
+
 } // namespace
 
 std::vector<std::string> CustomProcessorGroupChoices() {
@@ -737,6 +832,143 @@ CustomProcessorInstallResult InstallCustomProcessorFromJson(
     result.name = name;
     result.config_path = config_path;
     result.script_path = script_path;
+    return result;
+}
+
+std::vector<CustomProcessorSummary> ListEditableCustomProcessors(std::string& error) {
+    error.clear();
+    std::vector<CustomProcessorSummary> processors;
+
+    Json root;
+    if (!ReadUserProcessorRoot(root, error)) {
+        return processors;
+    }
+
+    for (const auto& parser_json : root.at("parsers")) {
+        if (!parser_json.is_object()) {
+            continue;
+        }
+        std::string id;
+        std::string editable_error;
+        if (!IsEditableUserProcessor(parser_json, id, editable_error)) {
+            if (!editable_error.empty()) {
+                error = editable_error;
+                processors.clear();
+                return processors;
+            }
+            continue;
+        }
+
+        CustomProcessorSummary summary;
+        summary.id = id;
+        summary.name = JsonString(parser_json, "name", id);
+        summary.group = JsonString(parser_json, "group", "User");
+        summary.scope = NormalizeScopeValue(JsonString(parser_json, "scope", "text"));
+        summary.output = NormalizeOutputValue(JsonString(parser_json, "output", "replace_text"));
+        summary.description = JsonString(parser_json, "description", "");
+        summary.script_path = ResolveUserScriptPath(parser_json);
+        processors.push_back(std::move(summary));
+    }
+
+    std::sort(processors.begin(), processors.end(), [](const auto& left, const auto& right) {
+        return ToLowerCopy(left.name) < ToLowerCopy(right.name);
+    });
+    return processors;
+}
+
+CustomProcessorLoadResult LoadCustomProcessorForEditing(const std::string& processor_id) {
+    CustomProcessorLoadResult result;
+
+    Json root;
+    if (!ReadUserProcessorRoot(root, result.error)) {
+        return result;
+    }
+
+    const Json* parser_json = FindEditableProcessorJson(root, processor_id, result.error);
+    if (parser_json == nullptr) {
+        return result;
+    }
+
+    const fs::path script_path = ResolveUserScriptPath(*parser_json);
+    if (script_path.empty()) {
+        result.error = "Processor has no Lua script path: " + processor_id;
+        return result;
+    }
+
+    const std::string lua = ReadTextFile(script_path, result.error);
+    if (!result.error.empty()) {
+        return result;
+    }
+
+    const Json editable = BuildProcessorEditJson(*parser_json, lua);
+    result.success = true;
+    result.id = JsonString(*parser_json, "id");
+    result.name = JsonString(*parser_json, "name", result.id);
+    result.json_text = editable.dump(2) + "\n";
+    return result;
+}
+
+CustomProcessorDeleteResult DeleteCustomProcessor(const std::string& processor_id) {
+    CustomProcessorDeleteResult result;
+    result.id = processor_id;
+    result.config_path = TextParserManager::UserConfigFilePath();
+
+    Json root;
+    if (!ReadUserProcessorRoot(root, result.error)) {
+        return result;
+    }
+
+    bool found = false;
+    fs::path script_path;
+    auto& parsers = root["parsers"];
+    for (auto it = parsers.begin(); it != parsers.end(); ++it) {
+        if (!it->is_object()) {
+            continue;
+        }
+        const std::string id = JsonString(*it, "id");
+        if (id != processor_id) {
+            continue;
+        }
+
+        std::string editable_id;
+        std::string editable_error;
+        if (!IsEditableUserProcessor(*it, editable_id, editable_error)) {
+            result.error = editable_error.empty()
+                ? "Processor is not editable: " + processor_id
+                : editable_error;
+            return result;
+        }
+
+        found = true;
+        result.name = JsonString(*it, "name", id);
+        script_path = ResolveUserScriptPath(*it);
+        result.script_path = script_path;
+        parsers.erase(it);
+        break;
+    }
+
+    if (!found) {
+        result.error = "Processor not found: " + processor_id;
+        return result;
+    }
+
+    if (!WriteTextFile(result.config_path, root.dump(2) + "\n", result.error)) {
+        return result;
+    }
+
+    if (!script_path.empty()) {
+        std::error_code ec;
+        if (fs::exists(script_path, ec)) {
+            fs::remove(script_path, ec);
+            if (ec) {
+                result.error = "Processor entry was deleted, but Lua script could not be removed: " +
+                    script_path.string() + ": " + ec.message();
+                return result;
+            }
+        }
+    }
+
+    result.success = true;
     return result;
 }
 
