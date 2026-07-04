@@ -109,6 +109,10 @@ SearchFilesModalContent::SearchFilesModalContent(
     query_option.multiline = false;
     query_option.on_enter = [this] { ExecuteSearch(); };
     query_option.cursor_position = &query_cursor_position_;
+    query_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     query_input_ = ftxui::Input(&query_, "text to search", query_option);
     search_paste_button_ = MakeTextButton("Paste", [this] { PasteSearchQuery(); });
     search_clear_button_ = MakeTextButton("Clear", [this] { ClearSearchQuery(); });
@@ -116,6 +120,10 @@ SearchFilesModalContent::SearchFilesModalContent(
     ftxui::InputOption masks_option;
     masks_option.multiline = false;
     masks_option.on_enter = [this] { ExecuteSearch(); };
+    masks_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     masks_input_ = ftxui::Input(&masks_, "*.cpp *.hpp *.txt", masks_option);
 
     ftxui::MenuOption filter_option = ftxui::MenuOption::Vertical();
@@ -144,6 +152,10 @@ SearchFilesModalContent::SearchFilesModalContent(
     filter_name_option.on_enter = [this] {
         UpdateSelectedFilterFromInputs();
     };
+    filter_name_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     filter_name_input_component_ =
     ftxui::Input(&filter_name_input_, "filter name", filter_name_option);
 
@@ -151,6 +163,10 @@ SearchFilesModalContent::SearchFilesModalContent(
     filter_value_option.multiline = false;
     filter_value_option.on_enter = [this] {
         UpdateSelectedFilterFromInputs();
+    };
+    filter_value_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
     };
     filter_value_input_component_ =
     ftxui::Input(&filter_value_input_, "file masks", filter_value_option);
@@ -163,12 +179,20 @@ SearchFilesModalContent::SearchFilesModalContent(
     ftxui::InputOption context_before_option;
     context_before_option.multiline = false;
     context_before_option.on_enter = [this] { ExecuteSearch(); };
+    context_before_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     context_before_input_component_ =
         ftxui::Input(&context_before_input_, "before", context_before_option);
 
     ftxui::InputOption context_after_option;
     context_after_option.multiline = false;
     context_after_option.on_enter = [this] { ExecuteSearch(); };
+    context_after_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     context_after_input_component_ =
         ftxui::Input(&context_after_input_, "after", context_after_option);
 

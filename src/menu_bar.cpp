@@ -12,6 +12,21 @@
 
 namespace textlt {
 
+namespace {
+
+bool IsLightTheme(const Theme& theme) {
+    return theme.name.find("Light") != std::string::npos;
+}
+
+ftxui::Color MenuBorderColor(const Theme& theme) {
+    if (IsLightTheme(theme)) {
+        return ftxui::Color::RGB(70, 70, 70);
+    }
+    return theme.menu_foreground;
+}
+
+} // namespace
+
 MenuBarComponent::MenuBarComponent(
 
     ActionCallback on_action,
@@ -199,7 +214,7 @@ ftxui::Element MenuBarComponent::RenderDropdown() {
     
     Element dropdown =
         dropdown_menu_->Render() |
-        border |
+        borderStyled(ftxui::LIGHT, MenuBorderColor(theme)) |
         bgcolor(theme.menu_background) |
         color(theme.menu_foreground) |
         reflect(dropdown_boxes_[active_dropdown_]) |

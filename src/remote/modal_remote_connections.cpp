@@ -11,6 +11,7 @@
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/mouse.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "remote/remote_dialog_theme.hpp"
 #include "remote/remote_dropbox_provider.hpp"
 #include "remote/remote_google_drive_provider.hpp"
 #include "remote/remote_microsoft_drive_provider.hpp"
@@ -119,9 +120,7 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
       on_close_(std::move(on_close)) {
     auto input_transform = [this](ftxui::InputState state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return state.element |
-            ftxui::bgcolor(theme.modal_input_bg) |
-            ftxui::color(theme.modal_input_fg);
+        return RemoteDialogInputTransform(theme, std::move(state));
     };
 
     ftxui::InputOption base_option;

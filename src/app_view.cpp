@@ -16,6 +16,17 @@ namespace textlt {
 
 namespace {
 
+bool IsLightTheme(const Theme& theme) {
+    return theme.name.find("Light") != std::string::npos;
+}
+
+ftxui::Color MainWindowSeparatorColor(const Theme& theme) {
+    if (IsLightTheme(theme)) {
+        return ftxui::Color::RGB(70, 70, 70);
+    }
+    return theme.menu_foreground;
+}
+
 bool IsLineManipulationShortcut(const ftxui::Event& event) {
     const std::string& input = event.input();
     return input == "Alt+Up" ||
@@ -179,31 +190,32 @@ ftxui::Element TextltApp::Render() {
     Element workspace = editor_config_.show_file_explorer
         ? hbox({
               sidebar_panel_->Render() | size(WIDTH, EQUAL, 28),
-              separator(),
+              separator() | color(MainWindowSeparatorColor(current_theme_)),
               editor_workspace | xflex,
           })
         : hbox({
               editor_workspace | xflex,
           });
 
+    Element top_menu_separator = separator() | color(MainWindowSeparatorColor(current_theme_));
     Elements base_rows = {
         title_bar_component_ ? title_bar_component_->Render() : RenderTitleBar(),
-        separator(),
+        top_menu_separator,
         top_menu_element,
-        separator(),
+        separator() | color(MainWindowSeparatorColor(current_theme_)),
         workspace | yflex,
     };
 
     if (current_search_mode_ != SearchMode::None) {
-        base_rows.push_back(separator());
+        base_rows.push_back(separator() | color(MainWindowSeparatorColor(current_theme_)));
         base_rows.push_back(RenderFindPanel());
     }
     if (show_goto_line_bar_) {
-        base_rows.push_back(separator());
+        base_rows.push_back(separator() | color(MainWindowSeparatorColor(current_theme_)));
         base_rows.push_back(RenderGoToLinePanel());
     }
 
-    base_rows.push_back(separator());
+    base_rows.push_back(separator() | color(MainWindowSeparatorColor(current_theme_)));
     const int cursor_row_index = editor->GetCursorRow();
     const int cursor_row = cursor_row_index + 1;
     const int cursor_col = editor->GetCursorCol() + 1;
@@ -361,18 +373,18 @@ ftxui::Element TextltApp::RenderFindPanel() {
     return vbox({
         hbox({
             text(" " + mode + " ") | bold | color(current_theme_.menu_foreground),
-            separator(),
+            separator() | color(MainWindowSeparatorColor(current_theme_)),
             text(" " + FindMatchStatus() + " ") | color(current_theme_.menu_foreground),
             filler(),
             text(" Esc closes ") | dim | color(current_theme_.foreground),
         }),
         hbox({
             input_column | xflex,
-            separator(),
+            separator() | color(MainWindowSeparatorColor(current_theme_)),
             utility_column | size(WIDTH, GREATER_THAN, 9),
             text(" "),
             action_column | size(WIDTH, GREATER_THAN, 16),
-            separator(),
+            separator() | color(MainWindowSeparatorColor(current_theme_)),
             filter_column | size(WIDTH, GREATER_THAN, 18),
         }),
     }) |
@@ -387,7 +399,7 @@ ftxui::Element TextltApp::RenderGoToLinePanel() {
     return hbox({
         text(" Go to Line: ") | bold | color(current_theme_.menu_foreground),
         goto_line_input_component_->Render() | size(WIDTH, GREATER_THAN, 12) | xflex,
-        separator(),
+        separator() | color(MainWindowSeparatorColor(current_theme_)),
         text(" Enter jumps | Esc closes ") | dim | color(current_theme_.foreground),
     }) |
         border |

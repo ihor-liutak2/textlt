@@ -72,11 +72,19 @@ CustomProcessorBuilderModalContent::CustomProcessorBuilderModalContent(
     ftxui::InputOption request_option;
     request_option.multiline = true;
     request_option.cursor_position = &request_cursor_;
+    request_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     request_input_ = ftxui::Input(&request_text_, "Describe what this processor should do", request_option);
 
     ftxui::InputOption json_option;
     json_option.multiline = true;
     json_option.cursor_position = &json_cursor_;
+    json_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     json_input_ = ftxui::Input(&json_text_, "Paste AI JSON object here", json_option);
 
     copy_prompt_button_ = MakeTextButton("Copy AI Prompt", [this] { CopyPrompt(); });

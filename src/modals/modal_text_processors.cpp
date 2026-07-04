@@ -150,6 +150,10 @@ TextProcessorsModalContent::TextProcessorsModalContent(
         ftxui::InputOption option;
         option.multiline = false;
         option.cursor_position = &param_cursors_[index];
+        option.transform = [this](ftxui::InputState state) {
+            const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+            return theme.InputTransform(std::move(state));
+        };
         param_inputs_.push_back(ftxui::Input(&param_values_[index], "", option));
     }
 
@@ -157,6 +161,10 @@ TextProcessorsModalContent::TextProcessorsModalContent(
     repeat_option.multiline = false;
     repeat_option.cursor_position = &repeat_cursor_;
     repeat_option.on_enter = [this] { ApplySelected(); };
+    repeat_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     repeat_input_ = ftxui::Input(&repeat_count_, "1", repeat_option);
 
     ftxui::CheckboxOption checkbox_option = ftxui::CheckboxOption::Simple();

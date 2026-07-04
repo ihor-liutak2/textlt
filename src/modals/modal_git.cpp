@@ -114,6 +114,10 @@ GitModalContent::GitModalContent(
 
     ftxui::InputOption commit_message_option;
     commit_message_option.multiline = true;
+    commit_message_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     commit_message_input_ = ftxui::Input(&commit_message_, "commit message", commit_message_option);
     commit_button_ = MakeTextButton("Commit", [this] { CommitStagedFiles(); });
 
@@ -142,11 +146,19 @@ GitModalContent::GitModalContent(
 
     ftxui::InputOption rename_branch_option;
     rename_branch_option.multiline = false;
+    rename_branch_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     rename_branch_input_component_ =
         ftxui::Input(&rename_branch_input_, "new branch name", rename_branch_option);
 
     ftxui::InputOption remote_filter_option;
     remote_filter_option.multiline = false;
+    remote_filter_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     auto remote_filter_input =
         ftxui::Input(&remote_branch_filter_, "filter remote branches", remote_filter_option);
     remote_filter_input_component_ = ftxui::CatchEvent(
@@ -178,6 +190,10 @@ GitModalContent::GitModalContent(
 
     ftxui::InputOption tag_filter_option;
     tag_filter_option.multiline = false;
+    tag_filter_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     auto tag_filter_input = ftxui::Input(&tag_filter_, "filter tags", tag_filter_option);
     tag_filter_input_component_ = ftxui::CatchEvent(
         tag_filter_input,
@@ -205,10 +221,18 @@ GitModalContent::GitModalContent(
 
     ftxui::InputOption tag_name_option;
     tag_name_option.multiline = false;
+    tag_name_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     tag_name_input_component_ = ftxui::Input(&tag_name_input_, "tag name", tag_name_option);
 
     ftxui::InputOption tag_message_option;
     tag_message_option.multiline = false;
+    tag_message_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     tag_message_input_component_ = ftxui::Input(&tag_message_input_, "optional message", tag_message_option);
 
     create_tag_button_ = MakeTextButton("Create tag", [this] { CreateTag(); });
@@ -259,6 +283,10 @@ GitModalContent::GitModalContent(
 
     ftxui::InputOption confirm_input_option;
     confirm_input_option.multiline = false;
+    confirm_input_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     confirm_input_component_ = ftxui::Input(&confirm_typed_text_, "confirmation", confirm_input_option);
     confirm_confirm_button_ = MakeTextButton("Confirm", [this] { ConfirmPendingAction(); });
     confirm_cancel_button_ = MakeTextButton("Cancel", [this] { CancelPendingAction(); });

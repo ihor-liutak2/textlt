@@ -29,6 +29,17 @@ ftxui::Color SidebarTextColor(const Theme& theme) {
     return theme.foreground;
 }
 
+bool IsLightTheme(const Theme& theme) {
+    return theme.name.find("Light") != std::string::npos;
+}
+
+ftxui::Color SidebarBorderColor(const Theme& theme) {
+    if (IsLightTheme(theme)) {
+        return ftxui::Color::RGB(70, 70, 70);
+    }
+    return theme.gutter;
+}
+
 } // namespace
 
 SidebarPanel::SidebarPanel(
@@ -134,7 +145,7 @@ ftxui::Element SidebarPanel::Render() {
         separator(),
         vbox(std::move(rows)) | reflect(menu_box_) | frame | yflex,
     }) |
-        border |
+        borderStyled(ftxui::LIGHT, SidebarBorderColor(theme)) |
         reflect(panel_box_);
 }
 

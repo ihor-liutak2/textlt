@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "ftxui/component/component_options.hpp"
+#include "ftxui/dom/elements.hpp"
 #include "ftxui/screen/color.hpp"
 
 namespace textlt {
@@ -37,6 +39,23 @@ struct Theme {
     ftxui::Color modal_input_fg = ftxui::Color::White;
     ftxui::Color modal_selected_item_bg = ftxui::Color::Cyan;
     ftxui::Color modal_selected_item_fg = ftxui::Color::Black;
+
+    bool IsLight() const {
+        return name.find("Light") != std::string::npos;
+    }
+
+    ftxui::Color InputForeground() const {
+        if (IsLight()) {
+            return ftxui::Color::RGB(28, 28, 28);
+        }
+        return modal_input_fg;
+    }
+
+    ftxui::Element InputTransform(ftxui::InputState state) const {
+        state.element |= ftxui::bgcolor(modal_input_bg);
+        state.element |= ftxui::color(InputForeground());
+        return state.element;
+    }
 };
 
 std::vector<Theme> LoadThemesFromDirectory(const std::filesystem::path& directory);

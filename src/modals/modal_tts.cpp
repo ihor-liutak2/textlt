@@ -218,6 +218,10 @@ TtsModalContent::TtsModalContent(
 
     ftxui::InputOption input_option;
     input_option.multiline = false;
+    input_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     title_input_ = ftxui::Input(&metadata_title_, "title", input_option);
     author_input_ = ftxui::Input(&metadata_author_, "author", input_option);
     series_input_ = ftxui::Input(&metadata_series_, "series", input_option);

@@ -12,6 +12,7 @@
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/mouse.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "remote/remote_dialog_theme.hpp"
 
 namespace textlt {
 namespace {
@@ -108,9 +109,7 @@ RemoteFilesModalContent::RemoteFilesModalContent(
     operation_option.on_enter = [this] { ConfirmPendingOperation(); };
     operation_option.transform = [this](ftxui::InputState state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return state.element |
-            ftxui::bgcolor(theme.modal_input_bg) |
-            ftxui::color(theme.modal_input_fg);
+        return RemoteDialogInputTransform(theme, std::move(state));
     };
     operation_input_ = ftxui::Input(&pending_input_value_, "name", operation_option);
     confirm_button_ = MakeTextButton("Confirm", [this] { ConfirmPendingOperation(); });
@@ -186,9 +185,7 @@ ftxui::Component RemoteFilesModalContent::MakePathInput(PanelSide side) {
     };
     option.transform = [this](ftxui::InputState state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return state.element |
-            ftxui::bgcolor(theme.modal_input_bg) |
-            ftxui::color(theme.modal_input_fg);
+        return RemoteDialogInputTransform(theme, std::move(state));
     };
     return ftxui::Input(&panel.path_input, side == PanelSide::Local ? "local path" : "remote path", option);
 }

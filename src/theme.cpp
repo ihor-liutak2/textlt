@@ -213,6 +213,7 @@ namespace textlt {
                                                  gutter,
                                                  selection_bg,
                                                  selection_fg);
+                theme.modal_input_fg = ftxui::Color::RGB(28, 28, 28);
             }
             return theme;
         }

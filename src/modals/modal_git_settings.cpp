@@ -83,10 +83,18 @@ GitSettingsModalContent::GitSettingsModalContent(
 
     ftxui::InputOption remote_name_option;
     remote_name_option.multiline = false;
+    remote_name_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     remote_name_input_component_ = ftxui::Input(&remote_name_input_, "remote name", remote_name_option);
 
     ftxui::InputOption remote_url_option;
     remote_url_option.multiline = false;
+    remote_url_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     remote_url_input_component_ = ftxui::Input(&remote_url_input_, "remote url", remote_url_option);
 
     refresh_remotes_button_ = MakeTextButton("Refresh", [this] { RefreshRemotes(); });
@@ -98,6 +106,10 @@ GitSettingsModalContent::GitSettingsModalContent(
 
     ftxui::InputOption identity_option;
     identity_option.multiline = false;
+    identity_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     local_name_input_component_ = ftxui::Input(&local_name_input_, "local user.name", identity_option);
     local_email_input_component_ = ftxui::Input(&local_email_input_, "local user.email", identity_option);
     global_name_input_component_ = ftxui::Input(&global_name_input_, "global user.name", identity_option);
@@ -113,6 +125,10 @@ GitSettingsModalContent::GitSettingsModalContent(
 
     ftxui::InputOption config_filter_option;
     config_filter_option.multiline = false;
+    config_filter_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     auto config_filter_input = ftxui::Input(&config_filter_, "filter config", config_filter_option);
     config_filter_input_component_ = ftxui::CatchEvent(
         config_filter_input,
@@ -143,6 +159,10 @@ GitSettingsModalContent::GitSettingsModalContent(
 
     ftxui::InputOption confirm_input_option;
     confirm_input_option.multiline = false;
+    confirm_input_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return theme.InputTransform(std::move(state));
+    };
     confirm_input_component_ = ftxui::Input(&confirm_typed_text_, "confirmation", confirm_input_option);
     confirm_confirm_button_ = MakeTextButton("Confirm", [this] { ConfirmPendingAction(); });
     confirm_cancel_button_ = MakeTextButton("Cancel", [this] { CancelPendingAction(); });
