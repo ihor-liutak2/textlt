@@ -114,9 +114,11 @@ std::string ConnectionTargetSummary(const RemoteConnectionConfig& config) {
 RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     const Theme* theme,
     RemoteConfigStore* config_store,
+    WriteClipboardCallback write_clipboard,
     CloseCallback on_close)
     : theme_(theme),
       config_store_(config_store),
+      write_clipboard_(std::move(write_clipboard)),
       on_close_(std::move(on_close)) {
     auto input_transform = [this](ftxui::InputState state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
@@ -205,6 +207,7 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     microsoft_type_button_ = MakeTextButton("Microsoft", [this] { SelectType(RemoteConnectionType::MicrosoftDrive); });
     dropbox_type_button_ = MakeTextButton("Dropbox", [this] { SelectType(RemoteConnectionType::Dropbox); });
     reload_button_ = MakeTextButton("Reload", [this] { Reload(); });
+    help_button_ = MakeTextButton("Help Connect", [this] { OpenHelp(); });
     close_button_ = MakeTextButton("Close", [this] {
         if (on_close_) {
             on_close_();
@@ -215,45 +218,62 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
         ftxui::Renderer([this] { return RenderConnectionList(); }),
         [this](ftxui::Event event) { return HandleListEvent(std::move(event)); });
 
-    container_ = ftxui::Container::Vertical({
-        ftxui::Container::Horizontal({
-            add_button_,
-            delete_button_,
-            save_button_,
-            test_button_,
-            token_button_,
-            reload_button_,
-            close_button_,
-        }),
-        ftxui::Container::Horizontal({
-            sftp_type_button_,
-            google_type_button_,
-            microsoft_type_button_,
-            dropbox_type_button_,
-        }),
-        ftxui::Container::Horizontal({
-            list_component_,
-            ftxui::Container::Vertical({
-                name_input_,
-                host_input_,
-                port_input_,
-                user_input_,
-                remote_root_input_,
-                identity_file_input_,
-                ssh_config_host_input_,
-                account_label_input_,
-                client_id_input_,
-                client_secret_input_,
-                tenant_id_input_,
-                token_file_input_,
-                root_folder_id_input_,
-                site_id_input_,
-                drive_id_input_,
-                app_key_input_,
-                app_secret_input_,
-            }),
-        }),
-    });
+    ftxui::Components toolbar_buttons;
+    toolbar_buttons.push_back(add_button_);
+    toolbar_buttons.push_back(delete_button_);
+    toolbar_buttons.push_back(save_button_);
+    toolbar_buttons.push_back(test_button_);
+    toolbar_buttons.push_back(token_button_);
+    toolbar_buttons.push_back(reload_button_);
+    toolbar_buttons.push_back(close_button_);
+
+    ftxui::Components type_buttons;
+    type_buttons.push_back(sftp_type_button_);
+    type_buttons.push_back(google_type_button_);
+    type_buttons.push_back(microsoft_type_button_);
+    type_buttons.push_back(dropbox_type_button_);
+
+    ftxui::Components form_fields;
+    form_fields.push_back(name_input_);
+    form_fields.push_back(host_input_);
+    form_fields.push_back(port_input_);
+    form_fields.push_back(user_input_);
+    form_fields.push_back(remote_root_input_);
+    form_fields.push_back(identity_file_input_);
+    form_fields.push_back(ssh_config_host_input_);
+    form_fields.push_back(account_label_input_);
+    form_fields.push_back(client_id_input_);
+    form_fields.push_back(client_secret_input_);
+    form_fields.push_back(tenant_id_input_);
+    form_fields.push_back(token_file_input_);
+    form_fields.push_back(root_folder_id_input_);
+    form_fields.push_back(site_id_input_);
+    form_fields.push_back(drive_id_input_);
+    form_fields.push_back(app_key_input_);
+    form_fields.push_back(app_secret_input_);
+    form_fields.push_back(help_button_);
+
+    ftxui::Components form_area;
+    form_area.push_back(list_component_);
+    form_area.push_back(ftxui::Container::Vertical(form_fields));
+
+    ftxui::Components main_children;
+    main_children.push_back(ftxui::Container::Horizontal(toolbar_buttons));
+    main_children.push_back(ftxui::Container::Horizontal(type_buttons));
+    main_children.push_back(ftxui::Container::Horizontal(form_area));
+    auto main_container = ftxui::Container::Vertical(main_children);
+
+    help_close_button_ = MakeTextButton("Close", [this] { CloseHelp(); });
+    copy_url_button_ = MakeTextButton("Copy URL", [this] { CopyHelpUrl(); });
+    ftxui::Components help_children;
+    help_children.push_back(copy_url_button_);
+    help_children.push_back(help_close_button_);
+    help_container_ = ftxui::Container::Horizontal(help_children);
+    ftxui::Components tab_children;
+    tab_children.push_back(main_container);
+    tab_children.push_back(help_container_);
+    container_ = ftxui::Container::Tab(
+        tab_children, &help_layer_index_);
     Reload();
 }
 
@@ -278,8 +298,10 @@ ftxui::Component RemoteConnectionsModalContent::MakeTextButton(
 
 void RemoteConnectionsModalContent::Open() {
     Reload();
-    if (list_component_) {
-        list_component_->TakeFocus();
+    help_active_ = false;
+    help_layer_index_ = 0;
+    if (name_input_) {
+        name_input_->TakeFocus();
     }
 }
 
@@ -287,6 +309,8 @@ void RemoteConnectionsModalContent::Close() {
     output_.clear();
     status_ = "Ready.";
     status_is_error_ = false;
+    help_active_ = false;
+    help_layer_index_ = 0;
 }
 
 void RemoteConnectionsModalContent::Reload() {
@@ -329,7 +353,7 @@ ftxui::Element RemoteConnectionsModalContent::Render() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
-    return vbox({
+    Element body = vbox({
         hbox({
             add_button_->Render(), text(" "),
             delete_button_->Render(), text(" "),
@@ -355,6 +379,20 @@ ftxui::Element RemoteConnectionsModalContent::Render() {
         separator() | color(theme.modal_border),
         RenderOutput(),
     }) | bgcolor(theme.modal_background) | color(theme.modal_text_color);
+
+    if (!help_active_) {
+        return body;
+    }
+
+    ftxui::Element overlay = RenderHelpOverlay();
+    ftxui::Element centered = ftxui::vbox(
+        ftxui::filler(),
+        ftxui::hbox(filler(), overlay, filler()),
+        ftxui::filler());
+    ftxui::Elements layers;
+    layers.push_back(body);
+    layers.push_back(centered);
+    return dbox(std::move(layers));
 }
 
 ftxui::Element RemoteConnectionsModalContent::RenderConnectionList() {
@@ -481,6 +519,10 @@ ftxui::Element RemoteConnectionsModalContent::RenderForm() {
             rows.push_back(field("Remote root", remote_root_input_));
             rows.push_back(note("Press Token to create/verify the token JSON placeholder."));
             rows.push_back(note("Remote root can be / or /TextLT. Dropbox file operations are active now."));
+            rows.push_back(ftxui::hbox({
+                ftxui::filler(),
+                help_button_->Render(),
+            }));
             break;
     }
 
@@ -551,6 +593,8 @@ void RemoteConnectionsModalContent::SelectType(RemoteConnectionType type) {
     ApplyTypeDefaults(type);
     output_.clear();
     SetStatus("Editing " + TypeDisplayName(type) + " connection fields.");
+    help_active_ = false;
+    help_layer_index_ = 0;
 }
 
 void RemoteConnectionsModalContent::ApplyTypeDefaults(RemoteConnectionType type) {
@@ -848,6 +892,43 @@ void RemoteConnectionsModalContent::PrepareTokenFile() {
     SetStatus("Token file prepared for " + TypeDisplayName(config.type) + ".");
 }
 
+void RemoteConnectionsModalContent::OpenHelp() {
+    help_active_ = true;
+    help_layer_index_ = 1;
+    if (help_close_button_) {
+        help_close_button_->TakeFocus();
+    }
+}
+
+void RemoteConnectionsModalContent::CloseHelp() {
+    help_active_ = false;
+    help_layer_index_ = 0;
+}
+
+void RemoteConnectionsModalContent::CopyHelpUrl() {
+    if (write_clipboard_) {
+        write_clipboard_("https://www.dropbox.com/developers/apps");
+        SetStatus("Copied Dropbox developer apps URL to clipboard.");
+    } else {
+        SetStatus("Clipboard is not available.", true);
+    }
+}
+
+bool RemoteConnectionsModalContent::HandleHelpEvent(ftxui::Event event) {
+    if (event == ftxui::Event::Escape) {
+        CloseHelp();
+        return true;
+    }
+    return help_container_ ? help_container_->OnEvent(event) : true;
+}
+
+bool RemoteConnectionsModalContent::HandleEvent(ftxui::Event event) {
+    if (help_active_) {
+        return HandleHelpEvent(std::move(event));
+    }
+    return false;
+}
+
 void RemoteConnectionsModalContent::SelectConnection(int index) {
     if (connections_.empty()) {
         selected_connection_ = 0;
@@ -897,13 +978,46 @@ void RemoteConnectionsModalContent::SetStatus(std::string status, bool is_error)
     status_is_error_ = is_error;
 }
 
+ftxui::Element RemoteConnectionsModalContent::RenderHelpOverlay() {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    Elements rows;
+    rows.push_back(text(" Dropbox help ") | bold | color(theme.modal_accent));
+    rows.push_back(separator() | color(theme.modal_border));
+    rows.push_back(text(" To connect to Dropbox:") | color(theme.modal_text_color));
+    rows.push_back(text(" 1. Go to the Dropbox Developer Console.") | color(theme.modal_text_color));
+    rows.push_back(text(" 2. Create a new app with full access.") | color(theme.modal_text_color));
+    rows.push_back(text(" 3. Copy the App key and App secret.") | color(theme.modal_text_color));
+    rows.push_back(text(" 4. Paste them into the fields above.") | color(theme.modal_text_color));
+    rows.push_back(text(" 5. Press Token to generate the token file.") | color(theme.modal_text_color));
+    rows.push_back(text(" 6. Press Test to verify the connection.") | color(theme.modal_text_color));
+    rows.push_back(text(""));
+    rows.push_back(text(" Dropbox app console: dropbox.com/developers/apps") |
+                   color(theme.modal_text_color));
+    rows.push_back(text(""));
+    rows.push_back(hbox({
+        filler(),
+        copy_url_button_ ? copy_url_button_->Render() : text(""),
+        text(" "),
+        help_close_button_ ? help_close_button_->Render() : text(""),
+    }));
+    return vbox(std::move(rows)) |
+        size(WIDTH, LESS_THAN, 60) |
+        border |
+        bgcolor(theme.modal_background) |
+        color(theme.modal_border) |
+        clear_under;
+}
+
 RemoteConnectionsModal::RemoteConnectionsModal(
     const Theme* theme,
-    RemoteConfigStore* config_store)
+    RemoteConfigStore* config_store,
+    WriteClipboardCallback write_clipboard)
     : theme_(theme) {
     content_ = std::make_shared<RemoteConnectionsModalContent>(
         theme_,
         config_store,
+        std::move(write_clipboard),
         [this] { Close(); });
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
     modal_->SetBodyFrameScrolling(false);
@@ -917,7 +1031,9 @@ ftxui::Component RemoteConnectionsModal::View() const {
 void RemoteConnectionsModal::Open() {
     open_ = true;
     content_->Open();
-    modal_->TakeFocus();
+    if (content_) {
+        content_->GetMainComponent()->TakeFocus();
+    }
 }
 
 void RemoteConnectionsModal::Close() {
@@ -930,7 +1046,13 @@ bool RemoteConnectionsModal::IsOpen() const {
 }
 
 bool RemoteConnectionsModal::OnEvent(ftxui::Event event) {
-    return open_ && modal_ && modal_->OnEvent(std::move(event));
+    if (!open_) {
+        return false;
+    }
+    if (content_ && content_->HandleEvent(event)) {
+        return true;
+    }
+    return modal_ ? modal_->OnEvent(std::move(event)) : false;
 }
 
 } // namespace textlt

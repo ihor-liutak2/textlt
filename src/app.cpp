@@ -141,7 +141,10 @@ TextltApp::TextltApp()
           }),
       remote_connections_modal_(
           &current_theme_,
-          &remote_config_store_),
+          &remote_config_store_,
+          [this](const std::string& text) {
+              WriteSystemClipboard(text);
+          }),
       remote_files_modal_(
           &current_theme_,
           &remote_config_store_,

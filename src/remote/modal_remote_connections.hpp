@@ -20,10 +20,12 @@ namespace textlt {
 class RemoteConnectionsModalContent : public IModalContent {
 public:
     using CloseCallback = std::function<void()>;
+    using WriteClipboardCallback = std::function<void(const std::string&)>;
 
     RemoteConnectionsModalContent(
         const Theme* theme,
         RemoteConfigStore* config_store,
+        WriteClipboardCallback write_clipboard,
         CloseCallback on_close);
 
     ftxui::Element Render() override;
@@ -35,11 +37,13 @@ public:
     void Open();
     void Close();
     void Reload();
+    bool HandleEvent(ftxui::Event event);
 
 private:
     ftxui::Component MakeTextButton(std::string label, std::function<void()> on_click);
     ftxui::Element RenderConnectionList();
     ftxui::Element RenderForm();
+    ftxui::Element RenderHelpOverlay();
     ftxui::Element RenderTypeButtons();
     ftxui::Element RenderOutput();
     bool HandleListEvent(ftxui::Event event);
@@ -54,6 +58,10 @@ private:
     void DeleteSelected();
     void TestSelected();
     void PrepareTokenFile();
+    void OpenHelp();
+    void CloseHelp();
+    void CopyHelpUrl();
+    bool HandleHelpEvent(ftxui::Event event);
     void SelectConnection(int index);
     RemoteConnectionConfig FormConfig() const;
     void SetStatus(std::string status, bool is_error = false);
@@ -61,6 +69,7 @@ private:
 
     const Theme* theme_ = nullptr;
     RemoteConfigStore* config_store_ = nullptr;
+    WriteClipboardCallback write_clipboard_;
     CloseCallback on_close_;
 
     std::vector<RemoteConnectionConfig> connections_;
@@ -108,6 +117,7 @@ private:
     std::string status_ = "Ready.";
     bool status_is_error_ = false;
     std::string output_;
+    bool help_active_ = false;
 
     ftxui::Component list_component_;
     ftxui::Component name_input_;
@@ -138,12 +148,22 @@ private:
     ftxui::Component dropbox_type_button_;
     ftxui::Component reload_button_;
     ftxui::Component close_button_;
+    ftxui::Component help_button_;
+    ftxui::Component help_close_button_;
+    ftxui::Component copy_url_button_;
+    ftxui::Component help_container_;
+    int help_layer_index_ = 0;
     ftxui::Component container_;
 };
 
 class RemoteConnectionsModal {
 public:
-    RemoteConnectionsModal(const Theme* theme, RemoteConfigStore* config_store);
+    using WriteClipboardCallback = RemoteConnectionsModalContent::WriteClipboardCallback;
+
+    RemoteConnectionsModal(
+        const Theme* theme,
+        RemoteConfigStore* config_store,
+        WriteClipboardCallback write_clipboard);
 
     ftxui::Component View() const;
     void Open();
