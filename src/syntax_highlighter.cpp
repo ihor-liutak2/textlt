@@ -19,24 +19,30 @@ enum class Language {
     Cpp,
     Csharp,
     Css,
+    Dart,
     Dockerfile,
     Env,
     Graphql,
+    Hcl,
     Ini,
     Html,
     Java,
     Javascript,
     Jsx,
     Json,
+    Kotlin,
     Lua,
     Go,
     Markdown,
     Php,
     Plain,
+    Powershell,
     Python,
     Ruby,
     Rust,
     Sql,
+    Swift,
+    Toml,
     Typescript,
     Tsx,
     Xml,
@@ -94,6 +100,9 @@ Language LanguageFromPath(const std::string& path) {
     if (extension == ".css") {
         return Language::Css;
     }
+    if (extension == ".dart") {
+        return Language::Dart;
+    }
     if (extension == ".gql" || extension == ".graphql") {
         return Language::Graphql;
     }
@@ -123,6 +132,9 @@ Language LanguageFromPath(const std::string& path) {
     if (extension == ".json") {
         return Language::Json;
     }
+    if (extension == ".kt" || extension == ".kts") {
+        return Language::Kotlin;
+    }
     if (extension == ".lua") {
         return Language::Lua;
     }
@@ -131,6 +143,9 @@ Language LanguageFromPath(const std::string& path) {
     }
     if (extension == ".php") {
         return Language::Php;
+    }
+    if (extension == ".ps1" || extension == ".psm1" || extension == ".psd1") {
+        return Language::Powershell;
     }
     if (extension == ".py") {
         return Language::Python;
@@ -144,6 +159,12 @@ Language LanguageFromPath(const std::string& path) {
     if (extension == ".sql") {
         return Language::Sql;
     }
+    if (extension == ".swift") {
+        return Language::Swift;
+    }
+    if (extension == ".toml") {
+        return Language::Toml;
+    }
     if (extension == ".ts" || extension == ".mts") {
         return Language::Typescript;
     }
@@ -152,6 +173,9 @@ Language LanguageFromPath(const std::string& path) {
     }
     if (extension == ".yaml" || extension == ".yml") {
         return Language::Yaml;
+    }
+    if (extension == ".tf" || extension == ".tfvars") {
+        return Language::Hcl;
     }
     if (extension == ".c" || extension == ".cc" || extension == ".cpp" ||
         extension == ".cxx" || extension == ".h" || extension == ".hh" ||
@@ -205,6 +229,8 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             return lexers::TokenizeCsharp(line);
         case Language::Css:
             return lexers::TokenizeCss(line);
+        case Language::Dart:
+            return lexers::TokenizeDart(line);
         case Language::Dockerfile:
             return lexers::TokenizeDockerfile(line);
         case Language::Env:
@@ -213,6 +239,8 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             return lexers::TokenizeGraphql(line);
         case Language::Go:
             return lexers::TokenizeGo(line);
+        case Language::Hcl:
+            return lexers::TokenizeHcl(line);
         case Language::Html:
             return lexers::TokenizeHtml(line);
         case Language::Ini:
@@ -223,6 +251,8 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             return lexers::TokenizeJavascript(line);
         case Language::Json:
             return lexers::TokenizeJson(line);
+        case Language::Kotlin:
+            return lexers::TokenizeKotlin(line);
         case Language::Lua:
             return lexers::TokenizeLua(line);
         case Language::Jsx:
@@ -231,6 +261,8 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             return lexers::TokenizeMarkdown(line);
         case Language::Php:
             return lexers::TokenizePhp(line, context);
+        case Language::Powershell:
+            return lexers::TokenizePowershell(line);
         case Language::Python:
             return lexers::TokenizePython(line);
         case Language::Ruby:
@@ -239,6 +271,10 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             return lexers::TokenizeRust(line);
         case Language::Sql:
             return lexers::TokenizeSql(line);
+        case Language::Swift:
+            return lexers::TokenizeSwift(line);
+        case Language::Toml:
+            return lexers::TokenizeToml(line);
         case Language::Typescript:
             return lexers::TokenizeTypescript(line);
         case Language::Tsx:

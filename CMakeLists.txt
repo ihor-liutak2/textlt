@@ -292,6 +292,15 @@ add_executable(textlt_keyboard_shortcuts_test
   tests/keyboard_shortcuts_test.cpp
 )
 
+add_executable(textlt_syntax_highlighter_test
+  tests/syntax_highlighter_test.cpp
+  src/syntax_highlighter.cpp
+  src/lexers/c_family_lexer.cpp
+  src/lexers/config_script_lexer.cpp
+  src/lexers/database_lexer.cpp
+  src/lexers/web_lexer.cpp
+)
+
 add_executable(textlt_builtin_text_processors_test
   tests/builtin_text_processors_test.cpp
   src/builtin_text_processors.cpp
@@ -330,6 +339,10 @@ add_executable(textlt_remote_oauth_token_store_test
 )
 
 target_include_directories(textlt_keyboard_shortcuts_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_include_directories(textlt_syntax_highlighter_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
@@ -457,6 +470,7 @@ target_include_directories(textlt_tts_audio_player_test PRIVATE
 target_link_libraries(textlt_tts_audio_player_test PRIVATE Threads::Threads)
 
 target_link_libraries(textlt_keyboard_shortcuts_test PRIVATE ftxui::component)
+target_link_libraries(textlt_syntax_highlighter_test PRIVATE ftxui::dom)
 target_link_libraries(textlt_shortcut_registry_test PRIVATE ftxui::component)
 target_link_libraries(textlt_custom_processor_builder_test PRIVATE lua54)
 
@@ -479,6 +493,7 @@ target_link_libraries(textlt_document_navigation_test PRIVATE ftxui::screen)
 add_test(NAME textlt_document_navigation_test COMMAND textlt_document_navigation_test)
 add_test(NAME textlt_text_importer_test COMMAND textlt_text_importer_test)
 add_test(NAME textlt_keyboard_shortcuts_test COMMAND textlt_keyboard_shortcuts_test)
+add_test(NAME textlt_syntax_highlighter_test COMMAND textlt_syntax_highlighter_test)
 add_test(NAME textlt_builtin_text_processors_test COMMAND textlt_builtin_text_processors_test)
 add_test(NAME textlt_app_command_registry_test COMMAND textlt_app_command_registry_test)
 add_test(NAME textlt_shortcut_registry_test COMMAND textlt_shortcut_registry_test)

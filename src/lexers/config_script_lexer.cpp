@@ -190,6 +190,175 @@ const std::unordered_set<std::string>& RubyKeywords() {
     return keywords;
 }
 
+const std::unordered_set<std::string>& PowershellKeywords() {
+    static const std::unordered_set<std::string> keywords = {
+        "begin",
+        "catch",
+        "class",
+        "continue",
+        "data",
+        "do",
+        "else",
+        "elseif",
+        "end",
+        "enum",
+        "exit",
+        "filter",
+        "finally",
+        "for",
+        "foreach",
+        "from",
+        "function",
+        "if",
+        "in",
+        "param",
+        "process",
+        "return",
+        "switch",
+        "throw",
+        "trap",
+        "try",
+        "until",
+        "using",
+        "while",
+        "workflow",
+    };
+    return keywords;
+}
+
+const std::unordered_set<std::string>& PowershellTypes() {
+    static const std::unordered_set<std::string> types = {
+        "bool",
+        "byte",
+        "datetime",
+        "decimal",
+        "double",
+        "false",
+        "hashtable",
+        "int",
+        "long",
+        "null",
+        "object",
+        "pscustomobject",
+        "string",
+        "true",
+    };
+    return types;
+}
+
+const std::unordered_set<std::string>& HclKeywords() {
+    static const std::unordered_set<std::string> keywords = {
+        "check",
+        "data",
+        "for_each",
+        "import",
+        "locals",
+        "module",
+        "moved",
+        "output",
+        "provider",
+        "provisioner",
+        "removed",
+        "resource",
+        "terraform",
+        "variable",
+    };
+    return keywords;
+}
+
+const std::unordered_set<std::string>& HclConstants() {
+    static const std::unordered_set<std::string> constants = {
+        "false",
+        "null",
+        "true",
+    };
+    return constants;
+}
+
+const std::unordered_set<std::string>& TomlConstants() {
+    static const std::unordered_set<std::string> constants = {
+        "false",
+        "inf",
+        "nan",
+        "true",
+    };
+    return constants;
+}
+
+std::string ToLower(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
+        return static_cast<char>(std::tolower(character));
+    });
+    return value;
+}
+
+size_t ParsePowershellVariableEnd(const std::string& line, size_t index) {
+    if (index + 1 >= line.size()) {
+        return index + 1;
+    }
+
+    const char next = line[index + 1];
+    if (next == '{') {
+        const size_t close = line.find('}', index + 2);
+        return close == std::string::npos ? line.size() : close + 1;
+    }
+
+    size_t current = index + 1;
+    while (current < line.size()) {
+        const char character = line[current];
+        const unsigned char value = static_cast<unsigned char>(character);
+        if (!std::isalnum(value) && character != '_' && character != ':' && character != '?') {
+            break;
+        }
+        ++current;
+    }
+    return current == index + 1 ? index + 1 : current;
+}
+
+bool IsTomlBareKeyBody(char character) {
+    const unsigned char value = static_cast<unsigned char>(character);
+    return std::isalnum(value) || character == '_' || character == '-';
+}
+
+size_t FindTomlCommentStart(const std::string& line, size_t start) {
+    bool in_single = false;
+    bool in_double = false;
+    bool escaped = false;
+    for (size_t index = start; index < line.size(); ++index) {
+        const char character = line[index];
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (in_double) {
+            if (character == '\\') {
+                escaped = true;
+            } else if (character == '"') {
+                in_double = false;
+            }
+            continue;
+        }
+        if (in_single) {
+            if (character == '\'') {
+                in_single = false;
+            }
+            continue;
+        }
+        if (character == '"') {
+            in_double = true;
+            continue;
+        }
+        if (character == '\'') {
+            in_single = true;
+            continue;
+        }
+        if (character == '#') {
+            return index;
+        }
+    }
+    return std::string::npos;
+}
+
 const std::unordered_set<std::string>& LuaKeywords() {
     static const std::unordered_set<std::string> keywords = {
         "and",
@@ -978,6 +1147,259 @@ std::vector<SyntaxHighlighter::Token> TokenizePython(const std::string& line) {
             if (PythonKeywords().find(word) != PythonKeywords().end()) {
                 style = SyntaxHighlighter::Style::Keyword;
             } else if (PythonTypes().find(word) != PythonTypes().end()) {
+                style = SyntaxHighlighter::Style::Type;
+            }
+            PushToken(tokens, start, index, style);
+            continue;
+        }
+
+        PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+        ++index;
+    }
+
+    return tokens;
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizePowershell(const std::string& line) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    size_t index = 0;
+    while (index < line.size()) {
+        if (line[index] == '#') {
+            PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Comment);
+            break;
+        }
+
+        if (line[index] == '"' || line[index] == '\'') {
+            const size_t end = ParseQuotedStringEnd(line, index);
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+            index = end;
+            continue;
+        }
+
+        if (line[index] == '$') {
+            const size_t end = ParsePowershellVariableEnd(line, index);
+            if (end > index + 1) {
+                PushToken(tokens, index, end, SyntaxHighlighter::Style::Type);
+                index = end;
+                continue;
+            }
+        }
+
+        if (IsNumberStart(line, index)) {
+            const size_t start = index;
+            index = ParseNumberEnd(line, index);
+            PushToken(tokens, start, index, SyntaxHighlighter::Style::Number);
+            continue;
+        }
+
+        if (line[index] == '[') {
+            size_t end = index + 1;
+            while (end < line.size() && line[end] != ']') {
+                ++end;
+            }
+            if (end < line.size() && end > index + 1) {
+                PushToken(tokens, index, end + 1, SyntaxHighlighter::Style::Type);
+                index = end + 1;
+                continue;
+            }
+        }
+
+        if (IsIdentifierStart(line[index])) {
+            const size_t start = index;
+            while (index < line.size() &&
+                   (IsIdentifierBody(line[index]) || line[index] == '-')) {
+                ++index;
+            }
+            const std::string word = ToLower(line.substr(start, index - start));
+            SyntaxHighlighter::Style style = SyntaxHighlighter::Style::Normal;
+            if (PowershellKeywords().find(word) != PowershellKeywords().end()) {
+                style = SyntaxHighlighter::Style::Keyword;
+            } else if (PowershellTypes().find(word) != PowershellTypes().end()) {
+                style = SyntaxHighlighter::Style::Type;
+            }
+            PushToken(tokens, start, index, style);
+            continue;
+        }
+
+        PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+        ++index;
+    }
+
+    return tokens;
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizeToml(const std::string& line) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    size_t index = SkipWhitespace(line, 0);
+    if (index > 0) {
+        PushToken(tokens, 0, index, SyntaxHighlighter::Style::Normal);
+    }
+
+    if (index >= line.size()) {
+        return tokens;
+    }
+
+    const size_t comment = FindTomlCommentStart(line, index);
+    const size_t content_end = comment == std::string::npos ? line.size() : comment;
+
+    if (line[index] == '[') {
+        const size_t close = line.find(']', index + 1);
+        const size_t end = close == std::string::npos || close >= content_end ? content_end : close + 1;
+        PushToken(tokens, index, end, SyntaxHighlighter::Style::Keyword);
+        if (comment != std::string::npos) {
+            PushToken(tokens, comment, line.size(), SyntaxHighlighter::Style::Comment);
+        }
+        return tokens;
+    }
+
+    size_t equals = std::string::npos;
+    bool in_single = false;
+    bool in_double = false;
+    bool escaped = false;
+    for (size_t current = index; current < content_end; ++current) {
+        const char character = line[current];
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (in_double) {
+            if (character == '\\') {
+                escaped = true;
+            } else if (character == '"') {
+                in_double = false;
+            }
+            continue;
+        }
+        if (in_single) {
+            if (character == '\'') {
+                in_single = false;
+            }
+            continue;
+        }
+        if (character == '"') {
+            in_double = true;
+            continue;
+        }
+        if (character == '\'') {
+            in_single = true;
+            continue;
+        }
+        if (character == '=') {
+            equals = current;
+            break;
+        }
+    }
+
+    if (equals != std::string::npos) {
+        size_t key_end = equals;
+        while (key_end > index && std::isspace(static_cast<unsigned char>(line[key_end - 1]))) {
+            --key_end;
+        }
+        PushToken(tokens, index, key_end, SyntaxHighlighter::Style::Type);
+        PushToken(tokens, key_end, equals + 1, SyntaxHighlighter::Style::Normal);
+        index = equals + 1;
+    }
+
+    while (index < content_end) {
+        index = SkipWhitespace(line, index);
+        if (index >= content_end) {
+            break;
+        }
+
+        if (line[index] == '"' || line[index] == '\'') {
+            const size_t end = std::min(ParseQuotedStringEnd(line, index), content_end);
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+            index = end;
+            continue;
+        }
+
+        if (IsNumberStart(line, index)) {
+            const size_t start = index;
+            index = std::min(ParseNumberEnd(line, index), content_end);
+            PushToken(tokens, start, index, SyntaxHighlighter::Style::Number);
+            continue;
+        }
+
+        if (IsIdentifierStart(line[index])) {
+            const size_t start = index;
+            while (index < content_end && IsTomlBareKeyBody(line[index])) {
+                ++index;
+            }
+            const std::string word = ToLower(line.substr(start, index - start));
+            const SyntaxHighlighter::Style style =
+                TomlConstants().find(word) != TomlConstants().end()
+                    ? SyntaxHighlighter::Style::Keyword
+                    : SyntaxHighlighter::Style::Normal;
+            PushToken(tokens, start, index, style);
+            continue;
+        }
+
+        PushToken(tokens, index, index + 1, SyntaxHighlighter::Style::Normal);
+        ++index;
+    }
+
+    if (comment != std::string::npos) {
+        PushToken(tokens, comment, line.size(), SyntaxHighlighter::Style::Comment);
+    }
+
+    return tokens;
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizeHcl(const std::string& line) {
+    std::vector<SyntaxHighlighter::Token> tokens;
+    tokens.reserve(line.size() / 4 + 1);
+
+    size_t index = 0;
+    while (index < line.size()) {
+        if (line[index] == '#') {
+            PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Comment);
+            break;
+        }
+
+        if (StartsWith(line, index, "//")) {
+            PushToken(tokens, index, line.size(), SyntaxHighlighter::Style::Comment);
+            break;
+        }
+
+        if (StartsWith(line, index, "/*")) {
+            const size_t end = FindCommentEnd(line, index + 2, "*/");
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::Comment);
+            index = end;
+            continue;
+        }
+
+        if (line[index] == '"' || line[index] == '\'') {
+            const size_t end = ParseQuotedStringEnd(line, index);
+            PushToken(tokens, index, end, SyntaxHighlighter::Style::String);
+            index = end;
+            continue;
+        }
+
+        if (IsNumberStart(line, index)) {
+            const size_t start = index;
+            index = ParseNumberEnd(line, index);
+            PushToken(tokens, start, index, SyntaxHighlighter::Style::Number);
+            continue;
+        }
+
+        if (IsIdentifierStart(line[index])) {
+            const size_t start = index;
+            while (index < line.size() && IsIdentifierBody(line[index])) {
+                ++index;
+            }
+            const std::string word = line.substr(start, index - start);
+            const std::string lowered = ToLower(word);
+            SyntaxHighlighter::Style style = SyntaxHighlighter::Style::Normal;
+            size_t lookahead = SkipWhitespace(line, index);
+            if (HclKeywords().find(lowered) != HclKeywords().end()) {
+                style = SyntaxHighlighter::Style::Keyword;
+            } else if (HclConstants().find(lowered) != HclConstants().end()) {
+                style = SyntaxHighlighter::Style::Keyword;
+            } else if (lookahead < line.size() && line[lookahead] == '=') {
                 style = SyntaxHighlighter::Style::Type;
             }
             PushToken(tokens, start, index, style);

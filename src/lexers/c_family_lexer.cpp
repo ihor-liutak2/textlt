@@ -380,6 +380,175 @@ const std::unordered_set<std::string>& RustTypes() {
     return types;
 }
 
+const std::unordered_set<std::string>& KotlinKeywords() {
+    static const std::unordered_set<std::string> keywords = {
+        "as",
+        "break",
+        "class",
+        "companion",
+        "continue",
+        "data",
+        "do",
+        "else",
+        "for",
+        "fun",
+        "if",
+        "import",
+        "in",
+        "interface",
+        "is",
+        "object",
+        "package",
+        "return",
+        "sealed",
+        "super",
+        "this",
+        "throw",
+        "try",
+        "typealias",
+        "val",
+        "var",
+        "when",
+        "while",
+    };
+    return keywords;
+}
+
+const std::unordered_set<std::string>& KotlinTypes() {
+    static const std::unordered_set<std::string> types = {
+        "Any",
+        "Boolean",
+        "Double",
+        "Float",
+        "Int",
+        "Long",
+        "Nothing",
+        "String",
+        "Unit",
+        "false",
+        "null",
+        "true",
+    };
+    return types;
+}
+
+const std::unordered_set<std::string>& SwiftKeywords() {
+    static const std::unordered_set<std::string> keywords = {
+        "associatedtype",
+        "break",
+        "case",
+        "catch",
+        "class",
+        "continue",
+        "defer",
+        "do",
+        "else",
+        "enum",
+        "extension",
+        "fallthrough",
+        "for",
+        "func",
+        "guard",
+        "if",
+        "import",
+        "in",
+        "init",
+        "let",
+        "protocol",
+        "repeat",
+        "return",
+        "struct",
+        "switch",
+        "throw",
+        "throws",
+        "try",
+        "var",
+        "where",
+        "while",
+    };
+    return keywords;
+}
+
+const std::unordered_set<std::string>& SwiftTypes() {
+    static const std::unordered_set<std::string> types = {
+        "Any",
+        "AnyObject",
+        "Bool",
+        "Character",
+        "Double",
+        "Float",
+        "Int",
+        "Never",
+        "String",
+        "UInt",
+        "false",
+        "nil",
+        "self",
+        "Self",
+        "true",
+    };
+    return types;
+}
+
+const std::unordered_set<std::string>& DartKeywords() {
+    static const std::unordered_set<std::string> keywords = {
+        "abstract",
+        "async",
+        "await",
+        "break",
+        "case",
+        "class",
+        "const",
+        "continue",
+        "else",
+        "enum",
+        "export",
+        "extends",
+        "factory",
+        "final",
+        "for",
+        "if",
+        "implements",
+        "import",
+        "in",
+        "late",
+        "mixin",
+        "new",
+        "part",
+        "return",
+        "static",
+        "switch",
+        "this",
+        "throw",
+        "try",
+        "var",
+        "void",
+        "while",
+        "with",
+        "yield",
+    };
+    return keywords;
+}
+
+const std::unordered_set<std::string>& DartTypes() {
+    static const std::unordered_set<std::string> types = {
+        "bool",
+        "double",
+        "dynamic",
+        "false",
+        "int",
+        "List",
+        "Map",
+        "null",
+        "num",
+        "Object",
+        "Set",
+        "String",
+        "true",
+    };
+    return types;
+}
+
 std::vector<SyntaxHighlighter::Token> TokenizeCsharp(const std::string& line) {
     std::vector<SyntaxHighlighter::Token> tokens;
     tokens.reserve(line.size() / 4 + 1);
@@ -922,6 +1091,24 @@ std::vector<SyntaxHighlighter::Token> TokenizeCLikeLine(const std::string& line,
                 } else if (TypescriptTypes().find(word) != TypescriptTypes().end()) {
                     style = SyntaxHighlighter::Style::Type;
                 }
+            } else if (family == "kotlin") {
+                if (KotlinKeywords().find(word) != KotlinKeywords().end()) {
+                    style = SyntaxHighlighter::Style::Keyword;
+                } else if (KotlinTypes().find(word) != KotlinTypes().end()) {
+                    style = SyntaxHighlighter::Style::Type;
+                }
+            } else if (family == "swift") {
+                if (SwiftKeywords().find(word) != SwiftKeywords().end()) {
+                    style = SyntaxHighlighter::Style::Keyword;
+                } else if (SwiftTypes().find(word) != SwiftTypes().end()) {
+                    style = SyntaxHighlighter::Style::Type;
+                }
+            } else if (family == "dart") {
+                if (DartKeywords().find(word) != DartKeywords().end()) {
+                    style = SyntaxHighlighter::Style::Keyword;
+                } else if (DartTypes().find(word) != DartTypes().end()) {
+                    style = SyntaxHighlighter::Style::Type;
+                }
             } else if (family == "json" && JsonKeywords().find(word) != JsonKeywords().end()) {
                 style = SyntaxHighlighter::Style::Keyword;
             }
@@ -947,6 +1134,18 @@ std::vector<SyntaxHighlighter::Token> TokenizeJava(const std::string& line) {
 
 std::vector<SyntaxHighlighter::Token> TokenizeJavascript(const std::string& line) {
     return TokenizeJsLikeLine(line, false);
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizeKotlin(const std::string& line) {
+    return TokenizeCLikeLine(line, "kotlin");
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizeDart(const std::string& line) {
+    return TokenizeCLikeLine(line, "dart");
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizeSwift(const std::string& line) {
+    return TokenizeCLikeLine(line, "swift");
 }
 
 std::vector<SyntaxHighlighter::Token> TokenizeTypescript(const std::string& line) {
