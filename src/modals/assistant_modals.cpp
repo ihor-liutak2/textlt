@@ -199,20 +199,6 @@ bool ReplaceFileFromFile(const std::filesystem::path& source,
     return static_cast<bool>(output);
 }
 
-bool FetchJsonUrl(const char* url, Json* root) {
-    const CurlManager::Response response = CurlManager::Get(url);
-    if (!response.ok || response.body.empty()) {
-        return false;
-    }
-
-    Json parsed = Json::parse(response.body, nullptr, false);
-    if (parsed.is_discarded() || !parsed.is_object()) {
-        return false;
-    }
-    *root = std::move(parsed);
-    return true;
-}
-
 std::string CurrentRuntimePlatform() {
 #ifdef _WIN32
     return "windows";
@@ -229,7 +215,16 @@ std::string CurrentRuntimeArch() {
 #endif
 }
 
-std::string AiRuntimeAssetPattern() {
+std::string CurrentRuntimeKey() {
+    const std::string platform = CurrentRuntimePlatform();
+    const std::string arch = CurrentRuntimeArch();
+    if (platform.empty() || arch.empty()) {
+        return {};
+    }
+    return platform + "_" + arch;
+}
+
+std::string AiRuntimeDownloadUrl() {
     using namespace assistant_modal_detail;
 
     Json root;
@@ -238,9 +233,8 @@ std::string AiRuntimeAssetPattern() {
     }
 
     const std::string backend_id = JsonString(root, "default_backend", "llama_cpp");
-    const std::string platform = CurrentRuntimePlatform();
-    const std::string arch = CurrentRuntimeArch();
-    if (platform.empty() || arch.empty()) {
+    const std::string runtime_key = CurrentRuntimeKey();
+    if (runtime_key.empty()) {
         return {};
     }
 
@@ -256,39 +250,13 @@ std::string AiRuntimeAssetPattern() {
         if (runtime == backend.end() || !runtime->is_object()) {
             return {};
         }
-        const auto assets = runtime->find("runtime_assets");
-        if (assets == runtime->end() || !assets->is_array()) {
+        const auto urls = runtime->find("runtime_download_urls");
+        if (urls == runtime->end() || !urls->is_object()) {
             return {};
         }
-        for (const Json& asset : *assets) {
-            if (!asset.is_object() ||
-                JsonString(asset, "platform") != platform ||
-                JsonString(asset, "arch") != arch ||
-                JsonString(asset, "backend") != "cpu") {
-                continue;
-            }
-            return JsonString(asset, "asset_pattern");
-        }
+        return JsonString(*urls, runtime_key.c_str());
     }
     return {};
-}
-
-bool MatchesRuntimeAssetPattern(const std::string& name,
-                                const std::string& pattern) {
-    if (name.rfind("llama-", 0) != 0) {
-        return false;
-    }
-
-    const size_t wildcard = pattern.find('*');
-    if (wildcard == std::string::npos) {
-        return name == pattern;
-    }
-
-    const std::string prefix = pattern.substr(0, wildcard);
-    const std::string suffix = pattern.substr(wildcard + 1);
-    return name.rfind(prefix, 0) == 0 &&
-           name.size() >= suffix.size() &&
-           name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
 bool FindSelectedAiModel(int selected_model, Json* selected) {
@@ -677,6 +645,8 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
     tts_cancel_delete_button_ =
         make_button("Cancel", [this] { CancelTtsVoiceDelete(); });
     tts_test_button_ = make_button("Test", [this] { TestTtsVoice(); });
+    tts_test_popup_close_button_ =
+        make_button("Close", [this] { CloseTtsTestPopup(); });
     fetch_ai_button_ = make_button("Fetch registry", [this] { FetchRegistries(); });
     ai_runtime_download_button_ =
         make_button("Download AI runtime", [this] { StartAiRuntimeDownload(); });
@@ -727,10 +697,18 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
         }),
     }, &selected_tab_);
 
-    container_ = ftxui::Container::Vertical({
+    auto primary_controls = ftxui::Container::Vertical({
         tab_buttons_,
         tab_body_container_,
     });
+    auto popup_controls = ftxui::CatchEvent(tts_test_popup_close_button_, [this](ftxui::Event event) {
+        if (event == ftxui::Event::Escape) {
+            CloseTtsTestPopup();
+            return true;
+        }
+        return false;
+    });
+    container_ = ftxui::Container::Tab({primary_controls, popup_controls}, &popup_layer_index_);
 
     LoadRegistries();
 }
@@ -878,46 +856,18 @@ bool AssistantSettingsModalContent::ResolveAiRuntimeDownload() {
     ai_runtime_progress_visible_ = false;
     ai_runtime_extracting_ = false;
     ai_progress_ = 0.0f;
-    ai_status_ = "Fetching runtime release...";
+    ai_status_ = "Loading runtime registry...";
 
-    const std::string asset_pattern = AiRuntimeAssetPattern();
-    if (asset_pattern.empty()) {
+    const std::string url = AiRuntimeDownloadUrl();
+    if (url.empty()) {
         ai_status_ = "Runtime asset not found";
         return false;
     }
 
-    Json release;
-    if (!FetchJsonUrl(CurlManager::kLlamaCppLatestReleaseUrl, &release)) {
-        ai_status_ = "Runtime asset not found";
-        return false;
-    }
-
-    const auto assets = release.find("assets");
-    if (assets == release.end() || !assets->is_array()) {
-        ai_status_ = "Runtime asset not found";
-        return false;
-    }
-
-    for (const Json& asset : *assets) {
-        if (!asset.is_object()) {
-            continue;
-        }
-        const std::string name = JsonString(asset, "name");
-        if (!MatchesRuntimeAssetPattern(name, asset_pattern)) {
-            continue;
-        }
-        const std::string url = JsonString(asset, "browser_download_url");
-        if (url.empty()) {
-            continue;
-        }
-        ai_runtime_download_url_ = url;
-        ai_runtime_asset_name_ = name;
-        ai_status_ = "Runtime asset found: " + name;
-        return true;
-    }
-
-    ai_status_ = "Runtime asset not found";
-    return false;
+    ai_runtime_download_url_ = url;
+    ai_runtime_asset_name_ = std::filesystem::path(url).filename().string();
+    ai_status_ = "Runtime asset found: " + ai_runtime_asset_name_;
+    return true;
 }
 
 void AssistantSettingsModalContent::StartAiRuntimeDownload() {
@@ -1344,6 +1294,7 @@ void AssistantSettingsModal::Open() {
     open_ = true;
     content_->SetTheme(theme_);
     modal_->SetTheme(theme_);
+    content_->CloseTtsTestPopup();
     content_->GetMainComponent()->TakeFocus();
 }
 

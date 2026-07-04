@@ -44,10 +44,11 @@ void TtsModalContent::CloseSelectedBookInfo() {
     show_selected_book_info_ = false;
     info_popup_pending_ = false;
     info_layer_index_ = 0;
+    info_popup_mode_ = InfoPopupMode::BookInfo;
     if (library_book_menu_) {
         library_book_menu_->TakeFocus();
     }
-    status_ = "Book info closed";
+    status_ = "Popup closed";
 }
 
 void TtsModalContent::DeleteSelectedBook() {

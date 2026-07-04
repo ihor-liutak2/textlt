@@ -8,6 +8,7 @@
 
 #include "editor_utils.hpp"
 #include "syntax_highlighter.hpp"
+#include "ftxui/screen/string.hpp"
 
 namespace textlt {
 namespace {
@@ -86,6 +87,7 @@ ftxui::Element EditorComponent::RenderViewport() {
 
         ftxui::Elements line_parts{line_number};
         const bool is_cursor_line = (doc_ && line_index == doc_->cursor_row);
+        const bool has_selection = doc_ && doc_->HasSelection();
         const size_t cursor_x = is_cursor_line ? std::min(doc_->cursor_col, line_content.size()) : line_content.size();
         const size_t render_start = smart_word_wrap ? segment.start : scroll_x_;
         const size_t render_end = smart_word_wrap
@@ -141,7 +143,7 @@ ftxui::Element EditorComponent::RenderViewport() {
                 character = character | ftxui::bgcolor(theme.cursor) | ftxui::color(theme.background) | ftxui::bold | ftxui::underlined;
             }
 
-            if (is_cursor_line && x == cursor_x) {
+            if (!has_selection && is_cursor_line && x == cursor_x) {
                 character = ftxui::text(glyph) | ftxui::bgcolor(theme.selection_bg) |
                 ftxui::color(theme.selection_fg) | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 1);
             }
@@ -149,7 +151,12 @@ ftxui::Element EditorComponent::RenderViewport() {
             x = glyph_end;
         }
 
-        if (is_cursor_line && cursor_x == line_content.size() && cursor_x >= render_start && cursor_x <= render_end && segment.end == line_content.size()) {
+        if (!has_selection &&
+            is_cursor_line &&
+            cursor_x == line_content.size() &&
+            cursor_x >= render_start &&
+            cursor_x <= render_end &&
+            segment.end == line_content.size()) {
             line_parts.push_back(ftxui::text(" ") | ftxui::bgcolor(theme.selection_bg) | ftxui::color(theme.selection_fg) | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 1));
         }
 
@@ -225,7 +232,7 @@ size_t EditorComponent::VisibleTextWidth() const {
 
     const bool show_line_numbers = config_ && config_->show_line_numbers;
     const size_t line_number_columns =
-    show_line_numbers ? LineNumberText(0, LineNumberWidth()).size() : 0;
+    show_line_numbers ? ftxui::string_width(LineNumberText(0, LineNumberWidth())) : 0;
 
     if (line_number_columns + kScrollbarColumns >= total_width) {
         return 1;

@@ -121,6 +121,10 @@ private:
     int selected_piper_voice_ = 0;
     bool show_selected_book_info_ = false;
     bool info_popup_pending_ = false;
+    enum class InfoPopupMode { BookInfo, TestText };
+    InfoPopupMode info_popup_mode_ = InfoPopupMode::BookInfo;
+    std::string test_text_;
+    size_t test_chunk_index_ = 0;
     std::string status_ = "TTS library not loaded";
     std::thread audio_worker_;
     mutable std::mutex audio_worker_mutex_;

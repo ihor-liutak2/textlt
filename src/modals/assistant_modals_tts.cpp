@@ -355,7 +355,6 @@ bool UpdatePiperProgress(PiperDownloadContext* context,
 bool DownloadPiperFile(const std::string& url,
                        const std::filesystem::path& final_path,
                        const std::string& display_name,
-                       unsigned long long expected_size,
                        std::mutex& state_mutex,
                        std::atomic_bool& cancel,
                        std::string& current_file,
@@ -378,7 +377,6 @@ bool DownloadPiperFile(const std::string& url,
         std::lock_guard<std::mutex> lock(state_mutex);
         current_file = display_name;
         downloaded_bytes = 0;
-        total_bytes = expected_size;
         progress_ratio = 0.0f;
     }
     if (request_redraw) {
@@ -629,48 +627,29 @@ void AssistantSettingsModalContent::StartTtsVoiceDownload() {
         return;
     }
 
-    const std::string model_path = JsonString(voice, "model_path");
-    const std::string config_path = JsonString(voice, "config_path");
-    const unsigned long long model_size =
-        static_cast<unsigned long long>(JsonSize(voice, "model_size", 0));
-    const unsigned long long config_size =
-        static_cast<unsigned long long>(JsonSize(voice, "config_size", 0));
-    if (model_path.empty() || config_path.empty()) {
+    const std::string model_url = JsonString(voice, "model_url");
+    const std::string config_url = JsonString(voice, "config_url");
+    if (model_url.empty() || config_url.empty()) {
         std::lock_guard<std::mutex> lock(tts_download_mutex_);
         tts_status_ = "Voice registry entry is incomplete";
         tts_download_visible_ = false;
         return;
     }
 
-    Json root;
-    if (LoadUserRegistryJson(RegistryKind::Piper, &root) != RegistryLoadResult::Loaded) {
-        std::lock_guard<std::mutex> lock(tts_download_mutex_);
-        tts_status_ = "Registry not loaded";
-        tts_download_visible_ = false;
-        return;
-    }
-
-    const std::string base_url = JsonString(root, "base_url");
-    if (base_url.empty()) {
-        std::lock_guard<std::mutex> lock(tts_download_mutex_);
-        tts_status_ = "Registry has no base URL";
-        tts_download_visible_ = false;
-        return;
-    }
-
-    auto make_url = [base_url](const std::string& path) {
-        if (base_url.back() == '/' || (!path.empty() && path.front() == '/')) {
-            return base_url + path;
-        }
-        return base_url + "/" + path;
-    };
-
     const std::filesystem::path models_directory =
         UserDataDirectory() / "piper" / "models";
-    const std::filesystem::path model_final_path = models_directory / model_path;
-    const std::filesystem::path config_final_path = models_directory / config_path;
-    const std::string model_url = make_url(model_path);
-    const std::string config_url = make_url(config_path);
+    const std::filesystem::path model_local_path =
+        PiperManager::AssetPathFromUrl(model_url);
+    const std::filesystem::path config_local_path =
+        PiperManager::AssetPathFromUrl(config_url);
+    if (model_local_path.empty() || config_local_path.empty()) {
+        std::lock_guard<std::mutex> lock(tts_download_mutex_);
+        tts_status_ = "Voice registry entry has invalid URLs";
+        tts_download_visible_ = false;
+        return;
+    }
+    const std::filesystem::path model_final_path = models_directory / model_local_path;
+    const std::filesystem::path config_final_path = models_directory / config_local_path;
 
     {
         std::lock_guard<std::mutex> lock(tts_download_mutex_);
@@ -678,7 +657,7 @@ void AssistantSettingsModalContent::StartTtsVoiceDownload() {
         tts_downloading_ = true;
         tts_download_visible_ = true;
         tts_refresh_after_download_ = false;
-        tts_download_current_file_ = std::filesystem::path(model_path).filename().string();
+        tts_download_current_file_ = model_local_path.filename().string();
         tts_downloaded_bytes_ = 0;
         tts_total_bytes_ = 0;
         tts_progress_ratio_ = 0.0f;
@@ -691,16 +670,13 @@ void AssistantSettingsModalContent::StartTtsVoiceDownload() {
                                         config_url,
                                         model_final_path,
                                         config_final_path,
-                                        model_path,
-                                        config_path,
-                                        model_size,
-                                        config_size] {
+                                        model_local_path,
+                                        config_local_path] {
         std::string error_message;
         const bool model_ok = DownloadPiperFile(
             model_url,
             model_final_path,
-            std::filesystem::path(model_path).filename().string(),
-            model_size,
+            model_local_path.filename().string(),
             tts_download_mutex_,
             tts_cancel_download_,
             tts_download_current_file_,
@@ -714,8 +690,7 @@ void AssistantSettingsModalContent::StartTtsVoiceDownload() {
             config_ok = DownloadPiperFile(
                 config_url,
                 config_final_path,
-                std::filesystem::path(config_path).filename().string(),
-                config_size,
+                config_local_path.filename().string(),
                 tts_download_mutex_,
                 tts_cancel_download_,
                 tts_download_current_file_,
@@ -785,15 +760,19 @@ void AssistantSettingsModalContent::ConfirmTtsVoiceDelete() {
     const std::filesystem::path models_directory =
         UserDataDirectory() / "piper" / "models";
     for (const Json& voice : voices) {
-        const std::string model_path = JsonString(voice, "model_path");
-        const std::string config_path = JsonString(voice, "config_path");
+        const std::string model_url = JsonString(voice, "model_url");
+        const std::string config_url = JsonString(voice, "config_url");
         std::error_code error;
-        if (!model_path.empty()) {
-            std::filesystem::remove(models_directory / model_path, error);
+        if (!model_url.empty()) {
+            const std::filesystem::path model_path =
+                models_directory / PiperManager::AssetPathFromUrl(model_url);
+            std::filesystem::remove(model_path, error);
         }
         error.clear();
-        if (!config_path.empty()) {
-            std::filesystem::remove(models_directory / config_path, error);
+        if (!config_url.empty()) {
+            const std::filesystem::path config_path =
+                models_directory / PiperManager::AssetPathFromUrl(config_url);
+            std::filesystem::remove(config_path, error);
         }
     }
 
@@ -864,9 +843,12 @@ void AssistantSettingsModalContent::TestTtsVoice() {
         tts_download_visible_ = false;
         tts_status_ = "Generating Piper test audio...";
     }
+    const std::string test_text =
+        "Hello. This is a test of the local Piper voice in TextLT.";
+    ShowTtsTestPopup(test_text);
     RequestRedraw();
 
-    tts_runtime_thread_ = std::thread([this, voice] {
+    tts_runtime_thread_ = std::thread([this, voice, test_text] {
         const std::filesystem::path test_directory =
             PiperManager::ModelsDirectory().parent_path() / "test";
         assistant_modal_detail::EnsureDirectory(test_directory);
@@ -874,7 +856,7 @@ void AssistantSettingsModalContent::TestTtsVoice() {
         std::string error_message;
         const bool generated = PiperManager::RunToFile(
             voice,
-            "Привіт. Це тест локального голосу Piper у TextLT.",
+            test_text,
             wav_path,
             &error_message);
         bool played = false;
@@ -899,6 +881,23 @@ void AssistantSettingsModalContent::TestTtsVoice() {
     });
 }
 
+void AssistantSettingsModalContent::ShowTtsTestPopup(std::string text) {
+    tts_test_popup_text_ = std::move(text);
+    tts_test_popup_visible_ = true;
+    popup_layer_index_ = 1;
+    if (tts_test_popup_close_button_) {
+        tts_test_popup_close_button_->TakeFocus();
+    }
+    RequestRedraw();
+}
+
+void AssistantSettingsModalContent::CloseTtsTestPopup() {
+    tts_test_popup_visible_ = false;
+    popup_layer_index_ = 0;
+    tts_test_popup_text_.clear();
+    RequestRedraw();
+}
+
 void AssistantSettingsModalContent::ApplyTtsDownloadCompletion() {
     bool should_refresh = false;
     {
@@ -915,6 +914,29 @@ void AssistantSettingsModalContent::RequestRedraw() const {
     if (request_redraw_) {
         request_redraw_();
     }
+}
+
+ftxui::Element AssistantSettingsModalContent::RenderTtsTestPopup(const Theme& theme) const {
+    using namespace ftxui;
+
+    return vbox({
+        text(" Piper test text ") | bold | color(theme.modal_accent),
+        separator() | color(theme.modal_border),
+        paragraph(tts_test_popup_text_.empty()
+                      ? std::string("No test text available.")
+                      : tts_test_popup_text_) |
+            color(theme.modal_text_color) |
+            frame |
+            vscroll_indicator |
+            size(HEIGHT, LESS_THAN, 10),
+        separator() | color(theme.modal_border),
+        hbox({filler(), tts_test_popup_close_button_->Render()}),
+    }) |
+        border |
+        bgcolor(theme.modal_background) |
+        color(theme.modal_foreground) |
+        size(WIDTH, LESS_THAN, 72) |
+        clear_under;
 }
 
 ftxui::Element AssistantSettingsModalContent::RenderTtsTab(const Theme& theme) {
@@ -995,7 +1017,23 @@ ftxui::Element AssistantSettingsModalContent::RenderTtsTab(const Theme& theme) {
     }
     rows.push_back(text(" Voices") | bold | color(theme.modal_text_color));
     rows.push_back(tts_voice_menu_->Render() | border);
-    return vbox(std::move(rows)) | border;
+    Element body = vbox(std::move(rows)) | border;
+    if (!tts_test_popup_visible_) {
+        return body;
+    }
+
+    return dbox({
+        body,
+        vbox({
+            filler(),
+            hbox({
+                filler(),
+                RenderTtsTestPopup(theme),
+                filler(),
+            }),
+            filler(),
+        }),
+    });
 }
 
 } // namespace textlt

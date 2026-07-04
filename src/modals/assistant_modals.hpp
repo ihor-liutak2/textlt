@@ -72,6 +72,7 @@ public:
     std::string GetFooterText() const override;
 
     void SetTheme(const Theme* theme) { theme_ = theme; }
+    void CloseTtsTestPopup();
 
 private:
     void LoadRegistries();
@@ -94,10 +95,12 @@ private:
     void ConfirmTtsVoiceDelete();
     void CancelTtsVoiceDelete();
     void TestTtsVoice();
+    void ShowTtsTestPopup(std::string text);
     void ApplyTtsDownloadCompletion();
     void RequestRedraw() const;
     void SetTodoStatus(std::string action);
     ftxui::Element RenderTtsTab(const Theme& theme);
+    ftxui::Element RenderTtsTestPopup(const Theme& theme) const;
     ftxui::Element RenderAiTab(const Theme& theme);
 
     const Theme* theme_ = nullptr;
@@ -126,11 +129,14 @@ private:
     bool tts_download_visible_ = false;
     bool tts_refresh_after_download_ = false;
     bool tts_delete_confirm_visible_ = false;
+    bool tts_test_popup_visible_ = false;
+    std::string tts_test_popup_text_;
     std::vector<Json> tts_delete_pending_voices_;
     std::string tts_download_current_file_;
     unsigned long long tts_downloaded_bytes_ = 0;
     unsigned long long tts_total_bytes_ = 0;
     float tts_progress_ratio_ = 0.0f;
+    int popup_layer_index_ = 0;
     std::thread ai_runtime_thread_;
     mutable std::mutex ai_runtime_mutex_;
     bool ai_runtime_downloading_ = false;
@@ -162,6 +168,7 @@ private:
     ftxui::Component tts_confirm_delete_button_;
     ftxui::Component tts_cancel_delete_button_;
     ftxui::Component tts_test_button_;
+    ftxui::Component tts_test_popup_close_button_;
     ftxui::Component fetch_ai_button_;
     ftxui::Component ai_runtime_download_button_;
     ftxui::Component ai_runtime_delete_button_;

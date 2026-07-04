@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <fstream>
+#include <optional>
 #include <system_error>
 
 namespace textlt {
@@ -51,6 +52,55 @@ std::filesystem::path DownloadCacheDirectory() {
 #endif
 }
 
+std::string RuntimeDownloadUrlFromRegistry() {
+    const std::filesystem::path registry_path =
+        PiperManager::UserDataDirectory() / "registries" / "piper_voices_index.json";
+    std::error_code error;
+    if (!std::filesystem::exists(registry_path, error) || error) {
+        return {};
+    }
+
+    const Json registry = LoadJsonObject(registry_path);
+    if (!registry.is_object()) {
+        return {};
+    }
+
+    const Json urls = registry.contains("runtime_download_urls")
+        ? registry["runtime_download_urls"]
+        : Json::object();
+    if (!urls.is_object()) {
+        return {};
+    }
+
+#if defined(_WIN32)
+    return JsonString(urls, "windows_amd64");
+#elif defined(__x86_64__)
+    return JsonString(urls, "linux_x86_64");
+#else
+    return {};
+#endif
+}
+
+std::filesystem::path AssetPathFromUrlImpl(const std::string& url) {
+    const std::string::size_type scheme_end = url.find("://");
+    const std::string::size_type path_start = scheme_end == std::string::npos
+        ? url.find('/')
+        : url.find('/', scheme_end + 3);
+    if (path_start == std::string::npos || path_start + 1 >= url.size()) {
+        return {};
+    }
+
+    std::string relative = url.substr(path_start + 1);
+    const std::string::size_type query = relative.find_first_of("?#");
+    if (query != std::string::npos) {
+        relative.erase(query);
+    }
+    while (!relative.empty() && relative.front() == '/') {
+        relative.erase(relative.begin());
+    }
+    return relative.empty() ? std::filesystem::path{} : std::filesystem::path(relative);
+}
+
 } // namespace
 
 std::filesystem::path PiperManager::UserDataDirectory() {
@@ -94,13 +144,7 @@ std::filesystem::path PiperManager::RuntimeDownloadArchivePath() {
 }
 
 std::string PiperManager::RuntimeDownloadUrl() {
-#if defined(_WIN32) && (defined(_M_X64) || defined(__x86_64__))
-    return "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip";
-#elif !defined(_WIN32) && defined(__x86_64__)
-    return "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz";
-#else
-    return {};
-#endif
+    return RuntimeDownloadUrlFromRegistry();
 }
 
 std::filesystem::path PiperManager::RuntimeExecutablePath() {
@@ -136,17 +180,25 @@ bool PiperManager::RuntimeInstalled() {
     return !RuntimeExecutablePath().empty();
 }
 
+std::filesystem::path PiperManager::AssetPathFromUrl(const std::string& url) {
+    return AssetPathFromUrlImpl(url);
+}
+
 bool PiperManager::VoiceInstalled(const Json& voice) {
-    const std::string model_path = JsonString(voice, "model_path");
-    const std::string config_path = JsonString(voice, "config_path");
-    if (model_path.empty() || config_path.empty()) {
+    const std::string model_url = JsonString(voice, "model_url");
+    const std::string config_url = JsonString(voice, "config_url");
+    if (model_url.empty() || config_url.empty()) {
         return false;
     }
 
     const std::filesystem::path models_directory = ModelsDirectory();
     std::error_code error;
-    return std::filesystem::exists(models_directory / model_path, error) &&
-           std::filesystem::exists(models_directory / config_path, error);
+    const std::filesystem::path model_path = models_directory / AssetPathFromUrl(model_url);
+    const std::filesystem::path config_path = models_directory / AssetPathFromUrl(config_url);
+    return !model_path.empty() &&
+           !config_path.empty() &&
+           std::filesystem::exists(model_path, error) &&
+           std::filesystem::exists(config_path, error);
 }
 
 bool PiperManager::FindVoiceById(const std::string& voice_id, Json* voice) {
@@ -192,12 +244,13 @@ bool PiperManager::RunToFile(const Json& voice,
         return false;
     }
 
-    const std::string model_path = JsonString(voice, "model_path");
-    const std::string config_path = JsonString(voice, "config_path");
-    const std::filesystem::path model = ModelsDirectory() / model_path;
-    const std::filesystem::path config = ModelsDirectory() / config_path;
+    const std::string model_url = JsonString(voice, "model_url");
+    const std::string config_url = JsonString(voice, "config_url");
+    const std::filesystem::path model = ModelsDirectory() / AssetPathFromUrl(model_url);
+    const std::filesystem::path config = ModelsDirectory() / AssetPathFromUrl(config_url);
     std::error_code exists_error;
-    if (!std::filesystem::exists(model, exists_error) ||
+    if (model.empty() || config.empty() ||
+        !std::filesystem::exists(model, exists_error) ||
         !std::filesystem::exists(config, exists_error)) {
         if (error) {
             *error = "Selected Piper voice files are missing";
@@ -206,6 +259,8 @@ bool PiperManager::RunToFile(const Json& voice,
     }
 
     EnsureDirectory(output_wav.parent_path());
+    std::filesystem::path log_path = output_wav;
+    log_path.replace_extension(".log");
     const std::filesystem::path input_path = output_wav.string() + ".txt";
     {
         std::ofstream input(input_path, std::ios::binary | std::ios::trunc);
@@ -224,14 +279,18 @@ bool PiperManager::RunToFile(const Json& voice,
         " | " + QuoteShellPath(executable) +
         " --model " + QuoteShellPath(model) +
         " --config " + QuoteShellPath(config) +
-        " --output_file " + QuoteShellPath(output_wav);
+        " --output_file " + QuoteShellPath(output_wav) +
+        " > " + QuoteShellPath(log_path) +
+        " 2>&1";
 #else
     const std::string command =
         QuoteShellPath(executable) +
         " --model " + QuoteShellPath(model) +
         " --config " + QuoteShellPath(config) +
         " --output_file " + QuoteShellPath(output_wav) +
-        " < " + QuoteShellPath(input_path);
+        " < " + QuoteShellPath(input_path) +
+        " > " + QuoteShellPath(log_path) +
+        " 2>&1";
 #endif
     const int result = std::system(command.c_str());
     std::error_code remove_error;

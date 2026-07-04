@@ -14,8 +14,6 @@ public:
         "https://ihor-liutak2.github.io/textlt/registries/piper_voices_index.json";
     static constexpr const char* kAiRegistryUrl =
         "https://ihor-liutak2.github.io/textlt/registries/ollama_models_index.json";
-    static constexpr const char* kLlamaCppLatestReleaseUrl =
-        "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest";
 
     struct Response {
         bool ok = false;

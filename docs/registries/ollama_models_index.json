@@ -9,6 +9,10 @@
       "type": "portable",
       "runtime": {
         "download_page": "https://github.com/ggml-org/llama.cpp/releases",
+        "runtime_download_urls": {
+          "windows_amd64": "https://github.com/ggml-org/llama.cpp/releases/download/b9860/llama-b9860-bin-win-cpu-x64.zip",
+          "linux_x86_64": "https://github.com/ggml-org/llama.cpp/releases/download/b9860/llama-b9860-bin-ubuntu-x64.tar.gz"
+        },
         "binary_name": "llama-cli",
         "server_binary_name": "llama-server",
         "runtime_assets": [

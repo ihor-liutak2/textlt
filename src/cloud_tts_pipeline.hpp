@@ -150,6 +150,7 @@ public:
         std::string* error) const;
     uintmax_t BookAudioCacheSize(const std::string& book_id) const;
     size_t FindChunkIndexForLine(const std::string& book_id, size_t line) const;
+    std::string GetChunkText(const std::string& book_id, size_t chunk_index) const;
 
 private:
     static std::vector<PreparedChunk> BuildPreparedChunks(

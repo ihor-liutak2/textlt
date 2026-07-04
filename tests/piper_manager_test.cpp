@@ -29,6 +29,12 @@ void TestRuntimePathsAreConsistent() {
     }
 }
 
+void TestAssetPathFromUrl() {
+    const std::filesystem::path path = textlt::PiperManager::AssetPathFromUrl(
+        "https://example.com/assets/a/b/file.onnx");
+    assert(path == std::filesystem::path("assets/a/b/file.onnx"));
+}
+
 void TestRuntimeUrlAndArchiveNameMatchPlatform() {
     const std::filesystem::path archive = textlt::PiperManager::RuntimeDownloadArchivePath();
     if (!archive.empty()) {
@@ -51,6 +57,7 @@ void TestRuntimeUrlAndArchiveNameMatchPlatform() {
 int main() {
     TestShellQuoting();
     TestRuntimePathsAreConsistent();
+    TestAssetPathFromUrl();
     TestRuntimeUrlAndArchiveNameMatchPlatform();
     return 0;
 }

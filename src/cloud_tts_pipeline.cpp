@@ -663,6 +663,22 @@ size_t CloudTtsPipeline::FindChunkIndexForLine(const std::string& book_id, size_
     return 0;
 }
 
+std::string CloudTtsPipeline::GetChunkText(const std::string& book_id, size_t chunk_index) const {
+    const std::filesystem::path chunks_path = BookDirectory(book_id) / "chunks.json";
+    if (!std::filesystem::exists(chunks_path)) {
+        return "";
+    }
+    const Json chunks_json = LoadJsonValue(chunks_path);
+    if (!chunks_json.is_array() || chunk_index >= chunks_json.size()) {
+        return "";
+    }
+    const Json& chunk = chunks_json[chunk_index];
+    if (!chunk.is_object()) {
+        return "";
+    }
+    return JsonString(chunk, "cleansed_text");
+}
+
 void CloudTtsPipeline::Submit(
     std::string entire_document_text,
     std::filesystem::path source_file_path,

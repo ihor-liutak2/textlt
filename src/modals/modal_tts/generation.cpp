@@ -429,5 +429,27 @@ void TtsModalContent::ApplyAudioWorkerState() {
 }
 
 void TtsModalContent::TestCurrentChunk() {
-    StartPlaybackFrom(SelectedStartChunkIndex(), true);
+    if (!pipeline_) {
+        status_ = "TTS pipeline is not available";
+        return;
+    }
+
+    const std::string book_id = SelectedBookId();
+    if (book_id.empty()) {
+        status_ = "No prepared book selected";
+        return;
+    }
+
+    const size_t chunk_index = SelectedStartChunkIndex();
+    test_chunk_index_ = chunk_index;
+    test_text_ = pipeline_->GetChunkText(book_id, chunk_index);
+    if (test_text_.empty()) {
+        test_text_ = "No text available for chunk " + std::to_string(chunk_index + 1);
+    }
+
+    info_popup_mode_ = InfoPopupMode::TestText;
+    info_popup_pending_ = true;
+    NotifyUiRefresh();
+
+    StartPlaybackFrom(chunk_index, true);
 }

@@ -330,13 +330,30 @@ ftxui::Element TtsModalContent::Render() {
     if (!show_selected_book_info_) {
         return body;
     }
+
+    Element popup_content;
+    if (info_popup_mode_ == InfoPopupMode::TestText) {
+        popup_content = vbox({
+            PanelTitle("Chunk " + std::to_string(test_chunk_index_ + 1) + " text", theme),
+            paragraph(test_text_) |
+                color(theme.modal_text_color) |
+                frame |
+                vscroll_indicator |
+                size(HEIGHT, LESS_THAN, 15),
+            separator() | color(theme.modal_border),
+            hbox({filler(), close_info_button_->Render()}),
+        });
+    } else {
+        popup_content = RenderBookInfoPanel();
+    }
+
     return dbox({
         body,
         vbox({
             filler(),
             hbox({
                 filler(),
-                RenderBookInfoPanel() |
+                popup_content |
                     border |
                     size(WIDTH, LESS_THAN, 94) |
                     clear_under,

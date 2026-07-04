@@ -16,6 +16,7 @@ public:
     static std::string RuntimeDownloadUrl();
     static std::filesystem::path RuntimeExecutablePath();
     static bool RuntimeInstalled();
+    static std::filesystem::path AssetPathFromUrl(const std::string& url);
     static bool VoiceInstalled(const Json& voice);
     static bool FindVoiceById(const std::string& voice_id, Json* voice);
     static bool RunToFile(const Json& voice,
