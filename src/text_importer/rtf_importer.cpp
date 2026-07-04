@@ -170,7 +170,7 @@ std::string ParseRtfDocument(const std::string& rtf) {
             if (word == "ansicpg" && has_parameter) {
                 stack.back().codepage = parameter;
             } else if (word == "uc" && has_parameter) {
-                stack.back().unicode_skip_count = std::max(0, parameter);
+                stack.back().unicode_skip_count = (std::max)(0, parameter);
             }
 
             if (stack.back().skip_destination) {
@@ -229,7 +229,7 @@ int AttributeIntByLocalName(const pugi::xml_node& node, const std::string& local
             name = name.substr(separator + 1);
         }
         if (name == local_name) {
-            return std::max(1, attribute.as_int(fallback));
+            return (std::max)(1, attribute.as_int(fallback));
         }
     }
     return fallback;

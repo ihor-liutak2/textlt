@@ -8,20 +8,38 @@
 namespace textlt {
 namespace {
 
-std::filesystem::path UserHomeDirectory() {
+std::optional<std::string> GetEnvValue(const char* name) {
 #ifdef _WIN32
-    const char* user_profile = std::getenv("USERPROFILE");
-    if (user_profile && std::string(user_profile).empty() == false) {
-        return std::filesystem::path(user_profile);
+    char* buffer = nullptr;
+    size_t size = 0;
+    if (_dupenv_s(&buffer, &size, name) != 0 || buffer == nullptr) {
+        return std::nullopt;
     }
-    return {};
+
+    std::string value(buffer);
+    free(buffer);
+    if (value.empty()) {
+        return std::nullopt;
+    }
+    return value;
 #else
-    const char* home = std::getenv("HOME");
-    if (!home || std::string(home).empty()) {
-        return {};
+    const char* value = std::getenv(name);
+    if (value == nullptr || std::string(value).empty()) {
+        return std::nullopt;
     }
-    return std::filesystem::path(home);
+    return std::string(value);
 #endif
+}
+
+std::filesystem::path UserHomeDirectory() {
+    const std::optional<std::string> home = GetEnvValue(
+#ifdef _WIN32
+        "USERPROFILE"
+#else
+        "HOME"
+#endif
+    );
+    return home ? std::filesystem::path(*home) : std::filesystem::path{};
 }
 
 void EnsureDirectory(const std::filesystem::path& path) {
@@ -34,17 +52,17 @@ void EnsureDirectory(const std::filesystem::path& path) {
 
 std::filesystem::path DownloadCacheDirectory() {
 #ifdef _WIN32
-    const char* local_app_data = std::getenv("LOCALAPPDATA");
-    if (local_app_data && std::string(local_app_data).empty() == false) {
-        return std::filesystem::path(local_app_data) / "textlt" / "cache";
+    const std::optional<std::string> local_app_data = GetEnvValue("LOCALAPPDATA");
+    if (local_app_data) {
+        return std::filesystem::path(*local_app_data) / "textlt" / "cache";
     }
 
     const std::filesystem::path home = UserHomeDirectory();
     return home.empty() ? std::filesystem::path{} : home / "AppData" / "Local" / "textlt" / "cache";
 #else
-    const char* xdg_cache_home = std::getenv("XDG_CACHE_HOME");
-    if (xdg_cache_home && std::string(xdg_cache_home).empty() == false) {
-        return std::filesystem::path(xdg_cache_home) / "textlt";
+    const std::optional<std::string> xdg_cache_home = GetEnvValue("XDG_CACHE_HOME");
+    if (xdg_cache_home) {
+        return std::filesystem::path(*xdg_cache_home) / "textlt";
     }
 
     const std::filesystem::path home = UserHomeDirectory();
@@ -105,17 +123,17 @@ std::filesystem::path AssetPathFromUrlImpl(const std::string& url) {
 
 std::filesystem::path PiperManager::UserDataDirectory() {
 #ifdef _WIN32
-    const char* local_app_data = std::getenv("LOCALAPPDATA");
-    if (local_app_data && std::string(local_app_data).empty() == false) {
-        return std::filesystem::path(local_app_data) / "textlt";
+    const std::optional<std::string> local_app_data = GetEnvValue("LOCALAPPDATA");
+    if (local_app_data) {
+        return std::filesystem::path(*local_app_data) / "textlt";
     }
 
     const std::filesystem::path home = UserHomeDirectory();
     return home.empty() ? std::filesystem::path{} : home / "AppData" / "Local" / "textlt";
 #else
-    const char* xdg_data_home = std::getenv("XDG_DATA_HOME");
-    if (xdg_data_home && std::string(xdg_data_home).empty() == false) {
-        return std::filesystem::path(xdg_data_home) / "textlt";
+    const std::optional<std::string> xdg_data_home = GetEnvValue("XDG_DATA_HOME");
+    if (xdg_data_home) {
+        return std::filesystem::path(*xdg_data_home) / "textlt";
     }
 
     const std::filesystem::path home = UserHomeDirectory();

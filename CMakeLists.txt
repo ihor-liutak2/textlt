@@ -5,6 +5,16 @@ include(GNUInstallDirs)
 
 enable_testing()
 
+if(POLICY CMP0091)
+  cmake_policy(SET CMP0091 NEW)
+endif()
+
+if(MSVC)
+  # Match the static vcpkg triplet used in CI so the executable and bundled
+  # dependencies do not mix `/MT` and `/MD` runtimes.
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 # Use the C++17 language standard.
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
