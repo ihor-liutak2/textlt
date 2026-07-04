@@ -220,6 +220,7 @@ private:
     void PersistActiveFavoriteCursor();
     void RestoreFavoriteCursor(const std::string& path);
     void QueueTtsBookPreparationFromCursor(bool force_rebuild = false);
+    void SetTtsHeaderActiveButton(TtsHeaderButton button);
     void PreviewTheme(const std::string& theme_name);
     void SelectTheme(const std::string& theme_name);
     void SaveConfig();
@@ -367,6 +368,7 @@ private:
     std::string replace_text_;
     std::string goto_line_input_;
     std::string active_action_ = "Ready";
+    TtsHeaderButton tts_header_active_button_ = TtsHeaderButton::Open;
 
     UiLayer active_layer_ = UiLayer::Main;
     int active_layer_index_ = static_cast<int>(UiLayer::Main);

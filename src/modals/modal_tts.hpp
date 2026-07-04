@@ -19,13 +19,23 @@
 
 namespace textlt {
 
+enum class TtsHeaderButton {
+    Open,
+    Play,
+    Pause,
+    Stop,
+    Next,
+    Test,
+};
+
 class TtsModalContent : public IModalContent {
 public:
     TtsModalContent(
         const Theme* theme,
         CloudTtsPipeline* pipeline,
         std::function<void(bool)> prepare_current_file,
-        std::function<void()> request_ui_refresh);
+        std::function<void()> request_ui_refresh,
+        std::function<void(TtsHeaderButton)> set_header_button_active);
 
     ftxui::Element Render() override;
     ~TtsModalContent() override;
@@ -100,6 +110,7 @@ private:
     CloudTtsPipeline* pipeline_ = nullptr;
     std::function<void(bool)> prepare_current_file_;
     std::function<void()> request_ui_refresh_;
+    std::function<void(TtsHeaderButton)> set_header_button_active_;
     int selected_tab_ = static_cast<int>(Tab::Run);
     int info_layer_index_ = 0;
     std::vector<CloudTtsPipeline::BookInfo> library_books_;
@@ -189,7 +200,8 @@ public:
         const Theme* theme,
         CloudTtsPipeline* pipeline,
         std::function<void(bool)> prepare_current_file,
-        std::function<void()> request_ui_refresh);
+        std::function<void()> request_ui_refresh,
+        std::function<void(TtsHeaderButton)> set_header_button_active);
 
     ftxui::Component View() const;
     void Open();

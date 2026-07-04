@@ -34,13 +34,15 @@ public:
 ftxui::ButtonOption MakeFindPanelTextButtonOption(
     std::string label,
     std::function<void()> on_click,
-    const Theme* theme) {
+    const Theme* theme,
+    std::function<bool()> is_active = {}) {
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
     option.label = std::move(label);
     option.on_click = std::move(on_click);
-    option.transform = [theme](const ftxui::EntryState& state) {
+    option.transform = [theme, is_active = std::move(is_active)](const ftxui::EntryState& state) {
         ftxui::Element button = ftxui::text("[" + state.label + "]");
-        if (theme && (state.focused || state.active)) {
+        const bool active = is_active && is_active();
+        if (theme && (state.focused || state.active || active)) {
             return button |
                 ftxui::bgcolor(theme->menu_foreground) |
                 ftxui::color(theme->menu_background);
@@ -190,7 +192,8 @@ TextltApp::TextltApp()
           [this](bool force_rebuild) {
               QueueTtsBookPreparationFromCursor(force_rebuild);
           },
-          [this] { screen_.PostEvent(ftxui::Event::Custom); }),
+          [this] { screen_.PostEvent(ftxui::Event::Custom); },
+          [this](TtsHeaderButton button) { SetTtsHeaderActiveButton(button); }),
       view_layout_modal_(
           &current_theme_,
           [this] { return CurrentViewLayoutSnapshot(); },
@@ -244,23 +247,31 @@ TextltApp::TextltApp()
     title_bar_open_tts_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
         "TTS",
         [this] { RunCommand("tts.open_modal"); },
-        &current_theme_));
+        &current_theme_,
+        [this] { return tts_header_active_button_ == TtsHeaderButton::Open; }));
     title_bar_tts_play_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
         "Play",
         [this] { RunCommand("tts.play"); },
-        &current_theme_));
+        &current_theme_,
+        [this] {
+            return tts_header_active_button_ == TtsHeaderButton::Play ||
+                   tts_header_active_button_ == TtsHeaderButton::Test;
+        }));
     title_bar_tts_pause_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
         "Pause",
         [this] { RunCommand("tts.pause"); },
-        &current_theme_));
+        &current_theme_,
+        [this] { return tts_header_active_button_ == TtsHeaderButton::Pause; }));
     title_bar_tts_stop_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
         "Stop",
         [this] { RunCommand("tts.stop"); },
-        &current_theme_));
+        &current_theme_,
+        [this] { return tts_header_active_button_ == TtsHeaderButton::Stop; }));
     title_bar_tts_next_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
         "Next",
         [this] { RunCommand("tts.next"); },
-        &current_theme_));
+        &current_theme_,
+        [this] { return tts_header_active_button_ == TtsHeaderButton::Next; }));
     title_bar_component_ = ftxui::Renderer(
         ftxui::Container::Horizontal({
             title_bar_open_tts_button_,

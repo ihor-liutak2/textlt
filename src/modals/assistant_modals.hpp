@@ -146,6 +146,7 @@ private:
     unsigned long long ai_runtime_downloaded_bytes_ = 0;
     unsigned long long ai_runtime_total_bytes_ = 0;
     std::thread ai_model_thread_;
+    std::thread fetch_thread_;
     bool ai_model_downloading_ = false;
     bool ai_model_deleting_ = false;
     bool ai_model_progress_visible_ = false;

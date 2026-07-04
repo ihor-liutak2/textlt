@@ -199,6 +199,9 @@ void TtsModalContent::PlaybackLoop(
 }
 
 void TtsModalContent::Play() {
+    if (set_header_button_active_) {
+        set_header_button_active_(TtsHeaderButton::Play);
+    }
     bool resume_paused = false;
     size_t paused_chunk = 0;
     {
@@ -216,13 +219,21 @@ void TtsModalContent::Play() {
         return;
     }
 
-    // Use the same workflow as the Run tab. This refreshes the current cursor
-    // position, resolves the saved voice, reuses cached WAV files, and starts
-    // playback only after all required state is ready.
+    // If a book is already selected in the library, play from its saved
+    // cursor position directly.  Only fall back to re-preparing the
+    // current editor file when no library book is available.
+    if (HasPreparedBook()) {
+        StartPlaybackFrom(SelectedStartChunkIndex());
+        return;
+    }
+
     StartRunWorkflow(false, true);
 }
 
 void TtsModalContent::Pause() {
+    if (set_header_button_active_) {
+        set_header_button_active_(TtsHeaderButton::Pause);
+    }
     std::lock_guard<std::mutex> lock(playback_mutex_);
     if (!playback_worker_running_) {
         status_ = playback_paused_ ? playback_status_ : "Playback is not running";
@@ -236,6 +247,9 @@ void TtsModalContent::Pause() {
 }
 
 void TtsModalContent::Stop() {
+    if (set_header_button_active_) {
+        set_header_button_active_(TtsHeaderButton::Stop);
+    }
     {
         std::lock_guard<std::mutex> lock(playback_mutex_);
         if (!playback_worker_running_) {
@@ -254,6 +268,9 @@ void TtsModalContent::Stop() {
 }
 
 void TtsModalContent::Next() {
+    if (set_header_button_active_) {
+        set_header_button_active_(TtsHeaderButton::Next);
+    }
     size_t next_chunk = 0;
     bool should_start = false;
     {

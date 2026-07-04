@@ -6,15 +6,25 @@
 
 namespace textlt {
 
+void TextltApp::SetTtsHeaderActiveButton(TtsHeaderButton button) {
+    tts_header_active_button_ = button;
+    screen_.PostEvent(ftxui::Event::Custom);
+}
 
 void TextltApp::QueueTtsBookPreparationFromCursor(bool force_rebuild) {
-    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+    const std::shared_ptr<Document> document = ActiveDocument();
+    if (!document) {
+        active_action_ = "No document selected for TTS";
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
 
-    // Submit document content and cursor row index for TTS processing
+    // Submit the selected open document, not whichever editor pane happens to
+    // have focus, so TTS follows the left-panel selection.
     cloud_tts_pipeline_.Submit(
-        editor_ptr->GetAllText(),
-        editor_ptr->CurrentFilePath(),
-        editor_ptr->GetCursorRow(),
+        document->ToContent(),
+        document->CurrentFilePath(),
+        document->cursor_row,
         force_rebuild);
 
     active_action_ = "Queued TTS book preparation";

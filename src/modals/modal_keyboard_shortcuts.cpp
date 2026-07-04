@@ -131,11 +131,27 @@ void KeyboardShortcutsModalContent::RebuildKeyList() {
     if (selected_modifier_ < 0 || selected_modifier_ >= static_cast<int>(modifiers.size())) {
         selected_modifier_ = 0;
     }
-    key_labels_ = ShortcutKeyChoices(modifiers[selected_modifier_]);
-    for (std::string& key : key_labels_) {
+    key_labels_.clear();
+    const ShortcutKeyModifier modifier = modifiers[selected_modifier_];
+    const auto all_keys = ShortcutKeyChoices(modifier);
+    const auto selected_binding = SelectedBinding();
+    const std::string selected_action_id =
+        selected_binding ? selected_binding->definition.action_id : std::string();
+
+    for (std::string key : all_keys) {
         if (key == "/") {
             key = "Slash";
         }
+        if (shortcut_registry_ && !selected_action_id.empty()) {
+            const std::string shortcut = ShortcutModifierName(modifier) + "+" +
+                (key == "Slash" ? std::string("/") : key);
+            const ShortcutConflict conflict =
+                shortcut_registry_->FindConflict(CurrentContext(), selected_action_id, shortcut);
+            if (conflict.exists) {
+                continue;
+            }
+        }
+        key_labels_.push_back(std::move(key));
     }
     if (selected_key_ < 0 || selected_key_ >= static_cast<int>(key_labels_.size())) {
         selected_key_ = 0;
@@ -401,8 +417,12 @@ ftxui::Element KeyboardShortcutsModalContent::RenderPicker() const {
             }) | size(WIDTH, EQUAL, 18),
         }),
         separator(),
-        text("New: " + DisplayShortcut(selected_shortcut)) | color(theme.modal_accent),
-        text("Reserved terminal shortcuts are not listed.") | color(theme.modal_text_color),
+        paragraph("New: " + DisplayShortcut(selected_shortcut)) |
+            color(theme.modal_accent) |
+            flex,
+        paragraph("Only unassigned keys are shown for the selected modifier. Reserved terminal shortcuts are not listed.") |
+            color(theme.modal_text_color) |
+            flex,
     }) | border | size(WIDTH, EQUAL, 42);
 }
 

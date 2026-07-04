@@ -561,6 +561,7 @@ void TextltApp::OpenTtsModal() {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
+    SetTtsHeaderActiveButton(TtsHeaderButton::Open);
     tts_modal_.Open();
     active_action_ = "Opened Text-to-Speech";
     SetActiveLayer(UiLayer::Tts);

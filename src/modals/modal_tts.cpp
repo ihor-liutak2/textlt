@@ -154,11 +154,13 @@ TtsModalContent::TtsModalContent(
     const Theme* theme,
     CloudTtsPipeline* pipeline,
     std::function<void(bool)> prepare_current_file,
-    std::function<void()> request_ui_refresh)
+    std::function<void()> request_ui_refresh,
+    std::function<void(TtsHeaderButton)> set_header_button_active)
     : theme_(theme),
       pipeline_(pipeline),
       prepare_current_file_(std::move(prepare_current_file)),
-      request_ui_refresh_(std::move(request_ui_refresh)) {
+      request_ui_refresh_(std::move(request_ui_refresh)),
+      set_header_button_active_(std::move(set_header_button_active)) {
     run_tab_button_ = MakeTabButton("Run", static_cast<int>(Tab::Run));
     library_tab_button_ = MakeTabButton("Library", static_cast<int>(Tab::Library));
     voice_tab_button_ = MakeTabButton("Voice", static_cast<int>(Tab::Voice));
@@ -393,13 +395,15 @@ TtsModal::TtsModal(
     const Theme* theme,
     CloudTtsPipeline* pipeline,
     std::function<void(bool)> prepare_current_file,
-    std::function<void()> request_ui_refresh)
+    std::function<void()> request_ui_refresh,
+    std::function<void(TtsHeaderButton)> set_header_button_active)
     : theme_(theme) {
     content_ = std::make_shared<TtsModalContent>(
         theme_,
         pipeline,
         std::move(prepare_current_file),
-        std::move(request_ui_refresh));
+        std::move(request_ui_refresh),
+        std::move(set_header_button_active));
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
     modal_->SetFooterText("Escape closes.");
     modal_->SetFooterButtons({{"Close", [this] { Close(); }}});

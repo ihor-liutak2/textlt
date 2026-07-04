@@ -727,6 +727,9 @@ AssistantSettingsModalContent::~AssistantSettingsModalContent() {
     if (ai_model_thread_.joinable()) {
         ai_model_thread_.join();
     }
+    if (fetch_thread_.joinable()) {
+        fetch_thread_.join();
+    }
 }
 
 ftxui::Element AssistantSettingsModalContent::Render() {
@@ -768,6 +771,19 @@ void AssistantSettingsModalContent::FetchRegistries() {
             tts_status_ = "Voice download is running";
             return;
         }
+    }
+    {
+        std::lock_guard<std::mutex> ai_lock(ai_runtime_mutex_);
+        if (ai_runtime_downloading_ || ai_model_downloading_ || ai_model_deleting_) {
+            return;
+        }
+    }
+    if (fetch_thread_.joinable()) {
+        fetch_thread_.join();
+    }
+
+    {
+        std::lock_guard<std::mutex> tts_lock(tts_download_mutex_);
         tts_status_ = "Fetching TTS registry...";
         tts_progress_ = 0.0f;
     }
@@ -776,52 +792,56 @@ void AssistantSettingsModalContent::FetchRegistries() {
         ai_status_ = "Fetching AI registry...";
         ai_progress_ = 0.0f;
     }
+    RequestRedraw();
 
-    const RegistryDownloadResult piper_download_result =
-        DownloadRegistry(CurlManager::kPiperRegistryUrl, RegistryFilename(RegistryKind::Piper));
-    const RegistryDownloadResult ai_download_result =
-        DownloadRegistry(CurlManager::kAiRegistryUrl, RegistryFilename(RegistryKind::Ai));
+    fetch_thread_ = std::thread([this] {
+        const RegistryDownloadResult piper_download_result =
+            DownloadRegistry(CurlManager::kPiperRegistryUrl, RegistryFilename(RegistryKind::Piper));
+        const RegistryDownloadResult ai_download_result =
+            DownloadRegistry(CurlManager::kAiRegistryUrl, RegistryFilename(RegistryKind::Ai));
 
-    LoadPiperRegistry();
-    LoadAiRegistry();
+        LoadPiperRegistry();
+        LoadAiRegistry();
 
-    auto registry_status = [](const std::string& label,
-                              RegistryDownloadResult download_result,
-                              RegistryLoadResult load_result) {
-        if (download_result == RegistryDownloadResult::Saved &&
-            load_result == RegistryLoadResult::Loaded) {
-            return label + " registry loaded";
-        }
-        if (download_result == RegistryDownloadResult::Empty) {
-            return label + " registry file is empty";
-        }
-        if (download_result == RegistryDownloadResult::InvalidJson) {
-            return "Downloaded " + label + " registry is invalid JSON";
-        }
-        if (load_result == RegistryLoadResult::Missing) {
-            return label + " registry not loaded";
-        }
-        if (load_result == RegistryLoadResult::ParseFailed) {
-            return label + " registry parse failed";
-        }
-        return label + " registry download failed";
-    };
+        auto registry_status = [](const std::string& label,
+                                  RegistryDownloadResult download_result,
+                                  RegistryLoadResult load_result) {
+            if (download_result == RegistryDownloadResult::Saved &&
+                load_result == RegistryLoadResult::Loaded) {
+                return label + " registry loaded";
+            }
+            if (download_result == RegistryDownloadResult::Empty) {
+                return label + " registry file is empty";
+            }
+            if (download_result == RegistryDownloadResult::InvalidJson) {
+                return "Downloaded " + label + " registry is invalid JSON";
+            }
+            if (load_result == RegistryLoadResult::Missing) {
+                return label + " registry not loaded";
+            }
+            if (load_result == RegistryLoadResult::ParseFailed) {
+                return label + " registry parse failed";
+            }
+            return label + " registry download failed";
+        };
 
-    Json piper_root;
-    Json ai_root;
-    const RegistryLoadResult piper_load_result =
-        LoadUserRegistryJson(RegistryKind::Piper, &piper_root);
-    const RegistryLoadResult ai_load_result =
-        LoadUserRegistryJson(RegistryKind::Ai, &ai_root);
+        Json piper_root;
+        Json ai_root;
+        const RegistryLoadResult piper_load_result =
+            LoadUserRegistryJson(RegistryKind::Piper, &piper_root);
+        const RegistryLoadResult ai_load_result =
+            LoadUserRegistryJson(RegistryKind::Ai, &ai_root);
 
-    {
-        std::lock_guard<std::mutex> lock(tts_download_mutex_);
-        tts_status_ = registry_status("TTS", piper_download_result, piper_load_result);
-    }
-    {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        ai_status_ = registry_status("AI", ai_download_result, ai_load_result);
-    }
+        {
+            std::lock_guard<std::mutex> lock(tts_download_mutex_);
+            tts_status_ = registry_status("TTS", piper_download_result, piper_load_result);
+        }
+        {
+            std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+            ai_status_ = registry_status("AI", ai_download_result, ai_load_result);
+        }
+        RequestRedraw();
+    });
 }
 
 void AssistantSettingsModalContent::SetTodoStatus(std::string action) {

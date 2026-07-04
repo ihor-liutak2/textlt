@@ -431,24 +431,28 @@ void TextltApp::CommandViewLayoutOpen() {
 
 
 void TextltApp::CommandTtsPlay() {
+    SetTtsHeaderActiveButton(TtsHeaderButton::Play);
     tts_modal_.Play();
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
 
 void TextltApp::CommandTtsPause() {
+    SetTtsHeaderActiveButton(TtsHeaderButton::Pause);
     tts_modal_.Pause();
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
 
 void TextltApp::CommandTtsStop() {
+    SetTtsHeaderActiveButton(TtsHeaderButton::Stop);
     tts_modal_.Stop();
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
 
 void TextltApp::CommandTtsNext() {
+    SetTtsHeaderActiveButton(TtsHeaderButton::Next);
     tts_modal_.Next();
     screen_.PostEvent(ftxui::Event::Custom);
 }

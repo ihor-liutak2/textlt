@@ -83,8 +83,26 @@ RemoteCommandResult RemoteCommandRunner::Run(
 
 std::string RemoteCommandRunner::ShellQuote(const std::string& value) {
     if (value.empty()) {
+#ifdef _WIN32
+        return "\"\"";
+#else
         return "''";
+#endif
     }
+#ifdef _WIN32
+    // Windows cmd.exe uses double quotes for escaping
+    std::string quoted = "\"";
+    for (char ch : value) {
+        if (ch == '"') {
+            quoted += "\"\"";
+        } else {
+            quoted += ch;
+        }
+    }
+    quoted += "\"";
+    return quoted;
+#else
+    // Unix shells use single quotes for escaping
     std::string quoted = "'";
     for (char ch : value) {
         if (ch == '\'') {
@@ -95,6 +113,7 @@ std::string RemoteCommandRunner::ShellQuote(const std::string& value) {
     }
     quoted += "'";
     return quoted;
+#endif
 }
 
 std::filesystem::path RemoteCommandRunner::MakeTempPath(const std::string& prefix) {

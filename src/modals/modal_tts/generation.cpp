@@ -434,6 +434,10 @@ void TtsModalContent::TestCurrentChunk() {
         return;
     }
 
+    if (set_header_button_active_) {
+        set_header_button_active_(TtsHeaderButton::Test);
+    }
+
     const std::string book_id = SelectedBookId();
     if (book_id.empty()) {
         status_ = "No prepared book selected";
