@@ -80,5 +80,49 @@ int main() {
                               "\"local_file\"",
                               Style::String));
 
+    assert(ContainsStyledText("// JSON with comments",
+                              "sample.jsonc",
+                              "// JSON with comments",
+                              Style::Comment));
+    assert(ContainsStyledText("{ \"enabled\": true }",
+                              "sample.jsonc",
+                              "true",
+                              Style::Keyword));
+
+    assert(ContainsStyledText("$accent: #ff9d00;",
+                              "sample.scss",
+                              "$accent",
+                              Style::Type));
+    assert(ContainsStyledText("@accent: #ff9d00;",
+                              "sample.less",
+                              "@accent",
+                              Style::Type));
+    assert(ContainsStyledText("color: $accent",
+                              "sample.sass",
+                              "color",
+                              Style::Keyword));
+
+    assert(ContainsStyledText("<template><h1>{{ title }}</h1></template>",
+                              "sample.vue",
+                              "template",
+                              Style::Keyword));
+    assert(ContainsStyledText("{#if ready}",
+                              "sample.svelte",
+                              "{#if ready}",
+                              Style::Keyword));
+    assert(ContainsStyledText("const title = \"TextLT\";",
+                              "sample.astro",
+                              "const",
+                              Style::Keyword));
+
+    assert(ContainsStyledText("textlt: main.cpp",
+                              "Makefile",
+                              "textlt",
+                              Style::Keyword));
+    assert(ContainsStyledText("CXXFLAGS := -std=c++17",
+                              "Makefile",
+                              "CXXFLAGS",
+                              Style::Type));
+
     return 0;
 }

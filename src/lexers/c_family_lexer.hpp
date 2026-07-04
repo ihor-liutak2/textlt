@@ -14,6 +14,7 @@ std::vector<SyntaxHighlighter::Token> TokenizeGo(const std::string& line);
 std::vector<SyntaxHighlighter::Token> TokenizeJava(const std::string& line);
 std::vector<SyntaxHighlighter::Token> TokenizeJavascript(const std::string& line);
 std::vector<SyntaxHighlighter::Token> TokenizeJson(const std::string& line);
+std::vector<SyntaxHighlighter::Token> TokenizeJsonc(const std::string& line);
 std::vector<SyntaxHighlighter::Token> TokenizeJsx(const std::string& line, bool typescript);
 std::vector<SyntaxHighlighter::Token> TokenizeKotlin(const std::string& line);
 std::vector<SyntaxHighlighter::Token> TokenizeRust(const std::string& line);

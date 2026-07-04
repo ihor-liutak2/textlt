@@ -30,21 +30,29 @@ enum class Language {
     Javascript,
     Jsx,
     Json,
+    Jsonc,
     Kotlin,
+    Less,
     Lua,
     Go,
     Markdown,
+    Makefile,
     Php,
     Plain,
     Powershell,
     Python,
     Ruby,
     Rust,
+    Sass,
+    Scss,
     Sql,
     Swift,
     Toml,
     Typescript,
     Tsx,
+    Vue,
+    Svelte,
+    Astro,
     Xml,
     Yaml,
 };
@@ -68,6 +76,10 @@ Language LanguageFromPath(const std::string& path) {
     }
     if (filename == "CMakeLists.txt") {
         return Language::CMake;
+    }
+    if (filename == "Makefile" || filename == "makefile" ||
+        filename == "GNUmakefile") {
+        return Language::Makefile;
     }
     if (filename == "docker-compose.yml" || filename == "docker-compose.yaml") {
         return Language::Yaml;
@@ -100,11 +112,23 @@ Language LanguageFromPath(const std::string& path) {
     if (extension == ".css") {
         return Language::Css;
     }
+    if (extension == ".scss") {
+        return Language::Scss;
+    }
+    if (extension == ".sass") {
+        return Language::Sass;
+    }
+    if (extension == ".less") {
+        return Language::Less;
+    }
     if (extension == ".dart") {
         return Language::Dart;
     }
     if (extension == ".gql" || extension == ".graphql") {
         return Language::Graphql;
+    }
+    if (extension == ".tf" || extension == ".tfvars" || extension == ".hcl") {
+        return Language::Hcl;
     }
     if (extension == ".sh" || extension == ".bash" || extension == ".zsh" ||
         extension == ".bashrc" || extension == ".profile") {
@@ -132,6 +156,9 @@ Language LanguageFromPath(const std::string& path) {
     if (extension == ".json") {
         return Language::Json;
     }
+    if (extension == ".jsonc") {
+        return Language::Jsonc;
+    }
     if (extension == ".kt" || extension == ".kts") {
         return Language::Kotlin;
     }
@@ -140,6 +167,9 @@ Language LanguageFromPath(const std::string& path) {
     }
     if (extension == ".md" || extension == ".markdown") {
         return Language::Markdown;
+    }
+    if (extension == ".mk" || extension == ".mak") {
+        return Language::Makefile;
     }
     if (extension == ".php") {
         return Language::Php;
@@ -170,6 +200,15 @@ Language LanguageFromPath(const std::string& path) {
     }
     if (extension == ".tsx") {
         return Language::Tsx;
+    }
+    if (extension == ".vue") {
+        return Language::Vue;
+    }
+    if (extension == ".svelte") {
+        return Language::Svelte;
+    }
+    if (extension == ".astro") {
+        return Language::Astro;
     }
     if (extension == ".yaml" || extension == ".yml") {
         return Language::Yaml;
@@ -251,14 +290,20 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             return lexers::TokenizeJavascript(line);
         case Language::Json:
             return lexers::TokenizeJson(line);
+        case Language::Jsonc:
+            return lexers::TokenizeJsonc(line);
         case Language::Kotlin:
             return lexers::TokenizeKotlin(line);
+        case Language::Less:
+            return lexers::TokenizeLess(line);
         case Language::Lua:
             return lexers::TokenizeLua(line);
         case Language::Jsx:
             return lexers::TokenizeJsx(line, false);
         case Language::Markdown:
             return lexers::TokenizeMarkdown(line);
+        case Language::Makefile:
+            return lexers::TokenizeMakefile(line);
         case Language::Php:
             return lexers::TokenizePhp(line, context);
         case Language::Powershell:
@@ -269,6 +314,10 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             return lexers::TokenizeRuby(line);
         case Language::Rust:
             return lexers::TokenizeRust(line);
+        case Language::Sass:
+            return lexers::TokenizeSass(line);
+        case Language::Scss:
+            return lexers::TokenizeScss(line);
         case Language::Sql:
             return lexers::TokenizeSql(line);
         case Language::Swift:
@@ -279,6 +328,12 @@ std::vector<SyntaxHighlighter::Token> SyntaxHighlighter::TokenizeLine(
             return lexers::TokenizeTypescript(line);
         case Language::Tsx:
             return lexers::TokenizeJsx(line, true);
+        case Language::Vue:
+            return lexers::TokenizeSingleFileComponent(line);
+        case Language::Svelte:
+            return lexers::TokenizeSingleFileComponent(line);
+        case Language::Astro:
+            return lexers::TokenizeSingleFileComponent(line);
         case Language::Xml:
             return lexers::TokenizeXml(line);
         case Language::Yaml:

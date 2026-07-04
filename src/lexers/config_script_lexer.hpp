@@ -14,6 +14,7 @@ std::vector<SyntaxHighlighter::Token> TokenizeEnv(const std::string& line);
 std::vector<SyntaxHighlighter::Token> TokenizeHcl(const std::string& line);
 std::vector<SyntaxHighlighter::Token> TokenizeIni(const std::string& line);
 std::vector<SyntaxHighlighter::Token> TokenizeLua(const std::string& line);
+std::vector<SyntaxHighlighter::Token> TokenizeMakefile(const std::string& line);
 std::vector<SyntaxHighlighter::Token> TokenizeMarkdown(const std::string& line);
 std::vector<SyntaxHighlighter::Token> TokenizePowershell(const std::string& line);
 std::vector<SyntaxHighlighter::Token> TokenizePython(const std::string& line);

@@ -1109,7 +1109,8 @@ std::vector<SyntaxHighlighter::Token> TokenizeCLikeLine(const std::string& line,
                 } else if (DartTypes().find(word) != DartTypes().end()) {
                     style = SyntaxHighlighter::Style::Type;
                 }
-            } else if (family == "json" && JsonKeywords().find(word) != JsonKeywords().end()) {
+            } else if ((family == "json" || family == "jsonc") &&
+                       JsonKeywords().find(word) != JsonKeywords().end()) {
                 style = SyntaxHighlighter::Style::Keyword;
             }
 
@@ -1154,6 +1155,10 @@ std::vector<SyntaxHighlighter::Token> TokenizeTypescript(const std::string& line
 
 std::vector<SyntaxHighlighter::Token> TokenizeJson(const std::string& line) {
     return TokenizeCLikeLine(line, "json");
+}
+
+std::vector<SyntaxHighlighter::Token> TokenizeJsonc(const std::string& line) {
+    return TokenizeCLikeLine(line, "jsonc");
 }
 
 } // namespace textlt::lexers
