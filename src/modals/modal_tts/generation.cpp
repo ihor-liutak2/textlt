@@ -446,6 +446,7 @@ void TtsModalContent::TestCurrentChunk() {
 
     const size_t chunk_index = SelectedStartChunkIndex();
     test_chunk_index_ = chunk_index;
+    test_text_title_ = "Chunk " + std::to_string(chunk_index + 1) + " text";
     test_text_ = pipeline_->GetChunkText(book_id, chunk_index);
     if (test_text_.empty()) {
         test_text_ = "No text available for chunk " + std::to_string(chunk_index + 1);

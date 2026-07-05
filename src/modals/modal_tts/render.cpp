@@ -308,23 +308,15 @@ ftxui::Element TtsModalContent::RenderPlayerTab() {
     }) | size(WIDTH, EQUAL, 48);
 
     Elements info_rows = {
-        PanelTitle("Audio Player", theme),
-        StatusLine("Current", current_player, theme),
+        PanelTitle("Player voice", theme),
+        player_voice_menu_->Render() |
+            frame |
+            vscroll_indicator |
+            size(HEIGHT, LESS_THAN, 10) |
+            border,
+        StatusLine("Current player", current_player, theme),
+        StatusLine("Test voice", CurrentPlayerVoiceLabel(), theme),
         StatusLine("Status", player_status_, theme),
-        paragraph("TextLT generates audio files, but playback is handled by an external player. mpv is recommended on Linux; afplay is preferred on macOS; PowerShell SoundPlayer is the Windows fallback.") |
-            color(theme.modal_text_color),
-        separator() | color(theme.modal_border),
-        PanelTitle("Custom command", theme),
-        paragraph("Use {file} where TextLT should insert the audio file path. If {file} is missing, TextLT appends the file path to the command.") |
-            dim |
-            color(theme.modal_text_color),
-        hbox({
-            text(" Command: ") | bold | color(theme.modal_accent),
-            custom_player_input_->Render() | flex,
-        }),
-        hbox({
-            save_custom_player_button_->Render(),
-        }),
     };
 
     if (!last_error.empty()) {
@@ -404,7 +396,7 @@ ftxui::Element TtsModalContent::Render() {
     Element popup_content;
     if (info_popup_mode_ == InfoPopupMode::TestText) {
         popup_content = vbox({
-            PanelTitle("Chunk " + std::to_string(test_chunk_index_ + 1) + " text", theme),
+            PanelTitle(test_text_title_, theme),
             paragraph(test_text_) |
                 color(theme.modal_text_color) |
                 frame |

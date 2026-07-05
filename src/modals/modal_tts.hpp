@@ -101,8 +101,11 @@ private:
     void ClearSelectedAudioCache();
     void RefreshPlayerOptions();
     void SaveSelectedPlayer();
-    void SaveCustomPlayerCommand();
     void TestSelectedPlayer();
+    void RefreshPlayerVoiceOptions();
+    void SaveSelectedPlayerVoice();
+    std::string SelectedPlayerVoiceId() const;
+    std::string CurrentPlayerVoiceLabel() const;
     TtsAudioPlayer::PlayerSettings AudioPlayerSettings() const;
     TtsAudioPlayer::PlayerSettings SelectedPlayerSettings() const;
     std::string CurrentAudioPlayerLabel() const;
@@ -155,6 +158,7 @@ private:
     enum class InfoPopupMode { BookInfo, TestText };
     InfoPopupMode info_popup_mode_ = InfoPopupMode::BookInfo;
     std::string test_text_;
+    std::string test_text_title_ = "Test text";
     size_t test_chunk_index_ = 0;
     std::string status_ = "TTS library not loaded";
     std::thread audio_worker_;
@@ -180,8 +184,10 @@ private:
     std::vector<TtsAudioPlayer::PlayerStatus> player_statuses_;
     std::vector<std::string> player_labels_ = {"No players detected"};
     int selected_player_ = 0;
-    std::string custom_player_command_;
     std::string player_status_ = "Audio player list not loaded";
+    std::vector<std::string> player_voice_ids_;
+    std::vector<std::string> player_voice_labels_ = {"No installed English voices"};
+    int selected_player_voice_ = 0;
     mutable std::mutex player_mutex_;
     std::string player_last_error_;
 
@@ -207,7 +213,6 @@ private:
     ftxui::Component set_player_button_;
     ftxui::Component test_player_button_;
     ftxui::Component refresh_players_button_;
-    ftxui::Component save_custom_player_button_;
     ftxui::Component run_book_menu_;
     ftxui::Component library_book_menu_;
     ftxui::Component title_input_;
@@ -218,7 +223,7 @@ private:
     ftxui::Component language_menu_;
     ftxui::Component piper_voice_menu_;
     ftxui::Component player_menu_;
-    ftxui::Component custom_player_input_;
+    ftxui::Component player_voice_menu_;
 
     ftxui::Component run_tab_container_;
     ftxui::Component library_tab_container_;

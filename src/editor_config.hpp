@@ -26,6 +26,7 @@ struct EditorConfig {
     std::string active_theme_name = "Blueprint";
     std::string tts_audio_player_id = "auto";
     std::string tts_audio_player_command;
+    std::string tts_player_voice_id;
     std::vector<FavoriteEntry> favorites_;
     std::vector<std::string> file_modal_directories_;
 

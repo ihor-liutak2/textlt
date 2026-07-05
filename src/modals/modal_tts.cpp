@@ -14,6 +14,7 @@
 #include "ftxui/component/event.hpp"
 #include "ftxui/dom/elements.hpp"
 
+#include "piper_manager.hpp"
 #include "ui_button.hpp"
 
 namespace textlt {
@@ -218,12 +219,11 @@ TtsModalContent::TtsModalContent(
         MakeTextButton("Test", [this] { TestSelectedPlayer(); },
                        ButtonRole::Primary, ButtonVariant::AccentEdges, "▶");
     refresh_players_button_ =
-        MakeTextButton("Refresh", [this] { RefreshPlayerOptions(); },
+        MakeTextButton("Refresh", [this] {
+            RefreshPlayerOptions();
+            RefreshPlayerVoiceOptions();
+        },
                        ButtonRole::Primary, ButtonVariant::AccentEdges, "⟳");
-    save_custom_player_button_ =
-        MakeTextButton("Save custom", [this] { SaveCustomPlayerCommand(); },
-                       ButtonRole::Primary);
-
     auto make_book_menu = [this] {
         ftxui::MenuOption menu_option = ftxui::MenuOption::Vertical();
         menu_option.on_change = [this] { SyncMetadataFieldsFromSelection(); };
@@ -255,10 +255,6 @@ TtsModalContent::TtsModalContent(
     genre_input_ = ftxui::Input(&metadata_genre_, "genre", input_option);
     series_index_input_ =
         ftxui::Input(&metadata_series_index_, "series index", input_option);
-    custom_player_command_ = editor_config_ ? editor_config_->tts_audio_player_command : std::string();
-    custom_player_input_ =
-        ftxui::Input(&custom_player_command_, "mpv --really-quiet {file}", input_option);
-
     ftxui::MenuOption language_option = ftxui::MenuOption::Vertical();
     language_option.on_change = [this] {
         RebuildVoiceOptions();
@@ -296,6 +292,12 @@ TtsModalContent::TtsModalContent(
         return row | ftxui::color(theme.modal_text_color);
     };
     player_menu_ = ftxui::Menu(&player_labels_, &selected_player_, player_option);
+
+    ftxui::MenuOption player_voice_option = ftxui::MenuOption::Vertical();
+    player_voice_option.on_change = [this] { SaveSelectedPlayerVoice(); };
+    player_voice_option.entries_option.transform = language_option.entries_option.transform;
+    player_voice_menu_ =
+        ftxui::Menu(&player_voice_labels_, &selected_player_voice_, player_voice_option);
 
     run_tab_container_ = ftxui::Container::Vertical({
         run_refresh_library_button_,
@@ -341,8 +343,7 @@ TtsModalContent::TtsModalContent(
             test_player_button_,
             refresh_players_button_,
         }),
-        custom_player_input_,
-        save_custom_player_button_,
+        player_voice_menu_,
     });
 
     tab_body_container_ = ftxui::Container::Tab({
@@ -377,6 +378,7 @@ TtsModalContent::TtsModalContent(
     });
     renderer_ = ftxui::Renderer(controls_, [this] { return Render(); });
     RefreshPlayerOptions();
+    RefreshPlayerVoiceOptions();
     RefreshLibrary();
 }
 
@@ -446,6 +448,7 @@ void TtsModalContent::Open() {
     show_selected_book_info_ = false;
     info_layer_index_ = 0;
     RefreshPlayerOptions();
+    RefreshPlayerVoiceOptions();
     RefreshLibrary();
     if (library_book_menu_) {
         library_book_menu_->TakeFocus();

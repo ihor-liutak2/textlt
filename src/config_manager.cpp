@@ -101,6 +101,8 @@ EditorConfig ConfigManager::Load() const {
     }
     config.tts_audio_player_command = JsonString(
         root, "tts_audio_player_command", config.tts_audio_player_command);
+    config.tts_player_voice_id = JsonString(
+        root, "tts_player_voice_id", config.tts_player_voice_id);
 
     std::vector<FavoriteEntry> favorite_entries = ExtractFavoriteEntries(root, "favorites_");
     if (favorite_entries.empty()) {

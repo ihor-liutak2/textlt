@@ -81,6 +81,7 @@ bool WriteConfigAtomically(const std::filesystem::path& path, const EditorConfig
         {"active_theme_name", config.active_theme_name},
         {"tts_audio_player_id", config.tts_audio_player_id.empty() ? "auto" : config.tts_audio_player_id},
         {"tts_audio_player_command", config.tts_audio_player_command},
+        {"tts_player_voice_id", config.tts_player_voice_id},
         {"favorites_", Json::array()},
         {"file_modal_directories", Json::array()},
     };
