@@ -575,8 +575,10 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
     std::function<void()> request_redraw)
     : theme_(theme),
       request_redraw_(std::move(request_redraw)) {
-    auto make_button = [this](std::string label, std::function<void()> on_click) {
-        ButtonSpec spec = ButtonSpecFromLabel(std::move(label), ButtonRole::Default, ButtonVariant::AccentEdges);
+    auto make_button = [this](std::string label,
+                              std::function<void()> on_click,
+                              ButtonRole role = ButtonRole::Default) {
+        ButtonSpec spec = ButtonSpecFromLabel(std::move(label), role, ButtonVariant::AccentEdges);
         ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
         option.label = ButtonCaptionText(spec);
         option.on_click = std::move(on_click);
@@ -627,7 +629,7 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
     tts_voice_menu_ = ftxui::Menu(&tts_voice_labels_, &selected_tts_voice_, checkbox_option);
     ai_model_menu_ = ftxui::Menu(&ai_model_labels_, &selected_ai_model_, checkbox_option);
 
-    fetch_tts_button_ = make_button("Fetch registry", [this] { FetchRegistries(); });
+    fetch_tts_button_ = make_button("Fetch registry", [this] { FetchRegistries(); }, ButtonRole::Primary);
     tts_runtime_install_button_ =
         make_button("Install Piper", [this] { StartPiperRuntimeInstall(); });
     tts_download_button_ = make_button("Download voice", [this] { StartTtsVoiceDownload(); });
@@ -636,10 +638,10 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
         make_button("Confirm delete", [this] { ConfirmTtsVoiceDelete(); });
     tts_cancel_delete_button_ =
         make_button("Cancel", [this] { CancelTtsVoiceDelete(); });
-    tts_test_button_ = make_button("Test", [this] { TestTtsVoice(); });
+    tts_test_button_ = make_button("Test", [this] { TestTtsVoice(); }, ButtonRole::Primary);
     tts_test_popup_close_button_ =
         make_button("Close", [this] { CloseTtsTestPopup(); });
-    fetch_ai_button_ = make_button("Fetch registry", [this] { FetchRegistries(); });
+    fetch_ai_button_ = make_button("Fetch registry", [this] { FetchRegistries(); }, ButtonRole::Primary);
     ai_runtime_download_button_ =
         make_button("Download AI runtime", [this] { StartAiRuntimeDownload(); });
     ai_runtime_delete_button_ =

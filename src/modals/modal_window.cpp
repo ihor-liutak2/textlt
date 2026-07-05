@@ -29,8 +29,9 @@ ModalWindow::ModalWindow(std::shared_ptr<IModalContent> content,
 }
 
 ftxui::ButtonOption ModalWindow::MakeTextButtonOption(const std::string& label,
-                                                      ButtonCallback callback) const {
-    ButtonSpec spec = ButtonSpecFromLabel(label);
+                                                      ButtonCallback callback,
+                                                      ButtonRole role) const {
+    ButtonSpec spec = ButtonSpecFromLabel(label, role);
     if (label == "■") {
         spec.caption = "■";
         spec.role = ButtonRole::Cancel;
@@ -82,11 +83,14 @@ void ModalWindow::SetFooterButtons(std::vector<FooterButton> buttons) {
 
     for (size_t index = 0; index < count; ++index) {
         auto callback = std::move(buttons[index].on_click);
-        footer_buttons_.push_back(ftxui::Button(MakeTextButtonOption(buttons[index].label, [callback = std::move(callback)] {
-            if (callback) {
-                callback();
-            }
-        })));
+        footer_buttons_.push_back(ftxui::Button(MakeTextButtonOption(
+            buttons[index].label,
+            [callback = std::move(callback)] {
+                if (callback) {
+                    callback();
+                }
+            },
+            buttons[index].role)));
     }
     RebuildChildren();
 }

@@ -12,6 +12,7 @@
 #include "ftxui/dom/elements.hpp"
 #include "ftxui/screen/box.hpp"
 #include "theme.hpp" // Assuming Theme is available for styling
+#include "ui_button.hpp"
 #include "modal_interface.hpp" // Include the interface
 
 namespace textlt {
@@ -25,6 +26,7 @@ public:
     struct FooterButton {
         std::string label;
         ButtonCallback on_click;
+        ButtonRole role = ButtonRole::Default;
     };
 
     ModalWindow(std::shared_ptr<IModalContent> content, const Theme* theme, OnCloseCallback on_close);
@@ -48,7 +50,10 @@ public:
     void RefreshChildren() { RebuildChildren(); }
 
 private:
-    ftxui::ButtonOption MakeTextButtonOption(const std::string& label, ButtonCallback callback) const;
+    ftxui::ButtonOption MakeTextButtonOption(
+        const std::string& label,
+        ButtonCallback callback,
+        ButtonRole role = ButtonRole::Default) const;
     void RebuildChildren();
     ftxui::Component ActiveChild() override;
     void SetActiveChild(ftxui::ComponentBase* child) override;

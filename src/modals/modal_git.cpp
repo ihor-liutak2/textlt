@@ -19,30 +19,8 @@ ButtonSpec GitButtonSpec(std::string label) {
     spec.variant = ButtonVariant::AccentEdges;
 
     const std::string& caption = spec.caption;
-    if (caption == "Commit" || caption == "Open" || caption == "Open side by side" ||
-        caption == "Open unified diff" || caption == "Checkout" ||
-        caption == "Checkout remote" || caption == "Create tag" || caption == "Push" ||
-        caption == "Fetch") {
-        spec.role = ButtonRole::Primary;
-        return spec;
-    }
-    if (caption == "Confirm") {
-        spec.role = ButtonRole::Primary;
-        return spec;
-    }
     if (caption == "Cancel") {
         spec.role = ButtonRole::Cancel;
-        return spec;
-    }
-    if (caption.find("Delete") != std::string::npos ||
-        caption.find("Force push") != std::string::npos) {
-        spec.role = ButtonRole::Danger;
-        return spec;
-    }
-    if (caption.find("Copy") != std::string::npos ||
-        caption.find("Refresh") != std::string::npos ||
-        caption == "Fetch tags" || caption == "Check connection") {
-        spec.role = ButtonRole::Utility;
         return spec;
     }
     if (caption == "Working" || caption == "Staged") {
@@ -50,21 +28,24 @@ ButtonSpec GitButtonSpec(std::string label) {
         spec.size = ButtonSize::Compact;
         return spec;
     }
-    if (caption.find("Unstage") != std::string::npos ||
+    if (caption.find("Merge") != std::string::npos ||
         caption.find("Rebase") != std::string::npos ||
-        caption.find("Merge") != std::string::npos ||
+        caption.find("Delete") != std::string::npos ||
+        caption.find("Update") != std::string::npos ||
         caption.find("Rename") != std::string::npos ||
-        caption.find("Update") != std::string::npos) {
+        caption == "Push" || caption == "Push tag" ||
+        caption == "Push all tags" || caption.find("Force push") != std::string::npos) {
         spec.role = ButtonRole::Warning;
         return spec;
     }
-    if (caption.find("Stage") != std::string::npos ||
-        caption == "Push tag" || caption == "Push all tags") {
-        spec.role = ButtonRole::Success;
+    if (caption.find("Copy") != std::string::npos ||
+        caption.find("Refresh") != std::string::npos ||
+        caption == "Check connection") {
+        spec.role = ButtonRole::Utility;
         return spec;
     }
 
-    spec.role = ButtonRole::Secondary;
+    spec.role = ButtonRole::Primary;
     return spec;
 }
 

@@ -5,8 +5,8 @@ ftxui::Element RemoteConnectionsModalContent::Render() {
     Element body = vbox({
         hbox({
             add_button_->Render(), text(" "),
-            delete_button_->Render(), text(" "),
             save_button_->Render(), text(" "),
+            delete_button_->Render(), text(" "),
             test_button_->Render(), text(" "),
             token_button_->Render(), text(" "),
             reload_button_->Render(), text(" "),

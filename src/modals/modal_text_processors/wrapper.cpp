@@ -20,12 +20,12 @@ TextProcessorsModal::TextProcessorsModal(
             if (content_) {
                 content_->Reload();
             }
-        }},
+        }, ButtonRole::Cancel},
         {"Pin", [this] {
             if (content_) {
                 content_->TogglePinned();
             }
-        }},
+        }, ButtonRole::Cancel},
         {"Close", [this] { Close(); }},
     });
     modal_->SetBodyFrameScrolling(false);

@@ -40,7 +40,11 @@ ButtonSpec SearchButtonSpec(std::string label) {
         spec.size = ButtonSize::Compact;
         return spec;
     }
-    if (caption == "Paste" || caption == "Copy paths") {
+    if (caption == "Paste") {
+        spec.role = ButtonRole::Warning;
+        return spec;
+    }
+    if (caption == "Copy paths") {
         spec.role = ButtonRole::Utility;
         return spec;
     }

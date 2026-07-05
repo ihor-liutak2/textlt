@@ -20,7 +20,7 @@ SearchFilesModal::SearchFilesModal(
             if (content_) {
                 content_->ExecuteSearchFromFooter();
             }
-        }},
+        }, ButtonRole::Cancel},
         {"Close", [this] { Close(); }},
     });
 

@@ -174,10 +174,10 @@ TtsModalContent::TtsModalContent(
 
     run_refresh_library_button_ =
         MakeTextButton("Refresh", [this] { StartRunWorkflow(true, false); },
-                       ButtonRole::Utility, ButtonVariant::AccentEdges, "⟳");
+                       ButtonRole::Danger, ButtonVariant::AccentEdges, "⟳");
     library_refresh_library_button_ =
         MakeTextButton("Refresh", [this] { StartRunWorkflow(true, false); },
-                       ButtonRole::Utility, ButtonVariant::AccentEdges, "⟳");
+                       ButtonRole::Danger, ButtonVariant::AccentEdges, "⟳");
     save_metadata_button_ =
         MakeTextButton("Save metadata", [this] { SaveSelectedMetadata(); },
                        ButtonRole::Primary);
@@ -204,7 +204,7 @@ TtsModalContent::TtsModalContent(
                        ButtonRole::Danger);
     info_button_ =
         MakeTextButton("Info", [this] { ShowSelectedBookInfo(); },
-                       ButtonRole::Utility);
+                       ButtonRole::Danger);
     delete_book_button_ =
         MakeTextButton("Delete", [this] { DeleteSelectedBook(); },
                        ButtonRole::Danger);
@@ -216,10 +216,10 @@ TtsModalContent::TtsModalContent(
                        ButtonRole::Primary);
     test_player_button_ =
         MakeTextButton("Test", [this] { TestSelectedPlayer(); },
-                       ButtonRole::Secondary, ButtonVariant::AccentEdges, "▶");
+                       ButtonRole::Primary, ButtonVariant::AccentEdges, "▶");
     refresh_players_button_ =
         MakeTextButton("Refresh", [this] { RefreshPlayerOptions(); },
-                       ButtonRole::Utility, ButtonVariant::AccentEdges, "⟳");
+                       ButtonRole::Primary, ButtonVariant::AccentEdges, "⟳");
     save_custom_player_button_ =
         MakeTextButton("Save custom", [this] { SaveCustomPlayerCommand(); },
                        ButtonRole::Primary);

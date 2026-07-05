@@ -263,7 +263,8 @@ TextltApp::TextltApp()
         [this] { RunCommand("tts.open_modal"); },
         &current_theme_,
         [this] { return tts_header_active_button_ == TtsHeaderButton::Open; },
-        ButtonRole::Primary));
+        ButtonRole::Media,
+        "▶"));
     title_bar_tts_play_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
         "Play",
         [this] { RunCommand("tts.play"); },
@@ -418,15 +419,15 @@ TextltApp::TextltApp()
         &goto_line_input_, "line number", goto_line_input_option);
 
     find_paste_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
-        "Paste", [this] { PasteIntoFindPanelInput(); }, &current_theme_));
+        "Paste", [this] { PasteIntoFindPanelInput(); }, &current_theme_, {}, ButtonRole::Navigation));
     find_clear_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
         "Clear", [this] { ClearFindPanelFields(); }, &current_theme_));
     replace_paste_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
-        "Paste", [this] { PasteIntoFindPanelInput(); }, &current_theme_));
+        "Paste", [this] { PasteIntoFindPanelInput(); }, &current_theme_, {}, ButtonRole::Navigation));
     replace_clear_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
         "Clear", [this] { ClearFindPanelFields(); }, &current_theme_));
     find_next_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
-        "Find Next", [this] { FindNext(); }, &current_theme_));
+        "Find Next", [this] { FindNext(); }, &current_theme_, {}, ButtonRole::Navigation));
     find_previous_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
         "Find Prev", [this] { FindPrevious(); }, &current_theme_));
     replace_next_button_ = ftxui::Button(MakeFindPanelTextButtonOption(

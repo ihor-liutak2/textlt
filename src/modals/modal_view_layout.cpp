@@ -89,7 +89,7 @@ ViewLayoutContent::ViewLayoutContent(
             on_equal_widths_();
         }
         RefreshFromApp();
-    }, ButtonRole::Utility));
+    }, ButtonRole::Cancel));
 
     container_ = ftxui::Container::Vertical({
         ftxui::Container::Horizontal({

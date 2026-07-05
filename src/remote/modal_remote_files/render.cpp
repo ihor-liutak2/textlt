@@ -17,13 +17,13 @@ ftxui::Element RemoteFilesModalContent::Render() {
         hbox({
             copy_to_remote_button_->Render(), text(" "),
             copy_to_local_button_->Render(), text(" "),
+            mkdir_button_->Render(), text(" "),
             open_button_->Render(), text(" "),
             sync_opened_button_->Render(), text(" "),
-            clear_cache_button_->Render(), text(" "),
             copy_path_button_->Render(), text(" "),
-            mkdir_button_->Render(), text(" "),
             rename_button_->Render(), text(" "),
-            delete_button_->Render(),
+            delete_button_->Render(), text(" "),
+            clear_cache_button_->Render(),
         }),
         separator() | color(theme.modal_border),
         hbox({

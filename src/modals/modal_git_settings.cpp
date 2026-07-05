@@ -20,7 +20,8 @@ ButtonSpec GitSettingsButtonSpec(std::string label) {
 
     const std::string& caption = spec.caption;
     if (caption == "Add" || caption == "Update URL" || caption == "Save local" ||
-        caption == "Save global" || caption == "Confirm") {
+        caption == "Save global" || caption == "Confirm" || caption == "Refresh" ||
+        caption == "Test") {
         spec.role = ButtonRole::Primary;
         return spec;
     }
@@ -36,7 +37,7 @@ ButtonSpec GitSettingsButtonSpec(std::string label) {
         spec.role = ButtonRole::Warning;
         return spec;
     }
-    if (caption == "Refresh" || caption == "Copy" || caption == "Test") {
+    if (caption == "Copy") {
         spec.role = ButtonRole::Utility;
         return spec;
     }

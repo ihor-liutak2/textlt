@@ -87,9 +87,9 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     save_button_ = MakeTextButton("Save", [this] { SaveFormToSelected(); },
         ButtonRole::Primary, ButtonVariant::AccentEdges);
     test_button_ = MakeTextButton("Test", [this] { TestSelected(); },
-        ButtonRole::Secondary, ButtonVariant::AccentEdges, "▶");
+        ButtonRole::Cancel, ButtonVariant::AccentEdges, "▶");
     token_button_ = MakeTextButton("Token", [this] { PrepareTokenFile(); },
-        ButtonRole::Utility, ButtonVariant::AccentEdges);
+        ButtonRole::Cancel, ButtonVariant::AccentEdges);
     sftp_type_button_ = MakeTextButton("SFTP", [this] { SelectType(RemoteConnectionType::Sftp); },
         ButtonRole::Toggle, ButtonVariant::Minimal);
     google_type_button_ = MakeTextButton("Google", [this] { SelectType(RemoteConnectionType::GoogleDrive); },
@@ -99,7 +99,7 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     dropbox_type_button_ = MakeTextButton("Dropbox", [this] { SelectType(RemoteConnectionType::Dropbox); },
         ButtonRole::Toggle, ButtonVariant::Minimal);
     reload_button_ = MakeTextButton("Reload", [this] { Reload(); },
-        ButtonRole::Utility, ButtonVariant::AccentEdges, "⟳");
+        ButtonRole::Cancel, ButtonVariant::AccentEdges, "⟳");
     help_button_ = MakeTextButton("Help Connect", [this] { OpenHelp(); },
         ButtonRole::Utility, ButtonVariant::AccentEdges, "?");
     authorize_button_ = MakeTextButton("Authorize", [this] { AuthorizeConnection(); },
@@ -127,8 +127,8 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
 
     ftxui::Components toolbar_buttons;
     toolbar_buttons.push_back(add_button_);
-    toolbar_buttons.push_back(delete_button_);
     toolbar_buttons.push_back(save_button_);
+    toolbar_buttons.push_back(delete_button_);
     toolbar_buttons.push_back(test_button_);
     toolbar_buttons.push_back(token_button_);
     toolbar_buttons.push_back(reload_button_);

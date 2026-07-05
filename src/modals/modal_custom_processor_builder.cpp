@@ -21,12 +21,17 @@ ButtonSpec CustomProcessorButtonSpec(std::string label) {
     spec.variant = ButtonVariant::AccentEdges;
 
     const std::string& caption = spec.caption;
-    if (caption == "Save Processor") {
+    if (caption == "Save Processor" || caption == "Copy AI Prompt" ||
+        caption == "Paste JSON" || caption == "Validate") {
         spec.role = ButtonRole::Primary;
         return spec;
     }
     if (caption == "Close") {
         spec.role = ButtonRole::Cancel;
+        return spec;
+    }
+    if (caption == "Create" || caption == "Manage") {
+        spec.role = ButtonRole::Tab;
         return spec;
     }
     if (caption == "Delete") {
@@ -37,16 +42,17 @@ ButtonSpec CustomProcessorButtonSpec(std::string label) {
         spec.role = ButtonRole::Warning;
         return spec;
     }
-    if (caption == "Copy AI Prompt" || caption == "Paste JSON" || caption == "Reload") {
+    if (caption == "Reload") {
         spec.role = ButtonRole::Utility;
         return spec;
     }
-    if (caption == "Validate" || caption == "Edit") {
+    if (caption == "Edit") {
         spec.role = ButtonRole::Secondary;
         return spec;
     }
 
     spec.role = ButtonRole::Toggle;
+    spec.variant = ButtonVariant::Minimal;
     spec.size = ButtonSize::Compact;
     return spec;
 }
