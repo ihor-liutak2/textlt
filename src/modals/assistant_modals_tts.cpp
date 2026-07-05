@@ -18,6 +18,7 @@
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/event.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "assistant_download_progress.hpp"
 #include "piper_manager.hpp"
 
 namespace textlt {
@@ -32,24 +33,6 @@ ftxui::Element StatusLine(const std::string& label,
         text(value) | color(theme.modal_text_color),
     });
 }
-
-
-std::string FormatBytes(unsigned long long value) {
-    std::string text = std::to_string(value);
-    std::string formatted;
-    int group_count = 0;
-    for (auto iter = text.rbegin(); iter != text.rend(); ++iter) {
-        if (group_count == 3) {
-            formatted.push_back(' ');
-            group_count = 0;
-        }
-        formatted.push_back(*iter);
-        ++group_count;
-    }
-    std::reverse(formatted.begin(), formatted.end());
-    return formatted;
-}
-
 
 
 bool IsSafeArchivePath(const std::filesystem::path& path) {
@@ -155,11 +138,7 @@ bool ExtractArchive(const std::filesystem::path& archive_path,
 
 bool DownloadRuntimeArchive(const std::string& url,
                             const std::filesystem::path& final_path,
-                            std::mutex& state_mutex,
-                            unsigned long long& downloaded_bytes,
-                            unsigned long long& total_bytes,
-                            float& progress_ratio,
-                            const std::function<void()>& request_redraw) {
+                            std::mutex& state_mutex) {
     using namespace assistant_modal_detail;
 
     EnsureDirectory(final_path.parent_path());
@@ -170,20 +149,8 @@ bool DownloadRuntimeArchive(const std::string& url,
     const bool download_ok = CurlManager::DownloadToFile(
         url,
         part_path,
-        [&](unsigned long long total, unsigned long long downloaded) {
-            {
-                std::lock_guard<std::mutex> lock(state_mutex);
-                downloaded_bytes = downloaded;
-                if (total > 0) {
-                    total_bytes = total;
-                    progress_ratio = static_cast<float>(downloaded) / static_cast<float>(total);
-                } else if (downloaded > 0) {
-                    progress_ratio = 0.05f;
-                }
-            }
-            if (request_redraw) {
-                request_redraw();
-            }
+        [&state_mutex](unsigned long long, unsigned long long) {
+            std::lock_guard<std::mutex> lock(state_mutex);
             return true;
         });
 
@@ -311,57 +278,12 @@ std::vector<Json> SelectedInstalledPiperVoices(const std::string& selected_langu
     return selected;
 }
 
-struct PiperDownloadContext {
-    std::atomic_bool* cancel = nullptr;
-    std::mutex* mutex = nullptr;
-    unsigned long long* downloaded_bytes = nullptr;
-    unsigned long long* total_bytes = nullptr;
-    float* progress_ratio = nullptr;
-    std::function<void()>* request_redraw = nullptr;
-};
-
-bool UpdatePiperProgress(PiperDownloadContext* context,
-                         unsigned long long total,
-                         unsigned long long downloaded) {
-    if (!context || !context->cancel || !context->mutex) {
-        return true;
-    }
-    if (*context->cancel) {
-        return false;
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(*context->mutex);
-        *context->downloaded_bytes =
-            downloaded > 0 ? static_cast<unsigned long long>(downloaded) : 0;
-        if (total > 0) {
-            *context->total_bytes = static_cast<unsigned long long>(total);
-            *context->progress_ratio =
-                static_cast<float>(downloaded) / static_cast<float>(total);
-        } else if (*context->total_bytes > 0) {
-            *context->progress_ratio =
-                static_cast<float>(*context->downloaded_bytes) /
-                static_cast<float>(*context->total_bytes);
-        } else {
-            *context->progress_ratio = downloaded > 0 ? 0.05f : 0.0f;
-        }
-    }
-    if (context->request_redraw && *context->request_redraw) {
-        (*context->request_redraw)();
-    }
-    return true;
-}
-
 bool DownloadPiperFile(const std::string& url,
                        const std::filesystem::path& final_path,
                        const std::string& display_name,
                        std::mutex& state_mutex,
                        std::atomic_bool& cancel,
                        std::string& current_file,
-                       unsigned long long& downloaded_bytes,
-                       unsigned long long& total_bytes,
-                       float& progress_ratio,
-                       std::function<void()>& request_redraw,
                        std::string* error_message) {
     using namespace assistant_modal_detail;
 
@@ -376,26 +298,16 @@ bool DownloadPiperFile(const std::string& url,
     {
         std::lock_guard<std::mutex> lock(state_mutex);
         current_file = display_name;
-        downloaded_bytes = 0;
-        progress_ratio = 0.0f;
     }
-    if (request_redraw) {
-        request_redraw();
-    }
-
-    PiperDownloadContext context{
-        &cancel,
-        &state_mutex,
-        &downloaded_bytes,
-        &total_bytes,
-        &progress_ratio,
-        &request_redraw,
-    };
     const bool download_ok = CurlManager::DownloadToFile(
         url,
         part_path,
-        [&context](unsigned long long total, unsigned long long downloaded) {
-            return UpdatePiperProgress(&context, total, downloaded);
+        [&cancel, &state_mutex](unsigned long long, unsigned long long) {
+            if (cancel.load()) {
+                return false;
+            }
+            std::lock_guard<std::mutex> lock(state_mutex);
+            return true;
         });
 
     if (!download_ok) {
@@ -544,22 +456,30 @@ void AssistantSettingsModalContent::StartPiperRuntimeInstall() {
         tts_refresh_after_download_ = false;
         tts_delete_confirm_visible_ = false;
         tts_download_current_file_ = archive_path.filename().string();
-        tts_downloaded_bytes_ = 0;
-        tts_total_bytes_ = 0;
         tts_progress_ratio_ = 0.0f;
         tts_status_ = "Downloading Piper runtime...";
     }
     RequestRedraw();
 
     tts_runtime_thread_ = std::thread([this, url, archive_path, runtime_directory] {
+        std::atomic_bool progress_running{true};
+        std::thread progress_thread = assistant_modal_detail::StartAssistantDownloadProgress(
+            progress_running,
+            [this](float progress) {
+                std::lock_guard<std::mutex> lock(tts_download_mutex_);
+                tts_progress_ratio_ = progress;
+            },
+            request_redraw_);
+
         const bool download_ok = DownloadRuntimeArchive(
             url,
             archive_path,
-            tts_download_mutex_,
-            tts_downloaded_bytes_,
-            tts_total_bytes_,
-            tts_progress_ratio_,
-            request_redraw_);
+            tts_download_mutex_);
+
+        progress_running = false;
+        if (progress_thread.joinable()) {
+            progress_thread.join();
+        }
         if (!download_ok) {
             std::lock_guard<std::mutex> lock(tts_download_mutex_);
             tts_downloading_ = false;
@@ -575,8 +495,6 @@ void AssistantSettingsModalContent::StartPiperRuntimeInstall() {
             tts_status_ = "Extracting Piper runtime...";
             tts_download_current_file_ = "extracting " + archive_path.filename().string();
             tts_progress_ratio_ = 0.0f;
-            tts_downloaded_bytes_ = 0;
-            tts_total_bytes_ = 0;
         }
         RequestRedraw();
 
@@ -654,8 +572,6 @@ void AssistantSettingsModalContent::StartTtsVoiceDownload() {
         tts_download_visible_ = true;
         tts_refresh_after_download_ = false;
         tts_download_current_file_ = model_filename;
-        tts_downloaded_bytes_ = 0;
-        tts_total_bytes_ = 0;
         tts_progress_ratio_ = 0.0f;
         tts_status_ = "Downloading voice...";
     }
@@ -668,6 +584,15 @@ void AssistantSettingsModalContent::StartTtsVoiceDownload() {
                                         config_final_path,
                                         model_filename,
                                         config_filename] {
+        std::atomic_bool progress_running{true};
+        std::thread progress_thread = assistant_modal_detail::StartAssistantDownloadProgress(
+            progress_running,
+            [this](float progress) {
+                std::lock_guard<std::mutex> lock(tts_download_mutex_);
+                tts_progress_ratio_ = progress;
+            },
+            request_redraw_);
+
         std::string error_message;
         const bool model_ok = DownloadPiperFile(
             model_url,
@@ -676,10 +601,6 @@ void AssistantSettingsModalContent::StartTtsVoiceDownload() {
             tts_download_mutex_,
             tts_cancel_download_,
             tts_download_current_file_,
-            tts_downloaded_bytes_,
-            tts_total_bytes_,
-            tts_progress_ratio_,
-            request_redraw_,
             &error_message);
         bool config_ok = false;
         if (model_ok) {
@@ -690,11 +611,12 @@ void AssistantSettingsModalContent::StartTtsVoiceDownload() {
                 tts_download_mutex_,
                 tts_cancel_download_,
                 tts_download_current_file_,
-                tts_downloaded_bytes_,
-                tts_total_bytes_,
-                tts_progress_ratio_,
-                request_redraw_,
                 &error_message);
+        }
+
+        progress_running = false;
+        if (progress_thread.joinable()) {
+            progress_thread.join();
         }
 
         std::lock_guard<std::mutex> lock(tts_download_mutex_);
@@ -939,16 +861,12 @@ ftxui::Element AssistantSettingsModalContent::RenderTtsTab(const Theme& theme) {
     bool show_download_progress = false;
     bool show_delete_confirmation = false;
     std::string current_file;
-    unsigned long long downloaded_bytes = 0;
-    unsigned long long total_bytes = 0;
     float progress_ratio = 0.0f;
     {
         std::lock_guard<std::mutex> lock(tts_download_mutex_);
         show_download_progress = tts_download_visible_;
         show_delete_confirmation = tts_delete_confirm_visible_;
         current_file = tts_download_current_file_;
-        downloaded_bytes = tts_downloaded_bytes_;
-        total_bytes = tts_total_bytes_;
         progress_ratio = tts_progress_ratio_;
     }
 
@@ -982,15 +900,9 @@ ftxui::Element AssistantSettingsModalContent::RenderTtsTab(const Theme& theme) {
         rows.push_back(separator() | color(theme.modal_border));
         rows.push_back(text(" Download progress") | bold | color(theme.modal_text_color));
         rows.push_back(text(" " + current_file) | color(theme.modal_text_color));
-        std::string byte_text = FormatBytes(downloaded_bytes) + " bytes";
-        if (total_bytes > 0) {
-            byte_text = FormatBytes(downloaded_bytes) + " / " +
-                        FormatBytes(total_bytes) + " bytes";
-        }
         const int percent =
             static_cast<int>(progress_ratio * 100.0f + 0.5f);
         rows.push_back(hbox({
-            text(" " + byte_text) | color(theme.modal_text_color),
             filler(),
             text(std::to_string(percent) + "% ") |
                 color(theme.modal_text_color),

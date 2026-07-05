@@ -14,6 +14,7 @@
 #include "ftxui/component/event.hpp"
 #include "ftxui/dom/elements.hpp"
 
+#include "assistant_download_progress.hpp"
 #include "piper_manager.hpp"
 #include "ui_button.hpp"
 
@@ -289,46 +290,9 @@ bool FindSelectedAiModel(int selected_model, Json* selected) {
     return false;
 }
 
-struct RuntimeDownloadContext {
-    std::mutex* mutex = nullptr;
-    std::atomic<float>* progress = nullptr;
-    unsigned long long* downloaded_bytes = nullptr;
-    unsigned long long* total_bytes = nullptr;
-    std::function<void()>* request_redraw = nullptr;
-};
-
-bool UpdateRuntimeProgress(RuntimeDownloadContext* context,
-                           unsigned long long total,
-                           unsigned long long downloaded) {
-    if (!context || !context->mutex || !context->progress) {
-        return true;
-    }
-    {
-        std::lock_guard<std::mutex> lock(*context->mutex);
-        if (context->downloaded_bytes) {
-            *context->downloaded_bytes =
-                downloaded > 0 ? static_cast<unsigned long long>(downloaded) : 0;
-        }
-        if (context->total_bytes && total > 0) {
-            *context->total_bytes = static_cast<unsigned long long>(total);
-        }
-        context->progress->store(total > 0
-            ? static_cast<float>(downloaded) / static_cast<float>(total)
-            : (downloaded > 0 ? 0.05f : 0.0f));
-    }
-    if (context->request_redraw && *context->request_redraw) {
-        (*context->request_redraw)();
-    }
-    return true;
-}
-
 bool DownloadRuntimeArchive(const std::string& url,
                             const std::filesystem::path& final_path,
-                            std::mutex& state_mutex,
-                            std::atomic<float>& progress,
-                            unsigned long long& downloaded_bytes,
-                            unsigned long long& total_bytes,
-                            std::function<void()>& request_redraw) {
+                            std::mutex& state_mutex) {
     using namespace assistant_modal_detail;
 
     EnsureDirectory(final_path.parent_path());
@@ -336,18 +300,12 @@ bool DownloadRuntimeArchive(const std::string& url,
     std::error_code error;
     std::filesystem::remove(part_path, error);
 
-    RuntimeDownloadContext context{
-        &state_mutex,
-        &progress,
-        &downloaded_bytes,
-        &total_bytes,
-        &request_redraw,
-    };
     const bool download_ok = CurlManager::DownloadToFile(
         url,
         part_path,
-        [&context](unsigned long long total, unsigned long long downloaded) {
-            return UpdateRuntimeProgress(&context, total, downloaded);
+        [&state_mutex](unsigned long long, unsigned long long) {
+            std::lock_guard<std::mutex> lock(state_mutex);
+            return true;
         });
 
     if (!download_ok) {
@@ -371,11 +329,7 @@ bool DownloadRuntimeArchive(const std::string& url,
 bool DownloadAiModelFile(const std::string& url,
                          const std::filesystem::path& final_path,
                          const std::filesystem::path& part_path,
-                         std::mutex& state_mutex,
-                         std::atomic<float>& progress,
-                         unsigned long long& downloaded_bytes,
-                         unsigned long long& total_bytes,
-                         std::function<void()>& request_redraw) {
+                         std::mutex& state_mutex) {
     using namespace assistant_modal_detail;
 
     EnsureDirectory(final_path.parent_path());
@@ -383,18 +337,12 @@ bool DownloadAiModelFile(const std::string& url,
     std::error_code error;
     std::filesystem::remove(part_path, error);
 
-    RuntimeDownloadContext context{
-        &state_mutex,
-        &progress,
-        &downloaded_bytes,
-        &total_bytes,
-        &request_redraw,
-    };
     const bool download_ok = CurlManager::DownloadToFile(
         url,
         part_path,
-        [&context](unsigned long long total, unsigned long long downloaded) {
-            return UpdateRuntimeProgress(&context, total, downloaded);
+        [&state_mutex](unsigned long long, unsigned long long) {
+            std::lock_guard<std::mutex> lock(state_mutex);
+            return true;
         });
 
     if (!download_ok) {
@@ -908,8 +856,6 @@ void AssistantSettingsModalContent::StartAiRuntimeDownload() {
         ai_runtime_progress_visible_ = true;
         ai_runtime_extracting_ = false;
         ai_progress_ = 0.0f;
-        ai_runtime_downloaded_bytes_ = 0;
-        ai_runtime_total_bytes_ = 0;
         ai_status_ = "Runtime downloading...";
     }
     RequestRedraw();
@@ -923,22 +869,29 @@ void AssistantSettingsModalContent::StartAiRuntimeDownload() {
         UserDataDirectory() / "ai" / "runtimes" / "llama_cpp";
 
     ai_runtime_thread_ = std::thread([this, url, archive_path, runtime_directory] {
+        std::atomic_bool progress_running{true};
+        std::thread progress_thread = assistant_modal_detail::StartAssistantDownloadProgress(
+            progress_running,
+            [this](float progress) {
+                ai_progress_.store(progress);
+            },
+            request_redraw_);
+
         const bool download_ok = DownloadRuntimeArchive(
             url,
             archive_path,
-            ai_runtime_mutex_,
-            ai_progress_,
-            ai_runtime_downloaded_bytes_,
-            ai_runtime_total_bytes_,
-            request_redraw_);
+            ai_runtime_mutex_);
+
+        progress_running = false;
+        if (progress_thread.joinable()) {
+            progress_thread.join();
+        }
         if (!download_ok) {
             std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
             ai_runtime_downloading_ = false;
             ai_runtime_progress_visible_ = false;
             ai_runtime_extracting_ = false;
             ai_progress_ = 0.0f;
-            ai_runtime_downloaded_bytes_ = 0;
-            ai_runtime_total_bytes_ = 0;
             ai_status_ = "Runtime install failed";
             RequestRedraw();
             return;
@@ -950,8 +903,6 @@ void AssistantSettingsModalContent::StartAiRuntimeDownload() {
             ai_runtime_progress_visible_ = true;
             ai_runtime_extracting_ = true;
             ai_progress_ = 0.0f;
-            ai_runtime_downloaded_bytes_ = 0;
-            ai_runtime_total_bytes_ = 0;
         }
         RequestRedraw();
 
@@ -970,8 +921,6 @@ void AssistantSettingsModalContent::StartAiRuntimeDownload() {
         ai_runtime_progress_visible_ = false;
         ai_runtime_extracting_ = false;
         ai_progress_ = 0.0f;
-        ai_runtime_downloaded_bytes_ = 0;
-        ai_runtime_total_bytes_ = 0;
         ai_status_ = binary_ok ? "Runtime installed" : "Runtime install failed";
         RequestRedraw();
     });
@@ -1031,8 +980,6 @@ void AssistantSettingsModalContent::ConfirmAiRuntimeDelete() {
         ai_runtime_extracting_ = true;
         ai_status_ = "Runtime deleting...";
         ai_progress_ = 0.0f;
-        ai_runtime_downloaded_bytes_ = 0;
-        ai_runtime_total_bytes_ = 0;
     }
     RequestRedraw();
 
@@ -1057,8 +1004,6 @@ void AssistantSettingsModalContent::ConfirmAiRuntimeDelete() {
             ai_runtime_download_url_.clear();
             ai_runtime_asset_name_.clear();
             ai_progress_ = 0.0f;
-            ai_runtime_downloaded_bytes_ = 0;
-            ai_runtime_total_bytes_ = 0;
             ai_status_ = deleted ? "Runtime deleted" : "Delete runtime failed";
         }
         RequestRedraw();
@@ -1114,31 +1059,36 @@ void AssistantSettingsModalContent::StartAiModelDownload() {
         ai_model_downloading_ = true;
         ai_model_progress_visible_ = true;
         ai_progress_ = 0.0f;
-        ai_model_downloaded_bytes_ = 0;
-        ai_model_total_bytes_ = 0;
         ai_status_ = "Model downloading...";
         ai_model_delete_confirm_visible_ = false;
     }
     RequestRedraw();
 
     ai_model_thread_ = std::thread([this, url, final_path, part_path] {
+        std::atomic_bool progress_running{true};
+        std::thread progress_thread = assistant_modal_detail::StartAssistantDownloadProgress(
+            progress_running,
+            [this](float progress) {
+                ai_progress_.store(progress);
+            },
+            request_redraw_);
+
         const bool ok = DownloadAiModelFile(
             url,
             final_path,
             part_path,
-            ai_runtime_mutex_,
-            ai_progress_,
-            ai_model_downloaded_bytes_,
-            ai_model_total_bytes_,
-            request_redraw_);
+            ai_runtime_mutex_);
+
+        progress_running = false;
+        if (progress_thread.joinable()) {
+            progress_thread.join();
+        }
 
         {
             std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
             ai_model_downloading_ = false;
             ai_model_progress_visible_ = false;
             ai_progress_ = 0.0f;
-            ai_model_downloaded_bytes_ = 0;
-            ai_model_total_bytes_ = 0;
             ai_refresh_after_model_download_ = ok;
             ai_status_ = ok ? "Model downloaded" : "Model download failed";
         }
@@ -1241,8 +1191,6 @@ void AssistantSettingsModalContent::ConfirmAiModelDelete() {
         ai_model_progress_visible_ = true;
         ai_model_delete_confirm_visible_ = false;
         ai_progress_ = 0.0f;
-        ai_model_downloaded_bytes_ = 0;
-        ai_model_total_bytes_ = 0;
         ai_status_ = "Model deleting...";
     }
     RequestRedraw();
@@ -1273,8 +1221,6 @@ void AssistantSettingsModalContent::ConfirmAiModelDelete() {
             ai_model_progress_visible_ = false;
             ai_model_delete_pending_filename_.clear();
             ai_progress_ = 0.0f;
-            ai_model_downloaded_bytes_ = 0;
-            ai_model_total_bytes_ = 0;
             ai_refresh_after_model_download_ = true;
             ai_status_ = deleted ? "Model deleted" : "Delete model failed";
         }

@@ -133,8 +133,6 @@ private:
     std::string tts_test_popup_text_;
     std::vector<Json> tts_delete_pending_voices_;
     std::string tts_download_current_file_;
-    unsigned long long tts_downloaded_bytes_ = 0;
-    unsigned long long tts_total_bytes_ = 0;
     float tts_progress_ratio_ = 0.0f;
     int popup_layer_index_ = 0;
     std::thread ai_runtime_thread_;
@@ -143,8 +141,6 @@ private:
     bool ai_runtime_delete_confirm_visible_ = false;
     bool ai_runtime_progress_visible_ = false;
     bool ai_runtime_extracting_ = false;
-    unsigned long long ai_runtime_downloaded_bytes_ = 0;
-    unsigned long long ai_runtime_total_bytes_ = 0;
     std::thread ai_model_thread_;
     std::thread fetch_thread_;
     bool ai_model_downloading_ = false;
@@ -153,8 +149,6 @@ private:
     bool ai_model_delete_confirm_visible_ = false;
     bool ai_refresh_after_model_download_ = false;
     std::string ai_model_delete_pending_filename_;
-    unsigned long long ai_model_downloaded_bytes_ = 0;
-    unsigned long long ai_model_total_bytes_ = 0;
 
     ftxui::Component tts_tab_button_;
     ftxui::Component ai_tab_button_;

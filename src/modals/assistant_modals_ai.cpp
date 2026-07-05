@@ -64,22 +64,6 @@ bool AiRuntimeInstalled() {
     return false;
 }
 
-std::string FormatBytes(unsigned long long value) {
-    std::string text = std::to_string(value);
-    std::string formatted;
-    int group_count = 0;
-    for (auto iter = text.rbegin(); iter != text.rend(); ++iter) {
-        if (group_count == 3) {
-            formatted.push_back(' ');
-            group_count = 0;
-        }
-        formatted.push_back(*iter);
-        ++group_count;
-    }
-    std::reverse(formatted.begin(), formatted.end());
-    return formatted;
-}
-
 std::string SelectedAiModelDescription(int selected_model) {
     using namespace assistant_modal_detail;
 
@@ -186,10 +170,6 @@ ftxui::Element AssistantSettingsModalContent::RenderAiTab(const Theme& theme) {
     bool show_model_progress = false;
     bool show_model_delete_confirmation = false;
     bool show_model_delete_progress = false;
-    unsigned long long downloaded_bytes = 0;
-    unsigned long long total_bytes = 0;
-    unsigned long long model_downloaded_bytes = 0;
-    unsigned long long model_total_bytes = 0;
     {
         std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
         refresh_models = ai_refresh_after_model_download_;
@@ -200,10 +180,6 @@ ftxui::Element AssistantSettingsModalContent::RenderAiTab(const Theme& theme) {
         show_model_progress = ai_model_progress_visible_;
         show_model_delete_confirmation = ai_model_delete_confirm_visible_;
         show_model_delete_progress = ai_model_deleting_;
-        downloaded_bytes = ai_runtime_downloaded_bytes_;
-        total_bytes = ai_runtime_total_bytes_;
-        model_downloaded_bytes = ai_model_downloaded_bytes_;
-        model_total_bytes = ai_model_total_bytes_;
     }
     if (refresh_models) {
         std::string status;
@@ -251,13 +227,7 @@ ftxui::Element AssistantSettingsModalContent::RenderAiTab(const Theme& theme) {
             }));
             rows.push_back(gauge(ai_progress) | border);
         } else {
-        std::string byte_text = FormatBytes(downloaded_bytes) + " bytes";
-        if (total_bytes > 0) {
-            byte_text = FormatBytes(downloaded_bytes) + " / " +
-                        FormatBytes(total_bytes) + " bytes";
-        }
         rows.push_back(hbox({
-            text(" " + byte_text) | color(theme.modal_text_color),
             filler(),
             text(std::to_string(percent) + "% ") | color(theme.modal_text_color),
         }));
@@ -291,13 +261,7 @@ ftxui::Element AssistantSettingsModalContent::RenderAiTab(const Theme& theme) {
                 text(std::to_string(percent) + "% ") | color(theme.modal_text_color),
             }));
         } else {
-            std::string byte_text = FormatBytes(model_downloaded_bytes) + " bytes";
-            if (model_total_bytes > 0) {
-                byte_text = FormatBytes(model_downloaded_bytes) + " / " +
-                            FormatBytes(model_total_bytes) + " bytes";
-            }
             rows.push_back(hbox({
-                text(" " + byte_text) | color(theme.modal_text_color),
                 filler(),
                 text(std::to_string(percent) + "% ") | color(theme.modal_text_color),
             }));
