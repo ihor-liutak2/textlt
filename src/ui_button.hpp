@@ -168,40 +168,55 @@ inline ButtonRole ButtonRoleFromLabel(const std::string& label) {
     if (key.empty()) {
         return ButtonRole::Default;
     }
-    if (key == "close" || key == "cancel" || key == "back" || key == "no") {
+    if (key == "close" || key == "cancel" || key == "back" || key == "no" ||
+        key == "esc") {
         return ButtonRole::Cancel;
     }
     if (ButtonLabelContains(key, "delete") || ButtonLabelContains(key, "remove") ||
         ButtonLabelContains(key, "discard") || ButtonLabelContains(key, "don't save") ||
-        ButtonLabelContains(key, "force")) {
+        ButtonLabelContains(key, "force") || ButtonLabelContains(key, "drop") ||
+        ButtonLabelContains(key, "erase") || ButtonLabelContains(key, "trash")) {
         return ButtonRole::Danger;
     }
     if (ButtonLabelContains(key, "reset") || ButtonLabelContains(key, "clear") ||
         ButtonLabelContains(key, "overwrite") || ButtonLabelContains(key, "replace") ||
-        ButtonLabelContains(key, "cut") || ButtonLabelContains(key, "stop")) {
+        ButtonLabelContains(key, "cut") || ButtonLabelContains(key, "stop") ||
+        ButtonLabelContains(key, "disconnect") || ButtonLabelContains(key, "rebase") ||
+        ButtonLabelContains(key, "unstage") || ButtonLabelContains(key, "abort")) {
         return ButtonRole::Warning;
     }
     if (ButtonLabelContains(key, "prev") || ButtonLabelContains(key, "next conn") ||
-        ButtonLabelContains(key, "home") || ButtonLabelContains(key, "current dir")) {
+        ButtonLabelContains(key, "home") || ButtonLabelContains(key, "current dir") ||
+        ButtonLabelContains(key, "parent") || key == "up" || key == ".." ||
+        ButtonLabelContains(key, "local") || ButtonLabelContains(key, "remote")) {
         return ButtonRole::Navigation;
     }
     if (ButtonLabelContains(key, "play") || ButtonLabelContains(key, "pause") ||
-        key == "next") {
+        ButtonLabelContains(key, "resume") || key == "next") {
         return ButtonRole::Media;
     }
     if (ButtonLabelContains(key, "refresh") || ButtonLabelContains(key, "reload") ||
         ButtonLabelContains(key, "copy") || ButtonLabelContains(key, "test") ||
         ButtonLabelContains(key, "browse") || ButtonLabelContains(key, "folder") ||
-        ButtonLabelContains(key, "registry")) {
+        ButtonLabelContains(key, "registry") || ButtonLabelContains(key, "help") ||
+        ButtonLabelContains(key, "preview") || ButtonLabelContains(key, "path") ||
+        ButtonLabelContains(key, "token") || ButtonLabelContains(key, "settings") ||
+        ButtonLabelContains(key, "log")) {
         return ButtonRole::Utility;
     }
-    if (ButtonLabelContains(key, "apply") || ButtonLabelContains(key, "save") ||
+    if (key == "ok" || key == "yes" || key == "done" ||
+        ButtonLabelContains(key, "apply") || ButtonLabelContains(key, "save") ||
         ButtonLabelContains(key, "select") || ButtonLabelContains(key, "confirm") ||
         ButtonLabelContains(key, "open") || ButtonLabelContains(key, "add") ||
         ButtonLabelContains(key, "create") || ButtonLabelContains(key, "install") ||
         ButtonLabelContains(key, "download") || ButtonLabelContains(key, "authorize") ||
         ButtonLabelContains(key, "submit") || ButtonLabelContains(key, "set ") ||
-        ButtonLabelContains(key, "assign")) {
+        ButtonLabelContains(key, "assign") || ButtonLabelContains(key, "connect") ||
+        ButtonLabelContains(key, "commit") || ButtonLabelContains(key, "checkout") ||
+        ButtonLabelContains(key, "push") || ButtonLabelContains(key, "fetch") ||
+        ButtonLabelContains(key, "pull") || ButtonLabelContains(key, "run") ||
+        ButtonLabelContains(key, "generate") || ButtonLabelContains(key, "export") ||
+        ButtonLabelContains(key, "import")) {
         return ButtonRole::Primary;
     }
     return ButtonRole::Secondary;
@@ -216,11 +231,11 @@ inline ButtonVariant ButtonVariantForRole(ButtonRole role) {
         case ButtonRole::Warning:
         case ButtonRole::Navigation:
         case ButtonRole::Media:
+        case ButtonRole::Success:
             return ButtonVariant::AccentBar;
         case ButtonRole::Cancel:
         case ButtonRole::Utility:
             return ButtonVariant::ColoredBrackets;
-        case ButtonRole::Success:
         case ButtonRole::Secondary:
         case ButtonRole::Default:
         default:
@@ -245,6 +260,131 @@ inline ButtonSpec ButtonSpecFromLabel(std::string label,
     spec.variant = variant;
     spec.size = size;
     spec.icon = std::move(icon);
+    return spec;
+}
+
+inline ButtonSpec MakeButtonSpec(std::string caption,
+                                 ButtonRole role = ButtonRole::Default,
+                                 ButtonVariant variant = ButtonVariant::Bracket,
+                                 ButtonSize size = ButtonSize::Normal,
+                                 std::string icon = {},
+                                 bool selected = false,
+                                 bool enabled = true) {
+    ButtonSpec spec = ButtonSpecFromLabel(std::move(caption),
+                                          role,
+                                          variant,
+                                          size,
+                                          std::move(icon));
+    spec.selected = selected;
+    spec.enabled = enabled;
+    return spec;
+}
+
+inline ButtonSpec RoleButtonSpec(ButtonRole role,
+                                 std::string caption,
+                                 std::string icon = {},
+                                 ButtonSize size = ButtonSize::Normal,
+                                 bool selected = false,
+                                 bool enabled = true) {
+    return MakeButtonSpec(std::move(caption),
+                          role,
+                          ButtonVariantForRole(role),
+                          size,
+                          std::move(icon),
+                          selected,
+                          enabled);
+}
+
+inline ButtonSpec PrimaryButtonSpec(std::string caption,
+                                    std::string icon = {},
+                                    ButtonSize size = ButtonSize::Normal) {
+    return RoleButtonSpec(ButtonRole::Primary, std::move(caption), std::move(icon), size);
+}
+
+inline ButtonSpec SecondaryButtonSpec(std::string caption,
+                                      std::string icon = {},
+                                      ButtonSize size = ButtonSize::Normal) {
+    return RoleButtonSpec(ButtonRole::Secondary, std::move(caption), std::move(icon), size);
+}
+
+inline ButtonSpec SuccessButtonSpec(std::string caption,
+                                    std::string icon = {},
+                                    ButtonSize size = ButtonSize::Normal) {
+    return RoleButtonSpec(ButtonRole::Success, std::move(caption), std::move(icon), size);
+}
+
+inline ButtonSpec WarningButtonSpec(std::string caption,
+                                    std::string icon = {},
+                                    ButtonSize size = ButtonSize::Normal) {
+    return RoleButtonSpec(ButtonRole::Warning, std::move(caption), std::move(icon), size);
+}
+
+inline ButtonSpec DangerButtonSpec(std::string caption,
+                                   std::string icon = {},
+                                   ButtonSize size = ButtonSize::Normal) {
+    return RoleButtonSpec(ButtonRole::Danger, std::move(caption), std::move(icon), size);
+}
+
+inline ButtonSpec CancelButtonSpec(std::string caption = "Close",
+                                   std::string icon = {},
+                                   ButtonSize size = ButtonSize::Normal) {
+    return RoleButtonSpec(ButtonRole::Cancel, std::move(caption), std::move(icon), size);
+}
+
+inline ButtonSpec UtilityButtonSpec(std::string caption,
+                                    std::string icon = {},
+                                    ButtonSize size = ButtonSize::Normal) {
+    return RoleButtonSpec(ButtonRole::Utility, std::move(caption), std::move(icon), size);
+}
+
+inline ButtonSpec NavigationButtonSpec(std::string caption,
+                                       std::string icon = {},
+                                       ButtonSize size = ButtonSize::Normal) {
+    return RoleButtonSpec(ButtonRole::Navigation, std::move(caption), std::move(icon), size);
+}
+
+inline ButtonSpec TabButtonSpec(std::string caption,
+                                bool selected = false,
+                                std::string icon = {},
+                                ButtonSize size = ButtonSize::Normal) {
+    return RoleButtonSpec(ButtonRole::Tab, std::move(caption), std::move(icon), size, selected);
+}
+
+inline ButtonSpec ToggleButtonSpec(std::string caption,
+                                   bool selected = false,
+                                   std::string icon = {},
+                                   ButtonSize size = ButtonSize::Normal) {
+    return RoleButtonSpec(ButtonRole::Toggle, std::move(caption), std::move(icon), size, selected);
+}
+
+inline ButtonSpec MediaButtonSpec(std::string caption,
+                                  std::string icon = {},
+                                  ButtonSize size = ButtonSize::Normal) {
+    return RoleButtonSpec(ButtonRole::Media, std::move(caption), std::move(icon), size);
+}
+
+inline ButtonSpec WithButtonVariant(ButtonSpec spec, ButtonVariant variant) {
+    spec.variant = variant;
+    return spec;
+}
+
+inline ButtonSpec WithButtonSize(ButtonSpec spec, ButtonSize size) {
+    spec.size = size;
+    return spec;
+}
+
+inline ButtonSpec WithButtonIcon(ButtonSpec spec, std::string icon) {
+    spec.icon = std::move(icon);
+    return spec;
+}
+
+inline ButtonSpec WithButtonSelected(ButtonSpec spec, bool selected = true) {
+    spec.selected = selected;
+    return spec;
+}
+
+inline ButtonSpec WithButtonEnabled(ButtonSpec spec, bool enabled = true) {
+    spec.enabled = enabled;
     return spec;
 }
 
@@ -416,6 +556,22 @@ inline ftxui::Element RenderButton(const Theme& theme,
     }
 }
 
+inline ftxui::Element RenderRoleButton(const Theme& theme,
+                                      ButtonRole role,
+                                     std::string caption,
+                                     bool focused = false,
+                                     std::string icon = {},
+                                     ButtonSize size = ButtonSize::Normal,
+                                     bool selected = false) {
+    return RenderButton(theme,
+                        RoleButtonSpec(role,
+                                       std::move(caption),
+                                       std::move(icon),
+                                       size,
+                                       selected),
+                        focused);
+}
+
 inline ftxui::ButtonOption MakeButtonOption(const Theme* theme,
                                             ButtonSpec spec,
                                             std::function<void()> on_click) {
@@ -434,6 +590,134 @@ inline ftxui::Component MakeButton(const Theme* theme,
                                    ButtonSpec spec,
                                    std::function<void()> on_click) {
     return ftxui::Button(MakeButtonOption(theme, std::move(spec), std::move(on_click)));
+}
+
+inline ftxui::Component MakeRoleButton(const Theme* theme,
+                                       ButtonRole role,
+                                       std::string caption,
+                                       std::function<void()> on_click,
+                                       std::string icon = {},
+                                       ButtonSize size = ButtonSize::Normal) {
+    return MakeButton(theme,
+                      RoleButtonSpec(role, std::move(caption), std::move(icon), size),
+                      std::move(on_click));
+}
+
+inline ftxui::Component MakePrimaryButton(const Theme* theme,
+                                          std::string caption,
+                                          std::function<void()> on_click,
+                                          std::string icon = {},
+                                          ButtonSize size = ButtonSize::Normal) {
+    return MakeRoleButton(theme,
+                          ButtonRole::Primary,
+                          std::move(caption),
+                          std::move(on_click),
+                          std::move(icon),
+                          size);
+}
+
+inline ftxui::Component MakeSecondaryButton(const Theme* theme,
+                                            std::string caption,
+                                            std::function<void()> on_click,
+                                            std::string icon = {},
+                                            ButtonSize size = ButtonSize::Normal) {
+    return MakeRoleButton(theme,
+                          ButtonRole::Secondary,
+                          std::move(caption),
+                          std::move(on_click),
+                          std::move(icon),
+                          size);
+}
+
+inline ftxui::Component MakeSuccessButton(const Theme* theme,
+                                          std::string caption,
+                                          std::function<void()> on_click,
+                                          std::string icon = {},
+                                          ButtonSize size = ButtonSize::Normal) {
+    return MakeRoleButton(theme,
+                          ButtonRole::Success,
+                          std::move(caption),
+                          std::move(on_click),
+                          std::move(icon),
+                          size);
+}
+
+inline ftxui::Component MakeWarningButton(const Theme* theme,
+                                          std::string caption,
+                                          std::function<void()> on_click,
+                                          std::string icon = {},
+                                          ButtonSize size = ButtonSize::Normal) {
+    return MakeRoleButton(theme,
+                          ButtonRole::Warning,
+                          std::move(caption),
+                          std::move(on_click),
+                          std::move(icon),
+                          size);
+}
+
+inline ftxui::Component MakeDangerButton(const Theme* theme,
+                                         std::string caption,
+                                         std::function<void()> on_click,
+                                         std::string icon = {},
+                                         ButtonSize size = ButtonSize::Normal) {
+    return MakeRoleButton(theme,
+                          ButtonRole::Danger,
+                          std::move(caption),
+                          std::move(on_click),
+                          std::move(icon),
+                          size);
+}
+
+inline ftxui::Component MakeCancelButton(const Theme* theme,
+                                         std::function<void()> on_click,
+                                         std::string caption = "Close",
+                                         std::string icon = {},
+                                         ButtonSize size = ButtonSize::Normal) {
+    return MakeRoleButton(theme,
+                          ButtonRole::Cancel,
+                          std::move(caption),
+                          std::move(on_click),
+                          std::move(icon),
+                          size);
+}
+
+inline ftxui::Component MakeUtilityButton(const Theme* theme,
+                                          std::string caption,
+                                          std::function<void()> on_click,
+                                          std::string icon = {},
+                                          ButtonSize size = ButtonSize::Normal) {
+    return MakeRoleButton(theme,
+                          ButtonRole::Utility,
+                          std::move(caption),
+                          std::move(on_click),
+                          std::move(icon),
+                          size);
+}
+
+inline ftxui::Component MakeNavigationButton(const Theme* theme,
+                                             std::string caption,
+                                             std::function<void()> on_click,
+                                             std::string icon = {},
+                                             ButtonSize size = ButtonSize::Normal) {
+    return MakeRoleButton(theme,
+                          ButtonRole::Navigation,
+                          std::move(caption),
+                          std::move(on_click),
+                          std::move(icon),
+                          size);
+}
+
+inline ftxui::Component MakeMediaButton(const Theme* theme,
+                                        std::string caption,
+                                        std::function<void()> on_click,
+                                        std::string icon = {},
+                                        ButtonSize size = ButtonSize::Normal) {
+    return MakeRoleButton(theme,
+                          ButtonRole::Media,
+                          std::move(caption),
+                          std::move(on_click),
+                          std::move(icon),
+                          size);
 }
 
 } // namespace textlt

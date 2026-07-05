@@ -111,3 +111,62 @@ Small modal cleanup uses the shared button system in generic and lightweight mod
 - `AssistantSettingsModal` uses semantic buttons for registry fetch, installs, downloads, tests, delete confirmations and tab buttons.
 
 `ButtonRoleFromLabel()` is intentionally conservative. Explicit roles in larger modals are still preferred when the context is important, while generic footer buttons can rely on the label-based fallback.
+
+## Patch D presets and polish
+
+Patch D adds preset helpers so new modal code can use semantic buttons without
+building `ButtonSpec` objects manually in every call site.
+
+Preferred spec presets:
+
+```cpp
+PrimaryButtonSpec("Save");
+SecondaryButtonSpec("Rename");
+SuccessButtonSpec("Connected");
+WarningButtonSpec("Clear cache");
+DangerButtonSpec("Delete");
+CancelButtonSpec("Close");
+UtilityButtonSpec("Copy path");
+NavigationButtonSpec("Parent");
+TabButtonSpec("Player", selected);
+ToggleButtonSpec("SFTP", selected);
+MediaButtonSpec("Play", "▶");
+```
+
+Use modifier helpers when a preset needs a small local adjustment:
+
+```cpp
+WithButtonSize(DangerButtonSpec("Delete"), ButtonSize::Compact);
+WithButtonVariant(SecondaryButtonSpec("Rename"), ButtonVariant::Minimal);
+WithButtonEnabled(UtilityButtonSpec("Copy path"), can_copy);
+WithButtonSelected(TabButtonSpec("Run"), active_tab == 0);
+WithButtonIcon(PrimaryButtonSpec("Generate"), "▶");
+```
+
+For simple clickable components, use role wrappers:
+
+```cpp
+MakePrimaryButton(&theme, "Save", on_save);
+MakeSuccessButton(&theme, "Connected", on_connected, "✓");
+MakeWarningButton(&theme, "Clear cache", on_clear);
+MakeDangerButton(&theme, "Delete", on_delete);
+MakeCancelButton(&theme, on_close);
+MakeUtilityButton(&theme, "Copy path", on_copy, "⧉");
+MakeNavigationButton(&theme, "Parent", on_parent, "↑");
+MakeMediaButton(&theme, "Play", on_play, "▶");
+```
+
+`RenderRoleButton()` is available for existing custom components that render
+buttons manually and need a semantic one-liner without constructing a full spec.
+
+The label-based fallback has also been widened for generic footer buttons:
+
+- `OK`, `Yes`, `Done`, `Generate`, `Connect`, `Commit`, `Push`, `Fetch`,
+  `Import`, and `Export` resolve to `Primary`.
+- `Drop`, `Erase`, and `Trash` resolve to `Danger`.
+- `Disconnect`, `Rebase`, `Unstage`, and `Abort` resolve to `Warning`.
+- `Parent`, `Up`, `Local`, and `Remote` resolve to `Navigation`.
+- `Help`, `Preview`, `Path`, `Token`, `Settings`, and `Log` resolve to `Utility`.
+
+For larger modals, explicit presets are still preferred over label inference
+because context is clearer in code review.
