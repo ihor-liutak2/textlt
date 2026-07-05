@@ -24,7 +24,7 @@ ftxui::Color MainWindowSeparatorColor(const Theme& theme) {
     if (IsLightTheme(theme)) {
         return ftxui::Color::RGB(70, 70, 70);
     }
-    return theme.menu_foreground;
+    return theme.gutter;
 }
 
 bool IsLineManipulationShortcut(const ftxui::Event& event) {
