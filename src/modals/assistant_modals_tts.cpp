@@ -177,7 +177,7 @@ bool PlayWaveFile(const std::filesystem::path& wav_path, std::string* error) {
     const std::string command =
         "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$p = " +
         PiperManager::QuotePowerShellSingle(wav_path) +
-        "; Add-Type -AssemblyName System; (New-Object System.Media.SoundPlayer $p).PlaySync()\"";
+        "; Add-Type -AssemblyName System; (New-Object System.Media.SoundPlayer $p).PlaySync()\" > NUL 2>&1";
     const int result = std::system(command.c_str());
     if (result != 0 && error) {
         *error = "Windows SoundPlayer failed";

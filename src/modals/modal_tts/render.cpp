@@ -1,5 +1,64 @@
 /* Included by ../modal_tts.cpp. */
 
+namespace {
+
+std::vector<std::string> WrapText(const std::string& text, size_t width) {
+    std::vector<std::string> lines;
+    std::string current;
+    size_t position = 0;
+
+    while (position < text.size()) {
+        while (position < text.size() && text[position] == ' ') {
+            ++position;
+        }
+
+        const size_t start = position;
+        while (position < text.size() && text[position] != ' ') {
+            ++position;
+        }
+
+        const std::string word = text.substr(start, position - start);
+        if (word.empty()) {
+            continue;
+        }
+
+        if (current.empty()) {
+            current = word;
+        } else if (current.size() + 1 + word.size() <= width) {
+            current += " " + word;
+        } else {
+            lines.push_back(current);
+            current = word;
+        }
+    }
+
+    if (!current.empty()) {
+        lines.push_back(current);
+    }
+
+    if (lines.empty()) {
+        lines.push_back("");
+    }
+    return lines;
+}
+
+ftxui::Element RenderWrappedTextBox(const std::string& text,
+                                    size_t width,
+                                    size_t height,
+                                    const Theme& theme) {
+    using namespace ftxui;
+    Elements lines;
+    for (const std::string& line : WrapText(text, width)) {
+        lines.push_back(ftxui::text(line) | color(theme.modal_text_color));
+    }
+    return vbox(std::move(lines)) |
+        frame |
+        vscroll_indicator |
+        size(HEIGHT, LESS_THAN, static_cast<int>(height));
+}
+
+} // namespace
+
 ftxui::Element TtsModalContent::RenderTitle() {
     return ftxui::hbox({
         run_tab_button_->Render(),
@@ -397,11 +456,11 @@ ftxui::Element TtsModalContent::Render() {
     if (info_popup_mode_ == InfoPopupMode::TestText) {
         popup_content = vbox({
             PanelTitle(test_text_title_, theme),
-            paragraph(test_text_) |
-                color(theme.modal_text_color) |
-                frame |
-                vscroll_indicator |
-                size(HEIGHT, LESS_THAN, 15),
+            RenderWrappedTextBox(
+                test_text_.empty() ? std::string("No text available.") : test_text_,
+                62,
+                10,
+                theme),
             separator() | color(theme.modal_border),
             hbox({filler(), close_info_button_->Render()}),
         });
@@ -417,7 +476,7 @@ ftxui::Element TtsModalContent::Render() {
                 filler(),
                 popup_content |
                     border |
-                    size(WIDTH, LESS_THAN, 94) |
+                    size(WIDTH, LESS_THAN, 72) |
                     clear_under,
                 filler(),
             }),

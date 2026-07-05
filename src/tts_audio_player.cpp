@@ -9,6 +9,7 @@
 
 #ifndef _WIN32
 #include <csignal>
+#include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
@@ -239,6 +240,12 @@ bool PlayWithPosixProcess(
     }
 
     if (pid == 0) {
+        const int null_fd = open("/dev/null", O_WRONLY);
+        if (null_fd >= 0) {
+            dup2(null_fd, STDOUT_FILENO);
+            dup2(null_fd, STDERR_FILENO);
+            close(null_fd);
+        }
         execvp(executable.c_str(), argv.data());
         _exit(127);
     }
@@ -296,7 +303,7 @@ std::string BuildWindowsCommand(
     const TtsAudioPlayer::PlayerCommand& command,
     const std::filesystem::path& audio_file) {
     if (IsCustomCommand(command)) {
-        return BuildCustomCommandLine(command, audio_file);
+        return BuildCustomCommandLine(command, audio_file) + " > NUL 2>&1";
     }
 
     std::ostringstream command_line;
@@ -304,7 +311,7 @@ std::string BuildWindowsCommand(
     for (const std::string& argument : BuildArguments(command, audio_file)) {
         command_line << ' ' << TtsAudioPlayer::QuoteShellArgument(argument);
     }
-    return command_line.str();
+    return command_line.str() + " > NUL 2>&1";
 }
 #endif
 
