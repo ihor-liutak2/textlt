@@ -53,7 +53,8 @@ FilesModalContent::FilesModalContent(
     AddFavoriteDirectoryCallback on_add_favorite_directory,
     CopyPathCallback on_copy_path,
     ConfirmPathCallback on_confirm_path,
-    CloseCallback on_close)
+    CloseCallback on_close,
+    FilesChangedCallback on_files_changed)
     : theme_(theme),
       file_manager_(file_manager),
       start_directory_provider_(std::move(start_directory_provider)),
@@ -61,7 +62,8 @@ FilesModalContent::FilesModalContent(
       on_add_favorite_directory_(std::move(on_add_favorite_directory)),
       on_copy_path_(std::move(on_copy_path)),
       on_confirm_path_(std::move(on_confirm_path)),
-      on_close_(std::move(on_close)) {
+      on_close_(std::move(on_close)),
+      on_files_changed_(std::move(on_files_changed)) {
     RebuildComponents();
 }
 

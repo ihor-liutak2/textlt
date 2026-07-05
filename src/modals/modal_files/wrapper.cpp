@@ -5,7 +5,8 @@ FilesModal::FilesModal(
     FavoriteDirectoriesProvider favorite_directories_provider,
     AddFavoriteDirectoryCallback on_add_favorite_directory,
     CopyPathCallback on_copy_path,
-    ConfirmPathCallback on_confirm_path)
+    ConfirmPathCallback on_confirm_path,
+    FilesChangedCallback on_files_changed)
     : theme_(theme) {
     content_ = std::make_shared<FilesModalContent>(
         theme_,
@@ -15,7 +16,8 @@ FilesModal::FilesModal(
         std::move(on_add_favorite_directory),
         std::move(on_copy_path),
         std::move(on_confirm_path),
-        [this] { Close(); });
+        [this] { Close(); },
+        std::move(on_files_changed));
 
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
     modal_->SetBodyFrameScrolling(false);

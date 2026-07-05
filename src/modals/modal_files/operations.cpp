@@ -173,6 +173,7 @@ void FilesModalContent::ConfirmPendingOperation() {
             CancelPendingOperation();
             Refresh();
             SetStatus("Directory created: " + FileManager::PathToUtf8(target.filename()));
+            if (on_files_changed_) on_files_changed_();
             break;
         }
         case PendingFileOperation::CreateFileItem: {
@@ -188,6 +189,7 @@ void FilesModalContent::ConfirmPendingOperation() {
             CancelPendingOperation();
             Refresh();
             SetStatus("File created: " + FileManager::PathToUtf8(target.filename()));
+            if (on_files_changed_) on_files_changed_();
             break;
         }
         case PendingFileOperation::DeleteItems: {
@@ -207,6 +209,7 @@ void FilesModalContent::ConfirmPendingOperation() {
             CancelPendingOperation();
             Refresh();
             SetStatus("Deleted " + std::to_string(count) + " item(s).");
+            if (on_files_changed_) on_files_changed_();
             break;
         }
         case PendingFileOperation::RenameItem: {
@@ -234,6 +237,7 @@ void FilesModalContent::ConfirmPendingOperation() {
             CancelPendingOperation();
             Refresh();
             SetStatus("Renamed to: " + FileManager::PathToUtf8(destination.filename()));
+            if (on_files_changed_) on_files_changed_();
             break;
         }
         case PendingFileOperation::PasteItems: {
@@ -246,6 +250,7 @@ void FilesModalContent::ConfirmPendingOperation() {
             CancelPendingOperation();
             Refresh();
             SetStatus("Pasted " + std::to_string(count) + " item(s).");
+            if (on_files_changed_) on_files_changed_();
             break;
         }
         case PendingFileOperation::None:

@@ -124,6 +124,10 @@ TextltApp::TextltApp()
           },
           [this](FilesModalMode mode, const std::filesystem::path& path, std::string& error) {
               return ConfirmFilesModalAction(mode, path, error);
+          },
+          [this] {
+              RefreshProjectSidebar();
+              git_manager_.Invalidate();
           }),
       text_processors_modal_(
           &current_theme_,

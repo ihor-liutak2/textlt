@@ -41,6 +41,7 @@ public:
         const std::filesystem::path& path,
         std::string& error)>;
     using CloseCallback = std::function<void()>;
+    using FilesChangedCallback = std::function<void()>;
 
     FilesModalContent(
         const Theme* theme,
@@ -50,7 +51,8 @@ public:
         AddFavoriteDirectoryCallback on_add_favorite_directory,
         CopyPathCallback on_copy_path,
         ConfirmPathCallback on_confirm_path,
-        CloseCallback on_close);
+        CloseCallback on_close,
+        FilesChangedCallback on_files_changed = {});
 
     ftxui::Element Render() override;
     ftxui::Component GetMainComponent() override { return container_; }
@@ -165,6 +167,7 @@ private:
     CopyPathCallback on_copy_path_;
     ConfirmPathCallback on_confirm_path_;
     CloseCallback on_close_;
+    FilesChangedCallback on_files_changed_;
 
     FilesModalMode mode_ = FilesModalMode::None;
     std::filesystem::path current_directory_;
@@ -224,6 +227,7 @@ public:
     using AddFavoriteDirectoryCallback = FilesModalContent::AddFavoriteDirectoryCallback;
     using CopyPathCallback = FilesModalContent::CopyPathCallback;
     using ConfirmPathCallback = FilesModalContent::ConfirmPathCallback;
+    using FilesChangedCallback = FilesModalContent::FilesChangedCallback;
 
     FilesModal(
         const Theme* theme,
@@ -232,7 +236,8 @@ public:
         FavoriteDirectoriesProvider favorite_directories_provider,
         AddFavoriteDirectoryCallback on_add_favorite_directory,
         CopyPathCallback on_copy_path,
-        ConfirmPathCallback on_confirm_path);
+        ConfirmPathCallback on_confirm_path,
+        FilesChangedCallback on_files_changed = {});
 
     ftxui::Component View() const;
 
