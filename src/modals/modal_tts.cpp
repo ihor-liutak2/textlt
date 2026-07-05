@@ -174,10 +174,10 @@ TtsModalContent::TtsModalContent(
 
     run_refresh_library_button_ =
         MakeTextButton("Refresh", [this] { StartRunWorkflow(true, false); },
-                       ButtonRole::Utility, ButtonVariant::ColoredBrackets, "⟳");
+                       ButtonRole::Utility, ButtonVariant::AccentEdges, "⟳");
     library_refresh_library_button_ =
         MakeTextButton("Refresh", [this] { StartRunWorkflow(true, false); },
-                       ButtonRole::Utility, ButtonVariant::ColoredBrackets, "⟳");
+                       ButtonRole::Utility, ButtonVariant::AccentEdges, "⟳");
     save_metadata_button_ =
         MakeTextButton("Save metadata", [this] { SaveSelectedMetadata(); },
                        ButtonRole::Primary);
@@ -186,19 +186,19 @@ TtsModalContent::TtsModalContent(
                        ButtonRole::Primary);
     generate_current_button_ =
         MakeTextButton("Test", [this] { TestCurrentChunk(); },
-                       ButtonRole::Secondary, ButtonVariant::ColoredBrackets, "▶");
+                       ButtonRole::Secondary, ButtonVariant::AccentEdges, "▶");
     play_button_ =
         MakeTextButton("Play", [this] { Play(); },
-                       ButtonRole::Media, ButtonVariant::AccentBar, "▶");
+                       ButtonRole::Media, ButtonVariant::AccentEdges, "▶");
     pause_button_ =
         MakeTextButton("Pause", [this] { Pause(); },
-                       ButtonRole::Media, ButtonVariant::AccentBar, "⏸");
+                       ButtonRole::Media, ButtonVariant::AccentEdges, "⏸");
     stop_button_ =
         MakeTextButton("Stop", [this] { Stop(); },
-                       ButtonRole::Warning, ButtonVariant::AccentBar, "■");
+                       ButtonRole::Warning, ButtonVariant::AccentEdges, "■");
     next_button_ =
         MakeTextButton("Next", [this] { Next(); },
-                       ButtonRole::Media, ButtonVariant::AccentBar, "⏭");
+                       ButtonRole::Media, ButtonVariant::AccentEdges, "⏭");
     clear_audio_cache_button_ =
         MakeTextButton("Clear audio cache", [this] { ClearSelectedAudioCache(); },
                        ButtonRole::Danger);
@@ -216,10 +216,10 @@ TtsModalContent::TtsModalContent(
                        ButtonRole::Primary);
     test_player_button_ =
         MakeTextButton("Test", [this] { TestSelectedPlayer(); },
-                       ButtonRole::Secondary, ButtonVariant::ColoredBrackets, "▶");
+                       ButtonRole::Secondary, ButtonVariant::AccentEdges, "▶");
     refresh_players_button_ =
         MakeTextButton("Refresh", [this] { RefreshPlayerOptions(); },
-                       ButtonRole::Utility, ButtonVariant::ColoredBrackets, "⟳");
+                       ButtonRole::Utility, ButtonVariant::AccentEdges, "⟳");
     save_custom_player_button_ =
         MakeTextButton("Save custom", [this] { SaveCustomPlayerCommand(); },
                        ButtonRole::Primary);
@@ -404,7 +404,7 @@ ftxui::Component TtsModalContent::MakeTabButton(std::string label, int tab_index
     ButtonSpec spec;
     spec.caption = std::move(label);
     spec.role = ButtonRole::Tab;
-    spec.variant = ButtonVariant::AccentBar;
+    spec.variant = ButtonVariant::AccentEdges;
     spec.size = ButtonSize::Compact;
 
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();

@@ -260,7 +260,7 @@ ftxui::Component SearchFilesModalContent::MakeTabButton(
     ButtonSpec spec;
     spec.caption = std::move(label);
     spec.role = ButtonRole::Tab;
-    spec.variant = ButtonVariant::AccentBar;
+    spec.variant = ButtonVariant::AccentEdges;
     spec.size = ButtonSize::Compact;
 
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();

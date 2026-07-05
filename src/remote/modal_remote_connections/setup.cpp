@@ -81,15 +81,15 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     app_secret_input_ = ftxui::Input(&app_secret_value_, "Dropbox app secret", app_secret_option);
 
     add_button_ = MakeTextButton("Add", [this] { AddConnection(); },
-        ButtonRole::Primary, ButtonVariant::AccentBar, "+");
+        ButtonRole::Primary, ButtonVariant::AccentEdges, "+");
     delete_button_ = MakeTextButton("Delete", [this] { DeleteSelected(); },
-        ButtonRole::Danger, ButtonVariant::AccentBar, "!");
+        ButtonRole::Danger, ButtonVariant::AccentEdges, "!");
     save_button_ = MakeTextButton("Save", [this] { SaveFormToSelected(); },
-        ButtonRole::Primary, ButtonVariant::AccentBar);
+        ButtonRole::Primary, ButtonVariant::AccentEdges);
     test_button_ = MakeTextButton("Test", [this] { TestSelected(); },
-        ButtonRole::Secondary, ButtonVariant::AccentBar, "▶");
+        ButtonRole::Secondary, ButtonVariant::AccentEdges, "▶");
     token_button_ = MakeTextButton("Token", [this] { PrepareTokenFile(); },
-        ButtonRole::Utility, ButtonVariant::AccentBar);
+        ButtonRole::Utility, ButtonVariant::AccentEdges);
     sftp_type_button_ = MakeTextButton("SFTP", [this] { SelectType(RemoteConnectionType::Sftp); },
         ButtonRole::Toggle, ButtonVariant::Minimal);
     google_type_button_ = MakeTextButton("Google", [this] { SelectType(RemoteConnectionType::GoogleDrive); },
@@ -99,27 +99,27 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     dropbox_type_button_ = MakeTextButton("Dropbox", [this] { SelectType(RemoteConnectionType::Dropbox); },
         ButtonRole::Toggle, ButtonVariant::Minimal);
     reload_button_ = MakeTextButton("Reload", [this] { Reload(); },
-        ButtonRole::Utility, ButtonVariant::AccentBar, "⟳");
+        ButtonRole::Utility, ButtonVariant::AccentEdges, "⟳");
     help_button_ = MakeTextButton("Help Connect", [this] { OpenHelp(); },
-        ButtonRole::Utility, ButtonVariant::AccentBar, "?");
+        ButtonRole::Utility, ButtonVariant::AccentEdges, "?");
     authorize_button_ = MakeTextButton("Authorize", [this] { AuthorizeConnection(); },
-        ButtonRole::Primary, ButtonVariant::AccentBar);
+        ButtonRole::Primary, ButtonVariant::AccentEdges);
 
     auto redirect_option = base_option;
     redirect_option.cursor_position = &redirect_url_cursor_;
     redirect_url_input_ = ftxui::Input(&redirect_url_value_, "paste redirect URL here", redirect_option);
     submit_redirect_button_ = MakeTextButton("Submit", [this] { SubmitRedirectUrl(); },
-        ButtonRole::Primary, ButtonVariant::AccentBar);
+        ButtonRole::Primary, ButtonVariant::AccentEdges);
     cancel_authorize_button_ = MakeTextButton("Cancel", [this] {
         authorize_pending_ = false;
         authorize_layer_index_ = 0;
         SetStatus("Authorization cancelled.");
-    }, ButtonRole::Cancel, ButtonVariant::AccentBar);
+    }, ButtonRole::Cancel, ButtonVariant::AccentEdges);
     close_button_ = MakeTextButton("Close", [this] {
         if (on_close_) {
             on_close_();
         }
-    }, ButtonRole::Cancel, ButtonVariant::AccentBar);
+    }, ButtonRole::Cancel, ButtonVariant::AccentEdges);
 
     list_component_ = ftxui::CatchEvent(
         ftxui::Renderer([this] { return RenderConnectionList(); }),
@@ -191,9 +191,9 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     });
 
     help_close_button_ = MakeTextButton("Close", [this] { CloseHelp(); },
-        ButtonRole::Cancel, ButtonVariant::AccentBar);
+        ButtonRole::Cancel, ButtonVariant::AccentEdges);
     copy_url_button_ = MakeTextButton("Copy URL", [this] { CopyHelpUrl(); },
-        ButtonRole::Utility, ButtonVariant::AccentBar, "⧉");
+        ButtonRole::Utility, ButtonVariant::AccentEdges, "⧉");
     ftxui::Components help_children;
     help_children.push_back(copy_url_button_);
     help_children.push_back(help_close_button_);

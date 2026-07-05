@@ -19,7 +19,7 @@ namespace {
 ButtonSpec SearchButtonSpec(std::string label) {
     ButtonSpec spec;
     spec.caption = std::move(label);
-    spec.variant = ButtonVariant::AccentBar;
+    spec.variant = ButtonVariant::AccentEdges;
 
     const std::string& caption = spec.caption;
     if (caption == "Open" || caption == "Apply" || caption == "Add" || caption == "Save") {

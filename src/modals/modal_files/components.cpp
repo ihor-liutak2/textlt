@@ -17,50 +17,50 @@ ftxui::Component FilesModalContent::MakeTextButton(
 void FilesModalContent::RebuildComponents() {
     home_button_ = MakeTextButton("Home", [this] {
         LoadBuiltInDirectory(FileManager::UserHomeDirectory());
-    }, ButtonRole::Navigation, ButtonVariant::AccentBar, "⌂");
+    }, ButtonRole::Navigation, ButtonVariant::AccentEdges, "⌂");
     documents_button_ = MakeTextButton("Documents", [this] {
         LoadBuiltInDirectory(FileManager::UserDocumentsDirectory());
-    }, ButtonRole::Navigation, ButtonVariant::AccentBar);
+    }, ButtonRole::Navigation, ButtonVariant::AccentEdges);
     downloads_button_ = MakeTextButton("Download", [this] {
         LoadBuiltInDirectory(FileManager::UserDownloadsDirectory());
-    }, ButtonRole::Navigation, ButtonVariant::AccentBar);
+    }, ButtonRole::Navigation, ButtonVariant::AccentEdges);
     current_dir_button_ = MakeTextButton("Current Dir", [this] {
         std::filesystem::path directory;
         if (start_directory_provider_) {
             directory = start_directory_provider_();
         }
         LoadBuiltInDirectory(directory);
-    }, ButtonRole::Navigation, ButtonVariant::AccentBar);
+    }, ButtonRole::Navigation, ButtonVariant::AccentEdges);
     add_dir_button_ = MakeTextButton("Add Dir", [this] {
         AddCurrentDirectoryToFavorites();
-    }, ButtonRole::Primary, ButtonVariant::AccentBar, "+");
+    }, ButtonRole::Primary, ButtonVariant::AccentEdges, "+");
     refresh_button_ = MakeTextButton("Refresh", [this] { Refresh(); },
-        ButtonRole::Utility, ButtonVariant::AccentBar, "⟳");
+        ButtonRole::Utility, ButtonVariant::AccentEdges, "⟳");
     copy_path_button_ = MakeTextButton("Copy Path", [this] {
         CopySelectedPathText();
-    }, ButtonRole::Utility, ButtonVariant::AccentBar, "⧉");
+    }, ButtonRole::Utility, ButtonVariant::AccentEdges, "⧉");
 
     create_dir_button_ = MakeTextButton("Create Dir", [this] {
         StartCreateDirectoryOperation();
-    }, ButtonRole::Primary, ButtonVariant::AccentBar, "+");
+    }, ButtonRole::Primary, ButtonVariant::AccentEdges, "+");
     create_file_button_ = MakeTextButton("Create File", [this] {
         StartCreateFileOperation();
-    }, ButtonRole::Primary, ButtonVariant::AccentBar, "+");
+    }, ButtonRole::Primary, ButtonVariant::AccentEdges, "+");
     delete_button_ = MakeTextButton("Delete", [this] {
         StartDeleteOperation();
-    }, ButtonRole::Danger, ButtonVariant::AccentBar, "!");
+    }, ButtonRole::Danger, ButtonVariant::AccentEdges, "!");
     rename_button_ = MakeTextButton("Rename", [this] {
         StartRenameOperation();
-    }, ButtonRole::Secondary, ButtonVariant::AccentBar);
+    }, ButtonRole::Secondary, ButtonVariant::AccentEdges);
     copy_button_ = MakeTextButton("Copy", [this] {
         StartCopyOperation();
-    }, ButtonRole::Utility, ButtonVariant::AccentBar, "⧉");
+    }, ButtonRole::Utility, ButtonVariant::AccentEdges, "⧉");
     cut_button_ = MakeTextButton("Cut", [this] {
         StartCutOperation();
-    }, ButtonRole::Warning, ButtonVariant::AccentBar);
+    }, ButtonRole::Warning, ButtonVariant::AccentEdges);
     paste_button_ = MakeTextButton("Paste", [this] {
         StartPasteOperation();
-    }, ButtonRole::Utility, ButtonVariant::AccentBar);
+    }, ButtonRole::Utility, ButtonVariant::AccentEdges);
 
     ftxui::InputOption path_option;
     path_option.multiline = false;
@@ -95,10 +95,10 @@ void FilesModalContent::RebuildComponents() {
         operation_option);
     confirm_yes_button_ = MakeTextButton("Confirm", [this] {
         ConfirmPendingOperation();
-    }, ButtonRole::Primary, ButtonVariant::AccentBar);
+    }, ButtonRole::Primary, ButtonVariant::AccentEdges);
     confirm_cancel_button_ = MakeTextButton("Cancel", [this] {
         CancelPendingOperation();
-    }, ButtonRole::Cancel, ButtonVariant::AccentBar);
+    }, ButtonRole::Cancel, ButtonVariant::AccentEdges);
 
     entry_list_component_ = ftxui::CatchEvent(
         ftxui::Renderer([this] { return RenderEntryList(); }),

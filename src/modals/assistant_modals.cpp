@@ -576,7 +576,7 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
     : theme_(theme),
       request_redraw_(std::move(request_redraw)) {
     auto make_button = [this](std::string label, std::function<void()> on_click) {
-        ButtonSpec spec = ButtonSpecFromLabel(std::move(label), ButtonRole::Default, ButtonVariant::AccentBar);
+        ButtonSpec spec = ButtonSpecFromLabel(std::move(label), ButtonRole::Default, ButtonVariant::AccentEdges);
         ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
         option.label = ButtonCaptionText(spec);
         option.on_click = std::move(on_click);
@@ -587,7 +587,7 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
         return ftxui::Button(option);
     };
     auto make_tab_button = [this](std::string label, int tab_index) {
-        ButtonSpec spec = ButtonSpecFromLabel(std::move(label), ButtonRole::Tab, ButtonVariant::AccentBar, ButtonSize::Compact);
+        ButtonSpec spec = ButtonSpecFromLabel(std::move(label), ButtonRole::Tab, ButtonVariant::AccentEdges, ButtonSize::Compact);
         ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
         option.label = ButtonCaptionText(spec);
         option.on_click = [this, tab_index] { selected_tab_ = tab_index; };

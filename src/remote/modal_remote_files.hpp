@@ -90,7 +90,7 @@ private:
         std::string label,
         std::function<void()> on_click,
         ButtonRole role = ButtonRole::Default,
-        ButtonVariant variant = ButtonVariant::AccentBar,
+        ButtonVariant variant = ButtonVariant::AccentEdges,
         std::string icon = {},
         ButtonSize size = ButtonSize::Normal);
     ftxui::Component MakePathInput(PanelSide side);

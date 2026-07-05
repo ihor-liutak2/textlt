@@ -16,7 +16,7 @@ namespace {
 ButtonSpec GitSettingsButtonSpec(std::string label) {
     ButtonSpec spec;
     spec.caption = std::move(label);
-    spec.variant = ButtonVariant::AccentBar;
+    spec.variant = ButtonVariant::AccentEdges;
 
     const std::string& caption = spec.caption;
     if (caption == "Add" || caption == "Update URL" || caption == "Save local" ||
@@ -288,7 +288,7 @@ ftxui::Component GitSettingsModalContent::MakeTabButton(std::string label, int t
     ButtonSpec spec;
     spec.caption = std::move(label);
     spec.role = ButtonRole::Tab;
-    spec.variant = ButtonVariant::AccentBar;
+    spec.variant = ButtonVariant::AccentEdges;
     spec.size = ButtonSize::Compact;
 
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();

@@ -22,7 +22,7 @@ ftxui::Element TextButtonElement(const std::string& label,
     if (label == "Menu shortcuts" || label == "Text shortcuts") {
         role = ButtonRole::Tab;
     }
-    ButtonSpec spec = ButtonSpecFromLabel(label, role, ButtonVariant::AccentBar, ButtonSize::Compact);
+    ButtonSpec spec = ButtonSpecFromLabel(label, role, ButtonVariant::AccentEdges, ButtonSize::Compact);
     spec.selected = selected;
     return RenderButton(theme, spec, active);
 }

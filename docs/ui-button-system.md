@@ -24,7 +24,9 @@ one modal at a time.
 ## Variants
 
 - `Bracket` — classic `[ Caption ]` terminal button.
-- `AccentBar` — colored left marker and caption.
+- `AccentBar` — legacy colored left marker and caption.
+- `AccentEdges` — default TextLT textual button with colored left and right
+  semantic edges, for example `▌ Save ▐`.
 - `Pill` — padded label with background.
 - `ColoredBrackets` — brackets use the semantic role accent and the caption
   uses the normal button text color.
@@ -63,7 +65,8 @@ The TTS modal is the first pilot migration:
 2. Migrate one modal per patch to keep visual and behavior changes reviewable.
 3. Prefer semantic roles over hard-coded colors.
 4. Keep `Bracket` or `ColoredBrackets` when compact layout matters.
-5. Use `AccentBar` for tabs, media controls, and primary toolbar actions.
+5. Use `AccentEdges` for regular textual buttons. Keep `AccentBar` only when
+   a compact one-sided marker is intentionally needed.
 
 ## Remote and Files migration
 
@@ -120,7 +123,7 @@ building `ButtonSpec` objects manually in every call site.
 Preferred spec presets:
 
 ```cpp
-PrimaryButtonSpec("Save");
+PrimaryButtonSpec("Save"); // renders with AccentEdges by default
 SecondaryButtonSpec("Rename");
 SuccessButtonSpec("Connected");
 WarningButtonSpec("Clear cache");
@@ -170,3 +173,28 @@ The label-based fallback has also been widened for generic footer buttons:
 
 For larger modals, explicit presets are still preferred over label inference
 because context is clearer in code review.
+
+
+## Patch E accent edge default
+
+Patch E introduces `ButtonVariant::AccentEdges` as the default visual style for
+semantic text buttons. The button caption stays in the normal button text color,
+while the left and right edge markers use the semantic role accent color.
+
+Example shape:
+
+```text
+▌ Save ▐
+▌ Delete ▐
+▌ Cancel ▐
+```
+
+This keeps TextLT buttons terminal-native, but gives every action a clearer start
+and end than the old one-sided `AccentBar` style. `AccentBar`, `Bracket`,
+`ColoredBrackets`, `Pill`, `Minimal`, and `Shadow` remain available for special
+layouts and theme experiments.
+
+`ButtonVariantForRole()` now resolves all semantic roles to `AccentEdges` by
+default. Existing migrated modal buttons that previously used explicit
+`AccentBar` or `ColoredBrackets` have also been moved to `AccentEdges`, while
+explicit `Minimal` toggle/provider buttons remain minimal.

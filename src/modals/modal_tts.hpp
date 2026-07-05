@@ -75,7 +75,7 @@ private:
     ftxui::Component MakeTextButton(std::string label,
                                     std::function<void()> on_click,
                                     ButtonRole role = ButtonRole::Secondary,
-                                    ButtonVariant variant = ButtonVariant::ColoredBrackets,
+                                    ButtonVariant variant = ButtonVariant::AccentEdges,
                                     std::string icon = {});
     ftxui::Component MakeTabButton(std::string label, int tab_index);
     void SelectTab(int tab_index);

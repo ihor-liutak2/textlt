@@ -32,6 +32,7 @@ enum class ButtonRole {
 enum class ButtonVariant {
     Bracket,
     AccentBar,
+    AccentEdges,
     Pill,
     ColoredBrackets,
     Minimal,
@@ -105,6 +106,8 @@ inline const char* ToString(ButtonVariant variant) {
             return "Bracket";
         case ButtonVariant::AccentBar:
             return "AccentBar";
+        case ButtonVariant::AccentEdges:
+            return "AccentEdges";
         case ButtonVariant::Pill:
             return "Pill";
         case ButtonVariant::ColoredBrackets:
@@ -116,6 +119,7 @@ inline const char* ToString(ButtonVariant variant) {
     }
     return "Bracket";
 }
+
 
 inline const char* ToString(ButtonState state) {
     switch (state) {
@@ -224,23 +228,21 @@ inline ButtonRole ButtonRoleFromLabel(const std::string& label) {
 
 inline ButtonVariant ButtonVariantForRole(ButtonRole role) {
     switch (role) {
-        case ButtonRole::Tab:
-        case ButtonRole::Toggle:
+        case ButtonRole::Default:
         case ButtonRole::Primary:
-        case ButtonRole::Danger:
-        case ButtonRole::Warning:
-        case ButtonRole::Navigation:
-        case ButtonRole::Media:
+        case ButtonRole::Secondary:
         case ButtonRole::Success:
-            return ButtonVariant::AccentBar;
+        case ButtonRole::Warning:
+        case ButtonRole::Danger:
         case ButtonRole::Cancel:
         case ButtonRole::Utility:
-            return ButtonVariant::ColoredBrackets;
-        case ButtonRole::Secondary:
-        case ButtonRole::Default:
-        default:
-            return ButtonVariant::Bracket;
+        case ButtonRole::Navigation:
+        case ButtonRole::Tab:
+        case ButtonRole::Toggle:
+        case ButtonRole::Media:
+            return ButtonVariant::AccentEdges;
     }
+    return ButtonVariant::AccentEdges;
 }
 
 inline ButtonSpec ButtonSpecFromLabel(std::string label,
@@ -518,6 +520,14 @@ inline ftxui::Element RenderButton(const Theme& theme,
             });
             return ApplyButtonStateBackground(std::move(element), style, state);
         }
+        case ButtonVariant::AccentEdges: {
+            ftxui::Element element = ftxui::hbox({
+                ftxui::text("▌") | ftxui::color(style.accent),
+                ftxui::text(caption) | ftxui::color(style.text),
+                ftxui::text("▐") | ftxui::color(style.accent),
+            });
+            return ApplyButtonStateBackground(std::move(element), style, state);
+        }
         case ButtonVariant::Pill: {
             ftxui::Element element = ftxui::text(caption) | ftxui::color(style.text);
             return ApplyButtonStateBackground(std::move(element), style, state, true);
@@ -555,6 +565,7 @@ inline ftxui::Element RenderButton(const Theme& theme,
         }
     }
 }
+
 
 inline ftxui::Element RenderRoleButton(const Theme& theme,
                                       ButtonRole role,

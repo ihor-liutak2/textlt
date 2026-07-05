@@ -40,7 +40,7 @@ ftxui::Element FilesModalContent::RenderFavoriteDirectories() {
         ButtonSpec spec;
         spec.caption = TrimForDisplay(label, 16);
         spec.role = ButtonRole::Navigation;
-        spec.variant = ButtonVariant::ColoredBrackets;
+        spec.variant = ButtonVariant::AccentEdges;
         spec.size = ButtonSize::Compact;
         buttons.push_back(RenderButton(theme, spec) | reflect(favorite_boxes_[index]));
     }

@@ -119,7 +119,7 @@ ftxui::ButtonOption ViewLayoutContent::MakeButtonOption(
     std::function<void()> on_click,
     ButtonRole role,
     std::string icon) const {
-    ButtonSpec spec = ButtonSpecFromLabel(std::move(label), role, ButtonVariant::AccentBar, ButtonSize::Compact, std::move(icon));
+    ButtonSpec spec = ButtonSpecFromLabel(std::move(label), role, ButtonVariant::AccentEdges, ButtonSize::Compact, std::move(icon));
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
     option.label = ButtonCaptionText(spec);
     option.on_click = std::move(on_click);

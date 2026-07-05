@@ -8,6 +8,7 @@ int main() {
 
     assert(std::string(ToString(ButtonRole::Primary)) == "Primary");
     assert(std::string(ToString(ButtonVariant::AccentBar)) == "AccentBar");
+    assert(std::string(ToString(ButtonVariant::AccentEdges)) == "AccentEdges");
     assert(std::string(ToString(ButtonState::Disabled)) == "Disabled");
     assert(std::string(ToString(ButtonSize::Compact)) == "Compact");
 
@@ -29,12 +30,12 @@ int main() {
 
     ButtonSpec inferred_button = ButtonSpecFromLabel("Delete");
     assert(inferred_button.role == ButtonRole::Danger);
-    assert(inferred_button.variant == ButtonVariant::AccentBar);
+    assert(inferred_button.variant == ButtonVariant::AccentEdges);
 
     ButtonSpec save_button;
     save_button.caption = "Save";
     save_button.role = ButtonRole::Primary;
-    save_button.variant = ButtonVariant::AccentBar;
+    save_button.variant = ButtonVariant::AccentEdges;
 
     assert(ButtonCaptionText(save_button) == "Save");
     assert(PadButtonCaption("Save", ButtonSize::Compact) == "Save");
@@ -62,12 +63,12 @@ int main() {
     icon_button.caption = "Play";
     icon_button.icon = "▶";
     icon_button.role = ButtonRole::Media;
-    icon_button.variant = ButtonVariant::AccentBar;
+    icon_button.variant = ButtonVariant::AccentEdges;
     assert(ButtonCaptionText(icon_button) == "▶ Play");
 
     ButtonSpec primary_preset = PrimaryButtonSpec("Generate", "▶");
     assert(primary_preset.role == ButtonRole::Primary);
-    assert(primary_preset.variant == ButtonVariant::AccentBar);
+    assert(primary_preset.variant == ButtonVariant::AccentEdges);
     assert(ButtonCaptionText(primary_preset) == "▶ Generate");
 
     ButtonSpec selected_tab = TabButtonSpec("Player", true);
@@ -89,7 +90,7 @@ int main() {
 
     ButtonSpec success_button = SuccessButtonSpec("Connected", "✓");
     assert(success_button.role == ButtonRole::Success);
-    assert(success_button.variant == ButtonVariant::AccentBar);
+    assert(success_button.variant == ButtonVariant::AccentEdges);
 
     ButtonSpec navigation_button = NavigationButtonSpec("Parent", "↑");
     assert(navigation_button.role == ButtonRole::Navigation);
@@ -106,6 +107,10 @@ int main() {
     RenderButton(theme, icon_button, false);
     RenderRoleButton(theme, ButtonRole::Primary, "Open", false);
     RenderRoleButton(theme, ButtonRole::Tab, "Run", false, "", ButtonSize::Normal, true);
+
+    ButtonSpec accent_bar = save_button;
+    accent_bar.variant = ButtonVariant::AccentBar;
+    RenderButton(theme, accent_bar, false);
 
     ButtonSpec colored = save_button;
     colored.variant = ButtonVariant::ColoredBrackets;
