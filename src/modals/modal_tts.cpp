@@ -14,6 +14,8 @@
 #include "ftxui/component/event.hpp"
 #include "ftxui/dom/elements.hpp"
 
+#include "ui_button.hpp"
+
 namespace textlt {
 namespace {
 
@@ -31,10 +33,6 @@ ftxui::Element PanelTitle(const std::string& label, const Theme& theme) {
     return ftxui::text(" " + label) |
            ftxui::bold |
            ftxui::color(theme.modal_text_color);
-}
-
-std::string BracketLabel(const std::string& label) {
-    return "[ " + label + " ]";
 }
 
 std::string FormatBytes(unsigned long long value) {
@@ -175,39 +173,56 @@ TtsModalContent::TtsModalContent(
     });
 
     run_refresh_library_button_ =
-        MakeTextButton("Refresh", [this] { StartRunWorkflow(true, false); });
+        MakeTextButton("Refresh", [this] { StartRunWorkflow(true, false); },
+                       ButtonRole::Utility, ButtonVariant::ColoredBrackets, "⟳");
     library_refresh_library_button_ =
-        MakeTextButton("Refresh", [this] { StartRunWorkflow(true, false); });
+        MakeTextButton("Refresh", [this] { StartRunWorkflow(true, false); },
+                       ButtonRole::Utility, ButtonVariant::ColoredBrackets, "⟳");
     save_metadata_button_ =
-        MakeTextButton("Save metadata", [this] { SaveSelectedMetadata(); });
+        MakeTextButton("Save metadata", [this] { SaveSelectedMetadata(); },
+                       ButtonRole::Primary);
     save_voice_button_ =
-        MakeTextButton("Save voice", [this] { SaveSelectedVoice(); });
+        MakeTextButton("Save voice", [this] { SaveSelectedVoice(); },
+                       ButtonRole::Primary);
     generate_current_button_ =
-        MakeTextButton("Test", [this] { TestCurrentChunk(); });
+        MakeTextButton("Test", [this] { TestCurrentChunk(); },
+                       ButtonRole::Secondary, ButtonVariant::ColoredBrackets, "▶");
     play_button_ =
-        MakeTextButton("Play", [this] { Play(); });
+        MakeTextButton("Play", [this] { Play(); },
+                       ButtonRole::Media, ButtonVariant::AccentBar, "▶");
     pause_button_ =
-        MakeTextButton("Pause", [this] { Pause(); });
+        MakeTextButton("Pause", [this] { Pause(); },
+                       ButtonRole::Media, ButtonVariant::AccentBar, "⏸");
     stop_button_ =
-        MakeTextButton("Stop", [this] { Stop(); });
+        MakeTextButton("Stop", [this] { Stop(); },
+                       ButtonRole::Warning, ButtonVariant::AccentBar, "■");
     next_button_ =
-        MakeTextButton("Next", [this] { Next(); });
+        MakeTextButton("Next", [this] { Next(); },
+                       ButtonRole::Media, ButtonVariant::AccentBar, "⏭");
     clear_audio_cache_button_ =
-        MakeTextButton("Clear audio cache", [this] { ClearSelectedAudioCache(); });
+        MakeTextButton("Clear audio cache", [this] { ClearSelectedAudioCache(); },
+                       ButtonRole::Danger);
     info_button_ =
-        MakeTextButton("Info", [this] { ShowSelectedBookInfo(); });
+        MakeTextButton("Info", [this] { ShowSelectedBookInfo(); },
+                       ButtonRole::Utility);
     delete_book_button_ =
-        MakeTextButton("Delete", [this] { DeleteSelectedBook(); });
+        MakeTextButton("Delete", [this] { DeleteSelectedBook(); },
+                       ButtonRole::Danger);
     close_info_button_ =
-        MakeTextButton("Close", [this] { CloseSelectedBookInfo(); });
+        MakeTextButton("Close", [this] { CloseSelectedBookInfo(); },
+                       ButtonRole::Cancel);
     set_player_button_ =
-        MakeTextButton("Set current", [this] { SaveSelectedPlayer(); });
+        MakeTextButton("Set current", [this] { SaveSelectedPlayer(); },
+                       ButtonRole::Primary);
     test_player_button_ =
-        MakeTextButton("Test", [this] { TestSelectedPlayer(); });
+        MakeTextButton("Test", [this] { TestSelectedPlayer(); },
+                       ButtonRole::Secondary, ButtonVariant::ColoredBrackets, "▶");
     refresh_players_button_ =
-        MakeTextButton("Refresh", [this] { RefreshPlayerOptions(); });
+        MakeTextButton("Refresh", [this] { RefreshPlayerOptions(); },
+                       ButtonRole::Utility, ButtonVariant::ColoredBrackets, "⟳");
     save_custom_player_button_ =
-        MakeTextButton("Save custom", [this] { SaveCustomPlayerCommand(); });
+        MakeTextButton("Save custom", [this] { SaveCustomPlayerCommand(); },
+                       ButtonRole::Primary);
 
     auto make_book_menu = [this] {
         ftxui::MenuOption menu_option = ftxui::MenuOption::Vertical();
@@ -373,37 +388,40 @@ TtsModalContent::~TtsModalContent() {
 
 ftxui::Component TtsModalContent::MakeTextButton(
     std::string label,
-    std::function<void()> on_click) {
-    ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
-    option.label = std::move(label);
-    option.on_click = std::move(on_click);
-    option.transform = [this](const ftxui::EntryState& state) {
-        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        ftxui::Element button = ftxui::text(BracketLabel(state.label));
-        if (state.focused || state.active) {
-            return button |
-                ftxui::bgcolor(theme.modal_selected_item_bg) |
-                ftxui::color(theme.modal_selected_item_fg);
-        }
-        return button | ftxui::color(theme.modal_accent);
-    };
-    return ftxui::Button(option);
+    std::function<void()> on_click,
+    ButtonRole role,
+    ButtonVariant variant,
+    std::string icon) {
+    ButtonSpec spec;
+    spec.caption = std::move(label);
+    spec.role = role;
+    spec.variant = variant;
+    spec.icon = std::move(icon);
+    return MakeButton(theme_, std::move(spec), std::move(on_click));
 }
 
 ftxui::Component TtsModalContent::MakeTabButton(std::string label, int tab_index) {
+    ButtonSpec spec;
+    spec.caption = std::move(label);
+    spec.role = ButtonRole::Tab;
+    spec.variant = ButtonVariant::AccentBar;
+    spec.size = ButtonSize::Compact;
+
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
-    option.label = std::move(label);
+    option.label = ButtonCaptionText(spec);
     option.on_click = [this, tab_index] { SelectTab(tab_index); };
-    option.transform = [this, tab_index](const ftxui::EntryState& state) {
+    option.transform = [this, tab_index, spec = std::move(spec)](
+                           const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        ftxui::Element tab = ftxui::text(BracketLabel(state.label));
-        if (selected_tab_ == tab_index || state.focused || state.active) {
-            return tab |
-                ftxui::bgcolor(theme.modal_selected_item_bg) |
-                ftxui::color(theme.modal_selected_item_fg) |
-                ftxui::bold;
+        ButtonSpec resolved_spec = spec;
+        resolved_spec.selected = selected_tab_ == tab_index;
+        ftxui::Element tab = RenderButton(theme, resolved_spec, state.focused || state.active);
+        if (resolved_spec.selected || state.focused || state.active) {
+            tab |= ftxui::bold;
+        } else {
+            tab |= ftxui::dim;
         }
-        return tab | ftxui::color(theme.modal_text_color) | ftxui::dim;
+        return tab;
     };
     return ftxui::Button(option);
 }

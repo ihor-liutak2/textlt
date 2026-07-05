@@ -476,7 +476,7 @@ target_include_directories(textlt_ui_button_test PRIVATE
 )
 
 target_link_libraries(textlt_tts_audio_player_test PRIVATE Threads::Threads)
-target_link_libraries(textlt_ui_button_test PRIVATE ftxui::dom)
+target_link_libraries(textlt_ui_button_test PRIVATE ftxui::component)
 
 target_link_libraries(textlt_keyboard_shortcuts_test PRIVATE ftxui::component)
 target_link_libraries(textlt_syntax_highlighter_test PRIVATE ftxui::dom)

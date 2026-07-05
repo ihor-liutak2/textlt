@@ -1,9 +1,10 @@
 # TextLT UI Button System
 
-This document defines the first foundation layer for TextLT buttons.
+This document defines the TextLT button design system.
 
-The first implementation stage only adds semantic design tokens and C++
-button model types. It does not migrate existing modal buttons yet.
+The foundation layer adds semantic theme tokens, C++ button roles, variants,
+states, sizes, and a small rendering factory. Existing modal code can migrate
+one modal at a time.
 
 ## Roles
 
@@ -22,16 +23,44 @@ button model types. It does not migrate existing modal buttons yet.
 
 ## Variants
 
-- `Bracket` — classic `[Caption]` terminal button.
+- `Bracket` — classic `[ Caption ]` terminal button.
 - `AccentBar` — colored left marker and caption.
-- `Pill` — padded label with background when active.
-- `ColoredBrackets` — only brackets use the role accent.
+- `Pill` — padded label with background.
+- `ColoredBrackets` — brackets use the semantic role accent and the caption
+  uses the normal button text color.
 - `Minimal` — plain command-style caption.
-- `Shadow` — reserved for themes that want a subtle 3D style.
+- `Shadow` — optional two-line 3D-like style for themes that want it.
+
+## Factory helpers
+
+`src/ui_button.hpp` provides these helpers:
+
+```cpp
+ButtonCaptionText(spec);
+PadButtonCaption(text, size);
+RenderButton(theme, spec, focused);
+MakeButtonOption(theme, spec, on_click);
+MakeButton(theme, spec, on_click);
+```
+
+Use `RenderButton()` when an existing FTXUI component needs dynamic state, such
+as selected tabs. Use `MakeButton()` when a simple action button is enough.
+
+## First migration
+
+The TTS modal is the first pilot migration:
+
+- tabs use `ButtonRole::Tab` with `ButtonVariant::AccentBar`;
+- Play/Pause/Next use `ButtonRole::Media`;
+- Stop uses `ButtonRole::Warning`;
+- Delete/Clear audio cache use `ButtonRole::Danger`;
+- Save/Set current use `ButtonRole::Primary`;
+- Close uses `ButtonRole::Cancel`.
 
 ## Migration plan
 
-1. Keep existing UI unchanged.
-2. Use the semantic theme colors as fallback-safe design tokens.
-3. Add a button factory/helper in a later patch.
-4. Migrate one modal at a time, starting with TTS and Remote.
+1. Keep old helper functions in other modals until each modal is migrated.
+2. Migrate one modal per patch to keep visual and behavior changes reviewable.
+3. Prefer semantic roles over hard-coded colors.
+4. Keep `Bracket` or `ColoredBrackets` when compact layout matters.
+5. Use `AccentBar` for tabs, media controls, and primary toolbar actions.

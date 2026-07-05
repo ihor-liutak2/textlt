@@ -1,8 +1,14 @@
 #pragma once
 
+#include <algorithm>
+#include <functional>
 #include <string>
+#include <utility>
 
 #include "theme.hpp"
+#include "ftxui/component/component.hpp"
+#include "ftxui/component/component_options.hpp"
+#include "ftxui/dom/elements.hpp"
 #include "ftxui/screen/color.hpp"
 
 namespace textlt {
@@ -213,6 +219,115 @@ inline ButtonStyle ResolveButtonStyle(const Theme& theme,
                                       const ButtonSpec& spec,
                                       bool focused = false) {
     return ResolveButtonStyle(theme, spec.role, ResolveButtonState(spec, focused));
+}
+
+inline std::string ButtonCaptionText(const ButtonSpec& spec) {
+    if (spec.icon.empty()) {
+        return spec.caption;
+    }
+    if (spec.caption.empty()) {
+        return spec.icon;
+    }
+    return spec.icon + " " + spec.caption;
+}
+
+inline std::string PadButtonCaption(std::string caption, ButtonSize size) {
+    switch (size) {
+        case ButtonSize::Compact:
+            return caption;
+        case ButtonSize::Normal:
+            return " " + caption + " ";
+        case ButtonSize::Wide:
+            return "  " + caption + "  ";
+    }
+    return " " + caption + " ";
+}
+
+inline bool ButtonStateUsesBackground(ButtonState state) {
+    return state == ButtonState::Focused || state == ButtonState::Selected;
+}
+
+inline ftxui::Element ApplyButtonStateBackground(ftxui::Element element,
+                                                 const ButtonStyle& style,
+                                                 ButtonState state,
+                                                 bool force_background = false) {
+    if (force_background || ButtonStateUsesBackground(state)) {
+        element |= ftxui::bgcolor(style.background);
+    }
+    return element;
+}
+
+inline ftxui::Element RenderButton(const Theme& theme,
+                                   const ButtonSpec& spec,
+                                   bool focused = false) {
+    const ButtonState state = ResolveButtonState(spec, focused);
+    const ButtonStyle style = ResolveButtonStyle(theme, spec.role, state);
+    const std::string caption = PadButtonCaption(ButtonCaptionText(spec), spec.size);
+
+    switch (spec.variant) {
+        case ButtonVariant::AccentBar: {
+            ftxui::Element element = ftxui::hbox({
+                ftxui::text("▌") | ftxui::color(style.accent),
+                ftxui::text(caption) | ftxui::color(style.text),
+            });
+            return ApplyButtonStateBackground(std::move(element), style, state);
+        }
+        case ButtonVariant::Pill: {
+            ftxui::Element element = ftxui::text(caption) | ftxui::color(style.text);
+            return ApplyButtonStateBackground(std::move(element), style, state, true);
+        }
+        case ButtonVariant::ColoredBrackets: {
+            ftxui::Element element = ftxui::hbox({
+                ftxui::text("[") | ftxui::color(style.accent),
+                ftxui::text(caption) | ftxui::color(style.text),
+                ftxui::text("]") | ftxui::color(style.accent),
+            });
+            return ApplyButtonStateBackground(std::move(element), style, state);
+        }
+        case ButtonVariant::Minimal: {
+            ftxui::Element element = ftxui::text(ButtonCaptionText(spec)) |
+                ftxui::color(state == ButtonState::Normal ? style.accent : style.text);
+            return ApplyButtonStateBackground(std::move(element), style, state);
+        }
+        case ButtonVariant::Shadow: {
+            ftxui::Element body = ftxui::text(caption) | ftxui::color(style.text);
+            body = ApplyButtonStateBackground(std::move(body), style, state, true);
+            std::string shadow_text;
+            for (int index = 0; index < (std::max)(1, static_cast<int>(caption.size())); ++index) {
+                shadow_text += "▄";
+            }
+            return ftxui::vbox({
+                std::move(body),
+                ftxui::text(shadow_text) | ftxui::color(style.shadow),
+            });
+        }
+        case ButtonVariant::Bracket:
+        default: {
+            ftxui::Element element = ftxui::text("[" + caption + "]") |
+                ftxui::color(state == ButtonState::Normal ? style.accent : style.text);
+            return ApplyButtonStateBackground(std::move(element), style, state);
+        }
+    }
+}
+
+inline ftxui::ButtonOption MakeButtonOption(const Theme* theme,
+                                            ButtonSpec spec,
+                                            std::function<void()> on_click) {
+    ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
+    option.label = ButtonCaptionText(spec);
+    option.on_click = std::move(on_click);
+    option.transform = [theme, spec = std::move(spec)](const ftxui::EntryState& state) {
+        const Theme fallback_theme;
+        const Theme& resolved_theme = theme ? *theme : fallback_theme;
+        return RenderButton(resolved_theme, spec, state.focused || state.active);
+    };
+    return option;
+}
+
+inline ftxui::Component MakeButton(const Theme* theme,
+                                   ButtonSpec spec,
+                                   std::function<void()> on_click) {
+    return ftxui::Button(MakeButtonOption(theme, std::move(spec), std::move(on_click)));
 }
 
 } // namespace textlt

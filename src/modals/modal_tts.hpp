@@ -17,6 +17,7 @@
 #include "modal_window.hpp"
 #include "theme.hpp"
 #include "tts_audio_player.hpp"
+#include "ui_button.hpp"
 
 namespace textlt {
 
@@ -71,7 +72,11 @@ private:
         Player = 3,
     };
 
-    ftxui::Component MakeTextButton(std::string label, std::function<void()> on_click);
+    ftxui::Component MakeTextButton(std::string label,
+                                    std::function<void()> on_click,
+                                    ButtonRole role = ButtonRole::Secondary,
+                                    ButtonVariant variant = ButtonVariant::ColoredBrackets,
+                                    std::string icon = {});
     ftxui::Component MakeTabButton(std::string label, int tab_index);
     void SelectTab(int tab_index);
     void StartRunWorkflow(bool force_rebuild = false, bool play_after = true);
