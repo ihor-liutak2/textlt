@@ -463,11 +463,20 @@ add_executable(textlt_tts_audio_player_test
   src/tts_audio_player.cpp
 )
 
+add_executable(textlt_ui_button_test
+  tests/ui_button_test.cpp
+)
+
 target_include_directories(textlt_tts_audio_player_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+target_include_directories(textlt_ui_button_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
 target_link_libraries(textlt_tts_audio_player_test PRIVATE Threads::Threads)
+target_link_libraries(textlt_ui_button_test PRIVATE ftxui::dom)
 
 target_link_libraries(textlt_keyboard_shortcuts_test PRIVATE ftxui::component)
 target_link_libraries(textlt_syntax_highlighter_test PRIVATE ftxui::dom)
@@ -501,6 +510,7 @@ add_test(NAME textlt_custom_processor_builder_test COMMAND textlt_custom_process
 add_test(NAME textlt_tts_pipeline_test COMMAND textlt_tts_pipeline_test)
 add_test(NAME textlt_piper_manager_test COMMAND textlt_piper_manager_test)
 add_test(NAME textlt_tts_audio_player_test COMMAND textlt_tts_audio_player_test)
+add_test(NAME textlt_ui_button_test COMMAND textlt_ui_button_test)
 add_test(NAME textlt_remote_path_test COMMAND textlt_remote_path_test)
 add_test(NAME textlt_remote_oauth_token_store_test COMMAND textlt_remote_oauth_token_store_test)
 add_test(NAME textlt_remote_http_client_test COMMAND textlt_remote_http_client_test)

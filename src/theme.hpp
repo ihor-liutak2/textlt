@@ -40,6 +40,30 @@ struct Theme {
     ftxui::Color modal_selected_item_bg = ftxui::Color::Cyan;
     ftxui::Color modal_selected_item_fg = ftxui::Color::Black;
 
+    // Semantic button role colors. These are design-system tokens used by
+    // future button factories; existing modal rendering remains unchanged.
+    ftxui::Color button_default = ftxui::Color::White;
+    ftxui::Color button_primary = ftxui::Color::Cyan;
+    ftxui::Color button_secondary = ftxui::Color::White;
+    ftxui::Color button_success = ftxui::Color::Green;
+    ftxui::Color button_warning = ftxui::Color::Yellow;
+    ftxui::Color button_danger = ftxui::Color::Red;
+    ftxui::Color button_cancel = ftxui::Color::GrayLight;
+    ftxui::Color button_utility = ftxui::Color::Cyan;
+    ftxui::Color button_navigation = ftxui::Color::GrayLight;
+    ftxui::Color button_tab = ftxui::Color::Cyan;
+    ftxui::Color button_toggle = ftxui::Color::Cyan;
+    ftxui::Color button_media = ftxui::Color::Green;
+    ftxui::Color button_text = ftxui::Color::White;
+    ftxui::Color button_muted_text = ftxui::Color::GrayLight;
+    ftxui::Color button_focused_bg = ftxui::Color::Cyan;
+    ftxui::Color button_focused_fg = ftxui::Color::Black;
+    ftxui::Color button_selected_bg = ftxui::Color::Cyan;
+    ftxui::Color button_selected_fg = ftxui::Color::Black;
+    ftxui::Color button_disabled_fg = ftxui::Color::GrayLight;
+    ftxui::Color button_shadow = ftxui::Color::GrayDark;
+    ftxui::Color button_bracket = ftxui::Color::Cyan;
+
     bool IsLight() const {
         return name.find("Light") != std::string::npos;
     }

@@ -1,40 +1,51 @@
 {
   "name": "Pantone Grape Shadow",
-
   "background": "#1D1726",
   "foreground": "#EEE7F4",
-
   "header": "#2A2136",
   "menu_background": "#15101D",
   "menu_foreground": "#DCD0E8",
   "status": "#15101D",
-
   "editor_text": "#EEE7F4",
-
   "syntax_keyword": "#BFA3E6",
   "syntax_type": "#9FAFE0",
   "syntax_string": "#D6A0B8",
   "syntax_number": "#C7A0D8",
   "syntax_comment": "#7D7188",
-
   "gutter": "#62546F",
   "cursor": "#DDA6C8",
-
   "selection_bg": "#433453",
   "selection_fg": "#FFF6FF",
-
   "match_bg": "#4B355B",
   "active_match_bg": "#A96FB3",
-
   "modal_background": "#2A2136",
   "modal_foreground": "#EEE7F4",
   "modal_border": "#6F5A82",
   "modal_accent": "#DDA6C8",
   "modal_text_color": "#DCD0E8",
-
   "modal_input_bg": "#15101D",
   "modal_input_fg": "#EEE7F4",
-
   "modal_selected_item_bg": "#64497A",
-  "modal_selected_item_fg": "#FFF6FF"
+  "modal_selected_item_fg": "#FFF6FF",
+  "button_default": "#EEE7F4",
+  "button_primary": "#DDA6C8",
+  "button_secondary": "#DCD0E8",
+  "button_success": "#7EE787",
+  "button_warning": "#F6C453",
+  "button_danger": "#FF5C7A",
+  "button_cancel": "#62546F",
+  "button_utility": "#9FAFE0",
+  "button_navigation": "#62546F",
+  "button_tab": "#DDA6C8",
+  "button_toggle": "#DDA6C8",
+  "button_media": "#DDA6C8",
+  "button_text": "#DCD0E8",
+  "button_muted_text": "#7D7188",
+  "button_focused_bg": "#64497A",
+  "button_focused_fg": "#FFF6FF",
+  "button_selected_bg": "#64497A",
+  "button_selected_fg": "#FFF6FF",
+  "button_disabled_fg": "#62546F",
+  "button_shadow": "#1D1726",
+  "button_bracket": "#DDA6C8"
 }

@@ -1,40 +1,51 @@
 {
   "name": "Pantone Marsala",
-
   "background": "#2A1619",
   "foreground": "#F5E6E8",
-
   "header": "#3A2024",
   "menu_background": "#241114",
   "menu_foreground": "#E0C3C7",
   "status": "#241114",
-
   "editor_text": "#F5E6E8",
-
   "syntax_keyword": "#E8A7A1",
   "syntax_type": "#D68A91",
   "syntax_string": "#E6C7A8",
   "syntax_number": "#CFA0D8",
   "syntax_comment": "#8A6F75",
-
   "gutter": "#7A4A51",
   "cursor": "#E8A7A1",
-
   "selection_bg": "#6B3F44",
   "selection_fg": "#FFF2F4",
-
   "match_bg": "#6A3B42",
   "active_match_bg": "#C9828A",
-
   "modal_background": "#3A2024",
   "modal_foreground": "#F5E6E8",
   "modal_border": "#9E6269",
   "modal_accent": "#E8A7A1",
   "modal_text_color": "#E0C3C7",
-
   "modal_input_bg": "#1F0F12",
   "modal_input_fg": "#FFFFFF",
-
   "modal_selected_item_bg": "#9E6269",
-  "modal_selected_item_fg": "#2A1619"
+  "modal_selected_item_fg": "#2A1619",
+  "button_default": "#F5E6E8",
+  "button_primary": "#E8A7A1",
+  "button_secondary": "#E0C3C7",
+  "button_success": "#7EE787",
+  "button_warning": "#F6C453",
+  "button_danger": "#FF5C7A",
+  "button_cancel": "#7A4A51",
+  "button_utility": "#D68A91",
+  "button_navigation": "#7A4A51",
+  "button_tab": "#E8A7A1",
+  "button_toggle": "#E8A7A1",
+  "button_media": "#E8A7A1",
+  "button_text": "#E0C3C7",
+  "button_muted_text": "#8A6F75",
+  "button_focused_bg": "#9E6269",
+  "button_focused_fg": "#2A1619",
+  "button_selected_bg": "#9E6269",
+  "button_selected_fg": "#2A1619",
+  "button_disabled_fg": "#7A4A51",
+  "button_shadow": "#2A1619",
+  "button_bracket": "#E8A7A1"
 }

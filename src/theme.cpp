@@ -215,6 +215,49 @@ namespace textlt {
                                                  selection_fg);
                 theme.modal_input_fg = ftxui::Color::RGB(28, 28, 28);
             }
+
+            theme.button_default = ColorFromName(
+                JsonString(content, "button_default"), theme.modal_foreground);
+            theme.button_primary = ColorFromName(
+                JsonString(content, "button_primary"), theme.modal_accent);
+            theme.button_secondary = ColorFromName(
+                JsonString(content, "button_secondary"), theme.modal_text_color);
+            theme.button_success = ColorFromName(
+                JsonString(content, "button_success"), theme.syntax_string);
+            theme.button_warning = ColorFromName(
+                JsonString(content, "button_warning"), theme.active_match_bg);
+            theme.button_danger = ColorFromName(
+                JsonString(content, "button_danger"), theme.syntax_keyword);
+            theme.button_cancel = ColorFromName(
+                JsonString(content, "button_cancel"), theme.gutter);
+            theme.button_utility = ColorFromName(
+                JsonString(content, "button_utility"), theme.syntax_type);
+            theme.button_navigation = ColorFromName(
+                JsonString(content, "button_navigation"), theme.gutter);
+            theme.button_tab = ColorFromName(
+                JsonString(content, "button_tab"), theme.modal_accent);
+            theme.button_toggle = ColorFromName(
+                JsonString(content, "button_toggle"), theme.modal_accent);
+            theme.button_media = ColorFromName(
+                JsonString(content, "button_media"), theme.cursor);
+            theme.button_text = ColorFromName(
+                JsonString(content, "button_text"), theme.modal_text_color);
+            theme.button_muted_text = ColorFromName(
+                JsonString(content, "button_muted_text"), theme.syntax_comment);
+            theme.button_focused_bg = ColorFromName(
+                JsonString(content, "button_focused_bg"), theme.modal_selected_item_bg);
+            theme.button_focused_fg = ColorFromName(
+                JsonString(content, "button_focused_fg"), theme.modal_selected_item_fg);
+            theme.button_selected_bg = ColorFromName(
+                JsonString(content, "button_selected_bg"), theme.modal_selected_item_bg);
+            theme.button_selected_fg = ColorFromName(
+                JsonString(content, "button_selected_fg"), theme.modal_selected_item_fg);
+            theme.button_disabled_fg = ColorFromName(
+                JsonString(content, "button_disabled_fg"), theme.gutter);
+            theme.button_shadow = ColorFromName(
+                JsonString(content, "button_shadow"), theme.background);
+            theme.button_bracket = ColorFromName(
+                JsonString(content, "button_bracket"), theme.modal_accent);
             return theme;
         }
 

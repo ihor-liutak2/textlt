@@ -1,40 +1,51 @@
 {
   "name": "Pantone Ash Mauve",
-
   "background": "#2B2628",
   "foreground": "#EFE7E4",
-
   "header": "#393335",
   "menu_background": "#241F21",
   "menu_foreground": "#E6DAD7",
   "status": "#241F21",
-
   "editor_text": "#EFE7E4",
-
   "syntax_keyword": "#D8A7A1",
   "syntax_type": "#B8C7BE",
   "syntax_string": "#C9B27E",
   "syntax_number": "#C0A4D8",
   "syntax_comment": "#8A8082",
-
   "gutter": "#6D6466",
   "cursor": "#E2B8A3",
-
   "selection_bg": "#51494B",
   "selection_fg": "#FFF5F0",
-
   "match_bg": "#69514E",
   "active_match_bg": "#D09A7D",
-
   "modal_background": "#393335",
   "modal_foreground": "#EFE7E4",
   "modal_border": "#6D6466",
   "modal_accent": "#E2B8A3",
   "modal_text_color": "#E6DAD7",
-
   "modal_input_bg": "#241F21",
   "modal_input_fg": "#EFE7E4",
-
   "modal_selected_item_bg": "#6D6466",
-  "modal_selected_item_fg": "#FFF5F0"
+  "modal_selected_item_fg": "#FFF5F0",
+  "button_default": "#EFE7E4",
+  "button_primary": "#E2B8A3",
+  "button_secondary": "#E6DAD7",
+  "button_success": "#7EE787",
+  "button_warning": "#F6C453",
+  "button_danger": "#FF5C7A",
+  "button_cancel": "#6D6466",
+  "button_utility": "#B8C7BE",
+  "button_navigation": "#6D6466",
+  "button_tab": "#E2B8A3",
+  "button_toggle": "#E2B8A3",
+  "button_media": "#E2B8A3",
+  "button_text": "#E6DAD7",
+  "button_muted_text": "#8A8082",
+  "button_focused_bg": "#6D6466",
+  "button_focused_fg": "#FFF5F0",
+  "button_selected_bg": "#6D6466",
+  "button_selected_fg": "#FFF5F0",
+  "button_disabled_fg": "#6D6466",
+  "button_shadow": "#2B2628",
+  "button_bracket": "#E2B8A3"
 }

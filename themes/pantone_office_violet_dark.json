@@ -1,40 +1,51 @@
 {
   "name": "Pantone Office Violet Dark",
-
   "background": "#1C1724",
   "foreground": "#F2EDF7",
-
   "header": "#35214A",
   "menu_background": "#17121E",
   "menu_foreground": "#E7DFF0",
   "status": "#17121E",
-
   "editor_text": "#F2EDF7",
-
   "syntax_keyword": "#D78AC8",
   "syntax_type": "#7FC7C2",
   "syntax_string": "#D8B66A",
   "syntax_number": "#A9C77F",
   "syntax_comment": "#837A8D",
-
   "gutter": "#6D6178",
   "cursor": "#F0A06E",
-
   "selection_bg": "#40304F",
   "selection_fg": "#FFF8FF",
-
   "match_bg": "#4A3B28",
   "active_match_bg": "#D8B66A",
-
   "modal_background": "#2B2038",
   "modal_foreground": "#F2EDF7",
   "modal_border": "#7A5A96",
   "modal_accent": "#F0A06E",
   "modal_text_color": "#E7DFF0",
-
   "modal_input_bg": "#17121E",
   "modal_input_fg": "#F2EDF7",
-
   "modal_selected_item_bg": "#5B4175",
-  "modal_selected_item_fg": "#FFF8FF"
+  "modal_selected_item_fg": "#FFF8FF",
+  "button_default": "#F2EDF7",
+  "button_primary": "#F0A06E",
+  "button_secondary": "#E7DFF0",
+  "button_success": "#7EE787",
+  "button_warning": "#F6C453",
+  "button_danger": "#FF5C7A",
+  "button_cancel": "#6D6178",
+  "button_utility": "#7FC7C2",
+  "button_navigation": "#6D6178",
+  "button_tab": "#F0A06E",
+  "button_toggle": "#F0A06E",
+  "button_media": "#F0A06E",
+  "button_text": "#E7DFF0",
+  "button_muted_text": "#837A8D",
+  "button_focused_bg": "#5B4175",
+  "button_focused_fg": "#FFF8FF",
+  "button_selected_bg": "#5B4175",
+  "button_selected_fg": "#FFF8FF",
+  "button_disabled_fg": "#6D6178",
+  "button_shadow": "#1C1724",
+  "button_bracket": "#F0A06E"
 }
