@@ -7,6 +7,7 @@
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/mouse.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "ui_button.hpp"
 
 namespace textlt {
 namespace {
@@ -16,10 +17,6 @@ constexpr int kEntryNameWidth = 72;
 constexpr int kEntrySizeWidth = 12;
 constexpr int kMinDoubleClickMs = 80;
 constexpr int kMaxDoubleClickMs = 500;
-
-std::string BracketLabel(const std::string& label) {
-    return "[" + label + "]";
-}
 
 std::string FileTypeLabel(FileEntryType type) {
     switch (type) {

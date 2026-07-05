@@ -11,6 +11,7 @@
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/mouse.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "ui_button.hpp"
 #include "remote/remote_dialog_theme.hpp"
 #include "remote/remote_dropbox_provider.hpp"
 #include "remote/remote_google_drive_provider.hpp"
@@ -21,10 +22,6 @@
 
 namespace textlt {
 namespace {
-
-std::string BracketLabel(const std::string& label) {
-    return "[" + label + "]";
-}
 
 std::string TrimForDisplay(const std::string& value, size_t width) {
     if (value.size() <= width) {

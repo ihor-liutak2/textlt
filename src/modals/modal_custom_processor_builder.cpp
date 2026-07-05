@@ -10,17 +10,54 @@
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/dom/elements.hpp"
 
+#include "ui_button.hpp"
+
 namespace textlt {
 namespace {
 
-ftxui::Element TextButtonElement(const std::string& label, const Theme& theme, bool focused) {
-    ftxui::Element button = ftxui::text("[" + label + "]");
-    if (focused) {
-        return button |
-            ftxui::bgcolor(theme.modal_selected_item_bg) |
-            ftxui::color(theme.modal_selected_item_fg);
+ButtonSpec CustomProcessorButtonSpec(std::string label) {
+    ButtonSpec spec;
+    spec.caption = std::move(label);
+    spec.variant = ButtonVariant::AccentBar;
+
+    const std::string& caption = spec.caption;
+    if (caption == "Save Processor") {
+        spec.role = ButtonRole::Primary;
+        return spec;
     }
-    return button | ftxui::color(theme.modal_accent);
+    if (caption == "Close") {
+        spec.role = ButtonRole::Cancel;
+        return spec;
+    }
+    if (caption == "Delete") {
+        spec.role = ButtonRole::Danger;
+        return spec;
+    }
+    if (caption == "Clear") {
+        spec.role = ButtonRole::Warning;
+        return spec;
+    }
+    if (caption == "Copy AI Prompt" || caption == "Paste JSON" || caption == "Reload") {
+        spec.role = ButtonRole::Utility;
+        return spec;
+    }
+    if (caption == "Validate" || caption == "Edit") {
+        spec.role = ButtonRole::Secondary;
+        return spec;
+    }
+
+    spec.role = ButtonRole::Toggle;
+    spec.size = ButtonSize::Compact;
+    return spec;
+}
+
+ftxui::Element TextButtonElement(const std::string& label,
+                                 const Theme& theme,
+                                 bool focused,
+                                 bool selected = false) {
+    ButtonSpec spec = CustomProcessorButtonSpec(label);
+    spec.selected = selected;
+    return RenderButton(theme, spec, focused);
 }
 
 ftxui::Element SectionTitle(const std::string& label, const Theme& theme) {
@@ -46,7 +83,7 @@ CustomProcessorBuilderModalContent::CustomProcessorBuilderModalContent(
     auto menu_option = ftxui::MenuOption::Toggle();
     menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return TextButtonElement(state.label, theme, state.focused || state.active);
+        return TextButtonElement(state.label, theme, state.focused || state.active, state.state);
     };
 
     tab_buttons_ = ftxui::Menu(&tab_labels_, &selected_tab_, menu_option);
@@ -92,7 +129,7 @@ CustomProcessorBuilderModalContent::CustomProcessorBuilderModalContent(
     auto processor_option = ftxui::MenuOption::Vertical();
     processor_option.entries_option.transform = [this](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return TextButtonElement(state.label, theme, state.focused || state.active);
+        return TextButtonElement(state.label, theme, state.focused || state.active, state.state);
     };
     processor_labels_ = {"No editable user processors"};
     processor_menu_ = ftxui::Menu(&processor_labels_, &selected_processor_, processor_option);
@@ -161,14 +198,8 @@ CustomProcessorBuilderModalContent::CustomProcessorBuilderModalContent(
 ftxui::Component CustomProcessorBuilderModalContent::MakeTextButton(
     std::string label,
     std::function<void()> on_click) {
-    ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
-    option.label = std::move(label);
-    option.on_click = std::move(on_click);
-    option.transform = [this](const ftxui::EntryState& state) {
-        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return TextButtonElement(state.label, theme, state.focused || state.active);
-    };
-    return ftxui::Button(std::move(option));
+    ButtonSpec spec = CustomProcessorButtonSpec(std::move(label));
+    return MakeButton(theme_, std::move(spec), std::move(on_click));
 }
 
 void CustomProcessorBuilderModalContent::Open() {

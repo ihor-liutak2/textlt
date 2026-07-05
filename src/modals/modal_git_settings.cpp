@@ -8,11 +8,50 @@
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/dom/elements.hpp"
 
+#include "ui_button.hpp"
+
 namespace textlt {
 namespace {
 
-std::string BracketLabel(const std::string& label) {
-    return !label.empty() && label.front() == '[' ? label : "[" + label + "]";
+ButtonSpec GitSettingsButtonSpec(std::string label) {
+    ButtonSpec spec;
+    spec.caption = std::move(label);
+    spec.variant = ButtonVariant::AccentBar;
+
+    const std::string& caption = spec.caption;
+    if (caption == "Add" || caption == "Update URL" || caption == "Save local" ||
+        caption == "Save global" || caption == "Confirm") {
+        spec.role = ButtonRole::Primary;
+        return spec;
+    }
+    if (caption == "Cancel") {
+        spec.role = ButtonRole::Cancel;
+        return spec;
+    }
+    if (caption == "Remove") {
+        spec.role = ButtonRole::Danger;
+        return spec;
+    }
+    if (caption == "Clear local") {
+        spec.role = ButtonRole::Warning;
+        return spec;
+    }
+    if (caption == "Refresh" || caption == "Copy" || caption == "Test") {
+        spec.role = ButtonRole::Utility;
+        return spec;
+    }
+    if (caption == "Local" || caption == "Global") {
+        spec.role = ButtonRole::Toggle;
+        spec.size = ButtonSize::Compact;
+        return spec;
+    }
+    if (caption == "Rename") {
+        spec.role = ButtonRole::Warning;
+        return spec;
+    }
+
+    spec.role = ButtonRole::Secondary;
+    return spec;
 }
 
 std::string TrimCopy(std::string value) {
@@ -241,25 +280,19 @@ GitSettingsModalContent::GitSettingsModalContent(
 ftxui::Component GitSettingsModalContent::MakeTextButton(
     std::string label,
     std::function<void()> on_click) {
-    ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
-    option.label = std::move(label);
-    option.on_click = std::move(on_click);
-    option.transform = [this](const ftxui::EntryState& state) {
-        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        ftxui::Element button = ftxui::text(BracketLabel(state.label));
-        if (state.focused || state.active) {
-            return button |
-                ftxui::bgcolor(theme.modal_selected_item_bg) |
-                ftxui::color(theme.modal_selected_item_fg);
-        }
-        return button | ftxui::color(theme.modal_accent);
-    };
-    return ftxui::Button(option);
+    ButtonSpec spec = GitSettingsButtonSpec(std::move(label));
+    return MakeButton(theme_, std::move(spec), std::move(on_click));
 }
 
 ftxui::Component GitSettingsModalContent::MakeTabButton(std::string label, int tab_index) {
+    ButtonSpec spec;
+    spec.caption = std::move(label);
+    spec.role = ButtonRole::Tab;
+    spec.variant = ButtonVariant::AccentBar;
+    spec.size = ButtonSize::Compact;
+
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
-    option.label = std::move(label);
+    option.label = ButtonCaptionText(spec);
     option.on_click = [this, tab_index] {
         selected_tab_ = tab_index;
         if (selected_tab_ == static_cast<int>(Tab::Remotes) && remote_menu_) {
@@ -270,16 +303,17 @@ ftxui::Component GitSettingsModalContent::MakeTabButton(std::string label, int t
             config_filter_input_component_->TakeFocus();
         }
     };
-    option.transform = [this, tab_index](const ftxui::EntryState& state) {
+    option.transform = [this, tab_index, spec = std::move(spec)](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        ftxui::Element tab = ftxui::text(BracketLabel(state.label));
-        if (selected_tab_ == tab_index || state.focused || state.active) {
-            return tab |
-                ftxui::bgcolor(theme.modal_selected_item_bg) |
-                ftxui::color(theme.modal_selected_item_fg) |
-                ftxui::bold;
+        ButtonSpec resolved_spec = spec;
+        resolved_spec.selected = selected_tab_ == tab_index;
+        ftxui::Element tab = RenderButton(theme, resolved_spec, state.focused || state.active);
+        if (resolved_spec.selected || state.focused || state.active) {
+            tab |= ftxui::bold;
+        } else {
+            tab |= ftxui::dim;
         }
-        return tab | ftxui::color(theme.modal_text_color) | ftxui::dim;
+        return tab;
     };
     return ftxui::Button(option);
 }

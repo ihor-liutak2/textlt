@@ -42,15 +42,15 @@ ftxui::Element TextProcessorsModalContent::RenderScopeTabs() const {
     return hbox({
         text(" Scope: ") | bold | color(theme.modal_accent),
         active_scope_ == TextParserScope::Text
-            ? text("[Text]") | bgcolor(theme.modal_selected_item_bg) | color(theme.modal_selected_item_fg)
+            ? RenderButton(theme, ProcessorTabSpec("Text", true)) | bold
             : text_tab_button_->Render(),
         text(" "),
         active_scope_ == TextParserScope::Paragraph
-            ? text("[Paragraph]") | bgcolor(theme.modal_selected_item_bg) | color(theme.modal_selected_item_fg)
+            ? RenderButton(theme, ProcessorTabSpec("Paragraph", true)) | bold
             : paragraph_tab_button_->Render(),
         text(" "),
         active_scope_ == TextParserScope::Code
-            ? text("[Code]") | bgcolor(theme.modal_selected_item_bg) | color(theme.modal_selected_item_fg)
+            ? RenderButton(theme, ProcessorTabSpec("Code", true)) | bold
             : code_tab_button_->Render(),
         filler(),
     });
@@ -69,14 +69,12 @@ ftxui::Element TextProcessorsModalContent::RenderGroupTabs() const {
     auto render_group_button = [&](size_t index) -> Element {
         const std::string& group = kProcessorGroups[index];
         if (active_group_ == group) {
-            return text(BracketLabel(group)) |
-                bgcolor(theme.modal_selected_item_bg) |
-                color(theme.modal_selected_item_fg);
+            return RenderButton(theme, ProcessorTabSpec(group, true)) | bold;
         }
         if (index < group_tab_buttons_.size() && group_tab_buttons_[index]) {
             return group_tab_buttons_[index]->Render();
         }
-        return text(BracketLabel(group)) | color(theme.modal_accent);
+        return RenderButton(theme, ProcessorTabSpec(group));
     };
 
     auto build_row = [&](size_t begin, size_t end, const std::string& label) {

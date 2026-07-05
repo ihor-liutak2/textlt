@@ -37,10 +37,12 @@ ftxui::Element FilesModalContent::RenderFavoriteDirectories() {
         if (label.empty()) {
             label = FileManager::PathToUtf8(favorite_directories_[index]);
         }
-        buttons.push_back(
-            text(BracketLabel(TrimForDisplay(label, 16))) |
-            color(theme.modal_accent) |
-            reflect(favorite_boxes_[index]));
+        ButtonSpec spec;
+        spec.caption = TrimForDisplay(label, 16);
+        spec.role = ButtonRole::Navigation;
+        spec.variant = ButtonVariant::ColoredBrackets;
+        spec.size = ButtonSize::Compact;
+        buttons.push_back(RenderButton(theme, spec) | reflect(favorite_boxes_[index]));
     }
     return hbox(std::move(buttons));
 }

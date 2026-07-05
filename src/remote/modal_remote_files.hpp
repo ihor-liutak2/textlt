@@ -24,6 +24,7 @@
 #include "remote/remote_provider.hpp"
 #include "remote/remote_sftp_provider.hpp"
 #include "theme.hpp"
+#include "ui_button.hpp"
 
 namespace textlt {
 
@@ -85,7 +86,13 @@ private:
         std::chrono::steady_clock::time_point last_click_time{};
     };
 
-    ftxui::Component MakeTextButton(std::string label, std::function<void()> on_click);
+    ftxui::Component MakeTextButton(
+        std::string label,
+        std::function<void()> on_click,
+        ButtonRole role = ButtonRole::Default,
+        ButtonVariant variant = ButtonVariant::AccentBar,
+        std::string icon = {},
+        ButtonSize size = ButtonSize::Normal);
     ftxui::Component MakePathInput(PanelSide side);
     ftxui::Element RenderPanel(PanelSide side);
     ftxui::Element RenderEntryRow(PanelSide side, size_t index);

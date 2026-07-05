@@ -13,6 +13,8 @@
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/dom/elements.hpp"
 
+#include "ui_button.hpp"
+
 namespace textlt {
 namespace {
 
@@ -31,8 +33,14 @@ const std::vector<std::string> kProcessorGroups = {
     "User",
     "Custom",
 };
-std::string BracketLabel(const std::string& label) {
-    return "[" + label + "]";
+ButtonSpec ProcessorTabSpec(std::string label, bool selected = false) {
+    ButtonSpec spec;
+    spec.caption = std::move(label);
+    spec.role = ButtonRole::Tab;
+    spec.variant = ButtonVariant::AccentBar;
+    spec.size = ButtonSize::Compact;
+    spec.selected = selected;
+    return spec;
 }
 
 bool IsBackspaceEvent(const ftxui::Event& event) {
@@ -201,18 +209,13 @@ TextProcessorsModalContent::TextProcessorsModalContent(
 ftxui::Component TextProcessorsModalContent::MakeTextButton(
     std::string label,
     std::function<void()> on_click) {
+    ButtonSpec spec = ProcessorTabSpec(std::move(label));
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
-    option.label = std::move(label);
+    option.label = ButtonCaptionText(spec);
     option.on_click = std::move(on_click);
-    option.transform = [this](const ftxui::EntryState& state) {
+    option.transform = [this, spec = std::move(spec)](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        ftxui::Element button = ftxui::text(BracketLabel(state.label));
-        if (state.focused || state.active) {
-            return button |
-                ftxui::bgcolor(theme.modal_selected_item_bg) |
-                ftxui::color(theme.modal_selected_item_fg);
-        }
-        return button | ftxui::color(theme.modal_accent);
+        return RenderButton(theme, spec, state.focused || state.active);
     };
 
     return ftxui::Button(option);

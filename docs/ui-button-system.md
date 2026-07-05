@@ -64,3 +64,39 @@ The TTS modal is the first pilot migration:
 3. Prefer semantic roles over hard-coded colors.
 4. Keep `Bracket` or `ColoredBrackets` when compact layout matters.
 5. Use `AccentBar` for tabs, media controls, and primary toolbar actions.
+
+## Remote and Files migration
+
+The Remote Connections, Remote Files, and Files modals are the first broad
+workflow migration after the TTS pilot:
+
+- navigation actions use `ButtonRole::Navigation`;
+- create/open/save/confirm actions use `ButtonRole::Primary`;
+- rename/test/sync actions use `ButtonRole::Secondary`;
+- copy/refresh/path/error helpers use `ButtonRole::Utility`;
+- clear/cut/overwrite-like actions use `ButtonRole::Warning`;
+- delete actions use `ButtonRole::Danger`;
+- close/cancel actions use `ButtonRole::Cancel`;
+- remote provider choices use `ButtonRole::Toggle`.
+
+This keeps destructive, confirmation, navigation, and utility controls visually
+consistent across file-management workflows without changing their behavior.
+
+## Migration patch B
+
+The second migration pass moves Search, Git, Git Settings, Text Processors,
+and Custom Processor Builder controls to the shared button renderer. The modal
+logic is unchanged; only button rendering now goes through semantic roles and
+variants.
+
+Role mapping used in this pass:
+
+- Search: tabs use `Tab`, mask navigation uses `Navigation`, directory switches
+  use `Toggle`, open/apply/save actions use `Primary`, copy/paste actions use
+  `Utility`, and delete uses `Danger`.
+- Git: commit/open/checkout/push/fetch actions use `Primary`, copy/refresh/check
+  actions use `Utility`, branch rewrite operations use `Warning`, delete and
+  force push use `Danger`, and confirmation rows use `Primary` plus `Cancel`.
+- Processor modals: scope/group selectors use `Tab`, builder utility actions use
+  `Utility`, save uses `Primary`, clear uses `Warning`, delete uses `Danger`,
+  and close uses `Cancel`.

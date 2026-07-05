@@ -17,6 +17,7 @@
 #include "modal_interface.hpp"
 #include "modal_window.hpp"
 #include "theme.hpp"
+#include "ui_button.hpp"
 
 namespace textlt {
 
@@ -88,7 +89,11 @@ private:
 
     ftxui::Component MakeTextButton(
         std::string label,
-        std::function<void()> on_click);
+        std::function<void()> on_click,
+        ButtonRole role = ButtonRole::Default,
+        ButtonVariant variant = ButtonVariant::AccentBar,
+        std::string icon = {},
+        ButtonSize size = ButtonSize::Normal);
 
     void RebuildComponents();
     void RefreshFavorites();

@@ -12,6 +12,7 @@
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/mouse.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "ui_button.hpp"
 #include "remote/remote_dialog_theme.hpp"
 
 namespace textlt {
@@ -20,10 +21,6 @@ namespace {
 constexpr int kVisibleRows = 14;
 constexpr int kDoubleClickMinMs = 80;
 constexpr int kDoubleClickMaxMs = 500;
-
-std::string BracketLabel(const std::string& label) {
-    return "[" + label + "]";
-}
 
 bool IsBackspaceEvent(const ftxui::Event& event) {
     return event == ftxui::Event::Backspace ||

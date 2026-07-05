@@ -15,6 +15,7 @@
 #include "remote/remote_config_store.hpp"
 #include "remote/remote_oauth_flow.hpp"
 #include "theme.hpp"
+#include "ui_button.hpp"
 
 namespace textlt {
 
@@ -41,7 +42,13 @@ public:
     bool HandleEvent(ftxui::Event event);
 
 private:
-    ftxui::Component MakeTextButton(std::string label, std::function<void()> on_click);
+    ftxui::Component MakeTextButton(
+        std::string label,
+        std::function<void()> on_click,
+        ButtonRole role = ButtonRole::Default,
+        ButtonVariant variant = ButtonVariant::AccentBar,
+        std::string icon = {},
+        ButtonSize size = ButtonSize::Normal);
     ftxui::Element RenderConnectionList();
     ftxui::Element RenderForm();
     ftxui::Element RenderHelpOverlay();

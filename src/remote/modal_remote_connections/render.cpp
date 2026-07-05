@@ -11,7 +11,7 @@ ftxui::Element RemoteConnectionsModalContent::Render() {
             token_button_->Render(), text(" "),
             reload_button_->Render(), text(" "),
             close_button_->Render(),
-        }) | color(theme.modal_accent),
+        }),
         RenderTypeButtons(),
         separator() | color(theme.modal_border),
         hbox({
