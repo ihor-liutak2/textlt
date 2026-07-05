@@ -44,8 +44,8 @@ ftxui::ButtonOption MakeFindPanelTextButtonOption(
         const bool active = is_active && is_active();
         if (theme && (state.focused || state.active || active)) {
             return button |
-                ftxui::bgcolor(theme->menu_foreground) |
-                ftxui::color(theme->menu_background);
+                ftxui::bgcolor(theme->modal_selected_item_bg) |
+                ftxui::color(theme->modal_selected_item_fg);
         }
         if (theme) {
             return button | ftxui::color(theme->menu_foreground);

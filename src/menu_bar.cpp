@@ -18,6 +18,12 @@ bool IsLightTheme(const Theme& theme) {
     return theme.name.find("Light") != std::string::npos;
 }
 
+ftxui::Element MenuItemActiveStyle(const Theme& theme, ftxui::Element item) {
+    return item |
+           ftxui::bgcolor(theme.modal_selected_item_bg) |
+           ftxui::color(theme.modal_selected_item_fg);
+}
+
 ftxui::Color MenuBorderColor(const Theme& theme) {
     if (IsLightTheme(theme)) {
         return ftxui::Color::RGB(70, 70, 70);
@@ -120,9 +126,7 @@ MenuBarComponent::MenuBarComponent(
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
         ftxui::Element item = ftxui::text(state.label);
         if (state.focused || state.active) {
-            return item |
-                ftxui::bgcolor(theme.menu_foreground) |
-                ftxui::color(theme.menu_background);
+            return MenuItemActiveStyle(theme, std::move(item));
         }
         return item | ftxui::color(theme.menu_foreground);
     };
@@ -161,9 +165,7 @@ void MenuBarComponent::RebuildDropdownComponents() {
             const Theme& theme = theme_ ? *theme_ : FallbackTheme();
             ftxui::Element item = ftxui::text(state.label);
             if (state.focused || state.active) {
-                return item |
-                    ftxui::bgcolor(theme.menu_foreground) |
-                    ftxui::color(theme.menu_background);
+                return MenuItemActiveStyle(theme, std::move(item));
             }
             return item | ftxui::color(theme.menu_foreground);
         };
