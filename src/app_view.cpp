@@ -20,6 +20,16 @@ bool IsLightTheme(const Theme& theme) {
     return theme.name.find("Light") != std::string::npos;
 }
 
+std::string TruncateLabel(const std::string& value, size_t max_length) {
+    if (value.size() <= max_length) {
+        return value;
+    }
+    if (max_length <= 3) {
+        return value.substr(0, max_length);
+    }
+    return value.substr(0, max_length - 3) + "...";
+}
+
 ftxui::Color MainWindowSeparatorColor(const Theme& theme) {
     if (IsLightTheme(theme)) {
         return ftxui::Color::RGB(70, 70, 70);
@@ -226,8 +236,6 @@ ftxui::Element TextltApp::Render() {
             (cursor_row_index * 100) / static_cast<int>(total_lines - 1);
     }
     const std::string file_path = editor->CurrentFilePath();
-    const std::string filename =
-        std::filesystem::path(file_path).filename().string();
     const auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
     const std::filesystem::path git_workspace = editor_config_.show_file_explorer
         ? sidebar->CurrentPath()
@@ -236,19 +244,12 @@ ftxui::Element TextltApp::Render() {
         git_workspace.empty() ? std::filesystem::current_path() : git_workspace);
     const std::string git_branch = git_manager_.GetCurrentBranch();
     const std::string git_branch_badge =
-        git_branch.empty() ? "" : " | branch: " + git_branch;
-    std::string display_name = filename.empty() ? file_path : filename;
-    if (editor->IsDirty()) {
-        display_name += " *";
-    }
+        git_branch.empty() ? "" : " | branch: " + TruncateLabel(git_branch, 15);
 
     auto doc = editor->GetDocument();
-    std::string type_label = doc ? doc->Label() : "Plain Text";
 
     base_rows.push_back(
-        text(" File: " + display_name +
-        " | File Type: " + type_label +
-        " | Ln " + std::to_string(cursor_row) + ", Col " + std::to_string(cursor_col) +
+        text(" Ln " + std::to_string(cursor_row) + ", Col " + std::to_string(cursor_col) +
         " | " + editor->ActiveLineEndingLabel() +
         git_branch_badge +
         " | " + std::to_string(document_percent) + "%" +

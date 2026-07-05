@@ -142,7 +142,7 @@ ftxui::Element SidebarPanel::Render() {
             favorites_tab,
         }),
         opened_tab,
-        separator(),
+        separator() | color(SidebarBorderColor(theme)),
         vbox(std::move(rows)) | reflect(menu_box_) | frame | yflex,
     }) |
         borderStyled(ftxui::LIGHT, SidebarBorderColor(theme)) |

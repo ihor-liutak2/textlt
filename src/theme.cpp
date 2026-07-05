@@ -333,6 +333,16 @@ namespace textlt {
             return *iter;
         }
 
+        // Keep the old Dracula name working after the theme rename.
+        if (name == "Dracula") {
+            iter = std::find_if(themes.begin(), themes.end(), [](const Theme& theme) {
+                return theme.name == "Night Violet";
+            });
+            if (iter != themes.end()) {
+                return *iter;
+            }
+        }
+
         // Missing saved theme names fall back to the canonical light theme
         // before using the built-in default theme.
         auto github_light = std::find_if(themes.begin(), themes.end(), [](const Theme& theme) {
