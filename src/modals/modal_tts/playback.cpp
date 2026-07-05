@@ -25,8 +25,10 @@ void TtsModalContent::StartPlaybackFrom(size_t chunk_index, bool single_chunk) {
         status_ = "TTS pipeline is not available";
         return;
     }
-    if (!TtsAudioPlayer::HasAvailablePlayer()) {
+    const TtsAudioPlayer::PlayerSettings player_settings = AudioPlayerSettings();
+    if (!TtsAudioPlayer::HasAvailablePlayer(player_settings)) {
         status_ = TtsAudioPlayer::DependencyHelpText();
+        SetPlayerLastError(status_);
         return;
     }
 
@@ -88,8 +90,8 @@ void TtsModalContent::StartPlaybackFrom(size_t chunk_index, bool single_chunk) {
     }
 
     playback_worker_ = std::thread(
-        [this, book_id, voice_id, chunk_index, total_chunks = book.total_chunks, single_chunk] {
-            PlaybackLoop(book_id, voice_id, chunk_index, total_chunks, single_chunk);
+        [this, book_id, voice_id, chunk_index, total_chunks = book.total_chunks, single_chunk, player_settings] {
+            PlaybackLoop(book_id, voice_id, chunk_index, total_chunks, single_chunk, player_settings);
         });
     NotifyUiRefresh();
 }
@@ -99,7 +101,8 @@ void TtsModalContent::PlaybackLoop(
     std::string voice_id,
     size_t start_chunk_index,
     size_t total_chunks,
-    bool single_chunk) {
+    bool single_chunk,
+    TtsAudioPlayer::PlayerSettings player_settings) {
     size_t index = start_chunk_index;
     std::string final_status;
 
@@ -145,7 +148,8 @@ void TtsModalContent::PlaybackLoop(
         const bool played = audio_player_.PlayFileBlocking(
             audio_path,
             &playback_stop_requested_,
-            &play_error);
+            &play_error,
+            player_settings);
 
         if (playback_next_requested_.exchange(false)) {
             playback_stop_requested_.store(false);
@@ -159,11 +163,14 @@ void TtsModalContent::PlaybackLoop(
         }
 
         if (!played) {
+            SetPlayerLastError(play_error.empty() ? "Playback failed" : play_error);
             final_status = play_error.empty()
                 ? "Playback failed"
                 : "Playback failed: " + play_error;
             break;
         }
+
+        SetPlayerLastError({});
 
         pipeline_->MarkChunkPlayed(book_id, index, voice_id, nullptr);
         ++index;

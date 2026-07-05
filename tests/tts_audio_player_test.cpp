@@ -37,12 +37,41 @@ void TestDependencyHelp() {
     Expect(!textlt::TtsAudioPlayer::DependencyHelpText().empty(), "dependency help must not be empty");
 }
 
+void TestPlayerStatusesIncludeCustom() {
+    textlt::TtsAudioPlayer::PlayerSettings settings;
+    settings.selected_player_id = "custom";
+    settings.custom_command = "echo {file}";
+
+    const auto statuses = textlt::TtsAudioPlayer::PlayerStatuses(settings);
+    bool found_custom = false;
+    bool custom_current = false;
+    for (const auto& status : statuses) {
+        if (status.command.id == "custom") {
+            found_custom = true;
+            custom_current = status.current;
+            Expect(status.available, "configured custom player must be available");
+        }
+    }
+    Expect(found_custom, "player status list must include custom command row");
+    Expect(custom_current, "selected custom player must be current");
+}
+
+void TestAutoSettingsAreValid() {
+    const textlt::TtsAudioPlayer::PlayerSettings settings;
+    const auto statuses = textlt::TtsAudioPlayer::PlayerStatuses(settings);
+    Expect(!statuses.empty(), "player status list must not be empty");
+    Expect(!textlt::TtsAudioPlayer::SelectedPlayerStatusText(settings).empty(),
+           "selected player status text must not be empty");
+}
+
 } // namespace
 
 int main() {
     TestCandidatePlayersAreDefined();
     TestShellQuoting();
     TestDependencyHelp();
+    TestPlayerStatusesIncludeCustom();
+    TestAutoSettingsAreValid();
     std::cout << "tts audio player tests passed\n";
     return 0;
 }

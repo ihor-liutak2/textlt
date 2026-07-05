@@ -94,6 +94,13 @@ EditorConfig ConfigManager::Load() const {
     }
     config.active_theme_name = JsonString(
         root, "active_theme_name", config.active_theme_name);
+    config.tts_audio_player_id = JsonString(
+        root, "tts_audio_player_id", config.tts_audio_player_id);
+    if (config.tts_audio_player_id.empty()) {
+        config.tts_audio_player_id = "auto";
+    }
+    config.tts_audio_player_command = JsonString(
+        root, "tts_audio_player_command", config.tts_audio_player_command);
 
     std::vector<FavoriteEntry> favorite_entries = ExtractFavoriteEntries(root, "favorites_");
     if (favorite_entries.empty()) {

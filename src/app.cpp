@@ -196,6 +196,7 @@ TextltApp::TextltApp()
       tts_modal_(
           &current_theme_,
           &cloud_tts_pipeline_,
+          &editor_config_,
           [this](bool force_rebuild) {
               QueueTtsBookPreparationFromCursor(force_rebuild);
           },

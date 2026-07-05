@@ -153,21 +153,25 @@ ftxui::Element SuggestionLine(const std::vector<std::string>& suggestions,
 TtsModalContent::TtsModalContent(
     const Theme* theme,
     CloudTtsPipeline* pipeline,
+    EditorConfig* editor_config,
     std::function<void(bool)> prepare_current_file,
     std::function<void()> request_ui_refresh,
     std::function<void(TtsHeaderButton)> set_header_button_active)
     : theme_(theme),
       pipeline_(pipeline),
+      editor_config_(editor_config),
       prepare_current_file_(std::move(prepare_current_file)),
       request_ui_refresh_(std::move(request_ui_refresh)),
       set_header_button_active_(std::move(set_header_button_active)) {
     run_tab_button_ = MakeTabButton("Run", static_cast<int>(Tab::Run));
     library_tab_button_ = MakeTabButton("Library", static_cast<int>(Tab::Library));
     voice_tab_button_ = MakeTabButton("Voice", static_cast<int>(Tab::Voice));
+    player_tab_button_ = MakeTabButton("Player", static_cast<int>(Tab::Player));
     tab_buttons_ = ftxui::Container::Horizontal({
         run_tab_button_,
         library_tab_button_,
         voice_tab_button_,
+        player_tab_button_,
     });
 
     run_refresh_library_button_ =
@@ -196,6 +200,14 @@ TtsModalContent::TtsModalContent(
         MakeTextButton("Delete", [this] { DeleteSelectedBook(); });
     close_info_button_ =
         MakeTextButton("Close", [this] { CloseSelectedBookInfo(); });
+    set_player_button_ =
+        MakeTextButton("Set current", [this] { SaveSelectedPlayer(); });
+    test_player_button_ =
+        MakeTextButton("Test", [this] { TestSelectedPlayer(); });
+    refresh_players_button_ =
+        MakeTextButton("Refresh", [this] { RefreshPlayerOptions(); });
+    save_custom_player_button_ =
+        MakeTextButton("Save custom", [this] { SaveCustomPlayerCommand(); });
 
     auto make_book_menu = [this] {
         ftxui::MenuOption menu_option = ftxui::MenuOption::Vertical();
@@ -228,6 +240,9 @@ TtsModalContent::TtsModalContent(
     genre_input_ = ftxui::Input(&metadata_genre_, "genre", input_option);
     series_index_input_ =
         ftxui::Input(&metadata_series_index_, "series index", input_option);
+    custom_player_command_ = editor_config_ ? editor_config_->tts_audio_player_command : std::string();
+    custom_player_input_ =
+        ftxui::Input(&custom_player_command_, "mpv --really-quiet {file}", input_option);
 
     ftxui::MenuOption language_option = ftxui::MenuOption::Vertical();
     language_option.on_change = [this] {
@@ -252,6 +267,20 @@ TtsModalContent::TtsModalContent(
     voice_option.entries_option.transform = language_option.entries_option.transform;
     piper_voice_menu_ =
         ftxui::Menu(&piper_voice_labels_, &selected_piper_voice_, voice_option);
+
+    ftxui::MenuOption player_option = ftxui::MenuOption::Vertical();
+    player_option.entries_option.transform = [this](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        ftxui::Element row = ftxui::text(" " + state.label + " ");
+        if (state.focused || state.active) {
+            return row |
+                ftxui::bgcolor(theme.modal_selected_item_bg) |
+                ftxui::color(theme.modal_selected_item_fg) |
+                ftxui::bold;
+        }
+        return row | ftxui::color(theme.modal_text_color);
+    };
+    player_menu_ = ftxui::Menu(&player_labels_, &selected_player_, player_option);
 
     run_tab_container_ = ftxui::Container::Vertical({
         run_refresh_library_button_,
@@ -290,10 +319,22 @@ TtsModalContent::TtsModalContent(
         save_voice_button_,
     });
 
+    player_tab_container_ = ftxui::Container::Vertical({
+        player_menu_,
+        ftxui::Container::Horizontal({
+            set_player_button_,
+            test_player_button_,
+            refresh_players_button_,
+        }),
+        custom_player_input_,
+        save_custom_player_button_,
+    });
+
     tab_body_container_ = ftxui::Container::Tab({
         run_tab_container_,
         library_tab_container_,
         voice_tab_container_,
+        player_tab_container_,
     }, &selected_tab_);
 
     auto primary_controls = ftxui::Container::Vertical({
@@ -320,6 +361,7 @@ TtsModalContent::TtsModalContent(
         return false;
     });
     renderer_ = ftxui::Renderer(controls_, [this] { return Render(); });
+    RefreshPlayerOptions();
     RefreshLibrary();
 }
 
@@ -376,6 +418,8 @@ void TtsModalContent::SelectTab(int tab_index) {
         library_book_menu_->TakeFocus();
     } else if (selected_tab_ == static_cast<int>(Tab::Voice) && piper_voice_menu_) {
         piper_voice_menu_->TakeFocus();
+    } else if (selected_tab_ == static_cast<int>(Tab::Player) && player_menu_) {
+        player_menu_->TakeFocus();
     }
 }
 
@@ -383,6 +427,7 @@ void TtsModalContent::Open() {
     selected_tab_ = static_cast<int>(Tab::Library);
     show_selected_book_info_ = false;
     info_layer_index_ = 0;
+    RefreshPlayerOptions();
     RefreshLibrary();
     if (library_book_menu_) {
         library_book_menu_->TakeFocus();
@@ -391,6 +436,7 @@ void TtsModalContent::Open() {
 
 
 #include "modal_tts/generation.cpp"
+#include "modal_tts/player.cpp"
 #include "modal_tts/playback.cpp"
 #include "modal_tts/library_status.cpp"
 #include "modal_tts/render.cpp"
@@ -398,6 +444,7 @@ void TtsModalContent::Open() {
 TtsModal::TtsModal(
     const Theme* theme,
     CloudTtsPipeline* pipeline,
+    EditorConfig* editor_config,
     std::function<void(bool)> prepare_current_file,
     std::function<void()> request_ui_refresh,
     std::function<void(TtsHeaderButton)> set_header_button_active)
@@ -405,6 +452,7 @@ TtsModal::TtsModal(
     content_ = std::make_shared<TtsModalContent>(
         theme_,
         pipeline,
+        editor_config,
         std::move(prepare_current_file),
         std::move(request_ui_refresh),
         std::move(set_header_button_active));

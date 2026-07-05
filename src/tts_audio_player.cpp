@@ -1,5 +1,6 @@
 #include "tts_audio_player.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <sstream>
@@ -72,6 +73,36 @@ bool ExecutableExists(const std::string& executable) {
     return false;
 }
 
+std::string NormalizedSelectedPlayerId(std::string id) {
+    if (id.empty()) {
+        return "auto";
+    }
+    return id;
+}
+
+bool IsCustomCommand(const TtsAudioPlayer::PlayerCommand& command) {
+    return command.id == "custom";
+}
+
+TtsAudioPlayer::PlayerCommand CustomPlayerCommand(const TtsAudioPlayer::PlayerSettings& settings) {
+    return {
+        "custom",
+        "Custom command",
+        "",
+        {},
+        {},
+        settings.custom_command,
+        false,
+    };
+}
+
+bool PlayerAvailable(const TtsAudioPlayer::PlayerCommand& command) {
+    if (IsCustomCommand(command)) {
+        return !command.custom_command.empty();
+    }
+    return ExecutableExists(command.executable);
+}
+
 std::vector<std::string> BuildArguments(
     const TtsAudioPlayer::PlayerCommand& command,
     const std::filesystem::path& audio_file) {
@@ -83,16 +114,117 @@ std::vector<std::string> BuildArguments(
     return arguments;
 }
 
+void ReplaceAll(std::string& text, const std::string& from, const std::string& to) {
+    if (from.empty()) {
+        return;
+    }
+    size_t position = 0;
+    while ((position = text.find(from, position)) != std::string::npos) {
+        text.replace(position, from.size(), to);
+        position += to.size();
+    }
+}
+
+std::string BuildCustomCommandLine(const TtsAudioPlayer::PlayerCommand& command,
+                                   const std::filesystem::path& audio_file) {
+    std::string command_line = command.custom_command;
+    const std::string quoted_file = TtsAudioPlayer::QuoteShellArgument(audio_file.string());
+    if (command_line.find("{file}") != std::string::npos) {
+        ReplaceAll(command_line, "{file}", quoted_file);
+    } else {
+        if (!command_line.empty()) {
+            command_line += ' ';
+        }
+        command_line += quoted_file;
+    }
+    return command_line;
+}
+
+std::vector<TtsAudioPlayer::PlayerCommand> AvailableNonCustomPlayers() {
+    std::vector<TtsAudioPlayer::PlayerCommand> players;
+    for (const TtsAudioPlayer::PlayerCommand& command : TtsAudioPlayer::CandidatePlayers()) {
+        if (PlayerAvailable(command)) {
+            players.push_back(command);
+        }
+    }
+    return players;
+}
+
+std::vector<TtsAudioPlayer::PlayerCommand> AvailablePlayersForSettings(
+    const TtsAudioPlayer::PlayerSettings& settings) {
+    std::vector<TtsAudioPlayer::PlayerCommand> players = AvailableNonCustomPlayers();
+    const TtsAudioPlayer::PlayerCommand custom = CustomPlayerCommand(settings);
+    if (PlayerAvailable(custom)) {
+        players.push_back(custom);
+    }
+    return players;
+}
+
+TtsAudioPlayer::PlayerCommand ResolvePlayer(const TtsAudioPlayer::PlayerSettings& settings) {
+    const std::string selected_id = NormalizedSelectedPlayerId(settings.selected_player_id);
+    const std::vector<TtsAudioPlayer::PlayerCommand> players = AvailablePlayersForSettings(settings);
+
+    if (selected_id != "auto") {
+        const auto iter = std::find_if(
+            players.begin(),
+            players.end(),
+            [&](const TtsAudioPlayer::PlayerCommand& command) {
+                return command.id == selected_id;
+            });
+        if (iter != players.end()) {
+            return *iter;
+        }
+    }
+
+    return players.empty() ? TtsAudioPlayer::PlayerCommand{} : players.front();
+}
+
+std::string BuildStatusText(const TtsAudioPlayer::PlayerCommand& command,
+                            bool available,
+                            bool current) {
+    std::vector<std::string> parts;
+    parts.push_back(available ? "available" : "not found");
+    if (current) {
+        parts.push_back("current");
+    }
+    if (command.recommended) {
+        parts.push_back("recommended");
+    }
+    if (IsCustomCommand(command) && command.custom_command.empty()) {
+        parts.push_back("not configured");
+    }
+
+    std::string text;
+    for (size_t index = 0; index < parts.size(); ++index) {
+        if (index > 0) {
+            text += ", ";
+        }
+        text += parts[index];
+    }
+    return text;
+}
+
 #ifndef _WIN32
 bool PlayWithPosixProcess(
     const TtsAudioPlayer::PlayerCommand& command,
     const std::filesystem::path& audio_file,
     std::atomic<bool>* stop_requested,
     std::string* error) {
-    const std::vector<std::string> arguments = BuildArguments(command, audio_file);
+    std::string shell_command;
+    std::vector<std::string> arguments;
+    std::string executable = command.executable;
+
+    if (IsCustomCommand(command)) {
+        shell_command = BuildCustomCommandLine(command, audio_file);
+        executable = "/bin/sh";
+        arguments = {"-c", shell_command};
+    } else {
+        arguments = BuildArguments(command, audio_file);
+    }
+
     std::vector<char*> argv;
     argv.reserve(arguments.size() + 2);
-    argv.push_back(const_cast<char*>(command.executable.c_str()));
+    argv.push_back(const_cast<char*>(executable.c_str()));
     for (const std::string& argument : arguments) {
         argv.push_back(const_cast<char*>(argument.c_str()));
     }
@@ -107,7 +239,7 @@ bool PlayWithPosixProcess(
     }
 
     if (pid == 0) {
-        execvp(command.executable.c_str(), argv.data());
+        execvp(executable.c_str(), argv.data());
         _exit(127);
     }
 
@@ -149,7 +281,11 @@ bool PlayWithPosixProcess(
         return true;
     }
     if (error) {
-        *error = "Audio player failed";
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 127) {
+            *error = "Audio player command was not found";
+        } else {
+            *error = "Audio player failed";
+        }
     }
     return false;
 }
@@ -159,6 +295,10 @@ bool PlayWithPosixProcess(
 std::string BuildWindowsCommand(
     const TtsAudioPlayer::PlayerCommand& command,
     const std::filesystem::path& audio_file) {
+    if (IsCustomCommand(command)) {
+        return BuildCustomCommandLine(command, audio_file);
+    }
+
     std::ostringstream command_line;
     command_line << TtsAudioPlayer::QuoteShellArgument(command.executable);
     for (const std::string& argument : BuildArguments(command, audio_file)) {
@@ -176,49 +316,76 @@ std::vector<TtsAudioPlayer::PlayerCommand> TtsAudioPlayer::CandidatePlayers() {
         {"powershell", "PowerShell SoundPlayer", "powershell.exe",
          {"-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
           "$p=$args[0];$player=New-Object System.Media.SoundPlayer $p;$player.PlaySync()", "--"},
-         {}},
+         {}, {}, true},
+        {"mpv", "mpv", "mpv", {"--really-quiet", "--no-terminal"}, {}, {}, false},
+        {"ffplay", "ffplay", "ffplay", {"-nodisp", "-autoexit", "-loglevel", "error"}, {}, {}, false},
     };
 #elif defined(__APPLE__)
     return {
-        {"afplay", "afplay", "afplay", {}, {}},
-        {"ffplay", "ffplay", "ffplay", {"-nodisp", "-autoexit", "-loglevel", "error"}, {}},
+        {"afplay", "afplay", "afplay", {}, {}, {}, true},
+        {"mpv", "mpv", "mpv", {"--really-quiet", "--no-terminal"}, {}, {}, false},
+        {"ffplay", "ffplay", "ffplay", {"-nodisp", "-autoexit", "-loglevel", "error"}, {}, {}, false},
+        {"open", "open default app", "open", {}, {}, {}, false},
     };
 #else
     return {
-        {"pw-play", "PipeWire pw-play", "pw-play", {}, {}},
-        {"paplay", "PulseAudio paplay", "paplay", {}, {}},
-        {"aplay", "ALSA aplay", "aplay", {}, {}},
-        {"ffplay", "ffplay", "ffplay", {"-nodisp", "-autoexit", "-loglevel", "error"}, {}},
+        {"mpv", "mpv", "mpv", {"--really-quiet", "--no-terminal"}, {}, {}, true},
+        {"ffplay", "ffplay", "ffplay", {"-nodisp", "-autoexit", "-loglevel", "error"}, {}, {}, false},
+        {"pw-play", "PipeWire pw-play", "pw-play", {}, {}, {}, false},
+        {"paplay", "PulseAudio paplay", "paplay", {}, {}, {}, false},
+        {"aplay", "ALSA aplay", "aplay", {}, {}, {}, false},
+        {"xdg-open", "xdg-open default app", "xdg-open", {}, {}, {}, false},
     };
 #endif
 }
 
-std::vector<TtsAudioPlayer::PlayerCommand> TtsAudioPlayer::AvailablePlayers() {
-    std::vector<PlayerCommand> players;
+std::vector<TtsAudioPlayer::PlayerStatus> TtsAudioPlayer::PlayerStatuses(
+    const PlayerSettings& settings) {
+    std::vector<PlayerStatus> statuses;
+    const PlayerCommand current = ResolvePlayer(settings);
+
     for (const PlayerCommand& command : CandidatePlayers()) {
-        if (ExecutableExists(command.executable)) {
-            players.push_back(command);
-        }
+        const bool available = PlayerAvailable(command);
+        const bool is_current = !current.id.empty() && current.id == command.id;
+        statuses.push_back({command, available, is_current, BuildStatusText(command, available, is_current)});
     }
-    return players;
+
+    const PlayerCommand custom = CustomPlayerCommand(settings);
+    const bool custom_available = PlayerAvailable(custom);
+    const bool custom_current = !current.id.empty() && current.id == custom.id;
+    statuses.push_back({custom, custom_available, custom_current, BuildStatusText(custom, custom_available, custom_current)});
+    return statuses;
 }
 
-bool TtsAudioPlayer::HasAvailablePlayer() {
-    return !AvailablePlayers().empty();
+std::vector<TtsAudioPlayer::PlayerCommand> TtsAudioPlayer::AvailablePlayers(
+    const PlayerSettings& settings) {
+    return AvailablePlayersForSettings(settings);
 }
 
-std::string TtsAudioPlayer::SelectedPlayerLabel() {
-    const std::vector<PlayerCommand> players = AvailablePlayers();
-    return players.empty() ? std::string() : players.front().label;
+bool TtsAudioPlayer::HasAvailablePlayer(const PlayerSettings& settings) {
+    return !AvailablePlayers(settings).empty();
+}
+
+std::string TtsAudioPlayer::SelectedPlayerLabel(const PlayerSettings& settings) {
+    const PlayerCommand player = ResolvePlayer(settings);
+    return player.label;
+}
+
+std::string TtsAudioPlayer::SelectedPlayerStatusText(const PlayerSettings& settings) {
+    const PlayerCommand player = ResolvePlayer(settings);
+    if (player.id.empty()) {
+        return DependencyHelpText();
+    }
+    return BuildStatusText(player, true, true);
 }
 
 std::string TtsAudioPlayer::DependencyHelpText() {
 #ifdef _WIN32
-    return "No audio player found. Enable PowerShell and Windows audio playback.";
+    return "No audio player found. Enable PowerShell audio playback or install mpv/ffmpeg.";
 #elif defined(__APPLE__)
-    return "No audio player found. Install ffmpeg or use macOS afplay.";
+    return "No audio player found. macOS afplay should be available; otherwise install mpv or ffmpeg.";
 #else
-    return "No audio player found. Install pipewire-bin, pulseaudio-utils, alsa-utils, or ffmpeg.";
+    return "No audio player found. Recommended: sudo apt install mpv. Fallbacks: ffmpeg, pipewire-bin, pulseaudio-utils, or alsa-utils.";
 #endif
 }
 
@@ -251,7 +418,8 @@ std::string TtsAudioPlayer::QuoteShellArgument(const std::string& value) {
 bool TtsAudioPlayer::PlayFileBlocking(
     const std::filesystem::path& audio_file,
     std::atomic<bool>* stop_requested,
-    std::string* error) const {
+    std::string* error,
+    const PlayerSettings& settings) const {
     std::error_code exists_error;
     if (!std::filesystem::exists(audio_file, exists_error)) {
         if (error) {
@@ -260,8 +428,8 @@ bool TtsAudioPlayer::PlayFileBlocking(
         return false;
     }
 
-    const std::vector<PlayerCommand> players = AvailablePlayers();
-    if (players.empty()) {
+    const PlayerCommand player = ResolvePlayer(settings);
+    if (player.id.empty()) {
         if (error) {
             *error = DependencyHelpText();
         }
@@ -275,31 +443,21 @@ bool TtsAudioPlayer::PlayFileBlocking(
         }
         return false;
     }
-    for (const PlayerCommand& player : players) {
-        const int result = std::system(BuildWindowsCommand(player, audio_file).c_str());
-        if (result == 0) {
-            return true;
-        }
+    const int result = std::system(BuildWindowsCommand(player, audio_file).c_str());
+    if (result == 0) {
+        return true;
     }
     if (error) {
-        *error = "All available audio players failed";
+        *error = "Audio player failed: " + player.label;
     }
     return false;
 #else
     std::string last_error;
-    for (const PlayerCommand& player : players) {
-        if (PlayWithPosixProcess(player, audio_file, stop_requested, &last_error)) {
-            return true;
-        }
-        if (stop_requested && stop_requested->load()) {
-            if (error) {
-                *error = last_error.empty() ? "Playback stopped" : last_error;
-            }
-            return false;
-        }
+    if (PlayWithPosixProcess(player, audio_file, stop_requested, &last_error)) {
+        return true;
     }
     if (error) {
-        *error = last_error.empty() ? "All available audio players failed" : last_error;
+        *error = last_error.empty() ? "Audio player failed: " + player.label : last_error;
     }
     return false;
 #endif

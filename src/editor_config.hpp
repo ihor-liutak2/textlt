@@ -24,6 +24,8 @@ struct EditorConfig {
     bool search_whole_word = false;
     int tab_size = 4;
     std::string active_theme_name = "Blueprint";
+    std::string tts_audio_player_id = "auto";
+    std::string tts_audio_player_command;
     std::vector<FavoriteEntry> favorites_;
     std::vector<std::string> file_modal_directories_;
 

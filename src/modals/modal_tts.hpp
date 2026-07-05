@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "cloud_tts_pipeline.hpp"
+#include "editor_config.hpp"
 #include "ftxui/component/component.hpp"
 #include "ftxui/component/event.hpp"
 #include "ftxui/dom/elements.hpp"
@@ -33,6 +34,7 @@ public:
     TtsModalContent(
         const Theme* theme,
         CloudTtsPipeline* pipeline,
+        EditorConfig* editor_config,
         std::function<void(bool)> prepare_current_file,
         std::function<void()> request_ui_refresh,
         std::function<void(TtsHeaderButton)> set_header_button_active);
@@ -66,6 +68,7 @@ private:
         Run = 0,
         Library = 1,
         Voice = 2,
+        Player = 3,
     };
 
     ftxui::Component MakeTextButton(std::string label, std::function<void()> on_click);
@@ -84,18 +87,29 @@ private:
     ftxui::Element RenderRunTab();
     ftxui::Element RenderLibraryTab();
     ftxui::Element RenderVoiceTab();
+    ftxui::Element RenderPlayerTab();
     ftxui::Element RenderSelectedBookSummary() const;
     ftxui::Element RenderVoiceSelector();
     ftxui::Element RenderMetadataEditor();
     ftxui::Element RenderBookInfoPanel() const;
     void SaveSelectedVoice();
     void ClearSelectedAudioCache();
+    void RefreshPlayerOptions();
+    void SaveSelectedPlayer();
+    void SaveCustomPlayerCommand();
+    void TestSelectedPlayer();
+    TtsAudioPlayer::PlayerSettings AudioPlayerSettings() const;
+    TtsAudioPlayer::PlayerSettings SelectedPlayerSettings() const;
+    std::string CurrentAudioPlayerLabel() const;
+    std::string PlayerLastError() const;
+    void SetPlayerLastError(std::string error);
     void StartPlaybackFrom(size_t chunk_index, bool single_chunk = false);
     void PlaybackLoop(std::string book_id,
                       std::string voice_id,
                       size_t start_chunk_index,
                       size_t total_chunks,
-                      bool single_chunk);
+                      bool single_chunk,
+                      TtsAudioPlayer::PlayerSettings player_settings);
     void SetPlaybackStatus(std::string status);
     void NotifyUiRefresh();
     void JoinPlaybackWorker();
@@ -108,6 +122,7 @@ private:
 
     const Theme* theme_ = nullptr;
     CloudTtsPipeline* pipeline_ = nullptr;
+    EditorConfig* editor_config_ = nullptr;
     std::function<void(bool)> prepare_current_file_;
     std::function<void()> request_ui_refresh_;
     std::function<void(TtsHeaderButton)> set_header_button_active_;
@@ -157,10 +172,18 @@ private:
     size_t playback_chunk_index_ = 0;
     std::string playback_status_;
     TtsAudioPlayer audio_player_;
+    std::vector<TtsAudioPlayer::PlayerStatus> player_statuses_;
+    std::vector<std::string> player_labels_ = {"No players detected"};
+    int selected_player_ = 0;
+    std::string custom_player_command_;
+    std::string player_status_ = "Audio player list not loaded";
+    mutable std::mutex player_mutex_;
+    std::string player_last_error_;
 
     ftxui::Component run_tab_button_;
     ftxui::Component library_tab_button_;
     ftxui::Component voice_tab_button_;
+    ftxui::Component player_tab_button_;
     ftxui::Component tab_buttons_;
 
     ftxui::Component run_refresh_library_button_;
@@ -176,6 +199,10 @@ private:
     ftxui::Component info_button_;
     ftxui::Component delete_book_button_;
     ftxui::Component close_info_button_;
+    ftxui::Component set_player_button_;
+    ftxui::Component test_player_button_;
+    ftxui::Component refresh_players_button_;
+    ftxui::Component save_custom_player_button_;
     ftxui::Component run_book_menu_;
     ftxui::Component library_book_menu_;
     ftxui::Component title_input_;
@@ -185,10 +212,13 @@ private:
     ftxui::Component series_index_input_;
     ftxui::Component language_menu_;
     ftxui::Component piper_voice_menu_;
+    ftxui::Component player_menu_;
+    ftxui::Component custom_player_input_;
 
     ftxui::Component run_tab_container_;
     ftxui::Component library_tab_container_;
     ftxui::Component voice_tab_container_;
+    ftxui::Component player_tab_container_;
     ftxui::Component tab_body_container_;
     ftxui::Component controls_;
     ftxui::Component renderer_;
@@ -199,6 +229,7 @@ public:
     TtsModal(
         const Theme* theme,
         CloudTtsPipeline* pipeline,
+        EditorConfig* editor_config,
         std::function<void(bool)> prepare_current_file,
         std::function<void()> request_ui_refresh,
         std::function<void(TtsHeaderButton)> set_header_button_active);

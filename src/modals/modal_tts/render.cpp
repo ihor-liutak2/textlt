@@ -7,6 +7,8 @@ ftxui::Element TtsModalContent::RenderTitle() {
         library_tab_button_->Render(),
         ftxui::text(" "),
         voice_tab_button_->Render(),
+        ftxui::text(" "),
+        player_tab_button_->Render(),
     });
 }
 
@@ -137,7 +139,7 @@ ftxui::Element TtsModalContent::RenderRunTab() {
             text(" "),
             next_button_->Render(),
         }),
-        StatusLine("Player", TtsAudioPlayer::SelectedPlayerLabel().empty() ? TtsAudioPlayer::DependencyHelpText() : TtsAudioPlayer::SelectedPlayerLabel(), theme),
+        StatusLine("Player", CurrentAudioPlayerLabel(), theme),
         paragraph("Play generates missing chunks on demand, plays them with a system audio player, and advances automatically. Pause stops at the current chunk; Play resumes from that chunk.") |
             dim |
             color(theme.modal_text_color),
@@ -281,6 +283,72 @@ ftxui::Element TtsModalContent::RenderVoiceTab() {
         color(theme.modal_input_fg);
 }
 
+
+ftxui::Element TtsModalContent::RenderPlayerTab() {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+
+    const std::string current_player = CurrentAudioPlayerLabel();
+    const std::string last_error = PlayerLastError();
+
+    Element list_panel = vbox({
+        PanelTitle("Available players", theme),
+        player_menu_->Render() |
+            frame |
+            vscroll_indicator |
+            size(HEIGHT, LESS_THAN, 12) |
+            border,
+        hbox({
+            set_player_button_->Render(),
+            text(" "),
+            test_player_button_->Render(),
+            text(" "),
+            refresh_players_button_->Render(),
+        }),
+    }) | size(WIDTH, EQUAL, 48);
+
+    Elements info_rows = {
+        PanelTitle("Audio Player", theme),
+        StatusLine("Current", current_player, theme),
+        StatusLine("Status", player_status_, theme),
+        paragraph("TextLT generates audio files, but playback is handled by an external player. mpv is recommended on Linux; afplay is preferred on macOS; PowerShell SoundPlayer is the Windows fallback.") |
+            color(theme.modal_text_color),
+        separator() | color(theme.modal_border),
+        PanelTitle("Custom command", theme),
+        paragraph("Use {file} where TextLT should insert the audio file path. If {file} is missing, TextLT appends the file path to the command.") |
+            dim |
+            color(theme.modal_text_color),
+        hbox({
+            text(" Command: ") | bold | color(theme.modal_accent),
+            custom_player_input_->Render() | flex,
+        }),
+        hbox({
+            save_custom_player_button_->Render(),
+        }),
+    };
+
+    if (!last_error.empty()) {
+        info_rows.push_back(separator() | color(theme.modal_border));
+        info_rows.push_back(PanelTitle("Last playback error", theme));
+        info_rows.push_back(paragraph(last_error) | color(theme.syntax_string));
+    }
+
+    if (!TtsAudioPlayer::HasAvailablePlayer(AudioPlayerSettings())) {
+        info_rows.push_back(separator() | color(theme.modal_border));
+        info_rows.push_back(PanelTitle("No player found", theme));
+        info_rows.push_back(paragraph(TtsAudioPlayer::DependencyHelpText()) |
+                            color(theme.syntax_string));
+    }
+
+    return hbox({
+        list_panel | border,
+        text(" "),
+        vbox(std::move(info_rows)) | border | flex,
+    }) |
+        bgcolor(theme.modal_input_bg) |
+        color(theme.modal_input_fg);
+}
+
 ftxui::Element TtsModalContent::Render() {
     ApplyAudioWorkerState();
 
@@ -292,8 +360,10 @@ ftxui::Element TtsModalContent::Render() {
         body = RenderRunTab();
     } else if (selected_tab_ == static_cast<int>(Tab::Library)) {
         body = RenderLibraryTab();
-    } else {
+    } else if (selected_tab_ == static_cast<int>(Tab::Voice)) {
         body = RenderVoiceTab();
+    } else {
+        body = RenderPlayerTab();
     }
 
     body = body |
