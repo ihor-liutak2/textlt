@@ -34,8 +34,8 @@ ftxui::ButtonOption ModalWindow::MakeTextButtonOption(const std::string& label,
     if (label == "■") {
         spec.caption = "■";
         spec.role = ButtonRole::Cancel;
-        spec.variant = ButtonVariant::Minimal;
-        spec.size = ButtonSize::Compact;
+        spec.variant = ButtonVariant::ColoredBrackets;
+        spec.size = ButtonSize::Normal;
     }
 
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();

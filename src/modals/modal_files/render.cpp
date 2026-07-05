@@ -75,15 +75,15 @@ ftxui::Element FilesModalContent::RenderOperationButtons() {
         text(" "),
         create_file_button_->Render(),
         text(" "),
-        delete_button_->Render(),
-        text(" "),
         rename_button_->Render(),
         text(" "),
         copy_button_->Render(),
         text(" "),
-        cut_button_->Render(),
-        text(" "),
         paste_button_->Render(),
+        text(" "),
+        delete_button_->Render(),
+        text(" "),
+        cut_button_->Render(),
     });
 }
 

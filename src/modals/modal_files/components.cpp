@@ -35,10 +35,10 @@ void FilesModalContent::RebuildComponents() {
         AddCurrentDirectoryToFavorites();
     }, ButtonRole::Primary, ButtonVariant::AccentEdges, "+");
     refresh_button_ = MakeTextButton("Refresh", [this] { Refresh(); },
-        ButtonRole::Utility, ButtonVariant::AccentEdges, "⟳");
+        ButtonRole::Navigation, ButtonVariant::AccentEdges, "⟳");
     copy_path_button_ = MakeTextButton("Copy Path", [this] {
         CopySelectedPathText();
-    }, ButtonRole::Utility, ButtonVariant::AccentEdges, "⧉");
+    }, ButtonRole::Navigation, ButtonVariant::AccentEdges, "⧉");
 
     create_dir_button_ = MakeTextButton("Create Dir", [this] {
         StartCreateDirectoryOperation();
@@ -51,16 +51,16 @@ void FilesModalContent::RebuildComponents() {
     }, ButtonRole::Danger, ButtonVariant::AccentEdges, "!");
     rename_button_ = MakeTextButton("Rename", [this] {
         StartRenameOperation();
-    }, ButtonRole::Secondary, ButtonVariant::AccentEdges);
+    }, ButtonRole::Navigation, ButtonVariant::AccentEdges);
     copy_button_ = MakeTextButton("Copy", [this] {
         StartCopyOperation();
-    }, ButtonRole::Utility, ButtonVariant::AccentEdges, "⧉");
+    }, ButtonRole::Navigation, ButtonVariant::AccentEdges, "⧉");
     cut_button_ = MakeTextButton("Cut", [this] {
         StartCutOperation();
     }, ButtonRole::Warning, ButtonVariant::AccentEdges);
     paste_button_ = MakeTextButton("Paste", [this] {
         StartPasteOperation();
-    }, ButtonRole::Utility, ButtonVariant::AccentEdges);
+    }, ButtonRole::Navigation, ButtonVariant::AccentEdges);
 
     ftxui::InputOption path_option;
     path_option.multiline = false;
@@ -119,11 +119,11 @@ void FilesModalContent::RebuildComponents() {
         ftxui::Container::Horizontal({
             create_dir_button_,
             create_file_button_,
-            delete_button_,
             rename_button_,
             copy_button_,
-            cut_button_,
             paste_button_,
+            delete_button_,
+            cut_button_,
         }),
         entry_list_component_,
     });
