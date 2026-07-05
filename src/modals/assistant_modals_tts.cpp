@@ -636,20 +636,16 @@ void AssistantSettingsModalContent::StartTtsVoiceDownload() {
         return;
     }
 
-    const std::filesystem::path models_directory =
-        UserDataDirectory() / "piper" / "models";
-    const std::filesystem::path model_local_path =
-        PiperManager::AssetPathFromUrl(model_url);
-    const std::filesystem::path config_local_path =
-        PiperManager::AssetPathFromUrl(config_url);
-    if (model_local_path.empty() || config_local_path.empty()) {
+    const std::filesystem::path model_final_path = PiperManager::VoiceModelPath(voice);
+    const std::filesystem::path config_final_path = PiperManager::VoiceConfigPath(voice);
+    if (model_final_path.empty() || config_final_path.empty()) {
         std::lock_guard<std::mutex> lock(tts_download_mutex_);
-        tts_status_ = "Voice registry entry has invalid URLs";
+        tts_status_ = "Voice registry entry has invalid local paths";
         tts_download_visible_ = false;
         return;
     }
-    const std::filesystem::path model_final_path = models_directory / model_local_path;
-    const std::filesystem::path config_final_path = models_directory / config_local_path;
+    const std::string model_filename = model_final_path.filename().string();
+    const std::string config_filename = config_final_path.filename().string();
 
     {
         std::lock_guard<std::mutex> lock(tts_download_mutex_);
@@ -657,7 +653,7 @@ void AssistantSettingsModalContent::StartTtsVoiceDownload() {
         tts_downloading_ = true;
         tts_download_visible_ = true;
         tts_refresh_after_download_ = false;
-        tts_download_current_file_ = model_local_path.filename().string();
+        tts_download_current_file_ = model_filename;
         tts_downloaded_bytes_ = 0;
         tts_total_bytes_ = 0;
         tts_progress_ratio_ = 0.0f;
@@ -670,13 +666,13 @@ void AssistantSettingsModalContent::StartTtsVoiceDownload() {
                                         config_url,
                                         model_final_path,
                                         config_final_path,
-                                        model_local_path,
-                                        config_local_path] {
+                                        model_filename,
+                                        config_filename] {
         std::string error_message;
         const bool model_ok = DownloadPiperFile(
             model_url,
             model_final_path,
-            model_local_path.filename().string(),
+            model_filename,
             tts_download_mutex_,
             tts_cancel_download_,
             tts_download_current_file_,
@@ -690,7 +686,7 @@ void AssistantSettingsModalContent::StartTtsVoiceDownload() {
             config_ok = DownloadPiperFile(
                 config_url,
                 config_final_path,
-                config_local_path.filename().string(),
+                config_filename,
                 tts_download_mutex_,
                 tts_cancel_download_,
                 tts_download_current_file_,
@@ -757,22 +753,19 @@ void AssistantSettingsModalContent::ConfirmTtsVoiceDelete() {
         return;
     }
 
-    const std::filesystem::path models_directory =
-        UserDataDirectory() / "piper" / "models";
     for (const Json& voice : voices) {
-        const std::string model_url = JsonString(voice, "model_url");
-        const std::string config_url = JsonString(voice, "config_url");
         std::error_code error;
-        if (!model_url.empty()) {
-            const std::filesystem::path model_path =
-                models_directory / PiperManager::AssetPathFromUrl(model_url);
+        for (const std::filesystem::path& model_path : PiperManager::VoiceModelPathCandidates(voice)) {
             std::filesystem::remove(model_path, error);
+            error.clear();
         }
-        error.clear();
-        if (!config_url.empty()) {
-            const std::filesystem::path config_path =
-                models_directory / PiperManager::AssetPathFromUrl(config_url);
+        for (const std::filesystem::path& config_path : PiperManager::VoiceConfigPathCandidates(voice)) {
             std::filesystem::remove(config_path, error);
+            error.clear();
+        }
+        const std::filesystem::path voice_directory = PiperManager::VoiceDirectory(voice);
+        if (!voice_directory.empty()) {
+            std::filesystem::remove(voice_directory, error);
         }
     }
 

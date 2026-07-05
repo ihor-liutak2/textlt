@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include "json_utils.hpp"
 
@@ -17,6 +18,11 @@ public:
     static std::filesystem::path RuntimeExecutablePath();
     static bool RuntimeInstalled();
     static std::filesystem::path AssetPathFromUrl(const std::string& url);
+    static std::filesystem::path VoiceDirectory(const Json& voice);
+    static std::filesystem::path VoiceModelPath(const Json& voice);
+    static std::filesystem::path VoiceConfigPath(const Json& voice);
+    static std::vector<std::filesystem::path> VoiceModelPathCandidates(const Json& voice);
+    static std::vector<std::filesystem::path> VoiceConfigPathCandidates(const Json& voice);
     static bool VoiceInstalled(const Json& voice);
     static bool FindVoiceById(const std::string& voice_id, Json* voice);
     static bool RunToFile(const Json& voice,

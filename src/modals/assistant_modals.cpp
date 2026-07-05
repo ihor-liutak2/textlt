@@ -14,6 +14,7 @@
 #include "ftxui/component/event.hpp"
 #include "ftxui/dom/elements.hpp"
 
+#include "piper_manager.hpp"
 #include "ui_button.hpp"
 
 namespace textlt {
@@ -842,7 +843,7 @@ void AssistantSettingsModalContent::SetTodoStatus(std::string action) {
     using namespace assistant_modal_detail;
 
     if (selected_tab_ == 0) {
-        EnsureDirectory(UserDataDirectory() / "piper" / "models");
+        EnsureDirectory(PiperManager::ModelsDirectory());
         EnsureDirectory(DownloadCacheDirectory());
         std::lock_guard<std::mutex> lock(tts_download_mutex_);
         tts_status_ = "TODO: " + action + " support is not implemented";

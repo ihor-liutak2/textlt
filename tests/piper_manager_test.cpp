@@ -3,6 +3,7 @@
 #include <cassert>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -35,6 +36,37 @@ void TestAssetPathFromUrl() {
     assert(path == std::filesystem::path("assets/a/b/file.onnx"));
 }
 
+void TestVoicePathsUseRegistryIdDirectory() {
+    textlt::Json voice = textlt::Json::object();
+    voice["id"] = "en_US-lessac-medium";
+    voice["model_url"] =
+        "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
+        "en/en_US/lessac/medium/en_US-lessac-medium.onnx";
+    voice["config_url"] =
+        "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
+        "en/en_US/lessac/medium/en_US-lessac-medium.onnx.json";
+
+    const std::filesystem::path voice_directory = textlt::PiperManager::VoiceDirectory(voice);
+    const std::filesystem::path model_path = textlt::PiperManager::VoiceModelPath(voice);
+    const std::filesystem::path config_path = textlt::PiperManager::VoiceConfigPath(voice);
+    if (!voice_directory.empty()) {
+        assert(voice_directory.filename() == "en_US-lessac-medium");
+    }
+    if (!model_path.empty()) {
+        assert(model_path.parent_path().filename() == "en_US-lessac-medium");
+        assert(model_path.filename() == "en_US-lessac-medium.onnx");
+    }
+    if (!config_path.empty()) {
+        assert(config_path.parent_path().filename() == "en_US-lessac-medium");
+        assert(config_path.filename() == "en_US-lessac-medium.onnx.json");
+    }
+
+    const std::vector<std::filesystem::path> candidates =
+        textlt::PiperManager::VoiceModelPathCandidates(voice);
+    assert(!candidates.empty());
+    assert(candidates.front() == model_path);
+}
+
 void TestRuntimeUrlAndArchiveNameMatchPlatform() {
     const std::filesystem::path archive = textlt::PiperManager::RuntimeDownloadArchivePath();
     if (!archive.empty()) {
@@ -58,6 +90,7 @@ int main() {
     TestShellQuoting();
     TestRuntimePathsAreConsistent();
     TestAssetPathFromUrl();
+    TestVoicePathsUseRegistryIdDirectory();
     TestRuntimeUrlAndArchiveNameMatchPlatform();
     return 0;
 }

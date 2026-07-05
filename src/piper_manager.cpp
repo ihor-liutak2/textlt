@@ -4,6 +4,7 @@
 #include <fstream>
 #include <optional>
 #include <system_error>
+#include <vector>
 
 namespace textlt {
 namespace {
@@ -119,6 +120,88 @@ std::filesystem::path AssetPathFromUrlImpl(const std::string& url) {
     return relative.empty() ? std::filesystem::path{} : std::filesystem::path(relative);
 }
 
+std::string SafeVoiceDirectoryName(const std::string& value) {
+    std::string safe;
+    safe.reserve(value.size());
+    for (char character : value) {
+        const bool keep =
+            (character >= 'a' && character <= 'z') ||
+            (character >= 'A' && character <= 'Z') ||
+            (character >= '0' && character <= '9') ||
+            character == '-' ||
+            character == '_' ||
+            character == '.';
+        safe.push_back(keep ? character : '_');
+    }
+    while (!safe.empty() && safe.front() == '.') {
+        safe.erase(safe.begin());
+    }
+    return safe;
+}
+
+std::filesystem::path VoiceDirectoryNameFromRegistry(const Json& voice) {
+    std::string voice_id = JsonString(voice, "id");
+    if (voice_id.empty()) {
+        const std::filesystem::path model_path =
+            AssetPathFromUrlImpl(JsonString(voice, "model_url"));
+        voice_id = model_path.stem().string();
+    }
+    const std::string safe = SafeVoiceDirectoryName(voice_id);
+    return safe.empty() ? std::filesystem::path{} : std::filesystem::path(safe);
+}
+
+std::filesystem::path VoiceAssetTargetPath(const Json& voice, const char* url_key) {
+    const std::filesystem::path models_directory = PiperManager::ModelsDirectory();
+    const std::filesystem::path voice_directory_name = VoiceDirectoryNameFromRegistry(voice);
+    const std::filesystem::path asset_path = AssetPathFromUrlImpl(JsonString(voice, url_key));
+    if (models_directory.empty() || voice_directory_name.empty() || asset_path.empty()) {
+        return {};
+    }
+    return models_directory / voice_directory_name / asset_path.filename();
+}
+
+std::filesystem::path LegacyVoiceAssetPath(const Json& voice, const char* url_key) {
+    const std::filesystem::path models_directory = PiperManager::ModelsDirectory();
+    const std::filesystem::path asset_path = AssetPathFromUrlImpl(JsonString(voice, url_key));
+    if (models_directory.empty() || asset_path.empty()) {
+        return {};
+    }
+    return models_directory / asset_path;
+}
+
+std::vector<std::filesystem::path> UniqueVoicePathCandidates(
+    const std::filesystem::path& primary,
+    const std::filesystem::path& legacy) {
+    std::vector<std::filesystem::path> candidates;
+    if (!primary.empty()) {
+        candidates.push_back(primary);
+    }
+    if (!legacy.empty()) {
+        bool duplicate = false;
+        for (const std::filesystem::path& candidate : candidates) {
+            if (candidate == legacy) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate) {
+            candidates.push_back(legacy);
+        }
+    }
+    return candidates;
+}
+
+std::filesystem::path FirstExistingPath(const std::vector<std::filesystem::path>& candidates) {
+    std::error_code error;
+    for (const std::filesystem::path& candidate : candidates) {
+        if (!candidate.empty() && std::filesystem::exists(candidate, error) && !error) {
+            return candidate;
+        }
+        error.clear();
+    }
+    return {};
+}
+
 } // namespace
 
 std::filesystem::path PiperManager::UserDataDirectory() {
@@ -202,21 +285,39 @@ std::filesystem::path PiperManager::AssetPathFromUrl(const std::string& url) {
     return AssetPathFromUrlImpl(url);
 }
 
-bool PiperManager::VoiceInstalled(const Json& voice) {
-    const std::string model_url = JsonString(voice, "model_url");
-    const std::string config_url = JsonString(voice, "config_url");
-    if (model_url.empty() || config_url.empty()) {
-        return false;
-    }
-
+std::filesystem::path PiperManager::VoiceDirectory(const Json& voice) {
     const std::filesystem::path models_directory = ModelsDirectory();
-    std::error_code error;
-    const std::filesystem::path model_path = models_directory / AssetPathFromUrl(model_url);
-    const std::filesystem::path config_path = models_directory / AssetPathFromUrl(config_url);
-    return !model_path.empty() &&
-           !config_path.empty() &&
-           std::filesystem::exists(model_path, error) &&
-           std::filesystem::exists(config_path, error);
+    const std::filesystem::path voice_directory_name = VoiceDirectoryNameFromRegistry(voice);
+    if (models_directory.empty() || voice_directory_name.empty()) {
+        return {};
+    }
+    return models_directory / voice_directory_name;
+}
+
+std::filesystem::path PiperManager::VoiceModelPath(const Json& voice) {
+    return VoiceAssetTargetPath(voice, "model_url");
+}
+
+std::filesystem::path PiperManager::VoiceConfigPath(const Json& voice) {
+    return VoiceAssetTargetPath(voice, "config_url");
+}
+
+std::vector<std::filesystem::path> PiperManager::VoiceModelPathCandidates(const Json& voice) {
+    return UniqueVoicePathCandidates(
+        VoiceModelPath(voice),
+        LegacyVoiceAssetPath(voice, "model_url"));
+}
+
+std::vector<std::filesystem::path> PiperManager::VoiceConfigPathCandidates(const Json& voice) {
+    return UniqueVoicePathCandidates(
+        VoiceConfigPath(voice),
+        LegacyVoiceAssetPath(voice, "config_url"));
+}
+
+bool PiperManager::VoiceInstalled(const Json& voice) {
+    const std::filesystem::path model_path = FirstExistingPath(VoiceModelPathCandidates(voice));
+    const std::filesystem::path config_path = FirstExistingPath(VoiceConfigPathCandidates(voice));
+    return !model_path.empty() && !config_path.empty();
 }
 
 bool PiperManager::FindVoiceById(const std::string& voice_id, Json* voice) {
@@ -262,14 +363,9 @@ bool PiperManager::RunToFile(const Json& voice,
         return false;
     }
 
-    const std::string model_url = JsonString(voice, "model_url");
-    const std::string config_url = JsonString(voice, "config_url");
-    const std::filesystem::path model = ModelsDirectory() / AssetPathFromUrl(model_url);
-    const std::filesystem::path config = ModelsDirectory() / AssetPathFromUrl(config_url);
-    std::error_code exists_error;
-    if (model.empty() || config.empty() ||
-        !std::filesystem::exists(model, exists_error) ||
-        !std::filesystem::exists(config, exists_error)) {
+    const std::filesystem::path model = FirstExistingPath(VoiceModelPathCandidates(voice));
+    const std::filesystem::path config = FirstExistingPath(VoiceConfigPathCandidates(voice));
+    if (model.empty() || config.empty()) {
         if (error) {
             *error = "Selected Piper voice files are missing";
         }
@@ -319,6 +415,7 @@ bool PiperManager::RunToFile(const Json& voice,
         }
         return false;
     }
+    std::error_code exists_error;
     if (!std::filesystem::exists(output_wav, exists_error)) {
         if (error) {
             *error = "Piper did not create audio file";
