@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <utility>
 
+#include "ui_button.hpp"
+
 namespace textlt {
 
 namespace {
@@ -28,18 +30,20 @@ ModalWindow::ModalWindow(std::shared_ptr<IModalContent> content,
 
 ftxui::ButtonOption ModalWindow::MakeTextButtonOption(const std::string& label,
                                                       ButtonCallback callback) const {
+    ButtonSpec spec = ButtonSpecFromLabel(label);
+    if (label == "■") {
+        spec.caption = "■";
+        spec.role = ButtonRole::Cancel;
+        spec.variant = ButtonVariant::Minimal;
+        spec.size = ButtonSize::Compact;
+    }
+
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
-    option.label = label;
+    option.label = ButtonCaptionText(spec);
     option.on_click = std::move(callback);
-    option.transform = [this](const ftxui::EntryState& state) {
+    option.transform = [this, spec = std::move(spec)](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        ftxui::Element button = ftxui::text("[" + state.label + "]");
-        if (state.focused || state.active) {
-            return button |
-                ftxui::bgcolor(theme.modal_selected_item_bg) |
-                ftxui::color(theme.modal_selected_item_fg);
-        }
-        return button | ftxui::color(theme.modal_accent);
+        return RenderButton(theme, spec, state.focused || state.active);
     };
     return option;
 }

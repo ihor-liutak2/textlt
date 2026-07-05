@@ -11,6 +11,20 @@ int main() {
     assert(std::string(ToString(ButtonState::Disabled)) == "Disabled");
     assert(std::string(ToString(ButtonSize::Compact)) == "Compact");
 
+
+    assert(ButtonLabelKey("[Save]") == "save");
+    assert(ButtonRoleFromLabel("Save") == ButtonRole::Primary);
+    assert(ButtonRoleFromLabel("Apply layout") == ButtonRole::Primary);
+    assert(ButtonRoleFromLabel("Delete") == ButtonRole::Danger);
+    assert(ButtonRoleFromLabel("Confirm delete") == ButtonRole::Danger);
+    assert(ButtonRoleFromLabel("Reset All") == ButtonRole::Warning);
+    assert(ButtonRoleFromLabel("Refresh") == ButtonRole::Utility);
+    assert(ButtonRoleFromLabel("Close") == ButtonRole::Cancel);
+
+    ButtonSpec inferred_button = ButtonSpecFromLabel("Delete");
+    assert(inferred_button.role == ButtonRole::Danger);
+    assert(inferred_button.variant == ButtonVariant::AccentBar);
+
     ButtonSpec save_button;
     save_button.caption = "Save";
     save_button.role = ButtonRole::Primary;

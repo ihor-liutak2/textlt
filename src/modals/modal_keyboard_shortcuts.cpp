@@ -9,15 +9,22 @@
 #include "ftxui/component/mouse.hpp"
 #include "ftxui/dom/elements.hpp"
 
+#include "ui_button.hpp"
+
 namespace textlt {
 namespace {
 
-ftxui::Element TextButtonElement(const std::string& label, const Theme& theme, bool active) {
-    ftxui::Element element = ftxui::text("[" + label + "]");
-    if (active) {
-        return element | ftxui::bgcolor(theme.menu_foreground) | ftxui::color(theme.menu_background);
+ftxui::Element TextButtonElement(const std::string& label,
+                               const Theme& theme,
+                               bool active,
+                               bool selected = false) {
+    ButtonRole role = ButtonRoleFromLabel(label);
+    if (label == "Menu shortcuts" || label == "Text shortcuts") {
+        role = ButtonRole::Tab;
     }
-    return element | ftxui::color(theme.menu_foreground);
+    ButtonSpec spec = ButtonSpecFromLabel(label, role, ButtonVariant::AccentBar, ButtonSize::Compact);
+    spec.selected = selected;
+    return RenderButton(theme, spec, active);
 }
 
 std::string DisplayShortcut(const std::string& shortcut) {
@@ -80,7 +87,10 @@ ftxui::Component KeyboardShortcutsModalContent::MakeTextButton(
     option.on_click = std::move(on_click);
     option.transform = [this](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return TextButtonElement(state.label, theme, state.focused || state.active);
+        const bool selected =
+            (state.label == "Menu shortcuts" && tab_index_ == 0) ||
+            (state.label == "Text shortcuts" && tab_index_ == 1);
+        return TextButtonElement(state.label, theme, state.focused || state.active, selected);
     };
     return ftxui::Button(std::move(option));
 }
@@ -351,10 +361,10 @@ ftxui::Element KeyboardShortcutsModalContent::RenderTabs() const {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     return hbox({
-        TextButtonElement("Menu shortcuts", theme, tab_index_ == 0) |
+        TextButtonElement("Menu shortcuts", theme, false, tab_index_ == 0) |
             reflect(menu_tab_box_),
         text(" "),
-        TextButtonElement("Text shortcuts", theme, tab_index_ == 1) |
+        TextButtonElement("Text shortcuts", theme, false, tab_index_ == 1) |
             reflect(text_tab_box_),
         filler(),
         text("Tab switches sections") | color(theme.modal_text_color),

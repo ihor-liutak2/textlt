@@ -14,6 +14,8 @@
 #include "ftxui/component/event.hpp"
 #include "ftxui/dom/elements.hpp"
 
+#include "ui_button.hpp"
+
 namespace textlt {
 namespace assistant_modal_detail {
 
@@ -574,37 +576,27 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
     : theme_(theme),
       request_redraw_(std::move(request_redraw)) {
     auto make_button = [this](std::string label, std::function<void()> on_click) {
+        ButtonSpec spec = ButtonSpecFromLabel(std::move(label), ButtonRole::Default, ButtonVariant::AccentBar);
         ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
-        option.label = std::move(label);
+        option.label = ButtonCaptionText(spec);
         option.on_click = std::move(on_click);
-        option.transform = [this](const ftxui::EntryState& state) {
+        option.transform = [this, spec = std::move(spec)](const ftxui::EntryState& state) {
             const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-            ftxui::Element button =
-                ftxui::text(assistant_modal_detail::BracketLabel(state.label));
-            if (state.focused || state.active) {
-                return button |
-                    ftxui::bgcolor(theme.modal_selected_item_bg) |
-                    ftxui::color(theme.modal_selected_item_fg);
-            }
-            return button | ftxui::color(theme.modal_accent);
+            return RenderButton(theme, spec, state.focused || state.active);
         };
         return ftxui::Button(option);
     };
     auto make_tab_button = [this](std::string label, int tab_index) {
+        ButtonSpec spec = ButtonSpecFromLabel(std::move(label), ButtonRole::Tab, ButtonVariant::AccentBar, ButtonSize::Compact);
         ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
-        option.label = std::move(label);
+        option.label = ButtonCaptionText(spec);
         option.on_click = [this, tab_index] { selected_tab_ = tab_index; };
-        option.transform = [this, tab_index](const ftxui::EntryState& state) {
+        option.transform = [this, tab_index, spec = std::move(spec)](const ftxui::EntryState& state) {
             const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-            ftxui::Element tab =
-                ftxui::text(assistant_modal_detail::BracketLabel(state.label));
-            if (selected_tab_ == tab_index || state.focused || state.active) {
-                return tab |
-                    ftxui::bgcolor(theme.modal_selected_item_bg) |
-                    ftxui::color(theme.modal_selected_item_fg) |
-                    ftxui::bold;
-            }
-            return tab | ftxui::color(theme.foreground) | ftxui::dim;
+            ButtonSpec resolved_spec = spec;
+            resolved_spec.selected = selected_tab_ == tab_index;
+            ftxui::Element tab = RenderButton(theme, resolved_spec, state.focused || state.active);
+            return selected_tab_ == tab_index ? tab | ftxui::bold : tab | ftxui::dim;
         };
         return ftxui::Button(option);
     };

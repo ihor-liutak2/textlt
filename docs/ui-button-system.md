@@ -100,3 +100,14 @@ Role mapping used in this pass:
 - Processor modals: scope/group selectors use `Tab`, builder utility actions use
   `Utility`, save uses `Primary`, clear uses `Warning`, delete uses `Danger`,
   and close uses `Cancel`.
+
+## Patch C migration notes
+
+Small modal cleanup uses the shared button system in generic and lightweight modals:
+
+- `ModalWindow` footer buttons and header close button now resolve semantic roles from labels.
+- `KeyboardShortcutsModal` uses tab, primary, warning and cancel button roles.
+- `ViewLayoutModal` uses toggle buttons for layout presets and semantic action buttons for pane/document operations.
+- `AssistantSettingsModal` uses semantic buttons for registry fetch, installs, downloads, tests, delete confirmations and tab buttons.
+
+`ButtonRoleFromLabel()` is intentionally conservative. Explicit roles in larger modals are still preferred when the context is important, while generic footer buttons can rely on the label-based fallback.

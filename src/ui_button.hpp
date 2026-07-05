@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cctype>
 #include <functional>
 #include <string>
 #include <utility>
@@ -140,6 +141,111 @@ inline const char* ToString(ButtonSize size) {
             return "Wide";
     }
     return "Normal";
+}
+
+
+inline std::string ButtonLabelKey(std::string label) {
+    label.erase(std::remove(label.begin(), label.end(), '['), label.end());
+    label.erase(std::remove(label.begin(), label.end(), ']'), label.end());
+    while (!label.empty() && std::isspace(static_cast<unsigned char>(label.front()))) {
+        label.erase(label.begin());
+    }
+    while (!label.empty() && std::isspace(static_cast<unsigned char>(label.back()))) {
+        label.pop_back();
+    }
+    std::transform(label.begin(), label.end(), label.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return label;
+}
+
+inline bool ButtonLabelContains(const std::string& label_key, const std::string& needle) {
+    return label_key.find(needle) != std::string::npos;
+}
+
+inline ButtonRole ButtonRoleFromLabel(const std::string& label) {
+    const std::string key = ButtonLabelKey(label);
+    if (key.empty()) {
+        return ButtonRole::Default;
+    }
+    if (key == "close" || key == "cancel" || key == "back" || key == "no") {
+        return ButtonRole::Cancel;
+    }
+    if (ButtonLabelContains(key, "delete") || ButtonLabelContains(key, "remove") ||
+        ButtonLabelContains(key, "discard") || ButtonLabelContains(key, "don't save") ||
+        ButtonLabelContains(key, "force")) {
+        return ButtonRole::Danger;
+    }
+    if (ButtonLabelContains(key, "reset") || ButtonLabelContains(key, "clear") ||
+        ButtonLabelContains(key, "overwrite") || ButtonLabelContains(key, "replace") ||
+        ButtonLabelContains(key, "cut") || ButtonLabelContains(key, "stop")) {
+        return ButtonRole::Warning;
+    }
+    if (ButtonLabelContains(key, "prev") || ButtonLabelContains(key, "next conn") ||
+        ButtonLabelContains(key, "home") || ButtonLabelContains(key, "current dir")) {
+        return ButtonRole::Navigation;
+    }
+    if (ButtonLabelContains(key, "play") || ButtonLabelContains(key, "pause") ||
+        key == "next") {
+        return ButtonRole::Media;
+    }
+    if (ButtonLabelContains(key, "refresh") || ButtonLabelContains(key, "reload") ||
+        ButtonLabelContains(key, "copy") || ButtonLabelContains(key, "test") ||
+        ButtonLabelContains(key, "browse") || ButtonLabelContains(key, "folder") ||
+        ButtonLabelContains(key, "registry")) {
+        return ButtonRole::Utility;
+    }
+    if (ButtonLabelContains(key, "apply") || ButtonLabelContains(key, "save") ||
+        ButtonLabelContains(key, "select") || ButtonLabelContains(key, "confirm") ||
+        ButtonLabelContains(key, "open") || ButtonLabelContains(key, "add") ||
+        ButtonLabelContains(key, "create") || ButtonLabelContains(key, "install") ||
+        ButtonLabelContains(key, "download") || ButtonLabelContains(key, "authorize") ||
+        ButtonLabelContains(key, "submit") || ButtonLabelContains(key, "set ") ||
+        ButtonLabelContains(key, "assign")) {
+        return ButtonRole::Primary;
+    }
+    return ButtonRole::Secondary;
+}
+
+inline ButtonVariant ButtonVariantForRole(ButtonRole role) {
+    switch (role) {
+        case ButtonRole::Tab:
+        case ButtonRole::Toggle:
+        case ButtonRole::Primary:
+        case ButtonRole::Danger:
+        case ButtonRole::Warning:
+        case ButtonRole::Navigation:
+        case ButtonRole::Media:
+            return ButtonVariant::AccentBar;
+        case ButtonRole::Cancel:
+        case ButtonRole::Utility:
+            return ButtonVariant::ColoredBrackets;
+        case ButtonRole::Success:
+        case ButtonRole::Secondary:
+        case ButtonRole::Default:
+        default:
+            return ButtonVariant::Bracket;
+    }
+}
+
+inline ButtonSpec ButtonSpecFromLabel(std::string label,
+                                      ButtonRole role = ButtonRole::Default,
+                                      ButtonVariant variant = ButtonVariant::Bracket,
+                                      ButtonSize size = ButtonSize::Normal,
+                                      std::string icon = {}) {
+    if (role == ButtonRole::Default) {
+        role = ButtonRoleFromLabel(label);
+    }
+    if (variant == ButtonVariant::Bracket) {
+        variant = ButtonVariantForRole(role);
+    }
+    ButtonSpec spec;
+    spec.caption = std::move(label);
+    spec.role = role;
+    spec.variant = variant;
+    spec.size = size;
+    spec.icon = std::move(icon);
+    return spec;
 }
 
 inline ButtonState ResolveButtonState(const ButtonSpec& spec, bool focused) {

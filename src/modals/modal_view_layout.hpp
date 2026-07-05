@@ -11,6 +11,7 @@
 #include "modal_interface.hpp"
 #include "modal_window.hpp"
 #include "theme.hpp"
+#include "ui_button.hpp"
 
 namespace textlt {
 
@@ -72,7 +73,11 @@ public:
     void TakeFocus();
 
 private:
-    ftxui::ButtonOption MakeButtonOption(const std::string& label, std::function<void()> on_click) const;
+    ftxui::ButtonOption MakeButtonOption(
+        std::string label,
+        std::function<void()> on_click,
+        ButtonRole role = ButtonRole::Default,
+        std::string icon = {}) const;
     ftxui::Element RenderLayoutSection(const Theme& theme);
     ftxui::Element RenderPaneManager(const Theme& theme);
     ftxui::Element RenderPanePreview(const Theme& theme);

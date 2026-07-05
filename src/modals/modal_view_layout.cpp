@@ -49,13 +49,13 @@ ViewLayoutContent::ViewLayoutContent(
       on_equal_widths_(std::move(on_equal_widths)) {
     single_button_ = ftxui::Button(MakeButtonOption("Single", [this] {
         selected_layout_index_ = 0;
-    }));
+    }, ButtonRole::Toggle));
     two_button_ = ftxui::Button(MakeButtonOption("Two columns", [this] {
         selected_layout_index_ = 1;
-    }));
+    }, ButtonRole::Toggle));
     three_button_ = ftxui::Button(MakeButtonOption("Three columns", [this] {
         selected_layout_index_ = 2;
-    }));
+    }, ButtonRole::Toggle));
 
     ftxui::MenuOption pane_option = ftxui::MenuOption::Vertical();
     pane_option.on_change = [this] {
@@ -71,25 +71,25 @@ ViewLayoutContent::ViewLayoutContent(
 
     focus_pane_button_ = ftxui::Button(MakeButtonOption("Set active pane", [this] {
         FocusSelectedPane();
-    }));
+    }, ButtonRole::Primary));
     assign_document_button_ = ftxui::Button(MakeButtonOption("Assign document", [this] {
         AssignSelectedDocument();
-    }));
+    }, ButtonRole::Primary));
     set_role_button_ = ftxui::Button(MakeButtonOption("Set role", [this] {
         ApplySelectedRole();
-    }));
+    }, ButtonRole::Primary));
     split_active_button_ = ftxui::Button(MakeButtonOption("Split active document", [this] {
         if (on_split_active_) {
             on_split_active_();
         }
         RefreshFromApp();
-    }));
+    }, ButtonRole::Warning));
     equal_widths_button_ = ftxui::Button(MakeButtonOption("Equal widths", [this] {
         if (on_equal_widths_) {
             on_equal_widths_();
         }
         RefreshFromApp();
-    }));
+    }, ButtonRole::Utility));
 
     container_ = ftxui::Container::Vertical({
         ftxui::Container::Horizontal({
@@ -115,20 +115,25 @@ ViewLayoutContent::ViewLayoutContent(
 }
 
 ftxui::ButtonOption ViewLayoutContent::MakeButtonOption(
-    const std::string& label,
-    std::function<void()> on_click) const {
+    std::string label,
+    std::function<void()> on_click,
+    ButtonRole role,
+    std::string icon) const {
+    ButtonSpec spec = ButtonSpecFromLabel(std::move(label), role, ButtonVariant::AccentBar, ButtonSize::Compact, std::move(icon));
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
-    option.label = label;
+    option.label = ButtonCaptionText(spec);
     option.on_click = std::move(on_click);
-    option.transform = [this](const ftxui::EntryState& state) {
+    option.transform = [this, spec = std::move(spec)](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        ftxui::Element button = ftxui::text("[" + state.label + "]");
-        if (state.focused || state.active) {
-            return button |
-                ftxui::bgcolor(theme.modal_selected_item_bg) |
-                ftxui::color(theme.modal_selected_item_fg);
+        ButtonSpec resolved_spec = spec;
+        if (resolved_spec.caption == "Single") {
+            resolved_spec.selected = selected_layout_index_ == 0;
+        } else if (resolved_spec.caption == "Two columns") {
+            resolved_spec.selected = selected_layout_index_ == 1;
+        } else if (resolved_spec.caption == "Three columns") {
+            resolved_spec.selected = selected_layout_index_ == 2;
         }
-        return button | ftxui::color(theme.modal_accent);
+        return RenderButton(theme, resolved_spec, state.focused || state.active);
     };
     return option;
 }
