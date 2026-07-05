@@ -168,6 +168,17 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
         return true;
     }
 
+    if (event == ftxui::Event::Backspace && mode_ == SidebarMode::Project) {
+        const std::filesystem::path parent = current_path_.parent_path();
+        if (!parent.empty() && parent != current_path_) {
+            current_path_ = parent;
+            RebuildEntries();
+            list_scroll_offset_ = 0;
+            FocusMenu();
+            return true;
+        }
+    }
+
     if (event.is_mouse() &&
         (event.mouse().button == ftxui::Mouse::WheelDown ||
          event.mouse().button == ftxui::Mouse::WheelUp) &&

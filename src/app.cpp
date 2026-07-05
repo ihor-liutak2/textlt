@@ -299,9 +299,11 @@ TextltApp::TextltApp()
         editor_pane_renderers_.push_back(ftxui::CatchEvent(
             pane_renderer,
             [this, pane_index](ftxui::Event event) {
-                if (event.is_mouse() &&
+                if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left &&
+                    event.mouse().motion == ftxui::Mouse::Pressed &&
                     pane_index < VisibleEditorPaneCount() &&
-                    MainViewCanActivateEditorPane()) {
+                    MainViewCanActivateEditorPane() &&
+                    !sidebar_has_focus_) {
                     SetActiveEditorPane(pane_index);
                     auto editor = std::static_pointer_cast<EditorComponent>(editor_pane_components_[pane_index]);
                     if (editor) {
@@ -329,6 +331,16 @@ TextltApp::TextltApp()
         editor_workspace_container_,
     });
     body_container_ = ftxui::CatchEvent(body_content, [this](ftxui::Event event) {
+        if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left &&
+            event.mouse().motion == ftxui::Mouse::Pressed &&
+            ActiveLayer() == UiLayer::Main) {
+            auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
+            if (editor_config_.show_file_explorer && sidebar->ContainsPoint(event.mouse().x, event.mouse().y)) {
+                FocusSidebar();
+            } else if (!sidebar->ContainsPoint(event.mouse().x, event.mouse().y)) {
+                FocusEditor();
+            }
+        }
         if (event == ftxui::Event::Tab &&
             ActiveLayer() == UiLayer::Main &&
             (!menu_bar_ || !menu_bar_->IsDropdownOpen()) &&

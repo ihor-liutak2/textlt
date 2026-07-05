@@ -61,6 +61,10 @@ public:
 
     std::filesystem::path CurrentPath() const { return current_path_; }
 
+    bool ContainsPoint(int x, int y) const {
+        return panel_box_.x_min >= 0 && panel_box_.Contain(x, y);
+    }
+
     std::filesystem::path GetSelectedDirectoryPath() const {
         if (mode_ == SidebarMode::Project &&
             selected_entry_ >= 0 &&

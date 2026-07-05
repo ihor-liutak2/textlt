@@ -560,16 +560,9 @@ bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
             FocusEditor();
             return true;
         }
-        if (event == ftxui::Event::ArrowUp ||
-            event == ftxui::Event::ArrowDown ||
-            event == ftxui::Event::Return ||
-            input == "\x0A") {
-            const ftxui::Event sidebar_event =
-                input == "\x0A" ? ftxui::Event::Return : event;
-            if (sidebar_panel_->OnEvent(sidebar_event)) {
-                screen_.PostEvent(ftxui::Event::Custom);
-                return true;
-            }
+        if (sidebar_panel_->OnEvent(event)) {
+            screen_.PostEvent(ftxui::Event::Custom);
+            return true;
         }
     }
 
