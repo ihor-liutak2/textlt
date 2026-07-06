@@ -67,7 +67,7 @@ public:
     ftxui::Component GetMainComponent() override { return container_; }
     std::string GetTitle() override { return "Assistant Settings"; }
     ftxui::Element RenderTitle() override;
-    ModalSizePreference GetModalSizePreference() const override { return {90, 32}; }
+    ModalSizePreference GetModalSizePreference() const override { return {100, 32}; }
     ModalFrameStyle GetModalFrameStyle() const override {
         return ModalFrameStyle::TitleInBorder;
     }

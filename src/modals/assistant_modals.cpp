@@ -765,15 +765,23 @@ ftxui::Element AssistantSettingsModalContent::RenderTitle() {
 }
 
 std::string AssistantSettingsModalContent::GetFooterText() const {
+    auto trim_footer_text = [](const std::string& text) {
+        constexpr size_t kMaxFooterTextLength = 40;
+        if (text.size() <= kMaxFooterTextLength) {
+            return text;
+        }
+        return text.substr(0, kMaxFooterTextLength);
+    };
+
     if (selected_tab_ == 0) {
         std::lock_guard<std::mutex> lock(tts_download_mutex_);
-        return tts_status_;
+        return trim_footer_text(tts_status_);
     }
     if (selected_tab_ == 1) {
         std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        return ai_status_;
+        return trim_footer_text(ai_status_);
     }
-    return piper_server_status_;
+    return {};
 }
 
 void AssistantSettingsModalContent::LoadRegistries() {

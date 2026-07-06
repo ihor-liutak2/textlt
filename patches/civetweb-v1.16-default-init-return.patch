@@ -1,0 +1,12 @@
+--- a/src/civetweb.c
++++ b/src/civetweb.c
+@@ -5,5 +5,8 @@
+         }
+         mg_global_unlock();
+ 
+-        return features_inited;
++        /* MG_FEATURES_DEFAULT is zero, so return a nonzero success value after
++         * successful initialization to keep the API success or error distinction for
++         * callers that only request the default feature set. */
++        return features_inited ? features_inited : 1u;
+ }

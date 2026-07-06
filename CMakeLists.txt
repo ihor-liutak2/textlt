@@ -137,6 +137,10 @@ endif()
 FetchContent_Declare(civetweb
   GIT_REPOSITORY https://github.com/civetweb/civetweb.git
   GIT_TAG v1.16
+  PATCH_COMMAND
+    ${CMAKE_COMMAND}
+      -DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/patches/civetweb-v1.16-default-init-return.patch
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_patch_once.cmake
 )
 
 FetchContent_GetProperties(civetweb)
