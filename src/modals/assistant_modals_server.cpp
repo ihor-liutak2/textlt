@@ -226,18 +226,27 @@ long long JsonLongValue(const Json& object, const char* key, long long fallback 
     return fallback;
 }
 
+std::filesystem::path PiperLogDirectory() {
+    const std::filesystem::path data = PiperManager::UserDataDirectory();
+    return data.empty() ? std::filesystem::path{} : data / "piper" / "logs";
+}
+
 std::string BuildServerCommand(const std::filesystem::path& server,
+                               const std::filesystem::path& piper,
                                int port,
                                const std::filesystem::path& model,
                                const std::filesystem::path& config,
                                bool use_cuda) {
+    const std::filesystem::path log_dir = PiperLogDirectory();
 #ifdef _WIN32
     std::string command = "start \"\" /B " + PiperManager::QuoteShellPath(server) +
         " --host " + kPiperServerHost +
         " --port " + std::to_string(port) +
+        " --piper " + PiperManager::QuoteShellPath(piper) +
         " --model " + PiperManager::QuoteShellPath(model) +
         " --config " + PiperManager::QuoteShellPath(config) +
-        " --models-dir " + PiperManager::QuoteShellPath(PiperManager::ModelsDirectory());
+        " --models-dir " + PiperManager::QuoteShellPath(PiperManager::ModelsDirectory()) +
+        " --log-dir " + PiperManager::QuoteShellPath(log_dir);
     if (use_cuda) {
         command += " --cuda";
     }
@@ -247,9 +256,11 @@ std::string BuildServerCommand(const std::filesystem::path& server,
     std::string command = PiperManager::QuoteShellPath(server) +
         " --host " + kPiperServerHost +
         " --port " + std::to_string(port) +
+        " --piper " + PiperManager::QuoteShellPath(piper) +
         " --model " + PiperManager::QuoteShellPath(model) +
         " --config " + PiperManager::QuoteShellPath(config) +
-        " --models-dir " + PiperManager::QuoteShellPath(PiperManager::ModelsDirectory());
+        " --models-dir " + PiperManager::QuoteShellPath(PiperManager::ModelsDirectory()) +
+        " --log-dir " + PiperManager::QuoteShellPath(log_dir);
     if (use_cuda) {
         command += " --cuda";
     }
@@ -258,21 +269,24 @@ std::string BuildServerCommand(const std::filesystem::path& server,
 #endif
 }
 
-Json SelectedServerVoicePayload(const Json& voice,
-                                const std::filesystem::path& output_wav,
-                                const std::string& text,
-                                const PiperRunOptions& options) {
-    return {
-        {"text", text},
-        {"output_wav_path", output_wav.string()},
-        {"model_path", FirstExistingPath(PiperManager::VoiceModelPathCandidates(voice)).string()},
-        {"config_path", FirstExistingPath(PiperManager::VoiceConfigPathCandidates(voice)).string()},
-        {"use_cuda", options.use_cuda},
-        {"noise_scale", options.noise_scale},
-        {"sentence_silence_seconds", options.sentence_silence_seconds},
-        {"speaker_id", options.speaker_id}
-    };
+bool JsonBoolValue(const Json& object, const char* key, bool fallback = false) {
+    const auto it = object.find(key);
+    return it != object.end() && it->is_boolean() ? it->get<bool>() : fallback;
 }
+
+std::string VoiceStateLabel(const std::string& status) {
+    if (status == "ready") {
+        return "Ready";
+    }
+    if (status == "loading") {
+        return "Loading";
+    }
+    if (status == "failed") {
+        return "Failed";
+    }
+    return "Not loaded";
+}
+
 
 } // namespace
 
@@ -338,10 +352,11 @@ void AssistantSettingsModalContent::ApplyPiperServerStatusResponse(
     const std::string& offline_status) {
     if (!response.ok) {
         piper_server_running_ = "Stopped";
+        piper_server_voice_state_ = "Not loaded";
+        piper_server_active_voice_ = "-";
         piper_server_uptime_ = "-";
         piper_server_pid_ = "-";
         piper_server_requests_ = "-";
-        piper_server_backend_.clear();
         piper_server_status_ = response.error.empty()
             ? offline_status
             : offline_status + ": " + response.error;
@@ -351,20 +366,26 @@ void AssistantSettingsModalContent::ApplyPiperServerStatusResponse(
     const Json body = Json::parse(response.body, nullptr, false);
     if (!body.is_object()) {
         piper_server_running_ = "Running";
+        piper_server_voice_state_ = "Not loaded";
+        piper_server_active_voice_ = "-";
         piper_server_uptime_ = "-";
         piper_server_pid_ = "-";
         piper_server_requests_ = "-";
-        piper_server_backend_.clear();
         piper_server_status_ = "Server is running on 127.0.0.1:" + std::to_string(port);
         return;
     }
 
     piper_server_running_ = "Running";
+    piper_server_voice_state_ = VoiceStateLabel(JsonStringValue(body, "voice_status", "not_loaded"));
+    piper_server_active_voice_ = JsonStringValue(body, "active_voice", "-");
     piper_server_uptime_ = FormatDuration(JsonLongValue(body, "uptime_seconds"));
     piper_server_pid_ = JsonStringValue(body, "pid");
     piper_server_requests_ = JsonStringValue(body, "requests");
-    piper_server_backend_.clear();
     piper_server_status_ = "Server is running on 127.0.0.1:" + std::to_string(port);
+    const std::string backend_message = JsonStringValue(body, "backend_message", "");
+    if (piper_server_voice_state_ == "Failed" && !backend_message.empty() && backend_message != "-") {
+        piper_server_status_ += ". " + backend_message;
+    }
 }
 
 void AssistantSettingsModalContent::RefreshPiperServerStatus() {
@@ -398,9 +419,23 @@ void AssistantSettingsModalContent::StartPiperServer() {
         return;
     }
 
+    const RemoteHttpClient client;
+    const RemoteHttpResponse existing = client.Request("GET", BaseUrl(port) + "/status", {}, {}, 2);
+    if (existing.ok) {
+        ApplyPiperServerStatusResponse(existing, port, "Server is not running");
+        piper_server_status_ = "Server is already running on 127.0.0.1:" + std::to_string(port);
+        return;
+    }
+
     const std::filesystem::path server = PiperManager::ServerExecutablePath();
     if (server.empty()) {
         piper_server_status_ = "textlt-piper-server is not installed";
+        return;
+    }
+
+    const std::filesystem::path piper = PiperManager::RuntimeExecutablePath();
+    if (piper.empty()) {
+        piper_server_status_ = "Piper runtime is not installed";
         return;
     }
 
@@ -420,6 +455,7 @@ void AssistantSettingsModalContent::StartPiperServer() {
 
     const std::string command = BuildServerCommand(
         server,
+        piper,
         port,
         model,
         config,
@@ -427,12 +463,25 @@ void AssistantSettingsModalContent::StartPiperServer() {
     const int result = std::system(command.c_str());
     if (result != 0) {
         piper_server_running_ = "Stopped";
+        piper_server_voice_state_ = "Failed";
         piper_server_status_ = "Server start command failed";
         return;
     }
 
-    piper_server_status_ = "Server start requested on 127.0.0.1:" + std::to_string(port);
-    std::this_thread::sleep_for(std::chrono::milliseconds(350));
+    piper_server_status_ = "Starting server and loading voice...";
+    for (int attempt = 0; attempt < 80; ++attempt) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        const RemoteHttpResponse response = client.Request("GET", BaseUrl(port) + "/status", {}, {}, 2);
+        if (!response.ok) {
+            continue;
+        }
+        ApplyPiperServerStatusResponse(response, port, "Server is not running");
+        const Json body = Json::parse(response.body, nullptr, false);
+        if (body.is_object() && JsonBoolValue(body, "voice_ready")) {
+            piper_server_status_ = "Server started and voice is ready";
+            return;
+        }
+    }
     RefreshPiperServerStatus();
 }
 
@@ -454,10 +503,11 @@ void AssistantSettingsModalContent::StopPiperServer() {
         3);
     if (response.ok) {
         piper_server_running_ = "Stopped";
+        piper_server_voice_state_ = "Not loaded";
+        piper_server_active_voice_ = "-";
         piper_server_uptime_ = "-";
         piper_server_pid_ = "-";
         piper_server_requests_ = "-";
-        piper_server_backend_.clear();
         piper_server_status_ = "Server stop requested";
     } else {
         piper_server_status_ = response.error.empty()
@@ -505,39 +555,13 @@ bool AssistantSettingsModalContent::GeneratePiperTestAudio(const Json& voice,
         return false;
     }
 
-    const RemoteHttpClient client;
-    const RemoteHttpResponse health = client.Request(
-        "GET",
-        BaseUrl(port) + "/health",
-        {},
-        {},
-        2);
-    if (health.ok) {
-        const Json payload = SelectedServerVoicePayload(voice, output_wav, text, options);
-        const RemoteHttpResponse response = client.Request(
-            "POST",
-            BaseUrl(port) + "/synthesize",
-            {"Content-Type: application/json"},
-            payload.dump(),
-            30);
-        if (response.ok && response.status_code == 200) {
-            return true;
-        }
-        if (error) {
-            *error = "Server synthesize failed: " +
-                (response.body.empty() ? response.error : response.body);
-        }
-        return false;
-    }
-
-    return PiperManager::RunToFile(voice, text, output_wav, options, error);
+    const bool ok = PiperManager::RunToFile(voice, text, output_wav, options, error);
+    RefreshPiperServerStatus();
+    return ok;
 }
 
 ftxui::Element AssistantSettingsModalContent::RenderPiperServerTab(const Theme& theme) {
     using namespace ftxui;
-
-    const std::string language = SelectedPiperLanguage(tts_language_labels_, selected_tts_language_);
-    const std::string voice_label = SelectedPiperVoiceLabel(tts_voice_labels_, selected_tts_voice_);
 
     int port = 0;
     PiperRunOptions options;
@@ -569,14 +593,12 @@ ftxui::Element AssistantSettingsModalContent::RenderPiperServerTab(const Theme& 
     });
 
     Element status_panel = Panel("Server state", {
-        StatusLine("App", PiperManager::ServerInstalled() ? "installed" : "missing", theme),
-        StatusLine("State", piper_server_running_, theme),
+        StatusLine("Server", piper_server_running_, theme),
+        StatusLine("Voice state", piper_server_voice_state_, theme),
+        StatusLine("Active voice", piper_server_active_voice_, theme),
         StatusLine("Uptime", piper_server_uptime_, theme),
-        StatusLine("PID", piper_server_pid_, theme),
         StatusLine("Requests", piper_server_requests_, theme),
         StatusLine("Address", address, theme),
-        StatusLine("Language", language.empty() ? "-" : language, theme),
-        StatusLine("Voice", voice_label, theme),
     }, theme);
 
     Element settings_panel = Panel("Settings", {
@@ -598,7 +620,7 @@ ftxui::Element AssistantSettingsModalContent::RenderPiperServerTab(const Theme& 
         separator() | color(theme.modal_border),
         validation,
         paragraph(piper_server_status_) | color(theme.modal_text_color),
-        text("The existing TTS Test button uses these settings.") |
+        text("TTS Test uses textlt-piper-server only. No direct Piper fallback.") |
             color(theme.modal_text_color) | dim,
     }) | border;
 }

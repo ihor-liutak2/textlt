@@ -34,6 +34,13 @@ ftxui::Element StatusLine(const std::string& label,
     });
 }
 
+std::string SelectedPiperVoiceLabel(const std::vector<std::string>& labels,
+                                    int selected_voice) {
+    return selected_voice >= 0 && selected_voice < static_cast<int>(labels.size())
+        ? labels[selected_voice]
+        : "-";
+}
+
 
 bool IsSafeArchivePath(const std::filesystem::path& path) {
     if (path.empty() || path.is_absolute()) {
@@ -888,10 +895,6 @@ ftxui::Element AssistantSettingsModalContent::RenderTtsTab(const Theme& theme) {
         "Piper runtime",
         PiperManager::RuntimeInstalled() ? "installed" : "missing - use Install Piper",
         theme));
-    const std::filesystem::path piper_executable = PiperManager::RuntimeExecutablePath();
-    if (!piper_executable.empty()) {
-        rows.push_back(StatusLine("Piper executable", piper_executable.string(), theme));
-    }
     rows.push_back(separator() | color(theme.modal_border));
     rows.push_back(text(" Language") | bold | color(theme.modal_text_color));
     rows.push_back(tts_language_menu_->Render() | border);
@@ -921,6 +924,10 @@ ftxui::Element AssistantSettingsModalContent::RenderTtsTab(const Theme& theme) {
         }));
     }
     rows.push_back(text(" Voices") | bold | color(theme.modal_text_color));
+    rows.push_back(StatusLine(
+        "Selected voice",
+        SelectedPiperVoiceLabel(tts_voice_labels_, selected_tts_voice_),
+        theme));
     rows.push_back(tts_voice_menu_->Render() | border);
     Element body = vbox(std::move(rows)) | border;
     if (!tts_test_popup_visible_) {

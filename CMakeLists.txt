@@ -496,6 +496,8 @@ add_executable(textlt_tts_pipeline_test
   tests/tts_pipeline_test.cpp
   src/cloud_tts_pipeline.cpp
   src/piper_manager.cpp
+  src/remote/remote_http_client.cpp
+  src/remote/remote_command_runner.cpp
 )
 
 target_include_directories(textlt_tts_pipeline_test PRIVATE
@@ -506,6 +508,8 @@ target_include_directories(textlt_tts_pipeline_test PRIVATE
 add_executable(textlt_piper_manager_test
   tests/piper_manager_test.cpp
   src/piper_manager.cpp
+  src/remote/remote_http_client.cpp
+  src/remote/remote_command_runner.cpp
 )
 
 target_include_directories(textlt_piper_manager_test PRIVATE

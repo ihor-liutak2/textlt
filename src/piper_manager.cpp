@@ -1,9 +1,13 @@
 #include "piper_manager.hpp"
 
+#include "remote/remote_http_client.hpp"
+
+#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <optional>
 #include <system_error>
+#include <thread>
 #include <vector>
 
 namespace textlt {
@@ -189,6 +193,127 @@ std::vector<std::filesystem::path> UniqueVoicePathCandidates(
         }
     }
     return candidates;
+}
+
+
+constexpr const char* kPiperServerHost = "127.0.0.1";
+constexpr int kPiperServerPort = 59123;
+
+std::string PiperServerBaseUrl() {
+    return std::string("http://") + kPiperServerHost + ":" + std::to_string(kPiperServerPort);
+}
+
+std::filesystem::path PiperLogDirectory() {
+    const std::filesystem::path data = PiperManager::UserDataDirectory();
+    return data.empty() ? std::filesystem::path{} : data / "piper" / "logs";
+}
+
+Json PiperServerVoicePayload(const std::filesystem::path& model,
+                             const std::filesystem::path& config,
+                             const std::string& text,
+                             const std::filesystem::path& output_wav,
+                             const PiperRunOptions& options) {
+    return {
+        {"text", text},
+        {"output_wav_path", output_wav.string()},
+        {"model_path", model.string()},
+        {"config_path", config.string()},
+        {"use_cuda", options.use_cuda},
+        {"noise_scale", options.noise_scale},
+        {"sentence_silence_seconds", options.sentence_silence_seconds},
+        {"speaker_id", options.speaker_id}
+    };
+}
+
+std::string JsonErrorMessage(const std::string& body, const std::string& fallback) {
+    const Json parsed = Json::parse(body, nullptr, false);
+    if (parsed.is_object()) {
+        const auto error = parsed.find("error");
+        if (error != parsed.end() && error->is_string()) {
+            return error->get<std::string>();
+        }
+        const auto message = parsed.find("backend_message");
+        if (message != parsed.end() && message->is_string()) {
+            return message->get<std::string>();
+        }
+    }
+    return body.empty() ? fallback : body;
+}
+
+std::string BuildPiperServerCommand(const std::filesystem::path& server,
+                                    const std::filesystem::path& piper,
+                                    const std::filesystem::path& model,
+                                    const std::filesystem::path& config,
+                                    const PiperRunOptions& options) {
+    const std::filesystem::path log_dir = PiperLogDirectory();
+    EnsureDirectory(log_dir);
+#ifdef _WIN32
+    std::string command = "start \"\" /B " + PiperManager::QuoteShellPath(server) +
+        " --host " + std::string(kPiperServerHost) +
+        " --port " + std::to_string(kPiperServerPort) +
+        " --piper " + PiperManager::QuoteShellPath(piper) +
+        " --model " + PiperManager::QuoteShellPath(model) +
+        " --config " + PiperManager::QuoteShellPath(config) +
+        " --models-dir " + PiperManager::QuoteShellPath(PiperManager::ModelsDirectory()) +
+        " --log-dir " + PiperManager::QuoteShellPath(log_dir);
+    if (options.use_cuda) {
+        command += " --cuda";
+    }
+    command += " > NUL 2>&1";
+    return command;
+#else
+    std::string command = PiperManager::QuoteShellPath(server) +
+        " --host " + std::string(kPiperServerHost) +
+        " --port " + std::to_string(kPiperServerPort) +
+        " --piper " + PiperManager::QuoteShellPath(piper) +
+        " --model " + PiperManager::QuoteShellPath(model) +
+        " --config " + PiperManager::QuoteShellPath(config) +
+        " --models-dir " + PiperManager::QuoteShellPath(PiperManager::ModelsDirectory()) +
+        " --log-dir " + PiperManager::QuoteShellPath(log_dir);
+    if (options.use_cuda) {
+        command += " --cuda";
+    }
+    command += " >/dev/null 2>&1 &";
+    return command;
+#endif
+}
+
+bool PiperServerHealthOk(const RemoteHttpClient& client) {
+    const RemoteHttpResponse response = client.Request("GET", PiperServerBaseUrl() + "/health", {}, {}, 2);
+    return response.ok && response.status_code == 200;
+}
+
+bool EnsurePiperServerRunning(const std::filesystem::path& server,
+                              const std::filesystem::path& piper,
+                              const std::filesystem::path& model,
+                              const std::filesystem::path& config,
+                              const PiperRunOptions& options,
+                              std::string* error) {
+    const RemoteHttpClient client;
+    if (PiperServerHealthOk(client)) {
+        return true;
+    }
+
+    const std::string command = BuildPiperServerCommand(server, piper, model, config, options);
+    const int result = std::system(command.c_str());
+    if (result != 0) {
+        if (error) {
+            *error = "Cannot start textlt-piper-server";
+        }
+        return false;
+    }
+
+    for (int attempt = 0; attempt < 50; ++attempt) {
+        if (PiperServerHealthOk(client)) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    if (error) {
+        *error = "textlt-piper-server did not become available";
+    }
+    return false;
 }
 
 std::filesystem::path FirstExistingPath(const std::vector<std::filesystem::path>& candidates) {
@@ -396,8 +521,16 @@ bool PiperManager::RunToFile(const Json& voice,
                              const std::filesystem::path& output_wav,
                              const PiperRunOptions& options,
                              std::string* error) {
-    const std::filesystem::path executable = RuntimeExecutablePath();
-    if (executable.empty()) {
+    const std::filesystem::path server = ServerExecutablePath();
+    if (server.empty()) {
+        if (error) {
+            *error = "textlt-piper-server is not installed";
+        }
+        return false;
+    }
+
+    const std::filesystem::path piper = RuntimeExecutablePath();
+    if (piper.empty()) {
         if (error) {
             *error = "Piper runtime is not installed";
         }
@@ -414,60 +547,30 @@ bool PiperManager::RunToFile(const Json& voice,
     }
 
     EnsureDirectory(output_wav.parent_path());
-    std::filesystem::path log_path = output_wav;
-    log_path.replace_extension(".log");
-    const std::filesystem::path input_path = output_wav.string() + ".txt";
-    {
-        std::ofstream input(input_path, std::ios::binary | std::ios::trunc);
-        if (!input) {
-            if (error) {
-                *error = "Cannot write Piper input text";
-            }
-            return false;
-        }
-        input << text << '\n';
+    if (!EnsurePiperServerRunning(server, piper, model, config, options, error)) {
+        return false;
     }
 
-#ifdef _WIN32
-    const std::string command =
-        "type " + QuoteShellPath(input_path) +
-        " | " + QuoteShellPath(executable) +
-        " --model " + QuoteShellPath(model) +
-        " --config " + QuoteShellPath(config) +
-        (options.use_cuda ? " --cuda" : "") +
-        " --noise-scale " + std::to_string(options.noise_scale) +
-        " --sentence-silence " + std::to_string(options.sentence_silence_seconds) +
-        (options.speaker_id > 0 ? " --speaker " + std::to_string(options.speaker_id) : "") +
-        " --output_file " + QuoteShellPath(output_wav) +
-        " > " + QuoteShellPath(log_path) +
-        " 2>&1";
-#else
-    const std::string command =
-        QuoteShellPath(executable) +
-        " --model " + QuoteShellPath(model) +
-        " --config " + QuoteShellPath(config) +
-        (options.use_cuda ? " --cuda" : "") +
-        " --noise-scale " + std::to_string(options.noise_scale) +
-        " --sentence-silence " + std::to_string(options.sentence_silence_seconds) +
-        (options.speaker_id > 0 ? " --speaker " + std::to_string(options.speaker_id) : "") +
-        " --output_file " + QuoteShellPath(output_wav) +
-        " < " + QuoteShellPath(input_path) +
-        " > " + QuoteShellPath(log_path) +
-        " 2>&1";
-#endif
-    const int result = std::system(command.c_str());
-    std::error_code remove_error;
-    std::filesystem::remove(input_path, remove_error);
-    if (result != 0) {
+    const Json payload = PiperServerVoicePayload(model, config, text, output_wav, options);
+    const RemoteHttpClient client;
+    const RemoteHttpResponse response = client.Request(
+        "POST",
+        PiperServerBaseUrl() + "/synthesize",
+        {"Content-Type: application/json"},
+        payload.dump(),
+        45);
+    if (!response.ok || response.status_code != 200) {
         if (error) {
-            *error = "Piper command failed";
+            *error = "TTS server synthesize failed: " +
+                JsonErrorMessage(response.body, response.error.empty() ? "request failed" : response.error);
         }
         return false;
     }
+
     std::error_code exists_error;
-    if (!std::filesystem::exists(output_wav, exists_error)) {
+    if (!std::filesystem::exists(output_wav, exists_error) || exists_error) {
         if (error) {
-            *error = "Piper did not create audio file";
+            *error = "TTS server did not create audio file";
         }
         return false;
     }

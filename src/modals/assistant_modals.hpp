@@ -137,7 +137,8 @@ private:
     std::string piper_server_uptime_ = "-";
     std::string piper_server_pid_ = "-";
     std::string piper_server_requests_ = "-";
-    std::string piper_server_backend_ = "not checked";
+    std::string piper_server_voice_state_ = "Not loaded";
+    std::string piper_server_active_voice_ = "-";
     std::string piper_server_port_;
     std::string piper_server_noise_scale_ = "0.667";
     std::string piper_server_sentence_silence_ = "0.15";
