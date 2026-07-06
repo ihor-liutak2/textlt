@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+VERSION="${TEXTLT_VERSION:-${1:-v0.9.1}}"
+REPO="${TEXTLT_REPO:-ihor-liutak2/textlt}"
+ASSET="${TEXTLT_ASSET:-textlt-linux-x64.tar.gz}"
+INSTALL_ROOT="${TEXTLT_INSTALL_ROOT:-$HOME/.local/share/textlt}"
+APP_DIR="$INSTALL_ROOT/app"
+BIN_DIR="${TEXTLT_BIN_DIR:-$HOME/.local/bin}"
+ARCHIVE="${TMPDIR:-/tmp}/$ASSET"
+EXTRACT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/textlt-install.XXXXXX")"
+URL="${TEXTLT_DOWNLOAD_URL:-https://github.com/$REPO/releases/download/$VERSION/$ASSET}"
+
+cleanup() {
+  rm -rf "$EXTRACT_DIR"
+}
+trap cleanup EXIT
+
+require_tool() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "Required tool is missing: $1" >&2
+    exit 1
+  fi
+}
+
+require_tool tar
+mkdir -p "$INSTALL_ROOT" "$APP_DIR" "$BIN_DIR"
+
+echo "Downloading TextLT $VERSION for Linux..."
+if command -v curl >/dev/null 2>&1; then
+  curl -fL "$URL" -o "$ARCHIVE"
+elif command -v wget >/dev/null 2>&1; then
+  wget -O "$ARCHIVE" "$URL"
+else
+  echo "Install curl or wget first." >&2
+  exit 1
+fi
+
+echo "Extracting archive..."
+tar -xzf "$ARCHIVE" -C "$EXTRACT_DIR"
+
+EXE="$(find "$EXTRACT_DIR" -type f -name textlt -perm -111 | head -n 1)"
+if [[ -z "$EXE" ]]; then
+  echo "textlt executable was not found in the extracted archive." >&2
+  exit 1
+fi
+
+EXE_DIR="$(dirname "$EXE")"
+rm -rf "$APP_DIR"
+mkdir -p "$APP_DIR"
+cp -a "$EXE_DIR"/. "$APP_DIR"/
+chmod +x "$APP_DIR/textlt"
+
+cat > "$BIN_DIR/textlt" <<TEXTLT_WRAPPER
+#!/usr/bin/env bash
+cd "$APP_DIR" || exit 1
+exec "$APP_DIR/textlt" "\$@"
+TEXTLT_WRAPPER
+chmod +x "$BIN_DIR/textlt"
+
+BASHRC="$HOME/.bashrc"
+touch "$BASHRC"
+grep -qxF 'export PATH="$HOME/.local/bin:$PATH"' "$BASHRC" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$BASHRC"
+grep -qxF 'export COLORTERM=truecolor' "$BASHRC" || echo 'export COLORTERM=truecolor' >> "$BASHRC"
+grep -qxF 'export TERM=xterm-256color' "$BASHRC" || echo 'export TERM=xterm-256color' >> "$BASHRC"
+
+export PATH="$HOME/.local/bin:$PATH"
+export COLORTERM=truecolor
+export TERM=xterm-256color
+
+echo "TextLT installed to: $APP_DIR"
+echo "Run: textlt"
+textlt --help || true

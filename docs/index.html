@@ -439,8 +439,8 @@
         <div class="row justify-content-center text-center mb-4">
           <div class="col-lg-8">
             <span class="badge rounded-pill badge-soft mb-3">Install v0.9.1</span>
-            <h2 class="display-6 fw-bold">Choose your platform, copy one script.</h2>
-            <p class="text-secondary fs-5">Like Node-style install pages: pick Windows, Linux, or macOS, choose the install type, and paste the generated command into your terminal.</p>
+            <h2 class="display-6 fw-bold">Choose your platform, run the installer.</h2>
+            <p class="text-secondary fs-5">Pick Windows, Linux, or macOS. The box now only downloads one installer file and runs it; the real installation logic lives inside the platform installer script.</p>
           </div>
         </div>
 
@@ -451,19 +451,14 @@
               <button type="button" class="btn platform-pill" data-platform="windows">Windows</button>
               <button type="button" class="btn platform-pill" data-platform="macos">macOS</button>
             </div>
-            <div class="btn-group flex-wrap" role="group" aria-label="Choose install type">
-              <button type="button" class="btn type-pill active" data-type="archive">Archive install</button>
-              <button type="button" class="btn type-pill" data-type="source">Build from source</button>
-              <button type="button" class="btn type-pill" data-type="uninstall">Uninstall</button>
-            </div>
           </div>
 
           <div class="row g-4">
             <div class="col-lg-4">
               <div class="p-4 rounded-4 bg-black bg-opacity-25 border border-secondary-subtle h-100">
                 <div class="small text-uppercase text-secondary mb-2">Selected</div>
-                <h3 id="installTitle" class="h4 mb-3">Linux archive install</h3>
-                <p id="installDescription" class="text-secondary mb-4">Downloads the v0.9.1 Linux archive, installs it into your home directory, creates a textlt launcher, and updates terminal color settings.</p>
+                <h3 id="installTitle" class="h4 mb-3">Linux installer</h3>
+                <p id="installDescription" class="text-secondary mb-4">Downloads the Linux installer script and runs it. The script downloads the release archive, installs TextLT into your home directory, and creates the launcher.</p>
                 <div class="d-grid gap-2">
                   <a class="btn btn-accent" href="https://github.com/ihor-liutak2/textlt/releases/tag/v0.9.1">Open release v0.9.1</a>
                   <a class="btn btn-outline-accent" href="https://github.com/ihor-liutak2/textlt">GitHub repository</a>
@@ -480,10 +475,10 @@
         </div>
 
         <div class="row g-3 mt-4">
-          <div class="col-md-4"><div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25 h-100"><div class="fw-bold">Local Piper server</div><small class="text-secondary">Build from source, then run <code>./scripts/textlt-install-piper-server.sh build</code> to install <code>textlt-piper-server</code> into <code>~/.local/share/textlt/piper/bin</code>.</small></div></div>
+          <div class="col-md-4"><div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25 h-100"><div class="fw-bold">Installer scripts</div><small class="text-secondary">The site now exposes one installer file per platform: Linux, Windows, and macOS. The copy box only downloads and runs that file.</small></div></div>
           <div class="col-md-4"><div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25 h-100"><div class="fw-bold">Linux first-class</div><small class="text-secondary">MX Linux, Ubuntu, Debian, WSL, and terminal workflows are the natural home of TextLT.</small></div></div>
           <div class="col-md-4"><div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25 h-100"><div class="fw-bold">Windows supported</div><small class="text-secondary">The archive installer creates a wrapper so resources such as themes and text processors load correctly.</small></div></div>
-          <div class="col-md-4"><div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25 h-100"><div class="fw-bold">macOS experimental</div><small class="text-secondary">Use the source build script while macOS release archives are being stabilized.</small></div></div>
+          <div class="col-md-4"><div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25 h-100"><div class="fw-bold">macOS installer</div><small class="text-secondary">The macOS installer uses the matching release archive for the current CPU architecture when that asset is published.</small></div></div>
         </div>
       </div>
     </section>
@@ -527,207 +522,33 @@
   <script>
     const release = "v0.9.1";
 
+    const siteBase = "https://ihor-liutak2.github.io/textlt";
+
     const scripts = {
       linux: {
-        archive: {
-          title: "Linux archive install",
-          description: "Downloads the v0.9.1 Linux archive, installs it into your home directory, creates a textlt launcher, and updates terminal color settings.",
-          code: `VERSION="${release}"
-INSTALL_ROOT="$HOME/.local/share/textlt"
-BIN_DIR="$HOME/.local/bin"
-ARCHIVE="/tmp/textlt-linux-x64.tar.gz"
-URL="https://github.com/ihor-liutak2/textlt/releases/download/${release}/textlt-linux-x64.tar.gz"
-
-mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
-
-if command -v curl >/dev/null 2>&1; then
-  curl -L "$URL" -o "$ARCHIVE"
-else
-  wget -O "$ARCHIVE" "$URL"
-fi
-
-rm -rf "$INSTALL_ROOT"/*
-tar -xzf "$ARCHIVE" -C "$INSTALL_ROOT"
-
-EXE="$(find "$INSTALL_ROOT" -type f -name textlt -perm -111 | head -n 1)"
-
-if [ -z "$EXE" ]; then
-  echo "textlt executable was not found in the extracted archive." >&2
-  exit 1
-fi
-
-EXE_DIR="$(dirname "$EXE")"
-
-cat > "$BIN_DIR/textlt" <<TEXTLT_WRAPPER
-#!/usr/bin/env bash
-cd "$EXE_DIR" || exit 1
-exec "$EXE" "\$@"
-TEXTLT_WRAPPER
-
-chmod +x "$BIN_DIR/textlt" "$EXE"
-
-grep -qxF 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
-grep -qxF 'export COLORTERM=truecolor' "$HOME/.bashrc" || echo 'export COLORTERM=truecolor' >> "$HOME/.bashrc"
-grep -qxF 'export TERM=xterm-256color' "$HOME/.bashrc" || echo 'export TERM=xterm-256color' >> "$HOME/.bashrc"
-
-export PATH="$HOME/.local/bin:$PATH"
-export COLORTERM=truecolor
-export TERM=xterm-256color
-
-textlt --help`
-        },
-        source: {
-          title: "Linux build from source",
-          description: "Builds TextLT from the v0.9.1 tag and installs it into ~/.local using CMake install rules.",
-          code: `VERSION="${release}"
-sudo apt update
-sudo apt install -y build-essential cmake git libcurl4-openssl-dev libarchive-dev
-
-git clone --branch "$VERSION" --depth 1 https://github.com/ihor-liutak2/textlt.git "/tmp/textlt-$VERSION"
-cd "/tmp/textlt-$VERSION"
-
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/.local"
-cmake --build build -j"$(nproc)"
-cmake --install build
-
-grep -qxF 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
-export PATH="$HOME/.local/bin:$PATH"
-
-textlt --help`
-        },
-        uninstall: {
-          title: "Linux uninstall",
-          description: "Removes the user-level TextLT archive install and launcher. Source installs under ~/.local may also leave shared resources under ~/.local/share/textlt.",
-          code: `rm -rf "$HOME/.local/share/textlt"
-rm -f "$HOME/.local/bin/textlt"
-
-echo "TextLT user install removed."
-echo "If you added PATH/COLORTERM/TERM lines to ~/.bashrc, you may remove them manually."`
-        }
+        title: "Linux installer",
+        description: "Downloads the Linux installer script and runs it. The installer downloads the release archive, installs TextLT into ~/.local/share/textlt/app, creates ~/.local/bin/textlt, and keeps Piper data under ~/.local/share/textlt/piper untouched.",
+        code: `INSTALLER="/tmp/install-textlt-linux.sh"
+curl -fsSL "${siteBase}/install-textlt-linux.sh" -o "$INSTALLER"
+bash "$INSTALLER"`
       },
       windows: {
-        archive: {
-          title: "Windows archive install",
-          description: "Downloads the v0.9.1 Windows archive, installs it under LocalAppData, creates textlt.cmd, and adds it to the user PATH.",
-          code: `$VERSION = "${release}"
-$InstallRoot = "$env:LOCALAPPDATA\Programs\textlt"
-$Archive = "$env:TEMP\textlt-windows-x64.zip"
-$Url = "https://github.com/ihor-liutak2/textlt/releases/download/$VERSION/textlt-windows-x64.zip"
-
-New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
-Invoke-WebRequest $Url -OutFile $Archive
-
-Remove-Item "$InstallRoot\*" -Recurse -Force -ErrorAction SilentlyContinue
-Expand-Archive -Force $Archive -DestinationPath $InstallRoot
-
-$Exe = Get-ChildItem $InstallRoot -Recurse -Filter textlt.exe | Select-Object -First 1
-
-if (-not $Exe) {
-    Write-Error "textlt.exe was not found in the extracted archive."
-    exit 1
-}
-
-$ExeDir = Split-Path $Exe.FullName
-
-@"
-@echo off
-cd /d "$ExeDir"
-"$($Exe.FullName)" %*
-"@ | Set-Content -Encoding ASCII "$InstallRoot\textlt.cmd"
-
-$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
-if ($UserPath -notlike "*$InstallRoot*") {
-    [Environment]::SetEnvironmentVariable("Path", "$UserPath;$InstallRoot", "User")
-}
-
-Write-Host "TextLT was installed to: $ExeDir"
-Write-Host "Open a new PowerShell window and run: textlt"`
-        },
-        source: {
-          title: "Windows build from source",
-          description: "Builds TextLT from the v0.9.1 tag with CMake. Use Developer PowerShell, Visual Studio Build Tools, or a configured MinGW environment.",
-          code: `$VERSION = "${release}"
-$Source = "$env:TEMP\textlt-$VERSION"
-$Prefix = "$env:LOCALAPPDATA\Programs\textlt-source"
-
-git clone --branch $VERSION --depth 1 https://github.com/ihor-liutak2/textlt.git $Source
-Set-Location $Source
-
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$Prefix"
-cmake --build build --config Release
-cmake --install build --config Release
-
-Write-Host "TextLT source build installed to: $Prefix"
-Write-Host "Run the binary from the install bin directory or add it to PATH."`
-        },
-        uninstall: {
-          title: "Windows uninstall",
-          description: "Removes the archive install folder and cleans the user PATH entry created by the installer.",
-          code: `$InstallRoot = "$env:LOCALAPPDATA\Programs\textlt"
-Remove-Item $InstallRoot -Recurse -Force -ErrorAction SilentlyContinue
-
-$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
-$NewPath = (($UserPath -split ';') | Where-Object { $_ -and ($_ -ne $InstallRoot) }) -join ';'
-[Environment]::SetEnvironmentVariable("Path", $NewPath, "User")
-
-Write-Host "TextLT was removed. Open a new PowerShell window to reload PATH."`
-        }
+        title: "Windows installer",
+        description: "Downloads the Windows PowerShell installer and runs it. The installer downloads the release archive, installs TextLT under LocalAppData, creates textlt.cmd, and adds it to the user PATH.",
+        code: `$Installer = "$env:TEMP\\install-textlt-windows.ps1"
+Invoke-WebRequest -Uri "${siteBase}/install-textlt-windows.ps1" -OutFile $Installer
+PowerShell -ExecutionPolicy Bypass -File $Installer`
       },
       macos: {
-        archive: {
-          title: "macOS archive install",
-          description: "macOS archives are experimental. Use this only if a macOS asset is attached to the v0.9.1 release; otherwise choose Build from source.",
-          code: `VERSION="${release}"
-ARCH="$(uname -m)"
-INSTALL_ROOT="$HOME/.local/share/textlt"
-BIN_DIR="$HOME/.local/bin"
-ARCHIVE="/tmp/textlt-macos-\${ARCH}.tar.gz"
-URL="https://github.com/ihor-liutak2/textlt/releases/download/${release}/textlt-macos-\${ARCH}.tar.gz"
-
-mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
-curl -L "$URL" -o "$ARCHIVE"
-rm -rf "$INSTALL_ROOT"/*
-tar -xzf "$ARCHIVE" -C "$INSTALL_ROOT"
-
-EXE="$(find "$INSTALL_ROOT" -type f -name textlt -perm -111 | head -n 1)"
-if [ -z "$EXE" ]; then
-  echo "textlt executable was not found. If the archive does not exist yet, use Build from source." >&2
-  exit 1
-fi
-
-ln -sf "$EXE" "$BIN_DIR/textlt"
-textlt --help`
-        },
-        source: {
-          title: "macOS build from source",
-          description: "Recommended for macOS while binary release archives are experimental. Requires Homebrew, CMake, and a working C++ compiler.",
-          code: `VERSION="${release}"
-brew install cmake git curl libarchive
-
-git clone --branch "$VERSION" --depth 1 https://github.com/ihor-liutak2/textlt.git "/tmp/textlt-$VERSION"
-cd "/tmp/textlt-$VERSION"
-
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/.local"
-cmake --build build -j"$(sysctl -n hw.ncpu)"
-cmake --install build
-
-mkdir -p "$HOME/.local/bin"
-export PATH="$HOME/.local/bin:$PATH"
-textlt --help`
-        },
-        uninstall: {
-          title: "macOS uninstall",
-          description: "Removes the user-level TextLT files installed by the archive or source script.",
-          code: `rm -rf "$HOME/.local/share/textlt"
-rm -f "$HOME/.local/bin/textlt"
-
-echo "TextLT user install removed."`
-        }
+        title: "macOS installer",
+        description: "Downloads the macOS installer script and runs it. The installer downloads the matching macOS release archive, installs TextLT into ~/.local/share/textlt/app, and creates ~/.local/bin/textlt.",
+        code: `INSTALLER="/tmp/install-textlt-macos.sh"
+curl -fsSL "${siteBase}/install-textlt-macos.sh" -o "$INSTALLER"
+bash "$INSTALLER"`
       }
     };
 
     let selectedPlatform = "linux";
-    let selectedType = "archive";
 
     const titleEl = document.getElementById("installTitle");
     const descEl = document.getElementById("installDescription");
@@ -735,7 +556,7 @@ echo "TextLT user install removed."`
     const copyBtn = document.getElementById("copyInstall");
 
     function updateInstallPanel() {
-      const item = scripts[selectedPlatform][selectedType];
+      const item = scripts[selectedPlatform];
       titleEl.textContent = item.title;
       descEl.textContent = item.description;
       codeEl.textContent = item.code;
@@ -743,21 +564,11 @@ echo "TextLT user install removed."`
       document.querySelectorAll(".platform-pill").forEach((button) => {
         button.classList.toggle("active", button.dataset.platform === selectedPlatform);
       });
-      document.querySelectorAll(".type-pill").forEach((button) => {
-        button.classList.toggle("active", button.dataset.type === selectedType);
-      });
     }
 
     document.querySelectorAll(".platform-pill").forEach((button) => {
       button.addEventListener("click", () => {
         selectedPlatform = button.dataset.platform;
-        updateInstallPanel();
-      });
-    });
-
-    document.querySelectorAll(".type-pill").forEach((button) => {
-      button.addEventListener("click", () => {
-        selectedType = button.dataset.type;
         updateInstallPanel();
       });
     });
