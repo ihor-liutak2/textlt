@@ -8,6 +8,13 @@
 
 namespace textlt {
 
+struct PiperRunOptions {
+    bool use_cuda = false;
+    double noise_scale = 0.667;
+    double sentence_silence_seconds = 0.15;
+    int speaker_id = 0;
+};
+
 class PiperManager {
 public:
     static std::filesystem::path UserDataDirectory();
@@ -17,6 +24,8 @@ public:
     static std::string RuntimeDownloadUrl();
     static std::filesystem::path RuntimeExecutablePath();
     static bool RuntimeInstalled();
+    static std::filesystem::path ServerExecutablePath();
+    static bool ServerInstalled();
     static std::filesystem::path AssetPathFromUrl(const std::string& url);
     static std::filesystem::path VoiceDirectory(const Json& voice);
     static std::filesystem::path VoiceModelPath(const Json& voice);
@@ -28,6 +37,11 @@ public:
     static bool RunToFile(const Json& voice,
                           const std::string& text,
                           const std::filesystem::path& output_wav,
+                          std::string* error);
+    static bool RunToFile(const Json& voice,
+                          const std::string& text,
+                          const std::filesystem::path& output_wav,
+                          const PiperRunOptions& options,
                           std::string* error);
 
     static std::string QuoteShellPath(const std::filesystem::path& path);

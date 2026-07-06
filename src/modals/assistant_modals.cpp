@@ -554,9 +554,11 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
 
     tts_tab_button_ = make_tab_button("TTS", 0);
     ai_tab_button_ = make_tab_button("AI", 1);
+    piper_server_tab_button_ = make_tab_button("Server", 2);
     tab_buttons_ = ftxui::Container::Horizontal({
         tts_tab_button_,
         ai_tab_button_,
+        piper_server_tab_button_,
     });
 
     ftxui::MenuOption language_option = ftxui::MenuOption::Vertical();
@@ -578,6 +580,43 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
     tts_voice_menu_ = ftxui::Menu(&tts_voice_labels_, &selected_tts_voice_, checkbox_option);
     ai_model_menu_ = ftxui::Menu(&ai_model_labels_, &selected_ai_model_, checkbox_option);
 
+    ftxui::InputOption server_input_option;
+    server_input_option.transform = [this](ftxui::InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        ftxui::Element input = state.element |
+            ftxui::color(theme.modal_input_fg);
+        if (state.focused) {
+            input = input | ftxui::bgcolor(theme.modal_selected_item_bg) |
+                ftxui::color(theme.modal_selected_item_fg);
+        }
+        return input;
+    };
+    piper_server_port_input_ = ftxui::Input(
+        &piper_server_port_, "59123", server_input_option);
+    piper_server_noise_scale_input_ = ftxui::Input(
+        &piper_server_noise_scale_, "0.667", server_input_option);
+    piper_server_sentence_silence_input_ = ftxui::Input(
+        &piper_server_sentence_silence_, "0.15", server_input_option);
+    if (piper_server_speaker_id_.empty()) {
+        piper_server_speaker_id_ = "0";
+    }
+    piper_server_speaker_id_input_ = ftxui::Input(
+        &piper_server_speaker_id_, "0", server_input_option);
+    ftxui::CheckboxOption server_checkbox_option = ftxui::CheckboxOption::Simple();
+    server_checkbox_option.transform = [this](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        ftxui::Element item = ftxui::text(
+            std::string(state.state ? "[X] " : "[ ] ") + state.label);
+        if (state.focused || state.active) {
+            return item |
+                ftxui::bgcolor(theme.modal_selected_item_bg) |
+                ftxui::color(theme.modal_selected_item_fg);
+        }
+        return item | ftxui::color(theme.modal_text_color);
+    };
+    piper_server_cuda_checkbox_ = ftxui::Checkbox(
+        "Use CUDA", &piper_server_use_cuda_, server_checkbox_option);
+
     fetch_tts_button_ = make_button("Fetch registry", [this] { FetchRegistries(); }, ButtonRole::Primary);
     tts_runtime_install_button_ =
         make_button("Install Piper", [this] { StartPiperRuntimeInstall(); });
@@ -590,6 +629,16 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
     tts_test_button_ = make_button("Test", [this] { TestTtsVoice(); }, ButtonRole::Primary);
     tts_test_popup_close_button_ =
         make_button("Close", [this] { CloseTtsTestPopup(); });
+    piper_server_refresh_button_ =
+        make_button("Refresh", [this] { RefreshPiperServerStatus(); }, ButtonRole::Primary);
+    piper_server_start_button_ =
+        make_button("Start server", [this] { StartPiperServer(); }, ButtonRole::Primary);
+    piper_server_reload_button_ =
+        make_button("Reload server", [this] { ReloadPiperServer(); }, ButtonRole::Primary);
+    piper_server_health_button_ =
+        make_button("Check status", [this] { CheckPiperServerHealth(); }, ButtonRole::Primary);
+    piper_server_shutdown_button_ =
+        make_button("Stop server", [this] { StopPiperServer(); }, ButtonRole::Danger);
     fetch_ai_button_ = make_button("Fetch registry", [this] { FetchRegistries(); }, ButtonRole::Primary);
     ai_runtime_download_button_ =
         make_button("Download AI runtime", [this] { StartAiRuntimeDownload(); });
@@ -638,6 +687,20 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
             }),
             ai_model_menu_,
         }),
+        ftxui::Container::Vertical({
+            ftxui::Container::Horizontal({
+                piper_server_refresh_button_,
+                piper_server_start_button_,
+                piper_server_reload_button_,
+                piper_server_health_button_,
+                piper_server_shutdown_button_,
+            }),
+            piper_server_port_input_,
+            piper_server_cuda_checkbox_,
+            piper_server_noise_scale_input_,
+            piper_server_sentence_silence_input_,
+            piper_server_speaker_id_input_,
+        }),
     }, &selected_tab_);
 
     auto primary_controls = ftxui::Container::Vertical({
@@ -677,7 +740,15 @@ AssistantSettingsModalContent::~AssistantSettingsModalContent() {
 
 ftxui::Element AssistantSettingsModalContent::Render() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    return (selected_tab_ == 0 ? RenderTtsTab(theme) : RenderAiTab(theme)) |
+    ftxui::Element body;
+    if (selected_tab_ == 0) {
+        body = RenderTtsTab(theme);
+    } else if (selected_tab_ == 1) {
+        body = RenderAiTab(theme);
+    } else {
+        body = RenderPiperServerTab(theme);
+    }
+    return body |
         ftxui::bgcolor(theme.modal_input_bg) |
         ftxui::color(theme.modal_input_fg);
 }
@@ -688,6 +759,8 @@ ftxui::Element AssistantSettingsModalContent::RenderTitle() {
         tts_tab_button_->Render(),
         text(" "),
         ai_tab_button_->Render(),
+        text(" "),
+        piper_server_tab_button_->Render(),
     });
 }
 
@@ -696,8 +769,11 @@ std::string AssistantSettingsModalContent::GetFooterText() const {
         std::lock_guard<std::mutex> lock(tts_download_mutex_);
         return tts_status_;
     }
-    std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-    return ai_status_;
+    if (selected_tab_ == 1) {
+        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
+        return ai_status_;
+    }
+    return piper_server_status_;
 }
 
 void AssistantSettingsModalContent::LoadRegistries() {

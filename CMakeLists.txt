@@ -133,6 +133,53 @@ else()
   )
 endif()
 
+# Embedded localhost HTTP server for the persistent Piper service.
+FetchContent_Declare(civetweb
+  GIT_REPOSITORY https://github.com/civetweb/civetweb.git
+  GIT_TAG v1.16
+)
+
+FetchContent_GetProperties(civetweb)
+if(NOT civetweb_POPULATED)
+  FetchContent_Populate(civetweb)
+endif()
+
+add_library(textlt_civetweb STATIC
+  ${civetweb_SOURCE_DIR}/src/civetweb.c
+)
+
+target_include_directories(textlt_civetweb PUBLIC
+  ${civetweb_SOURCE_DIR}/include
+)
+target_include_directories(textlt_civetweb PRIVATE
+  ${civetweb_SOURCE_DIR}/src
+)
+target_compile_definitions(textlt_civetweb PRIVATE
+  NO_SSL
+  NO_CGI
+  NO_FILES
+  NO_CACHING
+)
+target_link_libraries(textlt_civetweb PUBLIC Threads::Threads)
+if(WIN32)
+  target_compile_definitions(textlt_civetweb PRIVATE
+    NOMINMAX
+    WIN32_LEAN_AND_MEAN
+    _CRT_SECURE_NO_WARNINGS
+  )
+  target_link_libraries(textlt_civetweb PUBLIC ws2_32)
+endif()
+
+add_executable(textlt-piper-server
+  tools/piper_server/textlt_piper_server.cpp
+)
+target_include_directories(textlt-piper-server PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+)
+target_link_libraries(textlt-piper-server PRIVATE textlt_civetweb)
+
+
+
 add_executable(textlt
   src/app.cpp
   src/app_command_registry.cpp
@@ -175,6 +222,7 @@ add_executable(textlt
   src/modals/assistant_modals_ai.cpp
   src/modals/assistant_download_progress.cpp
   src/modals/assistant_modals_tts.cpp
+  src/modals/assistant_modals_server.cpp
   src/modals/help_dialog.cpp
   src/modals/modal_ai.cpp
   src/modals/modal_git.cpp
@@ -250,9 +298,11 @@ target_link_libraries(textlt PRIVATE
 )
 
 install(TARGETS textlt RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS textlt-piper-server RUNTIME DESTINATION ${CMAKE_INSTALL_DATADIR}/textlt/piper/bin)
 if(UNIX)
   install(PROGRAMS
     scripts/textlt-install-runtime-deps.sh
+    scripts/textlt-install-piper-server.sh
     DESTINATION ${CMAKE_INSTALL_BINDIR}
   )
 endif()

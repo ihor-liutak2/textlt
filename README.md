@@ -192,6 +192,14 @@ chmod +x "$HOME/.local/bin/textlt"
 grep -qxF 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
 ```
 
+Install the optional local Piper server used by Assistant → Server:
+
+```bash
+./scripts/textlt-install-piper-server.sh build
+```
+
+This copies `textlt-piper-server` to `$HOME/.local/share/textlt/piper/bin/`.
+
 ### Manual Compilation
 
 If you prefer building manually, use CMake directly from the repository root:

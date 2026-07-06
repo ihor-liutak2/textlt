@@ -15,6 +15,8 @@
 #include "json_utils.hpp"
 #include "modal_interface.hpp"
 #include "modal_window.hpp"
+#include "piper_manager.hpp"
+#include "remote/remote_http_client.hpp"
 #include "theme.hpp"
 
 namespace textlt {
@@ -65,7 +67,7 @@ public:
     ftxui::Component GetMainComponent() override { return container_; }
     std::string GetTitle() override { return "Assistant Settings"; }
     ftxui::Element RenderTitle() override;
-    ModalSizePreference GetModalSizePreference() const override { return {80, 28}; }
+    ModalSizePreference GetModalSizePreference() const override { return {90, 32}; }
     ModalFrameStyle GetModalFrameStyle() const override {
         return ModalFrameStyle::TitleInBorder;
     }
@@ -95,6 +97,21 @@ private:
     void ConfirmTtsVoiceDelete();
     void CancelTtsVoiceDelete();
     void TestTtsVoice();
+    void RefreshPiperServerStatus();
+    void StartPiperServer();
+    void StopPiperServer();
+    void ReloadPiperServer();
+    void CheckPiperServerHealth();
+    void ApplyPiperServerStatusResponse(const RemoteHttpResponse& response,
+                                        int port,
+                                        const std::string& offline_status);
+    bool ReadPiperServerSettings(int* port,
+                                 PiperRunOptions* options,
+                                 std::string* error) const;
+    bool GeneratePiperTestAudio(const Json& voice,
+                                const std::string& text,
+                                const std::filesystem::path& output_wav,
+                                std::string* error);
     void ShowTtsTestPopup(std::string text);
     void ApplyTtsDownloadCompletion();
     void RequestRedraw() const;
@@ -102,6 +119,7 @@ private:
     ftxui::Element RenderTtsTab(const Theme& theme);
     ftxui::Element RenderTtsTestPopup(const Theme& theme) const;
     ftxui::Element RenderAiTab(const Theme& theme);
+    ftxui::Element RenderPiperServerTab(const Theme& theme);
 
     const Theme* theme_ = nullptr;
     std::function<void()> request_redraw_;
@@ -114,6 +132,17 @@ private:
     int selected_tts_voice_ = 0;
 
     std::string ai_status_ = "Registry not loaded";
+    std::string piper_server_status_ = "Press Start server or Check status";
+    std::string piper_server_running_ = "Stopped";
+    std::string piper_server_uptime_ = "-";
+    std::string piper_server_pid_ = "-";
+    std::string piper_server_requests_ = "-";
+    std::string piper_server_backend_ = "not checked";
+    std::string piper_server_port_;
+    std::string piper_server_noise_scale_ = "0.667";
+    std::string piper_server_sentence_silence_ = "0.15";
+    std::string piper_server_speaker_id_ = "0";
+    bool piper_server_use_cuda_ = false;
     std::vector<std::string> ai_model_labels_ = {"No models"};
     int selected_ai_model_ = 0;
     std::string ai_runtime_download_url_;
@@ -152,10 +181,16 @@ private:
 
     ftxui::Component tts_tab_button_;
     ftxui::Component ai_tab_button_;
+    ftxui::Component piper_server_tab_button_;
     ftxui::Component tab_buttons_;
     ftxui::Component tts_language_menu_;
     ftxui::Component tts_voice_menu_;
     ftxui::Component ai_model_menu_;
+    ftxui::Component piper_server_port_input_;
+    ftxui::Component piper_server_noise_scale_input_;
+    ftxui::Component piper_server_sentence_silence_input_;
+    ftxui::Component piper_server_speaker_id_input_;
+    ftxui::Component piper_server_cuda_checkbox_;
     ftxui::Component fetch_tts_button_;
     ftxui::Component tts_runtime_install_button_;
     ftxui::Component tts_download_button_;
@@ -164,6 +199,11 @@ private:
     ftxui::Component tts_cancel_delete_button_;
     ftxui::Component tts_test_button_;
     ftxui::Component tts_test_popup_close_button_;
+    ftxui::Component piper_server_refresh_button_;
+    ftxui::Component piper_server_start_button_;
+    ftxui::Component piper_server_reload_button_;
+    ftxui::Component piper_server_health_button_;
+    ftxui::Component piper_server_shutdown_button_;
     ftxui::Component fetch_ai_button_;
     ftxui::Component ai_runtime_download_button_;
     ftxui::Component ai_runtime_delete_button_;

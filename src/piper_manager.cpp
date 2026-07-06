@@ -281,6 +281,39 @@ bool PiperManager::RuntimeInstalled() {
     return !RuntimeExecutablePath().empty();
 }
 
+std::filesystem::path PiperManager::ServerExecutablePath() {
+    const std::filesystem::path runtime_directory = RuntimeDirectory();
+    if (runtime_directory.empty()) {
+        return {};
+    }
+    std::error_code error;
+    if (!std::filesystem::exists(runtime_directory, error)) {
+        return {};
+    }
+
+#ifdef _WIN32
+    constexpr const char* binary_name = "textlt-piper-server.exe";
+#else
+    constexpr const char* binary_name = "textlt-piper-server";
+#endif
+
+    std::filesystem::recursive_directory_iterator iterator(runtime_directory, error);
+    std::filesystem::recursive_directory_iterator end;
+    while (!error && iterator != end) {
+        const std::filesystem::directory_entry& entry = *iterator;
+        if (entry.is_regular_file(error) && entry.path().filename() == binary_name) {
+            return entry.path();
+        }
+        error.clear();
+        iterator.increment(error);
+    }
+    return {};
+}
+
+bool PiperManager::ServerInstalled() {
+    return !ServerExecutablePath().empty();
+}
+
 std::filesystem::path PiperManager::AssetPathFromUrl(const std::string& url) {
     return AssetPathFromUrlImpl(url);
 }
@@ -355,6 +388,14 @@ bool PiperManager::RunToFile(const Json& voice,
                              const std::string& text,
                              const std::filesystem::path& output_wav,
                              std::string* error) {
+    return RunToFile(voice, text, output_wav, PiperRunOptions{}, error);
+}
+
+bool PiperManager::RunToFile(const Json& voice,
+                             const std::string& text,
+                             const std::filesystem::path& output_wav,
+                             const PiperRunOptions& options,
+                             std::string* error) {
     const std::filesystem::path executable = RuntimeExecutablePath();
     if (executable.empty()) {
         if (error) {
@@ -393,6 +434,10 @@ bool PiperManager::RunToFile(const Json& voice,
         " | " + QuoteShellPath(executable) +
         " --model " + QuoteShellPath(model) +
         " --config " + QuoteShellPath(config) +
+        (options.use_cuda ? " --cuda" : "") +
+        " --noise-scale " + std::to_string(options.noise_scale) +
+        " --sentence-silence " + std::to_string(options.sentence_silence_seconds) +
+        (options.speaker_id > 0 ? " --speaker " + std::to_string(options.speaker_id) : "") +
         " --output_file " + QuoteShellPath(output_wav) +
         " > " + QuoteShellPath(log_path) +
         " 2>&1";
@@ -401,6 +446,10 @@ bool PiperManager::RunToFile(const Json& voice,
         QuoteShellPath(executable) +
         " --model " + QuoteShellPath(model) +
         " --config " + QuoteShellPath(config) +
+        (options.use_cuda ? " --cuda" : "") +
+        " --noise-scale " + std::to_string(options.noise_scale) +
+        " --sentence-silence " + std::to_string(options.sentence_silence_seconds) +
+        (options.speaker_id > 0 ? " --speaker " + std::to_string(options.speaker_id) : "") +
         " --output_file " + QuoteShellPath(output_wav) +
         " < " + QuoteShellPath(input_path) +
         " > " + QuoteShellPath(log_path) +

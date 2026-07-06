@@ -769,7 +769,7 @@ void AssistantSettingsModalContent::TestTtsVoice() {
         assistant_modal_detail::EnsureDirectory(test_directory);
         const std::filesystem::path wav_path = test_directory / "piper_test.wav";
         std::string error_message;
-        const bool generated = PiperManager::RunToFile(
+        const bool generated = GeneratePiperTestAudio(
             voice,
             test_text,
             wav_path,
