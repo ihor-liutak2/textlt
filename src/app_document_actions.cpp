@@ -5,7 +5,7 @@
 #include <string>
 #include <utility>
 
-#include "document.hpp"
+#include "editor/document_session.hpp"
 #include "ftxui/component/event.hpp"
 
 namespace textlt {
@@ -121,36 +121,36 @@ void TextltApp::RefreshProjectSidebar() {
 }
 
 
-std::shared_ptr<Document> TextltApp::ActiveDocument() const {
-    const auto document = document_workspace_.ActiveDocument();
+std::shared_ptr<DocumentSession> TextltApp::ActiveDocumentSession() const {
+    const auto document = document_workspace_.ActiveDocumentSession();
     if (document) {
         return document;
     }
     const auto editor = ActiveEditor();
-    return editor ? editor->GetDocument() : nullptr;
+    return editor ? editor->GetDocumentSession() : nullptr;
 }
 
 
-void TextltApp::AddOpenDocument(std::shared_ptr<Document> doc) {
+void TextltApp::AddOpenDocumentSession(std::shared_ptr<DocumentSession> doc) {
     if (!doc) {
         return;
     }
 
-    document_file_controller_.AddDocument(std::move(doc));
+    document_file_controller_.AddDocumentSession(std::move(doc));
     BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
 }
 
 
-void TextltApp::EnsureOneOpenDocument() {
-    document_file_controller_.EnsureOneDocument(VisibleEditorPaneCount());
+void TextltApp::EnsureOneOpenDocumentSession() {
+    document_file_controller_.EnsureOneDocumentSession(VisibleEditorPaneCount());
     BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
 }
 
 
-void TextltApp::RemoveOpenDocument(size_t index) {
-    document_file_controller_.RemoveDocument(index, VisibleEditorPaneCount());
+void TextltApp::RemoveOpenDocumentSession(size_t index) {
+    document_file_controller_.RemoveDocumentSession(index, VisibleEditorPaneCount());
     BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
 }
@@ -158,7 +158,7 @@ void TextltApp::RemoveOpenDocument(size_t index) {
 
 void TextltApp::CloseCurrentFile() {
     std::string closed_name;
-    document_file_controller_.CloseActiveDocument(VisibleEditorPaneCount(), closed_name);
+    document_file_controller_.CloseActiveDocumentSession(VisibleEditorPaneCount(), closed_name);
     BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
     UpdateFileMenuLabels();
@@ -194,8 +194,8 @@ void TextltApp::RestoreOpenedDocuments() {
 }
 
 
-void TextltApp::ActivateOpenDocument(size_t index) {
-    if (!document_file_controller_.ActivateDocument(index, VisibleEditorPaneCount())) {
+void TextltApp::ActivateOpenDocumentSession(size_t index) {
+    if (!document_file_controller_.ActivateDocumentSession(index, VisibleEditorPaneCount())) {
         return;
     }
 

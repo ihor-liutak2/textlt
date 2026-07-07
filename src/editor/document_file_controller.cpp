@@ -8,7 +8,7 @@
 #include <system_error>
 #include <utility>
 
-#include "document.hpp"
+#include "editor/document_session.hpp"
 #include "json_utils.hpp"
 
 namespace textlt {
@@ -44,8 +44,8 @@ DocumentFileController::DocumentFileController(
     LoadState();
 }
 
-std::shared_ptr<Document> DocumentFileController::ActiveDocument() const {
-    return workspace_.ActiveDocument();
+std::shared_ptr<DocumentSession> DocumentFileController::ActiveDocumentSession() const {
+    return workspace_.ActiveDocumentSession();
 }
 
 DocumentSession* DocumentFileController::ActiveSession() {
@@ -56,25 +56,25 @@ const DocumentSession* DocumentFileController::ActiveSession() const {
     return workspace_.ActiveSession();
 }
 
-size_t DocumentFileController::AddDocument(std::shared_ptr<Document> document) {
+size_t DocumentFileController::AddDocumentSession(std::shared_ptr<DocumentSession> document) {
     return AddSession(std::move(document));
 }
 
-size_t DocumentFileController::AddSession(std::shared_ptr<Document> document) {
-    const size_t session_index = workspace_.AddSessionDocument(std::move(document));
+size_t DocumentFileController::AddSession(std::shared_ptr<DocumentSession> document) {
+    const size_t session_index = workspace_.AddSession(std::move(document));
     workspace_.AssignSessionToActivePane(session_index);
     return session_index;
 }
 
-size_t DocumentFileController::NewDocument() {
+size_t DocumentFileController::NewDocumentSession() {
     PersistActiveFavoriteCursor();
-    const size_t session_index = workspace_.AddUntitledDocument();
+    const size_t session_index = workspace_.AddUntitledDocumentSession();
     workspace_.AssignSessionToActivePane(session_index);
     PersistOpenedDocuments();
     return session_index;
 }
 
-void DocumentFileController::EnsureOneDocument(size_t visible_pane_count) {
+void DocumentFileController::EnsureOneDocumentSession(size_t visible_pane_count) {
     if (!workspace_.Empty()) {
         workspace_.ClampActiveSessionIndex();
         workspace_.AssignSessionToActivePane(workspace_.ActiveSessionIndex());
@@ -82,23 +82,23 @@ void DocumentFileController::EnsureOneDocument(size_t visible_pane_count) {
         return;
     }
 
-    const size_t session_index = workspace_.AddUntitledDocument();
+    const size_t session_index = workspace_.AddUntitledDocumentSession();
     workspace_.AssignSessionToActivePane(session_index);
     workspace_.SyncEditorPaneDocuments(visible_pane_count);
 }
 
-bool DocumentFileController::RemoveDocument(size_t index, size_t visible_pane_count) {
+bool DocumentFileController::RemoveDocumentSession(size_t index, size_t visible_pane_count) {
     if (!workspace_.HasSessionAt(index)) {
         return false;
     }
 
-    workspace_.RemoveDocument(index);
-    EnsureOneDocument(visible_pane_count);
+    workspace_.RemoveDocumentSession(index);
+    EnsureOneDocumentSession(visible_pane_count);
     workspace_.SyncEditorPaneDocuments(visible_pane_count);
     return true;
 }
 
-bool DocumentFileController::ActivateDocument(size_t index, size_t visible_pane_count) {
+bool DocumentFileController::ActivateDocumentSession(size_t index, size_t visible_pane_count) {
     DocumentSession* session = workspace_.SessionAt(index);
     if (!session) {
         return false;
@@ -112,7 +112,7 @@ bool DocumentFileController::ActivateDocument(size_t index, size_t visible_pane_
     return true;
 }
 
-bool DocumentFileController::OpenDocument(const std::filesystem::path& path, std::string& error) {
+bool DocumentFileController::OpenDocumentSession(const std::filesystem::path& path, std::string& error) {
     PersistActiveFavoriteCursor();
 
     const std::filesystem::path normalized_path = NormalizeDocumentPath(path);
@@ -142,15 +142,15 @@ bool DocumentFileController::OpenDocument(const std::filesystem::path& path, std
     return true;
 }
 
-bool DocumentFileController::OpenOrCreateDocument(
+bool DocumentFileController::OpenOrCreateDocumentSession(
     const std::filesystem::path& path,
     std::string& error) {
     if (std::filesystem::exists(path)) {
-        return OpenDocument(path, error);
+        return OpenDocumentSession(path, error);
     }
 
     PersistActiveFavoriteCursor();
-    auto document = std::make_shared<Document>();
+    auto document = std::make_shared<DocumentSession>();
     document->Reset();
     document->SetPath(path);
     AddSession(document);
@@ -158,8 +158,8 @@ bool DocumentFileController::OpenOrCreateDocument(
     return true;
 }
 
-bool DocumentFileController::SaveActiveDocument(std::string& error) {
-    const auto document = workspace_.ActiveDocument();
+bool DocumentFileController::SaveActiveDocumentSession(std::string& error) {
+    const auto document = workspace_.ActiveDocumentSession();
     if (!document) {
         error = "No active document.";
         return false;
@@ -184,7 +184,7 @@ bool DocumentFileController::SaveActiveDocument(std::string& error) {
 bool DocumentFileController::SaveActiveDocumentAs(
     const std::filesystem::path& path,
     std::string& error) {
-    const auto document = workspace_.ActiveDocument();
+    const auto document = workspace_.ActiveDocumentSession();
     if (!document) {
         error = "No active document.";
         return false;
@@ -233,25 +233,25 @@ DocumentFileController::SaveAllResult DocumentFileController::SaveAllDirtyDocume
     return result;
 }
 
-bool DocumentFileController::CloseActiveDocument(
+bool DocumentFileController::CloseActiveDocumentSession(
     size_t visible_pane_count,
     std::string& closed_name) {
     if (workspace_.Empty()) {
-        EnsureOneDocument(visible_pane_count);
+        EnsureOneDocumentSession(visible_pane_count);
         closed_name.clear();
         return false;
     }
 
-    const auto closed_document = workspace_.ActiveDocument();
+    const auto closed_document = workspace_.ActiveDocumentSession();
     closed_name = DisplayName(closed_document);
-    RemoveDocument(workspace_.ActiveSessionIndex(), visible_pane_count);
+    RemoveDocumentSession(workspace_.ActiveSessionIndex(), visible_pane_count);
     PersistOpenedDocuments();
     return true;
 }
 
 void DocumentFileController::CloseAllDocuments(size_t visible_pane_count) {
     workspace_.ClearDocuments();
-    EnsureOneDocument(visible_pane_count);
+    EnsureOneDocumentSession(visible_pane_count);
     PersistOpenedDocuments();
 }
 
@@ -267,7 +267,7 @@ bool DocumentFileController::RestoreOpenedDocuments(size_t visible_pane_count) {
 
     workspace_.ClearDocuments();
     for (const OpenedFileState& entry : opened_config_.files) {
-        AddRestoredDocument(entry);
+        AddRestoredDocumentSession(entry);
     }
 
     if (workspace_.Empty()) {
@@ -380,7 +380,7 @@ void DocumentFileController::PersistActiveFavoriteCursor() {
 
 void DocumentFileController::RestoreFavoriteCursor(const std::filesystem::path& path) {
     const FavoriteFileEntry* favorite = FindFavorite(path);
-    const auto document = workspace_.ActiveDocument();
+    const auto document = workspace_.ActiveDocumentSession();
     if (!favorite || !document) {
         return;
     }
@@ -464,9 +464,9 @@ std::filesystem::path DocumentFileController::StatePath() const {
     return state_path_;
 }
 
-void DocumentFileController::AddRestoredDocument(const OpenedFileState& entry) {
+void DocumentFileController::AddRestoredDocumentSession(const OpenedFileState& entry) {
     if (entry.memory_only) {
-        auto document = std::make_shared<Document>();
+        auto document = std::make_shared<DocumentSession>();
         document->Reset();
         document->LoadContent(entry.content, "Untitled");
         document->is_dirty = true;
@@ -803,7 +803,7 @@ DocumentFileController::RecentFileEntry DocumentFileController::MakeRecentEntry(
     return entry;
 }
 
-std::string DocumentFileController::DisplayName(const std::shared_ptr<Document>& document) {
+std::string DocumentFileController::DisplayName(const std::shared_ptr<DocumentSession>& document) {
     if (!document) {
         return {};
     }

@@ -1,10 +1,10 @@
-#include "document.hpp"
+#include "editor/document_session.hpp"
 
 #include <algorithm>
 
 namespace textlt {
 
-bool Document::ConvertTabsToSpaces(size_t tab_size) {
+bool DocumentSession::ConvertTabsToSpaces(size_t tab_size) {
     EnsureValidBuffer();
     bool has_tabs = false;
     for (const std::string& line : lines) {
@@ -45,7 +45,7 @@ bool Document::ConvertTabsToSpaces(size_t tab_size) {
     return true;
 }
 
-bool Document::Convert4To2Spaces() {
+bool DocumentSession::Convert4To2Spaces() {
     EnsureValidBuffer();
     const HistoryManager::State before = CurrentState();
     transform::TransformResult result = transform::Convert4To2Spaces(
@@ -65,7 +65,7 @@ bool Document::Convert4To2Spaces() {
     return true;
 }
 
-bool Document::Convert2To4Spaces() {
+bool DocumentSession::Convert2To4Spaces() {
     EnsureValidBuffer();
     const HistoryManager::State before = CurrentState();
     transform::TransformResult result = transform::Convert2To4Spaces(
@@ -85,7 +85,7 @@ bool Document::Convert2To4Spaces() {
     return true;
 }
 
-bool Document::IndentLines(size_t tab_size) {
+bool DocumentSession::IndentLines(size_t tab_size) {
     EnsureValidBuffer();
     const HistoryManager::State before = CurrentState();
     transform::TransformResult result = transform::IndentLines(
@@ -106,7 +106,7 @@ bool Document::IndentLines(size_t tab_size) {
     return true;
 }
 
-bool Document::OutdentLines(size_t tab_size) {
+bool DocumentSession::OutdentLines(size_t tab_size) {
     EnsureValidBuffer();
     const HistoryManager::State before = CurrentState();
     transform::TransformResult result = transform::OutdentLines(
@@ -127,7 +127,7 @@ bool Document::OutdentLines(size_t tab_size) {
     return true;
 }
 
-bool Document::ToggleCase() {
+bool DocumentSession::ToggleCase() {
     EnsureValidBuffer();
     const HistoryManager::State before = CurrentState();
     transform::TransformResult result = transform::ToggleCase(

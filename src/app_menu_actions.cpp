@@ -3,7 +3,7 @@
 #include <memory>
 #include <string>
 
-#include "document.hpp"
+#include "editor/document_session.hpp"
 #include "ftxui/component/event.hpp"
 
 namespace textlt {
@@ -68,7 +68,7 @@ void TextltApp::RunDropdownAction(int menu_index, int item_index) {
 }
     
 void TextltApp::CommandFileNew() {
-    document_file_controller_.NewDocument();
+    document_file_controller_.NewDocumentSession();
     BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
     active_action_ = "New file";

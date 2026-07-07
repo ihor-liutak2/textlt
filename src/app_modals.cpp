@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "app_resources.hpp"
-#include "document.hpp"
+#include "editor/document_session.hpp"
 #include "ftxui/component/event.hpp"
 #include "theme.hpp"
 
@@ -332,7 +332,7 @@ bool TextltApp::GetTextProcessorTargetText(
     std::string& text,
     std::string& error) {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-    const auto document = editor_ptr ? editor_ptr->GetDocument() : document_workspace_.ActiveDocument();
+    const auto document = editor_ptr ? editor_ptr->GetDocumentSession() : document_workspace_.ActiveDocumentSession();
     if (!document) {
         error = "No active document.";
         active_action_ = error;
@@ -341,7 +341,7 @@ bool TextltApp::GetTextProcessorTargetText(
     }
 
     auto& session = document->Session();
-    if (!session.GetTextProcessorTargetText(document->Buffer(), whole_document, text, error)) {
+    if (!session.GetTextProcessorTargetText(whole_document, text, error)) {
         active_action_ = error;
         screen_.PostEvent(ftxui::Event::Custom);
         return false;
@@ -355,7 +355,7 @@ bool TextltApp::ReplaceTextProcessorTargetText(
     const std::string& text,
     std::string& error) {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-    const auto document = editor_ptr ? editor_ptr->GetDocument() : document_workspace_.ActiveDocument();
+    const auto document = editor_ptr ? editor_ptr->GetDocumentSession() : document_workspace_.ActiveDocumentSession();
     if (!document) {
         error = "No active document.";
         active_action_ = error;
@@ -364,19 +364,14 @@ bool TextltApp::ReplaceTextProcessorTargetText(
     }
 
     auto& session = document->Session();
-    if (!session.ReplaceTextProcessorTargetText(
-            document->Buffer(),
-            document->history,
-            whole_document,
-            text,
-            error)) {
+    if (!session.ReplaceTextProcessorTargetText(whole_document, text, error)) {
         active_action_ = error;
         screen_.PostEvent(ftxui::Event::Custom);
         return false;
     }
 
     if (editor_ptr) {
-        editor_ptr->SetDocument(document);
+        editor_ptr->SetDocumentSession(document);
     }
 
     active_action_ = whole_document
@@ -465,7 +460,7 @@ bool TextltApp::OpenGitCompareDocuments(
     }
 
     auto make_git_doc = [](const std::string& title, const std::string& content) {
-        auto doc = std::make_shared<Document>();
+        auto doc = std::make_shared<DocumentSession>();
         doc->LoadContent(content, title.empty() ? "Git compare" : title);
         doc->read_only = true;
         doc->temporary = true;
@@ -474,12 +469,12 @@ bool TextltApp::OpenGitCompareDocuments(
     };
 
     auto left_doc = make_git_doc(left_title, left_content);
-    const size_t left_index = document_workspace_.AddSessionDocument(left_doc);
+    const size_t left_index = document_workspace_.AddSession(left_doc);
 
     size_t right_index = left_index;
     if (!right_title.empty()) {
         auto right_doc = make_git_doc(right_title, right_content);
-        right_index = document_workspace_.AddSessionDocument(right_doc);
+        right_index = document_workspace_.AddSession(right_doc);
     }
 
     if (right_title.empty()) {

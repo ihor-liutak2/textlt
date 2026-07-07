@@ -459,9 +459,9 @@ bool MoveOne(
 
 } // namespace
 
-std::shared_ptr<Document> FileManager::Open(const std::filesystem::path& path, std::string& error) {
+std::shared_ptr<DocumentSession> FileManager::Open(const std::filesystem::path& path, std::string& error) {
     try {
-        auto doc = std::make_shared<Document>(path);
+        auto doc = std::make_shared<DocumentSession>(path);
         doc->LoadContent(ReadFileContent(path), path);
         return doc;
     } catch (const std::exception& e) {
@@ -470,7 +470,7 @@ std::shared_ptr<Document> FileManager::Open(const std::filesystem::path& path, s
     }
 }
 
-bool FileManager::Save(std::shared_ptr<Document> doc, std::string& error) {
+bool FileManager::Save(std::shared_ptr<DocumentSession> doc, std::string& error) {
     if (!doc) {
         error = "Document is null.";
         return false;
@@ -480,7 +480,7 @@ bool FileManager::Save(std::shared_ptr<Document> doc, std::string& error) {
 }
 
 bool FileManager::SaveAs(
-    std::shared_ptr<Document> doc,
+    std::shared_ptr<DocumentSession> doc,
     const std::filesystem::path& path,
     std::string& error) {
     if (!doc) {

@@ -1,10 +1,10 @@
-#include "document.hpp"
+#include "editor/document_session.hpp"
 
 #include <algorithm>
 
 namespace textlt {
 
-void Document::LoadContent(const std::string& content, std::filesystem::path p) {
+void DocumentSession::LoadContent(const std::string& content, std::filesystem::path p) {
     size_t lf_count = 0;
     size_t crlf_count = 0;
     for (size_t i = 0; i < content.size(); ++i) {
@@ -26,31 +26,25 @@ void Document::LoadContent(const std::string& content, std::filesystem::path p) 
     EnsureValidBuffer();
 }
 
-std::string Document::ToContent() const {
+std::string DocumentSession::ToContent() const {
     const std::string ending = line_ending == LineEnding::CRLF ? "\r\n" : "\n";
     return buffer.ToText(ending);
 }
 
-std::string Document::LineEndingLabel() const {
-    return session.LineEndingLabel();
-}
 
-std::string Document::CurrentFilePath() const {
-    return session.CurrentFilePath();
-}
 
-size_t Document::LineCount() const {
+size_t DocumentSession::LineCount() const {
     return lines.size();
 }
 
-std::string Document::CurrentLineText() const {
+std::string DocumentSession::CurrentLineText() const {
     if (cursor_row < lines.size()) {
         return lines[cursor_row];
     }
     return "";
 }
 
-std::string Document::TextFromCursor() const {
+std::string DocumentSession::TextFromCursor() const {
     if (lines.empty()) {
         return "";
     }
@@ -65,8 +59,5 @@ std::string Document::TextFromCursor() const {
     return text;
 }
 
-std::string Document::CommentPrefix() const {
-    return session.CommentPrefix();
-}
 
 } // namespace textlt

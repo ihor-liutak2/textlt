@@ -12,7 +12,7 @@
 #include "editor_input_controller.hpp"
 #include "history_manager.hpp"
 #include "theme.hpp"
-#include "document.hpp"
+#include "editor/document_session.hpp"
 
 namespace textlt {
 
@@ -29,8 +29,8 @@ namespace textlt {
         bool OnEvent(ftxui::Event event) override;
         bool Focusable() const override;
 
-        void SetDocument(std::shared_ptr<Document> doc);
-        std::shared_ptr<Document> GetDocument() const;
+        void SetDocumentSession(std::shared_ptr<DocumentSession> doc);
+        std::shared_ptr<DocumentSession> GetDocumentSession() const;
 
         void SaveToFile(const std::string& path);
         void LoadFromFile(const std::string& path);
@@ -133,7 +133,7 @@ namespace textlt {
         std::string GetCommentPrefix() const;
 
         // The shared reference to the active document
-        std::shared_ptr<Document> doc_;
+        std::shared_ptr<DocumentSession> doc_;
 
         // View-specific state
         EditorInputController input_controller_;

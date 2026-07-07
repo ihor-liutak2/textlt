@@ -1,4 +1,4 @@
-#include "document.hpp"
+#include "editor/document_session.hpp"
 
 #include <algorithm>
 #include <fstream>
@@ -8,7 +8,7 @@
 
 namespace textlt {
 
-bool Document::InsertText(const std::string& text) {
+bool DocumentSession::InsertText(const std::string& text) {
     if (text.empty()) {
         return false;
     }
@@ -53,7 +53,7 @@ bool Document::InsertText(const std::string& text) {
     return true;
 }
 
-bool Document::InsertCharacter(const std::string& input) {
+bool DocumentSession::InsertCharacter(const std::string& input) {
     if (input.empty()) {
         return false;
     }
@@ -64,7 +64,7 @@ bool Document::InsertCharacter(const std::string& input) {
     return true;
 }
 
-bool Document::InsertPairedCharacter(char opening, char closing) {
+bool DocumentSession::InsertPairedCharacter(char opening, char closing) {
     EnsureValidBuffer();
     EndTypingGroup();
     SaveSnapshot();
@@ -102,7 +102,7 @@ bool Document::InsertPairedCharacter(char opening, char closing) {
     return true;
 }
 
-bool Document::Backspace() {
+bool DocumentSession::Backspace() {
     EnsureValidBuffer();
     if (cursor_col > 0) {
         SaveSnapshot();
@@ -125,7 +125,7 @@ bool Document::Backspace() {
     return false;
 }
 
-bool Document::DeleteForward() {
+bool DocumentSession::DeleteForward() {
     EnsureValidBuffer();
     if (cursor_col < lines[cursor_row].size()) {
         SaveSnapshot();
@@ -145,7 +145,7 @@ bool Document::DeleteForward() {
     return false;
 }
 
-bool Document::DeleteWordBackward() {
+bool DocumentSession::DeleteWordBackward() {
     EnsureValidBuffer();
     if (cursor_col == 0) {
         if (cursor_row == 0) return false;
@@ -167,7 +167,7 @@ bool Document::DeleteWordBackward() {
     return true;
 }
 
-bool Document::DeleteWordForward() {
+bool DocumentSession::DeleteWordForward() {
     EnsureValidBuffer();
     if (cursor_col >= lines[cursor_row].size()) {
         if (cursor_row + 1 >= lines.size()) return false;
@@ -186,7 +186,7 @@ bool Document::DeleteWordForward() {
     return true;
 }
 
-bool Document::DeleteCurrentLine() {
+bool DocumentSession::DeleteCurrentLine() {
     EnsureValidBuffer();
     if (cursor_row >= lines.size()) {
         return false;
@@ -204,7 +204,7 @@ bool Document::DeleteCurrentLine() {
     return true;
 }
 
-bool Document::MoveLineUp() {
+bool DocumentSession::MoveLineUp() {
     EnsureValidBuffer();
     if (lines.size() < 2 || cursor_row == 0) return false;
     SaveSnapshot();
@@ -215,7 +215,7 @@ bool Document::MoveLineUp() {
     return true;
 }
 
-bool Document::MoveLinesUp() {
+bool DocumentSession::MoveLinesUp() {
     EnsureValidBuffer();
     if (lines.size() < 2) return false;
 
@@ -249,7 +249,7 @@ bool Document::MoveLinesUp() {
     return true;
 }
 
-bool Document::MoveLineDown() {
+bool DocumentSession::MoveLineDown() {
     EnsureValidBuffer();
     if (lines.size() < 2 || cursor_row + 1 >= lines.size()) return false;
     SaveSnapshot();
@@ -260,7 +260,7 @@ bool Document::MoveLineDown() {
     return true;
 }
 
-bool Document::MoveLinesDown() {
+bool DocumentSession::MoveLinesDown() {
     EnsureValidBuffer();
     if (lines.size() < 2) return false;
 
@@ -294,7 +294,7 @@ bool Document::MoveLinesDown() {
     return true;
 }
 
-bool Document::DuplicateLine() {
+bool DocumentSession::DuplicateLine() {
     EnsureValidBuffer();
     SaveSnapshot();
     lines.insert(lines.begin() + static_cast<std::ptrdiff_t>(cursor_row + 1), lines[cursor_row]);
@@ -304,7 +304,7 @@ bool Document::DuplicateLine() {
     return true;
 }
 
-bool Document::DuplicateLines() {
+bool DocumentSession::DuplicateLines() {
     EnsureValidBuffer();
 
     if (!HasSelection()) {

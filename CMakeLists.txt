@@ -215,6 +215,12 @@ add_executable(textlt
   src/editor_viewport.cpp
   src/editor/text_buffer.cpp
   src/editor/document_session.cpp
+  src/editor/document_session_content.cpp
+  src/editor/document_session_cursor.cpp
+  src/editor/document_session_editing.cpp
+  src/editor/document_session_history.cpp
+  src/editor/document_session_selection.cpp
+  src/editor/document_session_transform.cpp
   src/editor/document_workspace.cpp
   src/editor/document_file_controller.cpp
   src/editor/clipboard_controller.cpp
@@ -276,14 +282,6 @@ add_executable(textlt
   src/text_parser_lua_engine.cpp
   src/text_parser_manager.cpp
   src/theme.cpp
-  src/document.hpp
-  src/document.cpp
-  src/document_content.cpp
-  src/document_cursor.cpp
-  src/document_editing.cpp
-  src/document_history.cpp
-  src/document_selection.cpp
-  src/document_transform.cpp
   src/file_manager.cpp
   src/search_in_files.cpp
 )
@@ -334,12 +332,12 @@ endif()
 
 add_executable(textlt_document_navigation_test
   tests/document_navigation_test.cpp
-  src/document.cpp
   src/editor/document_session.cpp
+  src/editor/document_session_content.cpp
+  src/editor/document_session_cursor.cpp
+  src/editor/document_session_history.cpp
+  src/editor/document_session_selection.cpp
   src/editor/text_buffer.cpp
-  src/document_cursor.cpp
-  src/document_history.cpp
-  src/document_selection.cpp
   src/editor_utils.cpp
   src/history_manager.cpp
 )

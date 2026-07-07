@@ -3,8 +3,11 @@
 #include <cstddef>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include "history_manager.hpp"
+#include "text_transformer.hpp"
+#include "editor/text_buffer.hpp"
 
 namespace textlt {
 
@@ -41,10 +44,21 @@ struct Selection {
     size_t anchor_y = 0;
 };
 
-class TextBuffer;
-
 class DocumentSession {
 public:
+    DocumentSession();
+    explicit DocumentSession(std::filesystem::path p);
+    DocumentSession(const DocumentSession& other);
+    DocumentSession& operator=(const DocumentSession& other);
+    DocumentSession(DocumentSession&& other) noexcept;
+    DocumentSession& operator=(DocumentSession&& other) noexcept;
+
+    TextBuffer buffer;
+    HistoryManager history;
+
+    std::vector<std::string>& lines;
+    bool& is_dirty;
+
     size_t cursor_row = 0;
     size_t cursor_col = 0;
     Selection selection;
@@ -57,29 +71,86 @@ public:
     bool read_only = false;
     bool temporary = false;
 
+    DocumentSession& Session();
+    const DocumentSession& Session() const;
+    TextBuffer& Buffer();
+    const TextBuffer& Buffer() const;
+
+    void SetPath(std::filesystem::path p);
     void Reset();
-    void SetPath(std::filesystem::path new_path);
-    void RefreshLexer();
-
-    bool HasSelection() const;
-    bool IsMemoryOnly() const;
-
+    void LoadContent(const std::string& content, std::filesystem::path p);
+    std::string ToContent() const;
+    std::string LineEndingLabel() const;
     std::string CurrentFilePath() const;
+    size_t LineCount() const;
+    std::string CurrentLineText() const;
+    std::string TextFromCursor() const;
+    void EnsureValidBuffer();
+    void ClampCursor();
+    void SetCursorPosition(size_t row, size_t column);
+    void JumpToLine(size_t line_number);
+    void MoveCursorHome();
+    void MoveCursorEnd();
+    void MoveCursorLeft();
+    void MoveCursorRight();
+    void MoveCursorUp();
+    void MoveCursorDown();
+    void MoveCursorToPreviousParagraph();
+    void MoveCursorToNextParagraph();
+    void MoveCursorToPreviousWord();
+    void MoveCursorToNextWord();
+    bool HasSelection() const;
+    void BeginSelection();
+    void ClearSelection();
+    void SetSelectionAnchor(size_t row, size_t column);
+    void SetSelectionActive(bool active);
+    void SelectAll();
+    std::string GetSelectedText() const;
+    bool IsPositionSelected(size_t x, size_t y) const;
+    bool DeleteSelection();
+    bool DeleteSelectionWithoutSnapshot();
+    HistoryManager::State CurrentState() const;
+    void ApplyState(const HistoryManager::State& state);
+    void SaveSnapshot();
+    void SaveSnapshotForTyping(const std::string& input, bool has_selection);
+    void EndTypingGroup();
+    bool Undo();
+    bool Redo();
+    bool InsertText(const std::string& text);
+    bool InsertCharacter(const std::string& input);
+    bool InsertPairedCharacter(char opening, char closing);
+    bool Backspace();
+    bool DeleteForward();
+    bool DeleteWordBackward();
+    bool DeleteWordForward();
+    bool DeleteCurrentLine();
+    bool ConvertTabsToSpaces(size_t tab_size);
+    bool Convert4To2Spaces();
+    bool Convert2To4Spaces();
+    bool IndentLines(size_t tab_size);
+    bool OutdentLines(size_t tab_size);
+    bool ToggleCase();
+    bool MoveLineUp();
+    bool MoveLineDown();
+    bool DuplicateLine();
+    bool MoveLinesUp();
+    bool MoveLinesDown();
+    bool DuplicateLines();
+
+    void RefreshLexer();
+    bool IsMemoryOnly() const;
     std::string DisplayTitle() const;
     std::string TypeLabel() const;
+    std::string Label() const;
     std::string LexerId() const;
     std::string CommentPrefix() const;
-    std::string LineEndingLabel() const;
     std::string LineEndingText() const;
 
     bool GetTextProcessorTargetText(
-        const TextBuffer& buffer,
         bool whole_document,
         std::string& text,
         std::string& error) const;
     bool ReplaceTextProcessorTargetText(
-        TextBuffer& buffer,
-        HistoryManager& history,
         bool whole_document,
         const std::string& text,
         std::string& error);
@@ -87,13 +158,14 @@ public:
     static DocumentType DetermineDocumentType(const std::filesystem::path& path);
 
 private:
-    HistoryManager::State CurrentTextProcessorState(const TextBuffer& buffer) const;
-    void ClampTextProcessorCursor(TextBuffer& buffer);
-    void SelectWholeTextProcessorBuffer(TextBuffer& buffer);
+    void BindFrom(const DocumentSession& other);
+    HistoryManager::State CurrentTextProcessorState() const;
+    void ClampTextProcessorCursor();
+    void SelectWholeTextProcessorBuffer();
     void ClearTextProcessorSelection();
-    std::string SelectedTextFromBuffer(const TextBuffer& buffer) const;
-    bool DeleteTextProcessorSelection(TextBuffer& buffer);
-    bool InsertTextProcessorText(TextBuffer& buffer, const std::string& text);
+    std::string SelectedTextFromBuffer() const;
+    bool DeleteTextProcessorSelection();
+    bool InsertTextProcessorText(const std::string& text);
 };
 
 using EditorSession = DocumentSession;

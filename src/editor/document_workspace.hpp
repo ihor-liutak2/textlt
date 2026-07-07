@@ -9,7 +9,6 @@
 namespace textlt {
 
 class DocumentSession;
-struct Document;
 
 struct EditorPaneState {
     size_t document_index = 0;
@@ -18,8 +17,8 @@ struct EditorPaneState {
 
 class DocumentWorkspace {
 public:
-    std::vector<std::shared_ptr<Document>>& OpenDocuments();
-    const std::vector<std::shared_ptr<Document>>& OpenDocuments() const;
+    std::vector<std::shared_ptr<DocumentSession>>& OpenDocuments();
+    const std::vector<std::shared_ptr<DocumentSession>>& OpenDocuments() const;
 
     size_t ActiveDocumentIndex() const;
     size_t ActiveSessionIndex() const;
@@ -28,8 +27,8 @@ public:
     void ClampActiveDocumentIndex();
     void ClampActiveSessionIndex();
 
-    std::shared_ptr<Document> ActiveDocument() const;
-    std::shared_ptr<Document> DocumentAt(size_t index) const;
+    std::shared_ptr<DocumentSession> ActiveDocumentSession() const;
+    std::shared_ptr<DocumentSession> DocumentAt(size_t index) const;
     bool HasDocumentAt(size_t index) const;
     DocumentSession* ActiveSession();
     const DocumentSession* ActiveSession() const;
@@ -67,16 +66,16 @@ public:
     bool Empty() const;
     size_t DocumentCount() const;
     size_t SessionCount() const;
-    size_t AddDocument(std::shared_ptr<Document> document);
-    size_t AddSessionDocument(std::shared_ptr<Document> document);
-    size_t AddUntitledDocument();
-    void RemoveDocument(size_t index);
+    size_t AddDocumentSession(std::shared_ptr<DocumentSession> document);
+    size_t AddSession(std::shared_ptr<DocumentSession> document);
+    size_t AddUntitledDocumentSession();
+    void RemoveDocumentSession(size_t index);
 
-    static bool IsMemoryOnlyDocument(const std::shared_ptr<Document>& document);
+    static bool IsMemoryOnlyDocumentSession(const std::shared_ptr<DocumentSession>& document);
     static bool IsMemoryOnlySession(const DocumentSession* session);
 
 private:
-    std::vector<std::shared_ptr<Document>> open_documents_;
+    std::vector<std::shared_ptr<DocumentSession>> open_documents_;
     size_t active_document_index_ = 0;
     std::vector<EditorPaneState> editor_panes_;
     size_t active_editor_pane_index_ = 0;

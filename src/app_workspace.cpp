@@ -12,11 +12,11 @@ namespace textlt {
 
 namespace {
 
-std::string DocumentTitle(const std::shared_ptr<Document>& doc) {
+std::string DocumentTitle(const std::shared_ptr<DocumentSession>& doc) {
     return doc ? doc->DisplayTitle() : "Untitled";
 }
 
-std::string ShortDocumentTitle(const std::shared_ptr<Document>& doc) {
+std::string ShortDocumentTitle(const std::shared_ptr<DocumentSession>& doc) {
     std::string title = DocumentTitle(doc);
     if (doc && doc->is_dirty) {
         title += " *";
@@ -181,7 +181,7 @@ void TextltApp::AssignDocumentToEditorPane(size_t pane_index, size_t document_in
 
 void TextltApp::SplitActiveDocumentToNextPane() {
     if (document_workspace_.Empty()) {
-        EnsureOneOpenDocument();
+        EnsureOneOpenDocumentSession();
     }
     if (document_workspace_.Empty()) {
         return;
@@ -223,7 +223,7 @@ void TextltApp::BindEditorComponentsToWorkspace() {
         const size_t document_index = document_workspace_.PaneSessionIndex(pane_index);
         auto editor = std::static_pointer_cast<EditorComponent>(editor_pane_components_[pane_index]);
         if (editor) {
-            editor->SetDocument(document_workspace_.DocumentAt(document_index));
+            editor->SetDocumentSession(document_workspace_.DocumentAt(document_index));
         }
     }
 
@@ -244,7 +244,7 @@ ftxui::Element TextltApp::RenderEditorPane(size_t pane_index) {
 
     const Theme& theme = current_theme_;
     auto editor = std::static_pointer_cast<EditorComponent>(editor_pane_components_[pane_index]);
-    std::shared_ptr<Document> doc = editor ? editor->GetDocument() : nullptr;
+    std::shared_ptr<DocumentSession> doc = editor ? editor->GetDocumentSession() : nullptr;
 
     const std::string title = DocumentTitle(doc);
     const bool dirty = doc && doc->is_dirty;

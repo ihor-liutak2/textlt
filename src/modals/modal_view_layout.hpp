@@ -85,7 +85,7 @@ private:
     void ClampSelections();
     void SyncControlsFromSelectedPane();
     void FocusSelectedPane();
-    void AssignSelectedDocument();
+    void AssignSelectedDocumentSession();
     void ApplySelectedRole();
     std::string SelectedRoleLabel() const;
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "document.hpp"
+#include "editor/document_session.hpp"
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -42,13 +42,13 @@ public:
     FileManager() = default;
 
     // Opens an existing file and returns a populated Document.
-    std::shared_ptr<Document> Open(const std::filesystem::path& path, std::string& error);
+    std::shared_ptr<DocumentSession> Open(const std::filesystem::path& path, std::string& error);
 
     // Saves the document content to its current path.
-    bool Save(std::shared_ptr<Document> doc, std::string& error);
+    bool Save(std::shared_ptr<DocumentSession> doc, std::string& error);
 
     // Saves the document content to a new path and updates document path/type after success.
-    bool SaveAs(std::shared_ptr<Document> doc, const std::filesystem::path& path, std::string& error);
+    bool SaveAs(std::shared_ptr<DocumentSession> doc, const std::filesystem::path& path, std::string& error);
 
     bool ListDirectory(
         const std::filesystem::path& directory,

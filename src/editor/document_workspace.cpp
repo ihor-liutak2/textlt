@@ -5,15 +5,15 @@
 #include <filesystem>
 #include <utility>
 
-#include "document.hpp"
+#include "editor/document_session.hpp"
 
 namespace textlt {
 
-std::vector<std::shared_ptr<Document>>& DocumentWorkspace::OpenDocuments() {
+std::vector<std::shared_ptr<DocumentSession>>& DocumentWorkspace::OpenDocuments() {
     return open_documents_;
 }
 
-const std::vector<std::shared_ptr<Document>>& DocumentWorkspace::OpenDocuments() const {
+const std::vector<std::shared_ptr<DocumentSession>>& DocumentWorkspace::OpenDocuments() const {
     return open_documents_;
 }
 
@@ -46,11 +46,11 @@ void DocumentWorkspace::ClampActiveSessionIndex() {
     ClampActiveDocumentIndex();
 }
 
-std::shared_ptr<Document> DocumentWorkspace::ActiveDocument() const {
+std::shared_ptr<DocumentSession> DocumentWorkspace::ActiveDocumentSession() const {
     return DocumentAt(active_document_index_);
 }
 
-std::shared_ptr<Document> DocumentWorkspace::DocumentAt(size_t index) const {
+std::shared_ptr<DocumentSession> DocumentWorkspace::DocumentAt(size_t index) const {
     if (index >= open_documents_.size()) {
         return nullptr;
     }
@@ -325,23 +325,23 @@ size_t DocumentWorkspace::SessionCount() const {
     return DocumentCount();
 }
 
-size_t DocumentWorkspace::AddDocument(std::shared_ptr<Document> document) {
-    return AddSessionDocument(std::move(document));
+size_t DocumentWorkspace::AddDocumentSession(std::shared_ptr<DocumentSession> document) {
+    return AddSession(std::move(document));
 }
 
-size_t DocumentWorkspace::AddSessionDocument(std::shared_ptr<Document> document) {
+size_t DocumentWorkspace::AddSession(std::shared_ptr<DocumentSession> document) {
     open_documents_.push_back(std::move(document));
     active_document_index_ = open_documents_.empty() ? 0 : open_documents_.size() - 1;
     return active_document_index_;
 }
 
-size_t DocumentWorkspace::AddUntitledDocument() {
-    auto document = std::make_shared<Document>();
+size_t DocumentWorkspace::AddUntitledDocumentSession() {
+    auto document = std::make_shared<DocumentSession>();
     document->Reset();
-    return AddDocument(std::move(document));
+    return AddDocumentSession(std::move(document));
 }
 
-void DocumentWorkspace::RemoveDocument(size_t index) {
+void DocumentWorkspace::RemoveDocumentSession(size_t index) {
     if (index >= open_documents_.size()) {
         return;
     }
@@ -369,7 +369,7 @@ void DocumentWorkspace::RemoveDocument(size_t index) {
     }
 }
 
-bool DocumentWorkspace::IsMemoryOnlyDocument(const std::shared_ptr<Document>& document) {
+bool DocumentWorkspace::IsMemoryOnlyDocumentSession(const std::shared_ptr<DocumentSession>& document) {
     return document && IsMemoryOnlySession(&document->Session());
 }
 

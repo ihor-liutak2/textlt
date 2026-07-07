@@ -12,7 +12,6 @@
 
 namespace textlt {
 
-class Document;
 
 class DocumentFileController {
 public:
@@ -49,24 +48,24 @@ public:
 
     DocumentFileController(FileManager& file_manager, DocumentWorkspace& workspace);
 
-    std::shared_ptr<Document> ActiveDocument() const;
+    std::shared_ptr<DocumentSession> ActiveDocumentSession() const;
     DocumentSession* ActiveSession();
     const DocumentSession* ActiveSession() const;
 
-    size_t AddDocument(std::shared_ptr<Document> document);
-    size_t AddSession(std::shared_ptr<Document> document);
-    size_t NewDocument();
-    void EnsureOneDocument(size_t visible_pane_count);
-    bool RemoveDocument(size_t index, size_t visible_pane_count);
-    bool ActivateDocument(size_t index, size_t visible_pane_count);
+    size_t AddDocumentSession(std::shared_ptr<DocumentSession> document);
+    size_t AddSession(std::shared_ptr<DocumentSession> document);
+    size_t NewDocumentSession();
+    void EnsureOneDocumentSession(size_t visible_pane_count);
+    bool RemoveDocumentSession(size_t index, size_t visible_pane_count);
+    bool ActivateDocumentSession(size_t index, size_t visible_pane_count);
 
-    bool OpenDocument(const std::filesystem::path& path, std::string& error);
-    bool OpenOrCreateDocument(const std::filesystem::path& path, std::string& error);
-    bool SaveActiveDocument(std::string& error);
+    bool OpenDocumentSession(const std::filesystem::path& path, std::string& error);
+    bool OpenOrCreateDocumentSession(const std::filesystem::path& path, std::string& error);
+    bool SaveActiveDocumentSession(std::string& error);
     bool SaveActiveDocumentAs(const std::filesystem::path& path, std::string& error);
     SaveAllResult SaveAllDirtyDocuments();
 
-    bool CloseActiveDocument(size_t visible_pane_count, std::string& closed_name);
+    bool CloseActiveDocumentSession(size_t visible_pane_count, std::string& closed_name);
     void CloseAllDocuments(size_t visible_pane_count);
 
     void PersistOpenedDocuments();
@@ -103,7 +102,7 @@ private:
         size_t active_index = 0;
     };
 
-    void AddRestoredDocument(const OpenedFileState& entry);
+    void AddRestoredDocumentSession(const OpenedFileState& entry);
     void AddRecentFile(const std::filesystem::path& path);
     bool AddFavorite(const std::filesystem::path& path);
     bool IsFavorite(const std::filesystem::path& path) const;
@@ -121,7 +120,7 @@ private:
     static std::filesystem::path NormalizePath(const std::filesystem::path& path);
     static std::filesystem::path NormalizeDocumentPath(const std::filesystem::path& path);
     static RecentFileEntry MakeRecentEntry(const std::filesystem::path& path);
-    static std::string DisplayName(const std::shared_ptr<Document>& document);
+    static std::string DisplayName(const std::shared_ptr<DocumentSession>& document);
 
     FileManager& file_manager_;
     DocumentWorkspace& workspace_;

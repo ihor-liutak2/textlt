@@ -3,7 +3,7 @@
      * * Switches the editor context to a new document, synchronizes UI state,
      * and ensures cursor position is clamped to the new content boundaries.
      */
-    void EditorComponent::SetDocument(std::shared_ptr<Document> doc) {
+    void EditorComponent::SetDocumentSession(std::shared_ptr<DocumentSession> doc) {
         // Check if the provided document is valid to prevent null pointer dereference
         if (!doc) {
             return;
@@ -23,12 +23,12 @@
         ClearSelection();
     }
 
-    std::shared_ptr<Document> EditorComponent::GetDocument() const { return doc_; }
+    std::shared_ptr<DocumentSession> EditorComponent::GetDocumentSession() const { return doc_; }
 
     EditorComponent::EditorComponent(EditorConfig* config, const Theme* theme)
     : config_(config),
     theme_(theme),
-    doc_(std::make_shared<Document>()) { // Initialize default document
+    doc_(std::make_shared<DocumentSession>()) { // Initialize default document
 
         if (config_) {
             search_match_case_ = config_->search_match_case;
@@ -68,7 +68,7 @@
             std::istreambuf_iterator<char>(file),
             std::istreambuf_iterator<char>()};
 
-        if (!doc_) doc_ = std::make_shared<Document>();
+        if (!doc_) doc_ = std::make_shared<DocumentSession>();
         doc_->LoadContent(content, path);
         scroll_x_ = 0;
         scroll_y_ = 0;
@@ -77,7 +77,7 @@
     }
 
     void EditorComponent::NewFile(const std::string& path) {
-        if (!doc_) doc_ = std::make_shared<Document>();
+        if (!doc_) doc_ = std::make_shared<DocumentSession>();
 
         doc_->Reset();
         doc_->SetPath(path.empty() ? "Untitled" : path);

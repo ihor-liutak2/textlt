@@ -15,7 +15,7 @@
 #include "theme.hpp"
 #include "ui_button.hpp"
 #include "file_manager.hpp"
-#include "document.hpp"
+#include "editor/document_session.hpp"
 
 namespace textlt {
 
@@ -76,7 +76,7 @@ TextltApp::TextltApp()
       text_editor_(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_)),
       sidebar_panel_(ftxui::Make<SidebarPanel>(
           [this](const std::filesystem::path& path) { OpenSidebarFile(path); },
-          [this](size_t index) { ActivateOpenDocument(index); },
+          [this](size_t index) { ActivateOpenDocumentSession(index); },
           &current_theme_,
           &git_manager_,
           [this] { return document_file_controller_.FavoriteFilePaths(); },
@@ -348,7 +348,7 @@ TextltApp::TextltApp()
     editor_workspace_container_ = ftxui::Container::Horizontal(editor_pane_renderers_);
 
     RestoreOpenedDocuments();
-    EnsureOneOpenDocument();
+    EnsureOneOpenDocumentSession();
     UpdateFileMenuLabels();
     UpdateOptionsMenuLabels();
 
@@ -557,10 +557,10 @@ TextltApp::TextltApp(const std::vector<std::string>& files_to_open)
     if (!files_to_open.empty()) {
         document_workspace_.ClearDocuments();
         std::static_pointer_cast<EditorComponent>(text_editor_)
-            ->SetDocument(std::make_shared<Document>());
+            ->SetDocumentSession(std::make_shared<DocumentSession>());
     }
     InitializeWithFiles(files_to_open);
-    EnsureOneOpenDocument();
+    EnsureOneOpenDocumentSession();
     PersistOpenedDocuments();
 }
 

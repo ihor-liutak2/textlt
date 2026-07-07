@@ -73,7 +73,7 @@ ViewLayoutContent::ViewLayoutContent(
         FocusSelectedPane();
     }, ButtonRole::Primary));
     assign_document_button_ = ftxui::Button(MakeButtonOption("Assign document", [this] {
-        AssignSelectedDocument();
+        AssignSelectedDocumentSession();
     }, ButtonRole::Primary));
     set_role_button_ = ftxui::Button(MakeButtonOption("Set role", [this] {
         ApplySelectedRole();
@@ -241,7 +241,7 @@ void ViewLayoutContent::FocusSelectedPane() {
     RefreshFromApp();
 }
 
-void ViewLayoutContent::AssignSelectedDocument() {
+void ViewLayoutContent::AssignSelectedDocumentSession() {
     ClampSelections();
     if (on_assign_document_) {
         on_assign_document_(

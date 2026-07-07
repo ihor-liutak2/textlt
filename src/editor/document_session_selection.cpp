@@ -1,4 +1,4 @@
-#include "document.hpp"
+#include "editor/document_session.hpp"
 
 #include <algorithm>
 
@@ -6,12 +6,12 @@
 
 namespace textlt {
 
-bool Document::HasSelection() const {
+bool DocumentSession::HasSelection() const {
     return selection.active &&
         (cursor_col != selection.anchor_x || cursor_row != selection.anchor_y);
 }
 
-void Document::BeginSelection() {
+void DocumentSession::BeginSelection() {
     if (!selection.active) {
         selection.anchor_x = cursor_col;
         selection.anchor_y = cursor_row;
@@ -19,24 +19,24 @@ void Document::BeginSelection() {
     selection.active = true;
 }
 
-void Document::ClearSelection() {
+void DocumentSession::ClearSelection() {
     ClampCursor();
     selection.active = false;
     selection.anchor_x = cursor_col;
     selection.anchor_y = cursor_row;
 }
 
-void Document::SetSelectionAnchor(size_t row, size_t column) {
+void DocumentSession::SetSelectionAnchor(size_t row, size_t column) {
     EnsureValidBuffer();
     selection.anchor_y = std::min(row, lines.size() - 1);
     selection.anchor_x = std::min(column, lines[selection.anchor_y].size());
 }
 
-void Document::SetSelectionActive(bool active) {
+void DocumentSession::SetSelectionActive(bool active) {
     selection.active = active;
 }
 
-void Document::SelectAll() {
+void DocumentSession::SelectAll() {
     EnsureValidBuffer();
     selection.anchor_x = 0;
     selection.anchor_y = 0;
@@ -45,7 +45,7 @@ void Document::SelectAll() {
     selection.active = true;
 }
 
-std::string Document::GetSelectedText() const {
+std::string DocumentSession::GetSelectedText() const {
     if (!HasSelection()) {
         return "";
     }
@@ -69,7 +69,7 @@ std::string Document::GetSelectedText() const {
     return selected;
 }
 
-bool Document::IsPositionSelected(size_t x, size_t y) const {
+bool DocumentSession::IsPositionSelected(size_t x, size_t y) const {
     if (!HasSelection()) {
         return false;
     }
@@ -82,7 +82,7 @@ bool Document::IsPositionSelected(size_t x, size_t y) const {
     return !utils::PositionLess(position, start) && utils::PositionLess(position, end);
 }
 
-bool Document::DeleteSelection() {
+bool DocumentSession::DeleteSelection() {
     if (!HasSelection()) {
         return false;
     }
@@ -92,7 +92,7 @@ bool Document::DeleteSelection() {
     return DeleteSelectionWithoutSnapshot();
 }
 
-bool Document::DeleteSelectionWithoutSnapshot() {
+bool DocumentSession::DeleteSelectionWithoutSnapshot() {
     if (!HasSelection()) {
         return false;
     }

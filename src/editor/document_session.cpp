@@ -27,6 +27,104 @@ bool EndsWith(const std::string& value, const std::string& suffix) {
 
 } // namespace
 
+
+DocumentSession::DocumentSession()
+    : lines(buffer.MutableLines()),
+      is_dirty(buffer.DirtyFlag()) {}
+
+DocumentSession::DocumentSession(std::filesystem::path p)
+    : DocumentSession() {
+    SetPath(std::move(p));
+}
+
+DocumentSession::DocumentSession(const DocumentSession& other)
+    : buffer(other.buffer),
+      history(other.history),
+      lines(buffer.MutableLines()),
+      is_dirty(buffer.DirtyFlag()),
+      cursor_row(other.cursor_row),
+      cursor_col(other.cursor_col),
+      selection(other.selection),
+      scroll_x(other.scroll_x),
+      scroll_y(other.scroll_y),
+      path(other.path),
+      type(other.type),
+      line_ending(other.line_ending),
+      read_only(other.read_only),
+      temporary(other.temporary) {}
+
+DocumentSession& DocumentSession::operator=(const DocumentSession& other) {
+    if (this != &other) {
+        BindFrom(other);
+    }
+    return *this;
+}
+
+DocumentSession::DocumentSession(DocumentSession&& other) noexcept
+    : buffer(std::move(other.buffer)),
+      history(std::move(other.history)),
+      lines(buffer.MutableLines()),
+      is_dirty(buffer.DirtyFlag()),
+      cursor_row(other.cursor_row),
+      cursor_col(other.cursor_col),
+      selection(other.selection),
+      scroll_x(other.scroll_x),
+      scroll_y(other.scroll_y),
+      path(std::move(other.path)),
+      type(other.type),
+      line_ending(other.line_ending),
+      read_only(other.read_only),
+      temporary(other.temporary) {}
+
+DocumentSession& DocumentSession::operator=(DocumentSession&& other) noexcept {
+    if (this != &other) {
+        buffer = std::move(other.buffer);
+        history = std::move(other.history);
+        cursor_row = other.cursor_row;
+        cursor_col = other.cursor_col;
+        selection = other.selection;
+        scroll_x = other.scroll_x;
+        scroll_y = other.scroll_y;
+        path = std::move(other.path);
+        type = other.type;
+        line_ending = other.line_ending;
+        read_only = other.read_only;
+        temporary = other.temporary;
+    }
+    return *this;
+}
+
+void DocumentSession::BindFrom(const DocumentSession& other) {
+    buffer = other.buffer;
+    history = other.history;
+    cursor_row = other.cursor_row;
+    cursor_col = other.cursor_col;
+    selection = other.selection;
+    scroll_x = other.scroll_x;
+    scroll_y = other.scroll_y;
+    path = other.path;
+    type = other.type;
+    line_ending = other.line_ending;
+    read_only = other.read_only;
+    temporary = other.temporary;
+}
+
+DocumentSession& DocumentSession::Session() {
+    return *this;
+}
+
+const DocumentSession& DocumentSession::Session() const {
+    return *this;
+}
+
+TextBuffer& DocumentSession::Buffer() {
+    return buffer;
+}
+
+const TextBuffer& DocumentSession::Buffer() const {
+    return buffer;
+}
+
 DocumentType DocumentSession::DetermineDocumentType(const std::filesystem::path& path) {
     const std::string lower_ext = ToLowerCopy(path.extension().string());
     const std::string lower_filename = ToLowerCopy(path.filename().string());
@@ -76,6 +174,9 @@ void DocumentSession::Reset() {
     line_ending = LineEnding::LF;
     read_only = false;
     temporary = false;
+    buffer.SetLines({""});
+    buffer.SetDirty(false);
+    history.Clear();
 }
 
 void DocumentSession::SetPath(std::filesystem::path new_path) {
@@ -87,10 +188,6 @@ void DocumentSession::RefreshLexer() {
     type = DetermineDocumentType(path);
 }
 
-bool DocumentSession::HasSelection() const {
-    return selection.active &&
-        (cursor_col != selection.anchor_x || cursor_row != selection.anchor_y);
-}
 
 bool DocumentSession::IsMemoryOnly() const {
     const std::string value = path.string();
@@ -135,6 +232,10 @@ std::string DocumentSession::TypeLabel() const {
         case DocumentType::PlainText:  return "Plain Text";
         default:                       return "Unknown";
     }
+}
+
+std::string DocumentSession::Label() const {
+    return TypeLabel();
 }
 
 std::string DocumentSession::LexerId() const {
@@ -193,7 +294,7 @@ std::string DocumentSession::LineEndingText() const {
     return line_ending == LineEnding::CRLF ? "\r\n" : "\n";
 }
 
-HistoryManager::State DocumentSession::CurrentTextProcessorState(const TextBuffer& buffer) const {
+HistoryManager::State DocumentSession::CurrentTextProcessorState() const {
     return {
         buffer.Lines().empty() ? std::vector<std::string>{""} : buffer.Lines(),
         static_cast<int>(cursor_col),
@@ -201,7 +302,7 @@ HistoryManager::State DocumentSession::CurrentTextProcessorState(const TextBuffe
     };
 }
 
-void DocumentSession::ClampTextProcessorCursor(TextBuffer& buffer) {
+void DocumentSession::ClampTextProcessorCursor() {
     buffer.EnsureValid();
     const auto& lines = buffer.Lines();
     cursor_row = std::min(cursor_row, lines.size() - 1);
@@ -212,7 +313,7 @@ void DocumentSession::ClampTextProcessorCursor(TextBuffer& buffer) {
     }
 }
 
-void DocumentSession::SelectWholeTextProcessorBuffer(TextBuffer& buffer) {
+void DocumentSession::SelectWholeTextProcessorBuffer() {
     buffer.EnsureValid();
     const auto& lines = buffer.Lines();
     selection.anchor_x = 0;
@@ -228,7 +329,7 @@ void DocumentSession::ClearTextProcessorSelection() {
     selection.anchor_y = cursor_row;
 }
 
-std::string DocumentSession::SelectedTextFromBuffer(const TextBuffer& buffer) const {
+std::string DocumentSession::SelectedTextFromBuffer() const {
     const auto& lines = buffer.Lines();
     if (!HasSelection() || lines.empty()) {
         return "";
@@ -253,7 +354,7 @@ std::string DocumentSession::SelectedTextFromBuffer(const TextBuffer& buffer) co
     return selected;
 }
 
-bool DocumentSession::DeleteTextProcessorSelection(TextBuffer& buffer) {
+bool DocumentSession::DeleteTextProcessorSelection() {
     auto& lines = buffer.MutableLines();
     if (!HasSelection() || lines.empty()) {
         return false;
@@ -280,11 +381,11 @@ bool DocumentSession::DeleteTextProcessorSelection(TextBuffer& buffer) {
     cursor_col = start.x;
     cursor_row = start.y;
     ClearTextProcessorSelection();
-    ClampTextProcessorCursor(buffer);
+    ClampTextProcessorCursor();
     return true;
 }
 
-bool DocumentSession::InsertTextProcessorText(TextBuffer& buffer, const std::string& text) {
+bool DocumentSession::InsertTextProcessorText(const std::string& text) {
     if (text.empty()) {
         return false;
     }
@@ -323,12 +424,11 @@ bool DocumentSession::InsertTextProcessorText(TextBuffer& buffer, const std::str
     }
 
     ClearTextProcessorSelection();
-    ClampTextProcessorCursor(buffer);
+    ClampTextProcessorCursor();
     return true;
 }
 
 bool DocumentSession::GetTextProcessorTargetText(
-    const TextBuffer& buffer,
     bool whole_document,
     std::string& text,
     std::string& error) const {
@@ -342,13 +442,11 @@ bool DocumentSession::GetTextProcessorTargetText(
         return false;
     }
 
-    text = SelectedTextFromBuffer(buffer);
+    text = SelectedTextFromBuffer();
     return true;
 }
 
 bool DocumentSession::ReplaceTextProcessorTargetText(
-    TextBuffer& buffer,
-    HistoryManager& history,
     bool whole_document,
     const std::string& text,
     std::string& error) {
@@ -357,23 +455,23 @@ bool DocumentSession::ReplaceTextProcessorTargetText(
         return false;
     }
 
-    ClampTextProcessorCursor(buffer);
+    ClampTextProcessorCursor();
     if (whole_document) {
-        SelectWholeTextProcessorBuffer(buffer);
+        SelectWholeTextProcessorBuffer();
     } else if (!HasSelection()) {
         error = "No selected text. Select text or enable Whole document.";
         return false;
     }
 
     history.EndTypingGroup();
-    history.PushSnapshot(CurrentTextProcessorState(buffer));
+    history.PushSnapshot(CurrentTextProcessorState());
 
     bool changed = false;
     if (text.empty()) {
-        changed = DeleteTextProcessorSelection(buffer);
+        changed = DeleteTextProcessorSelection();
     } else {
-        DeleteTextProcessorSelection(buffer);
-        changed = InsertTextProcessorText(buffer, text);
+        DeleteTextProcessorSelection();
+        changed = InsertTextProcessorText(text);
     }
 
     if (changed) {

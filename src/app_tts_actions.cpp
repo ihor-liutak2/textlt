@@ -12,7 +12,7 @@ void TextltApp::SetTtsHeaderActiveButton(TtsHeaderButton button) {
 }
 
 void TextltApp::QueueTtsBookPreparationFromCursor(bool force_rebuild) {
-    const std::shared_ptr<Document> document = ActiveDocument();
+    const std::shared_ptr<DocumentSession> document = ActiveDocumentSession();
     if (!document) {
         active_action_ = "No document selected for TTS";
         screen_.PostEvent(ftxui::Event::Custom);

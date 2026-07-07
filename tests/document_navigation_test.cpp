@@ -1,10 +1,10 @@
-#include "document.hpp"
+#include "editor/document_session.hpp"
 #include "editor_utils.hpp"
 
 #include <cassert>
 #include <string>
 
-using textlt::Document;
+using textlt::DocumentSession;
 
 int main() {
     const std::string one = u8"один";
@@ -24,7 +24,7 @@ int main() {
            line.size() - three.size());
     assert(textlt::utils::FindWordDeleteEnd(line, 0) == one.size());
 
-    Document doc;
+    DocumentSession doc;
     doc.lines = {line};
     doc.cursor_row = 0;
     doc.cursor_col = line.size();
@@ -42,7 +42,7 @@ int main() {
     doc.MoveCursorToNextWord();
     assert(doc.cursor_col == one.size() + 1);
 
-    Document vertical;
+    DocumentSession vertical;
     vertical.lines = {u8"абвгд", u8"ёжзий", u8"abcde"};
     vertical.cursor_row = 0;
     vertical.cursor_col = std::string(u8"абв").size();
