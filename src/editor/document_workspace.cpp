@@ -2,7 +2,10 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <filesystem>
 #include <utility>
+
+#include "document.hpp"
 
 namespace textlt {
 
@@ -24,6 +27,56 @@ size_t DocumentWorkspace::ActiveDocumentIndex() const {
 
 void DocumentWorkspace::SetActiveDocumentIndex(size_t index) {
     active_document_index_ = index;
+    ClampActiveDocumentIndex();
+}
+
+void DocumentWorkspace::ClampActiveDocumentIndex() {
+    if (open_documents_.empty()) {
+        active_document_index_ = 0;
+        return;
+    }
+    active_document_index_ = std::min(active_document_index_, open_documents_.size() - 1);
+}
+
+std::shared_ptr<Document> DocumentWorkspace::ActiveDocument() const {
+    return DocumentAt(active_document_index_);
+}
+
+std::shared_ptr<Document> DocumentWorkspace::DocumentAt(size_t index) const {
+    if (index >= open_documents_.size()) {
+        return nullptr;
+    }
+    return open_documents_[index];
+}
+
+bool DocumentWorkspace::HasDocumentAt(size_t index) const {
+    return DocumentAt(index) != nullptr;
+}
+
+int DocumentWorkspace::FindDocumentByPath(const std::filesystem::path& path) const {
+    std::error_code error;
+    std::filesystem::path normalized = std::filesystem::absolute(path, error);
+    if (error) {
+        normalized = path;
+        error.clear();
+    }
+
+    for (size_t index = 0; index < open_documents_.size(); ++index) {
+        const auto& document = open_documents_[index];
+        if (!document) {
+            continue;
+        }
+
+        std::filesystem::path document_path = std::filesystem::absolute(document->path, error);
+        if (error) {
+            document_path = document->path;
+            error.clear();
+        }
+        if (document_path == normalized) {
+            return static_cast<int>(index);
+        }
+    }
+    return -1;
 }
 
 std::vector<EditorPaneState>& DocumentWorkspace::EditorPanes() {
@@ -68,6 +121,12 @@ size_t DocumentWorkspace::AddDocument(std::shared_ptr<Document> document) {
     return active_document_index_;
 }
 
+size_t DocumentWorkspace::AddUntitledDocument() {
+    auto document = std::make_shared<Document>();
+    document->Reset();
+    return AddDocument(std::move(document));
+}
+
 void DocumentWorkspace::RemoveDocument(size_t index) {
     if (index >= open_documents_.size()) {
         return;
@@ -94,6 +153,14 @@ void DocumentWorkspace::RemoveDocument(size_t index) {
             pane.document_index = active_document_index_;
         }
     }
+}
+
+bool DocumentWorkspace::IsMemoryOnlyDocument(const std::shared_ptr<Document>& document) {
+    if (!document) {
+        return false;
+    }
+    const std::string path = document->path.string();
+    return path.empty() || path == "Untitled" || path == "untitled.txt";
 }
 
 } // namespace textlt

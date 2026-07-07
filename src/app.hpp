@@ -179,9 +179,7 @@ private:
     bool SaveFile(const std::string& path, std::string& error);
     bool OpenFile(const std::string& path, std::string& error);
     void ActivateOpenDocument(size_t index);
-    int FindOpenDocument(const std::filesystem::path& path) const;
     void AddOpenDocument(std::shared_ptr<Document> doc);
-    bool IsMemoryOnlyDocument(const std::shared_ptr<Document>& doc) const;
     void EnsureOneOpenDocument();
     void RemoveOpenDocument(size_t index);
     void CloseCurrentFile();

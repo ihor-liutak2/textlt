@@ -46,7 +46,7 @@ bool TextltApp::SaveFile(const std::string& path, std::string& error) {
 bool TextltApp::OpenFile(const std::string& path, std::string& error) {
     try {
         PersistActiveFavoriteCursor();
-        const int open_index = FindOpenDocument(path);
+        const int open_index = document_workspace_.FindDocumentByPath(path);
         if (open_index >= 0) {
             ActivateOpenDocument(static_cast<size_t>(open_index));
             PersistOpenedDocuments();

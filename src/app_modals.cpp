@@ -690,7 +690,7 @@ void TextltApp::RequestExit() {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
     const bool has_only_empty_memory_document =
         document_workspace_.OpenDocuments().size() == 1 &&
-        IsMemoryOnlyDocument(document_workspace_.OpenDocuments().front()) &&
+        DocumentWorkspace::IsMemoryOnlyDocument(document_workspace_.OpenDocuments().front()) &&
         editor_ptr->GetAllText().empty();
     if (has_only_empty_memory_document) {
         PersistActiveFavoriteCursor();

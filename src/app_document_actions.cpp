@@ -123,35 +123,12 @@ void TextltApp::RefreshProjectSidebar() {
 
 
 std::shared_ptr<Document> TextltApp::ActiveDocument() const {
-    if (document_workspace_.ActiveDocumentIndex() < document_workspace_.OpenDocuments().size()) {
-        return document_workspace_.OpenDocuments()[document_workspace_.ActiveDocumentIndex()];
+    const auto document = document_workspace_.ActiveDocument();
+    if (document) {
+        return document;
     }
     const auto editor = ActiveEditor();
     return editor ? editor->GetDocument() : nullptr;
-}
-
-
-int TextltApp::FindOpenDocument(const std::filesystem::path& path) const {
-    std::error_code error;
-    std::filesystem::path normalized = std::filesystem::absolute(path, error);
-    if (error) {
-        normalized = path;
-    }
-
-    for (size_t index = 0; index < document_workspace_.OpenDocuments().size(); ++index) {
-        const auto& doc = document_workspace_.OpenDocuments()[index];
-        if (!doc) continue;
-
-        std::filesystem::path doc_path = std::filesystem::absolute(doc->path, error);
-        if (error) {
-            doc_path = doc->path;
-            error.clear();
-        }
-        if (doc_path == normalized) {
-            return static_cast<int>(index);
-        }
-    }
-    return -1;
 }
 
 
@@ -160,40 +137,29 @@ void TextltApp::AddOpenDocument(std::shared_ptr<Document> doc) {
         return;
     }
 
-    document_workspace_.AddDocument(doc);
-    AssignDocumentToActivePane(document_workspace_.ActiveDocumentIndex());
+    const size_t document_index = document_workspace_.AddDocument(doc);
+    AssignDocumentToActivePane(document_index);
     RefreshOpenedDocumentsSidebar();
 }
 
 
-bool TextltApp::IsMemoryOnlyDocument(const std::shared_ptr<Document>& doc) const {
-    if (!doc) {
-        return false;
-    }
-    const std::string path = doc->path.string();
-    return path.empty() || path == "Untitled" || path == "untitled.txt";
-}
-
-
 void TextltApp::EnsureOneOpenDocument() {
-    if (!document_workspace_.OpenDocuments().empty()) {
-        if (document_workspace_.ActiveDocumentIndex() >= document_workspace_.OpenDocuments().size()) {
-            document_workspace_.ActiveDocumentIndex() = document_workspace_.OpenDocuments().size() - 1;
-        }
+    if (!document_workspace_.Empty()) {
+        document_workspace_.ClampActiveDocumentIndex();
         AssignDocumentToActivePane(document_workspace_.ActiveDocumentIndex());
         SyncEditorPaneDocuments();
         RefreshOpenedDocumentsSidebar();
         return;
     }
 
-    auto doc = std::make_shared<Document>();
-    doc->Reset();
-    AddOpenDocument(doc);
+    const size_t document_index = document_workspace_.AddUntitledDocument();
+    AssignDocumentToActivePane(document_index);
+    RefreshOpenedDocumentsSidebar();
 }
 
 
 void TextltApp::RemoveOpenDocument(size_t index) {
-    if (index >= document_workspace_.OpenDocuments().size()) {
+    if (!document_workspace_.HasDocumentAt(index)) {
         return;
     }
 
@@ -214,10 +180,9 @@ void TextltApp::CloseCurrentFile() {
         return;
     }
 
+    const auto closed_document = document_workspace_.ActiveDocument();
     const std::string closed_name =
-        document_workspace_.OpenDocuments()[document_workspace_.ActiveDocumentIndex()]
-            ? document_workspace_.OpenDocuments()[document_workspace_.ActiveDocumentIndex()]->path.filename().string()
-            : "";
+        closed_document ? closed_document->path.filename().string() : "";
     RemoveOpenDocument(document_workspace_.ActiveDocumentIndex());
     PersistOpenedDocuments();
     RefreshOpenedDocumentsSidebar();
@@ -260,7 +225,7 @@ void TextltApp::PersistOpenedDocuments() {
             continue;
         }
 
-        if (IsMemoryOnlyDocument(doc)) {
+        if (DocumentWorkspace::IsMemoryOnlyDocument(doc)) {
             const std::string content = doc->ToContent();
             if (content.empty()) {
                 continue;
@@ -338,7 +303,7 @@ void TextltApp::RestoreOpenedDocuments() {
     }
 
     if (!document_workspace_.OpenDocuments().empty()) {
-        document_workspace_.ActiveDocumentIndex() = std::min(opened_config.active_index, document_workspace_.OpenDocuments().size() - 1);
+        document_workspace_.SetActiveDocumentIndex(std::min(opened_config.active_index, document_workspace_.OpenDocuments().size() - 1));
         AssignDocumentToActivePane(document_workspace_.ActiveDocumentIndex());
         SyncEditorPaneDocuments();
         RefreshOpenedDocumentsSidebar();
@@ -349,18 +314,19 @@ void TextltApp::RestoreOpenedDocuments() {
 
 
 void TextltApp::ActivateOpenDocument(size_t index) {
-    if (index >= document_workspace_.OpenDocuments().size() || !document_workspace_.OpenDocuments()[index]) {
+    const auto document = document_workspace_.DocumentAt(index);
+    if (!document) {
         return;
     }
 
     PersistActiveFavoriteCursor();
     AssignDocumentToActivePane(index);
     auto editor_ptr = ActiveEditor();
-    RestoreFavoriteCursor(document_workspace_.OpenDocuments()[index]->path.string());
+    RestoreFavoriteCursor(document->path.string());
     RefreshOpenedDocumentsSidebar();
     UpdateFileMenuLabels();
     PersistOpenedDocuments();
-    active_action_ = "Switched to " + (editor_ptr ? editor_ptr->CurrentFilePath() : document_workspace_.OpenDocuments()[index]->path.string());
+    active_action_ = "Switched to " + (editor_ptr ? editor_ptr->CurrentFilePath() : document->path.string());
     screen_.PostEvent(ftxui::Event::Custom);
 }
 

@@ -126,9 +126,9 @@ void TextltApp::RunDropdownAction(int menu_index, int item_index) {
     
 void TextltApp::CommandFileNew() {
     PersistActiveFavoriteCursor();
-    auto doc = std::make_shared<Document>();
-    doc->Reset();
-    AddOpenDocument(doc);
+    const size_t document_index = document_workspace_.AddUntitledDocument();
+    AssignDocumentToActivePane(document_index);
+    RefreshOpenedDocumentsSidebar();
     PersistOpenedDocuments();
     active_action_ = "New file";
     CloseDropdown();

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <vector>
@@ -22,6 +23,12 @@ public:
     size_t& ActiveDocumentIndex();
     size_t ActiveDocumentIndex() const;
     void SetActiveDocumentIndex(size_t index);
+    void ClampActiveDocumentIndex();
+
+    std::shared_ptr<Document> ActiveDocument() const;
+    std::shared_ptr<Document> DocumentAt(size_t index) const;
+    bool HasDocumentAt(size_t index) const;
+    int FindDocumentByPath(const std::filesystem::path& path) const;
 
     std::vector<EditorPaneState>& EditorPanes();
     const std::vector<EditorPaneState>& EditorPanes() const;
@@ -34,7 +41,10 @@ public:
     bool Empty() const;
     size_t DocumentCount() const;
     size_t AddDocument(std::shared_ptr<Document> document);
+    size_t AddUntitledDocument();
     void RemoveDocument(size_t index);
+
+    static bool IsMemoryOnlyDocument(const std::shared_ptr<Document>& document);
 
 private:
     std::vector<std::shared_ptr<Document>> open_documents_;
