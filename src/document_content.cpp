@@ -32,11 +32,11 @@ std::string Document::ToContent() const {
 }
 
 std::string Document::LineEndingLabel() const {
-    return line_ending == LineEnding::CRLF ? "CRLF" : "LF";
+    return session.LineEndingLabel();
 }
 
 std::string Document::CurrentFilePath() const {
-    return path.string();
+    return session.CurrentFilePath();
 }
 
 size_t Document::LineCount() const {
@@ -66,26 +66,50 @@ std::string Document::TextFromCursor() const {
 }
 
 std::string Document::CommentPrefix() const {
-    const std::string filename = path.filename().string();
-    const std::string extension = path.extension().string();
+    return session.CommentPrefix();
+}
 
-    if (extension == ".sql" || extension == ".graphql" || extension == ".gql") {
-        return "--";
+bool Document::GetTextProcessorTargetText(
+    bool whole_document,
+    std::string& text,
+    std::string& error) const {
+    if (whole_document) {
+        text = ToContent();
+        return true;
     }
 
-    if (filename.rfind("Dockerfile", 0) == 0 ||
-        filename == ".bashrc" || filename == ".profile" ||
-        filename == ".env" || filename == ".env.local" ||
-        filename == ".env.development" || filename == ".env.production" ||
-        (filename.size() >= 4 && filename.compare(filename.size() - 4, 4, ".env") == 0) ||
-        extension == ".conf" || extension == ".ini" || extension == ".py" ||
-        extension == ".rb" || extension == ".yaml" || extension == ".yml" ||
-        extension == ".sh" || extension == ".bash" || extension == ".zsh" ||
-        extension == ".bashrc" || extension == ".profile") {
-        return "#";
+    if (!HasSelection()) {
+        error = "No selected text. Select text or enable Whole document.";
+        return false;
     }
 
-    return "//";
+    text = GetSelectedText();
+    return true;
+}
+
+bool Document::ReplaceTextProcessorTargetText(
+    bool whole_document,
+    const std::string& text,
+    std::string& error) {
+    if (read_only) {
+        error = "Document is read-only.";
+        return false;
+    }
+
+    if (whole_document) {
+        SelectAll();
+    } else if (!HasSelection()) {
+        error = "No selected text. Select text or enable Whole document.";
+        return false;
+    }
+
+    if (text.empty()) {
+        DeleteSelection();
+    } else {
+        InsertText(text);
+    }
+
+    return true;
 }
 
 } // namespace textlt

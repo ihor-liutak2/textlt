@@ -11,33 +11,6 @@
 #include "editor/text_buffer.hpp"
 
 namespace textlt {
-    
-    enum class DocumentType {
-    PlainText,
-    Bash,
-    CMake,
-    Cpp,
-    Json,
-    Markdown,
-    Html,
-    Css,
-    Go,
-    Js,
-    Jsx,
-    Ts,
-    Tsx,
-    Php,
-    Blade,
-    Rust,
-    Java,
-    Python,
-    Xml
-};
-
-enum class LineEnding {
-    LF,
-    CRLF,
-};
 
 struct Document {
     Document();
@@ -50,17 +23,17 @@ struct Document {
     TextBuffer buffer;
     DocumentSession session;
 
-    std::filesystem::path path = "Untitled";
+    std::filesystem::path& path;
     std::vector<std::string>& lines;
-    DocumentType type = DocumentType::PlainText;
-    LineEnding line_ending = LineEnding::LF;
+    DocumentType& type;
+    LineEnding& line_ending;
     size_t& cursor_row;
     size_t& cursor_col;
     Selection& selection;
     bool& is_dirty;
-    bool read_only = false;
-    bool temporary = false;
-    
+    bool& read_only;
+    bool& temporary;
+
     HistoryManager history;
 
     void SetPath(std::filesystem::path p);
@@ -125,6 +98,11 @@ struct Document {
     bool DuplicateLines();
     std::string CommentPrefix() const;
     std::string Label() const;
+    std::string LexerId() const;
+    std::string DisplayTitle() const;
+    bool IsMemoryOnly() const;
+    bool GetTextProcessorTargetText(bool whole_document, std::string& text, std::string& error) const;
+    bool ReplaceTextProcessorTargetText(bool whole_document, const std::string& text, std::string& error);
 
 private:
     void BindFrom(const Document& other);

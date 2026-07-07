@@ -332,20 +332,19 @@ bool TextltApp::GetTextProcessorTargetText(
     std::string& text,
     std::string& error) {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-
-    if (whole_document) {
-        text = editor_ptr->GetAllText();
-        return true;
-    }
-
-    if (!editor_ptr->HasSelection()) {
-        error = "No selected text. Select text or enable Whole document.";
+    const auto document = editor_ptr ? editor_ptr->GetDocument() : document_workspace_.ActiveDocument();
+    if (!document) {
+        error = "No active document.";
         active_action_ = error;
         screen_.PostEvent(ftxui::Event::Custom);
         return false;
     }
 
-    text = editor_ptr->GetSelectedText();
+    if (!document->GetTextProcessorTargetText(whole_document, text, error)) {
+        active_action_ = error;
+        screen_.PostEvent(ftxui::Event::Custom);
+        return false;
+    }
     return true;
 }
 
@@ -355,20 +354,22 @@ bool TextltApp::ReplaceTextProcessorTargetText(
     const std::string& text,
     std::string& error) {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-
-    if (whole_document) {
-        editor_ptr->SelectAll();
-    } else if (!editor_ptr->HasSelection()) {
-        error = "No selected text. Select text or enable Whole document.";
+    const auto document = editor_ptr ? editor_ptr->GetDocument() : document_workspace_.ActiveDocument();
+    if (!document) {
+        error = "No active document.";
         active_action_ = error;
         screen_.PostEvent(ftxui::Event::Custom);
         return false;
     }
 
-    if (text.empty()) {
-        editor_ptr->DeleteSelection();
-    } else {
-        editor_ptr->InsertText(text);
+    if (!document->ReplaceTextProcessorTargetText(whole_document, text, error)) {
+        active_action_ = error;
+        screen_.PostEvent(ftxui::Event::Custom);
+        return false;
+    }
+
+    if (editor_ptr) {
+        editor_ptr->SetDocument(document);
     }
 
     active_action_ = whole_document

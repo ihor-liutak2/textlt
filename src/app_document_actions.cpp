@@ -217,11 +217,11 @@ void TextltApp::RefreshOpenedDocumentsSidebar() {
         const auto& doc = document_workspace_.OpenDocuments()[index];
         if (!doc) continue;
 
-        std::string label = doc->path.filename().string();
-        if (label.empty()) {
-            label = doc->path.string();
-        }
-        entries.push_back({doc->path, label, doc->is_dirty, index == document_workspace_.ActiveDocumentIndex()});
+        entries.push_back({
+            doc->path,
+            doc->DisplayTitle(),
+            doc->is_dirty,
+            index == document_workspace_.ActiveDocumentIndex()});
     }
 
     sidebar->SetOpenedFiles(std::move(entries), document_workspace_.ActiveDocumentIndex());

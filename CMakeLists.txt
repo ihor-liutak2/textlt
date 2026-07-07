@@ -214,6 +214,7 @@ add_executable(textlt
   src/editor_utils.cpp
   src/editor_viewport.cpp
   src/editor/text_buffer.cpp
+  src/editor/document_session.cpp
   src/editor/document_workspace.cpp
   src/editor/document_file_controller.cpp
   src/editor/clipboard_controller.cpp
@@ -334,6 +335,7 @@ endif()
 add_executable(textlt_document_navigation_test
   tests/document_navigation_test.cpp
   src/document.cpp
+  src/editor/document_session.cpp
   src/editor/text_buffer.cpp
   src/document_cursor.cpp
   src/document_history.cpp

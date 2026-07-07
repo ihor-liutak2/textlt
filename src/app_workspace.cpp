@@ -13,17 +13,7 @@ namespace textlt {
 namespace {
 
 std::string DocumentTitle(const std::shared_ptr<Document>& doc) {
-    if (!doc) {
-        return "Untitled";
-    }
-    std::string title = doc->path.filename().string();
-    if (title.empty()) {
-        title = doc->path.string();
-    }
-    if (title.empty()) {
-        title = "Untitled";
-    }
-    return title;
+    return doc ? doc->DisplayTitle() : "Untitled";
 }
 
 std::string ShortDocumentTitle(const std::shared_ptr<Document>& doc) {

@@ -311,11 +311,7 @@ void DocumentWorkspace::RemoveDocument(size_t index) {
 }
 
 bool DocumentWorkspace::IsMemoryOnlyDocument(const std::shared_ptr<Document>& document) {
-    if (!document) {
-        return false;
-    }
-    const std::string path = document->path.string();
-    return path.empty() || path == "Untitled" || path == "untitled.txt";
+    return document && document->IsMemoryOnly();
 }
 
 } // namespace textlt
