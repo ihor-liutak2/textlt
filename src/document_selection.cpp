@@ -119,7 +119,7 @@ bool Document::DeleteSelectionWithoutSnapshot() {
     cursor_row = start.y;
     ClampCursor();
     ClearSelection();
-    is_dirty = true;
+    buffer.MarkDirty();
     return true;
 }
 

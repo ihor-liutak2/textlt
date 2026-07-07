@@ -11,7 +11,7 @@ HistoryManager::State Document::CurrentState() const {
 }
 
 void Document::ApplyState(const HistoryManager::State& state) {
-    lines = state.lines;
+    buffer.SetLines(state.lines);
     cursor_col = state.cursor_x < 0 ? 0 : static_cast<size_t>(state.cursor_x);
     cursor_row = state.cursor_y < 0 ? 0 : static_cast<size_t>(state.cursor_y);
     EnsureValidBuffer();

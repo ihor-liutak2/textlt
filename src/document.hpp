@@ -7,6 +7,8 @@
 #include <utility>
 #include "history_manager.hpp"
 #include "text_transformer.hpp"
+#include "editor/document_session.hpp"
+#include "editor/text_buffer.hpp"
 
 namespace textlt {
     
@@ -37,29 +39,30 @@ enum class LineEnding {
     CRLF,
 };
 
-struct Selection {
-    bool active = false;
-    size_t anchor_x = 0;
-    size_t anchor_y = 0;
-};
-
 struct Document {
-    Document() = default;
+    Document();
+    Document(const Document& other);
+    Document& operator=(const Document& other);
+    Document(Document&& other) noexcept;
+    Document& operator=(Document&& other) noexcept;
+    explicit Document(std::filesystem::path p);
+
+    TextBuffer buffer;
+    DocumentSession session;
 
     std::filesystem::path path = "Untitled";
-    std::vector<std::string> lines{""};
+    std::vector<std::string>& lines;
     DocumentType type = DocumentType::PlainText;
     LineEnding line_ending = LineEnding::LF;
-    size_t cursor_row = 0;
-    size_t cursor_col = 0;
-    Selection selection;
-    bool is_dirty = false;
+    size_t& cursor_row;
+    size_t& cursor_col;
+    Selection& selection;
+    bool& is_dirty;
     bool read_only = false;
     bool temporary = false;
     
     HistoryManager history;
 
-    Document(std::filesystem::path p);
     void SetPath(std::filesystem::path p);
     void Reset();
     void LoadContent(const std::string& content, std::filesystem::path p);
@@ -122,6 +125,9 @@ struct Document {
     bool DuplicateLines();
     std::string CommentPrefix() const;
     std::string Label() const;
+
+private:
+    void BindFrom(const Document& other);
 };
 
 } // namespace textlt

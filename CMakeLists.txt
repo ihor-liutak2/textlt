@@ -213,6 +213,8 @@ add_executable(textlt
   src/editor_mouse.cpp
   src/editor_utils.cpp
   src/editor_viewport.cpp
+  src/editor/text_buffer.cpp
+  src/editor/document_workspace.cpp
   src/file_utils.cpp
   src/git_manager.cpp
   src/history_manager.cpp
@@ -331,6 +333,8 @@ endif()
 
 add_executable(textlt_document_navigation_test
   tests/document_navigation_test.cpp
+  src/document.cpp
+  src/editor/text_buffer.cpp
   src/document_cursor.cpp
   src/document_history.cpp
   src/document_selection.cpp

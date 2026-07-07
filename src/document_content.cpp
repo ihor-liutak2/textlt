@@ -17,26 +17,7 @@ void Document::LoadContent(const std::string& content, std::filesystem::path p) 
     }
     line_ending = (lf_count > 0 && crlf_count == lf_count) ? LineEnding::CRLF : LineEnding::LF;
 
-    lines.clear();
-    std::string line;
-    for (char character : content) {
-        if (character == '\n') {
-            if (!line.empty() && line.back() == '\r') {
-                line.pop_back();
-            }
-            lines.push_back(line);
-            line.clear();
-        } else {
-            line.push_back(character);
-        }
-    }
-    if (!content.empty() && content.back() != '\n') {
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
-        }
-        lines.push_back(line);
-    }
-
+    buffer.SetText(content);
     SetPath(std::move(p));
     cursor_row = 0;
     cursor_col = 0;
@@ -46,20 +27,8 @@ void Document::LoadContent(const std::string& content, std::filesystem::path p) 
 }
 
 std::string Document::ToContent() const {
-    if (lines.empty()) {
-        return "";
-    }
-
     const std::string ending = line_ending == LineEnding::CRLF ? "\r\n" : "\n";
-    std::string full_text;
-    full_text.reserve(lines.size() * 80);
-    for (size_t i = 0; i < lines.size(); ++i) {
-        full_text += lines[i];
-        if (i + 1 < lines.size()) {
-            full_text += ending;
-        }
-    }
-    return full_text;
+    return buffer.ToText(ending);
 }
 
 std::string Document::LineEndingLabel() const {

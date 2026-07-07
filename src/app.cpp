@@ -246,7 +246,12 @@ TextltApp::TextltApp()
           &current_theme_,
           [this] { SaveAndExit(); },
           [this] { DiscardAndExit(); },
-          [this] { CloseExitConfirmationDialog(); }) {
+          [this] { CloseExitConfirmationDialog(); }),
+      document_workspace_(),
+      open_documents_(document_workspace_.OpenDocuments()),
+      active_document_index_(document_workspace_.ActiveDocumentIndex()),
+      editor_panes_(document_workspace_.EditorPanes()),
+      active_editor_pane_index_(document_workspace_.ActiveEditorPaneIndex()) {
     recent_files_history_.Load();
     menu_bar_ = ftxui::Make<MenuBarComponent>(
         [this](int menu_index, int item_index) {

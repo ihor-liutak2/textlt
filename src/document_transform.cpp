@@ -41,7 +41,7 @@ bool Document::ConvertTabsToSpaces(size_t tab_size) {
     }
 
     cursor_col = std::min(adjusted_cursor_x, lines[cursor_row].size());
-    is_dirty = true;
+    buffer.MarkDirty();
     return true;
 }
 
@@ -60,7 +60,7 @@ bool Document::Convert4To2Spaces() {
     selection.anchor_x = result.selection.anchor_x;
     selection.anchor_y = result.selection.anchor_y;
     selection.active = result.selection.active;
-    is_dirty = true;
+    buffer.MarkDirty();
     ClampCursor();
     return true;
 }
@@ -80,7 +80,7 @@ bool Document::Convert2To4Spaces() {
     selection.anchor_x = result.selection.anchor_x;
     selection.anchor_y = result.selection.anchor_y;
     selection.active = result.selection.active;
-    is_dirty = true;
+    buffer.MarkDirty();
     ClampCursor();
     return true;
 }
@@ -101,7 +101,7 @@ bool Document::IndentLines(size_t tab_size) {
     selection.anchor_x = result.selection.anchor_x;
     selection.anchor_y = result.selection.anchor_y;
     selection.active = result.selection.active;
-    is_dirty = true;
+    buffer.MarkDirty();
     ClampCursor();
     return true;
 }
@@ -122,7 +122,7 @@ bool Document::OutdentLines(size_t tab_size) {
     selection.anchor_x = result.selection.anchor_x;
     selection.anchor_y = result.selection.anchor_y;
     selection.active = result.selection.active;
-    is_dirty = true;
+    buffer.MarkDirty();
     ClampCursor();
     return true;
 }
@@ -142,7 +142,7 @@ bool Document::ToggleCase() {
     selection.anchor_x = result.selection.anchor_x;
     selection.anchor_y = result.selection.anchor_y;
     selection.active = result.selection.active;
-    is_dirty = true;
+    buffer.MarkDirty();
     ClampCursor();
     return true;
 }

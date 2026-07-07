@@ -160,8 +160,7 @@ void TextltApp::AddOpenDocument(std::shared_ptr<Document> doc) {
         return;
     }
 
-    open_documents_.push_back(doc);
-    active_document_index_ = open_documents_.size() - 1;
+    document_workspace_.AddDocument(doc);
     AssignDocumentToActivePane(active_document_index_);
     RefreshOpenedDocumentsSidebar();
 }
@@ -198,25 +197,10 @@ void TextltApp::RemoveOpenDocument(size_t index) {
         return;
     }
 
-    open_documents_.erase(open_documents_.begin() + static_cast<std::ptrdiff_t>(index));
+    document_workspace_.RemoveDocument(index);
     if (open_documents_.empty()) {
-        active_document_index_ = 0;
         EnsureOneOpenDocument();
         return;
-    }
-
-    if (active_document_index_ >= open_documents_.size()) {
-        active_document_index_ = open_documents_.size() - 1;
-    } else if (index < active_document_index_) {
-        --active_document_index_;
-    }
-
-    for (EditorPaneState& pane : editor_panes_) {
-        if (pane.document_index > index) {
-            --pane.document_index;
-        } else if (pane.document_index == index) {
-            pane.document_index = active_document_index_;
-        }
     }
 
     SyncEditorPaneDocuments();

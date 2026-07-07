@@ -55,9 +55,79 @@ DocumentType DetermineDocumentType(const std::filesystem::path& path) {
 
 } // namespace
 
+Document::Document()
+    : lines(buffer.MutableLines()),
+      cursor_row(session.cursor_row),
+      cursor_col(session.cursor_col),
+      selection(session.selection),
+      is_dirty(buffer.DirtyFlag()) {}
+
 Document::Document(std::filesystem::path p)
-    : path(std::move(p)),
-      type(DetermineDocumentType(path)) {}
+    : Document() {
+    SetPath(std::move(p));
+}
+
+Document::Document(const Document& other)
+    : buffer(other.buffer),
+      session(other.session),
+      path(other.path),
+      lines(buffer.MutableLines()),
+      type(other.type),
+      line_ending(other.line_ending),
+      cursor_row(session.cursor_row),
+      cursor_col(session.cursor_col),
+      selection(session.selection),
+      is_dirty(buffer.DirtyFlag()),
+      read_only(other.read_only),
+      temporary(other.temporary),
+      history(other.history) {}
+
+Document& Document::operator=(const Document& other) {
+    if (this != &other) {
+        BindFrom(other);
+    }
+    return *this;
+}
+
+Document::Document(Document&& other) noexcept
+    : buffer(std::move(other.buffer)),
+      session(std::move(other.session)),
+      path(std::move(other.path)),
+      lines(buffer.MutableLines()),
+      type(other.type),
+      line_ending(other.line_ending),
+      cursor_row(session.cursor_row),
+      cursor_col(session.cursor_col),
+      selection(session.selection),
+      is_dirty(buffer.DirtyFlag()),
+      read_only(other.read_only),
+      temporary(other.temporary),
+      history(std::move(other.history)) {}
+
+Document& Document::operator=(Document&& other) noexcept {
+    if (this != &other) {
+        buffer = std::move(other.buffer);
+        session = std::move(other.session);
+        path = std::move(other.path);
+        type = other.type;
+        line_ending = other.line_ending;
+        read_only = other.read_only;
+        temporary = other.temporary;
+        history = std::move(other.history);
+    }
+    return *this;
+}
+
+void Document::BindFrom(const Document& other) {
+    buffer = other.buffer;
+    session = other.session;
+    path = other.path;
+    type = other.type;
+    line_ending = other.line_ending;
+    read_only = other.read_only;
+    temporary = other.temporary;
+    history = other.history;
+}
 
 void Document::SetPath(std::filesystem::path p) {
     path = std::move(p);
@@ -74,7 +144,7 @@ void Document::Reset() {
     read_only = false;
     temporary = false;
     history.Clear();
-    lines = {""};
+    buffer.SetLines({""});
 }
 
 std::string Document::Label() const {

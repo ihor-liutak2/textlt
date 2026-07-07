@@ -49,7 +49,7 @@ bool Document::InsertText(const std::string& text) {
         cursor_col = lines[cursor_row].size() - suffix.size();
     }
 
-    is_dirty = true;
+    buffer.MarkDirty();
     return true;
 }
 
@@ -60,7 +60,7 @@ bool Document::InsertCharacter(const std::string& input) {
     EnsureValidBuffer();
     lines[cursor_row].insert(cursor_col, input);
     cursor_col += input.size();
-    is_dirty = true;
+    buffer.MarkDirty();
     return true;
 }
 
@@ -90,14 +90,14 @@ bool Document::InsertPairedCharacter(char opening, char closing) {
             lines[cursor_row].insert(cursor_col, std::string(1, character));
             ++cursor_col;
         }
-        is_dirty = true;
+        buffer.MarkDirty();
         ClearSelection();
         return true;
     }
 
     lines[cursor_row].insert(cursor_col, std::string(1, opening) + closing);
     ++cursor_col;
-    is_dirty = true;
+    buffer.MarkDirty();
     ClearSelection();
     return true;
 }
@@ -110,7 +110,7 @@ bool Document::Backspace() {
             utils::PreviousUtf8CodepointStart(lines[cursor_row], cursor_col);
         lines[cursor_row].erase(erase_start, cursor_col - erase_start);
         cursor_col = erase_start;
-        is_dirty = true;
+        buffer.MarkDirty();
         return true;
     }
     if (cursor_row > 0) {
@@ -119,7 +119,7 @@ bool Document::Backspace() {
         lines[cursor_row - 1] += lines[cursor_row];
         lines.erase(lines.begin() + static_cast<std::ptrdiff_t>(cursor_row));
         --cursor_row;
-        is_dirty = true;
+        buffer.MarkDirty();
         return true;
     }
     return false;
@@ -132,14 +132,14 @@ bool Document::DeleteForward() {
         const size_t erase_end =
             utils::NextUtf8CodepointStart(lines[cursor_row], cursor_col);
         lines[cursor_row].erase(cursor_col, erase_end - cursor_col);
-        is_dirty = true;
+        buffer.MarkDirty();
         return true;
     }
     if (cursor_row + 1 < lines.size()) {
         SaveSnapshot();
         lines[cursor_row] += lines[cursor_row + 1];
         lines.erase(lines.begin() + static_cast<std::ptrdiff_t>(cursor_row + 1));
-        is_dirty = true;
+        buffer.MarkDirty();
         return true;
     }
     return false;
@@ -154,7 +154,7 @@ bool Document::DeleteWordBackward() {
         lines[cursor_row - 1] += lines[cursor_row];
         lines.erase(lines.begin() + static_cast<std::ptrdiff_t>(cursor_row));
         --cursor_row;
-        is_dirty = true;
+        buffer.MarkDirty();
         return true;
     }
 
@@ -163,7 +163,7 @@ bool Document::DeleteWordBackward() {
     SaveSnapshot();
     lines[cursor_row].erase(target, cursor_col - target);
     cursor_col = target;
-    is_dirty = true;
+    buffer.MarkDirty();
     return true;
 }
 
@@ -174,7 +174,7 @@ bool Document::DeleteWordForward() {
         SaveSnapshot();
         lines[cursor_row] += lines[cursor_row + 1];
         lines.erase(lines.begin() + static_cast<std::ptrdiff_t>(cursor_row + 1));
-        is_dirty = true;
+        buffer.MarkDirty();
         return true;
     }
 
@@ -182,7 +182,7 @@ bool Document::DeleteWordForward() {
     if (target == cursor_col) return false;
     SaveSnapshot();
     lines[cursor_row].erase(cursor_col, target - cursor_col);
-    is_dirty = true;
+    buffer.MarkDirty();
     return true;
 }
 
@@ -200,7 +200,7 @@ bool Document::DeleteCurrentLine() {
         cursor_row = lines.size() - 1;
     }
     cursor_col = 0;
-    is_dirty = true;
+    buffer.MarkDirty();
     return true;
 }
 
@@ -211,7 +211,7 @@ bool Document::MoveLineUp() {
     std::swap(lines[cursor_row], lines[cursor_row - 1]);
     --cursor_row;
     cursor_col = std::min(cursor_col, lines[cursor_row].size());
-    is_dirty = true;
+    buffer.MarkDirty();
     return true;
 }
 
@@ -245,7 +245,7 @@ bool Document::MoveLinesUp() {
     selection.anchor_y = std::min(selection.anchor_y, lines.size() - 1);
     selection.anchor_x = std::min(selection.anchor_x, lines[selection.anchor_y].size());
     selection.active = true;
-    is_dirty = true;
+    buffer.MarkDirty();
     return true;
 }
 
@@ -256,7 +256,7 @@ bool Document::MoveLineDown() {
     std::swap(lines[cursor_row], lines[cursor_row + 1]);
     ++cursor_row;
     cursor_col = std::min(cursor_col, lines[cursor_row].size());
-    is_dirty = true;
+    buffer.MarkDirty();
     return true;
 }
 
@@ -290,7 +290,7 @@ bool Document::MoveLinesDown() {
     selection.anchor_y = std::min(selection.anchor_y, lines.size() - 1);
     selection.anchor_x = std::min(selection.anchor_x, lines[selection.anchor_y].size());
     selection.active = true;
-    is_dirty = true;
+    buffer.MarkDirty();
     return true;
 }
 
@@ -300,7 +300,7 @@ bool Document::DuplicateLine() {
     lines.insert(lines.begin() + static_cast<std::ptrdiff_t>(cursor_row + 1), lines[cursor_row]);
     ++cursor_row;
     cursor_col = std::min(cursor_col, lines[cursor_row].size());
-    is_dirty = true;
+    buffer.MarkDirty();
     return true;
 }
 
@@ -330,7 +330,7 @@ bool Document::DuplicateLines() {
     lines.insert(lines.begin() + static_cast<std::ptrdiff_t>(end_row + 1),
                  copied_lines.begin(), copied_lines.end());
     selection.active = true;
-    is_dirty = true;
+    buffer.MarkDirty();
     return true;
 }
 
