@@ -73,43 +73,21 @@ bool Document::GetTextProcessorTargetText(
     bool whole_document,
     std::string& text,
     std::string& error) const {
-    if (whole_document) {
-        text = ToContent();
-        return true;
-    }
-
-    if (!HasSelection()) {
-        error = "No selected text. Select text or enable Whole document.";
-        return false;
-    }
-
-    text = GetSelectedText();
-    return true;
+    return session.GetTextProcessorTargetText(buffer, whole_document, text, error);
 }
 
 bool Document::ReplaceTextProcessorTargetText(
     bool whole_document,
     const std::string& text,
     std::string& error) {
-    if (read_only) {
-        error = "Document is read-only.";
-        return false;
-    }
-
-    if (whole_document) {
-        SelectAll();
-    } else if (!HasSelection()) {
-        error = "No selected text. Select text or enable Whole document.";
-        return false;
-    }
-
-    if (text.empty()) {
-        DeleteSelection();
-    } else {
-        InsertText(text);
-    }
-
-    return true;
+    const bool changed = session.ReplaceTextProcessorTargetText(
+        buffer,
+        history,
+        whole_document,
+        text,
+        error);
+    EnsureValidBuffer();
+    return changed;
 }
 
 } // namespace textlt

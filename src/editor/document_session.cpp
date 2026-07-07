@@ -2,8 +2,13 @@
 
 #include <algorithm>
 #include <cctype>
+#include <iterator>
 #include <unordered_map>
 #include <utility>
+#include <vector>
+
+#include "editor/text_buffer.hpp"
+#include "editor_utils.hpp"
 
 namespace textlt {
 namespace {
@@ -182,6 +187,199 @@ std::string DocumentSession::CommentPrefix() const {
 
 std::string DocumentSession::LineEndingLabel() const {
     return line_ending == LineEnding::CRLF ? "CRLF" : "LF";
+}
+
+std::string DocumentSession::LineEndingText() const {
+    return line_ending == LineEnding::CRLF ? "\r\n" : "\n";
+}
+
+HistoryManager::State DocumentSession::CurrentTextProcessorState(const TextBuffer& buffer) const {
+    return {
+        buffer.Lines().empty() ? std::vector<std::string>{""} : buffer.Lines(),
+        static_cast<int>(cursor_col),
+        static_cast<int>(cursor_row),
+    };
+}
+
+void DocumentSession::ClampTextProcessorCursor(TextBuffer& buffer) {
+    buffer.EnsureValid();
+    const auto& lines = buffer.Lines();
+    cursor_row = std::min(cursor_row, lines.size() - 1);
+    cursor_col = std::min(cursor_col, lines[cursor_row].size());
+    if (selection.active) {
+        selection.anchor_y = std::min(selection.anchor_y, lines.size() - 1);
+        selection.anchor_x = std::min(selection.anchor_x, lines[selection.anchor_y].size());
+    }
+}
+
+void DocumentSession::SelectWholeTextProcessorBuffer(TextBuffer& buffer) {
+    buffer.EnsureValid();
+    const auto& lines = buffer.Lines();
+    selection.anchor_x = 0;
+    selection.anchor_y = 0;
+    cursor_row = lines.size() - 1;
+    cursor_col = lines[cursor_row].size();
+    selection.active = true;
+}
+
+void DocumentSession::ClearTextProcessorSelection() {
+    selection.active = false;
+    selection.anchor_x = cursor_col;
+    selection.anchor_y = cursor_row;
+}
+
+std::string DocumentSession::SelectedTextFromBuffer(const TextBuffer& buffer) const {
+    const auto& lines = buffer.Lines();
+    if (!HasSelection() || lines.empty()) {
+        return "";
+    }
+
+    auto [start, end] = utils::OrderedSelection(
+        {selection.anchor_x, selection.anchor_y},
+        {cursor_col, cursor_row},
+        lines);
+
+    if (start.y == end.y) {
+        return lines[start.y].substr(start.x, end.x - start.x);
+    }
+
+    std::string selected = lines[start.y].substr(start.x);
+    selected.push_back('\n');
+    for (size_t y = start.y + 1; y < end.y; ++y) {
+        selected += lines[y];
+        selected.push_back('\n');
+    }
+    selected += lines[end.y].substr(0, end.x);
+    return selected;
+}
+
+bool DocumentSession::DeleteTextProcessorSelection(TextBuffer& buffer) {
+    auto& lines = buffer.MutableLines();
+    if (!HasSelection() || lines.empty()) {
+        return false;
+    }
+
+    auto [start, end] = utils::OrderedSelection(
+        {selection.anchor_x, selection.anchor_y},
+        {cursor_col, cursor_row},
+        lines);
+
+    if (start.y == end.y) {
+        lines[start.y].erase(start.x, end.x - start.x);
+    } else {
+        lines[start.y] = lines[start.y].substr(0, start.x) + lines[end.y].substr(end.x);
+        lines.erase(
+            lines.begin() + static_cast<std::ptrdiff_t>(start.y + 1),
+            lines.begin() + static_cast<std::ptrdiff_t>(end.y + 1));
+    }
+
+    if (lines.empty()) {
+        lines.push_back("");
+    }
+
+    cursor_col = start.x;
+    cursor_row = start.y;
+    ClearTextProcessorSelection();
+    ClampTextProcessorCursor(buffer);
+    return true;
+}
+
+bool DocumentSession::InsertTextProcessorText(TextBuffer& buffer, const std::string& text) {
+    if (text.empty()) {
+        return false;
+    }
+
+    buffer.EnsureValid();
+    auto& lines = buffer.MutableLines();
+
+    std::vector<std::string> inserted_lines(1);
+    for (char character : text) {
+        if (character == '\r') {
+            continue;
+        }
+        if (character == '\n') {
+            inserted_lines.emplace_back();
+        } else {
+            inserted_lines.back().push_back(character);
+        }
+    }
+
+    const size_t insertion_row = cursor_row;
+    const std::string suffix = lines[insertion_row].substr(cursor_col);
+    lines[insertion_row].erase(cursor_col);
+    lines[insertion_row] += inserted_lines.front();
+
+    if (inserted_lines.size() == 1) {
+        cursor_col = lines[insertion_row].size();
+        lines[insertion_row] += suffix;
+    } else {
+        inserted_lines.back() += suffix;
+        lines.insert(
+            lines.begin() + static_cast<std::ptrdiff_t>(insertion_row + 1),
+            std::make_move_iterator(inserted_lines.begin() + 1),
+            std::make_move_iterator(inserted_lines.end()));
+        cursor_row = insertion_row + inserted_lines.size() - 1;
+        cursor_col = lines[cursor_row].size() - suffix.size();
+    }
+
+    ClearTextProcessorSelection();
+    ClampTextProcessorCursor(buffer);
+    return true;
+}
+
+bool DocumentSession::GetTextProcessorTargetText(
+    const TextBuffer& buffer,
+    bool whole_document,
+    std::string& text,
+    std::string& error) const {
+    if (whole_document) {
+        text = buffer.ToText(LineEndingText());
+        return true;
+    }
+
+    if (!HasSelection()) {
+        error = "No selected text. Select text or enable Whole document.";
+        return false;
+    }
+
+    text = SelectedTextFromBuffer(buffer);
+    return true;
+}
+
+bool DocumentSession::ReplaceTextProcessorTargetText(
+    TextBuffer& buffer,
+    HistoryManager& history,
+    bool whole_document,
+    const std::string& text,
+    std::string& error) {
+    if (read_only) {
+        error = "Document is read-only.";
+        return false;
+    }
+
+    ClampTextProcessorCursor(buffer);
+    if (whole_document) {
+        SelectWholeTextProcessorBuffer(buffer);
+    } else if (!HasSelection()) {
+        error = "No selected text. Select text or enable Whole document.";
+        return false;
+    }
+
+    history.EndTypingGroup();
+    history.PushSnapshot(CurrentTextProcessorState(buffer));
+
+    bool changed = false;
+    if (text.empty()) {
+        changed = DeleteTextProcessorSelection(buffer);
+    } else {
+        DeleteTextProcessorSelection(buffer);
+        changed = InsertTextProcessorText(buffer, text);
+    }
+
+    if (changed) {
+        buffer.MarkDirty();
+    }
+    return changed;
 }
 
 } // namespace textlt

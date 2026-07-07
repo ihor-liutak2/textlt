@@ -340,7 +340,8 @@ bool TextltApp::GetTextProcessorTargetText(
         return false;
     }
 
-    if (!document->GetTextProcessorTargetText(whole_document, text, error)) {
+    auto& session = document->Session();
+    if (!session.GetTextProcessorTargetText(document->Buffer(), whole_document, text, error)) {
         active_action_ = error;
         screen_.PostEvent(ftxui::Event::Custom);
         return false;
@@ -362,7 +363,13 @@ bool TextltApp::ReplaceTextProcessorTargetText(
         return false;
     }
 
-    if (!document->ReplaceTextProcessorTargetText(whole_document, text, error)) {
+    auto& session = document->Session();
+    if (!session.ReplaceTextProcessorTargetText(
+            document->Buffer(),
+            document->history,
+            whole_document,
+            text,
+            error)) {
         active_action_ = error;
         screen_.PostEvent(ftxui::Event::Custom);
         return false;

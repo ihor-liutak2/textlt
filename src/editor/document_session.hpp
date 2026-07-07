@@ -4,6 +4,8 @@
 #include <filesystem>
 #include <string>
 
+#include "history_manager.hpp"
+
 namespace textlt {
 
 enum class DocumentType {
@@ -39,6 +41,8 @@ struct Selection {
     size_t anchor_y = 0;
 };
 
+class TextBuffer;
+
 class DocumentSession {
 public:
     size_t cursor_row = 0;
@@ -66,8 +70,30 @@ public:
     std::string LexerId() const;
     std::string CommentPrefix() const;
     std::string LineEndingLabel() const;
+    std::string LineEndingText() const;
+
+    bool GetTextProcessorTargetText(
+        const TextBuffer& buffer,
+        bool whole_document,
+        std::string& text,
+        std::string& error) const;
+    bool ReplaceTextProcessorTargetText(
+        TextBuffer& buffer,
+        HistoryManager& history,
+        bool whole_document,
+        const std::string& text,
+        std::string& error);
 
     static DocumentType DetermineDocumentType(const std::filesystem::path& path);
+
+private:
+    HistoryManager::State CurrentTextProcessorState(const TextBuffer& buffer) const;
+    void ClampTextProcessorCursor(TextBuffer& buffer);
+    void SelectWholeTextProcessorBuffer(TextBuffer& buffer);
+    void ClearTextProcessorSelection();
+    std::string SelectedTextFromBuffer(const TextBuffer& buffer) const;
+    bool DeleteTextProcessorSelection(TextBuffer& buffer);
+    bool InsertTextProcessorText(TextBuffer& buffer, const std::string& text);
 };
 
 using EditorSession = DocumentSession;
