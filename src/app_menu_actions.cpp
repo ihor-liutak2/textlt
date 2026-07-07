@@ -127,7 +127,8 @@ void TextltApp::RunDropdownAction(int menu_index, int item_index) {
 void TextltApp::CommandFileNew() {
     PersistActiveFavoriteCursor();
     const size_t document_index = document_workspace_.AddUntitledDocument();
-    AssignDocumentToActivePane(document_index);
+    document_workspace_.AssignDocumentToActivePane(document_index);
+    BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
     PersistOpenedDocuments();
     active_action_ = "New file";

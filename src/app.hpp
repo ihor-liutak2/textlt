@@ -202,9 +202,7 @@ private:
     void AssignDocumentToEditorPane(size_t pane_index, size_t document_index);
     void SplitActiveDocumentToNextPane();
     bool MainViewCanActivateEditorPane() const;
-    void EnsureEditorPanesHaveDocuments();
-    void AssignDocumentToActivePane(size_t document_index);
-    void SyncEditorPaneDocuments();
+    void BindEditorComponentsToWorkspace();
     ftxui::Element RenderEditorPane(size_t pane_index);
     ViewLayoutSnapshot CurrentViewLayoutSnapshot() const;
     void InitializeWithFiles(const std::vector<std::string>& files_to_open);

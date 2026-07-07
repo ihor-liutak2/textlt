@@ -487,7 +487,7 @@ bool TextltApp::OpenGitCompareDocuments(
         SetActiveEditorPane(0);
     }
 
-    document_workspace_.ActiveDocumentIndex() = left_index;
+    document_workspace_.SetActiveDocumentIndex(left_index);
     active_action_ = right_title.empty()
         ? "Opened Git diff"
         : "Opened Git side-by-side compare";

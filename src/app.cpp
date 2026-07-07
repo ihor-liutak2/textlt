@@ -307,7 +307,7 @@ TextltApp::TextltApp()
         }),
         [this] { return RenderTitleBar(); });
 
-    document_workspace_.EditorPanes().assign(3, EditorPaneState{});
+    document_workspace_.SetEditorPaneCount(3);
     editor_pane_components_.clear();
     editor_pane_components_.push_back(text_editor_);
     editor_pane_components_.push_back(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_));

@@ -26,9 +26,7 @@ void TextltApp::SwitchEditorFocus() {
 void TextltApp::FocusEditor() {
     sidebar_has_focus_ = false;
     SetActiveLayer(UiLayer::Main);
-    if (document_workspace_.ActiveEditorPaneIndex() >= editor_pane_components_.size()) {
-        document_workspace_.ActiveEditorPaneIndex() = 0;
-    }
+    document_workspace_.ClampActiveEditorPaneIndex(editor_pane_components_.size());
     if (!editor_pane_components_.empty()) {
         text_editor_ = editor_pane_components_[document_workspace_.ActiveEditorPaneIndex()];
     }
@@ -138,7 +136,8 @@ void TextltApp::AddOpenDocument(std::shared_ptr<Document> doc) {
     }
 
     const size_t document_index = document_workspace_.AddDocument(doc);
-    AssignDocumentToActivePane(document_index);
+    document_workspace_.AssignDocumentToActivePane(document_index);
+    BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
 }
 
@@ -146,14 +145,16 @@ void TextltApp::AddOpenDocument(std::shared_ptr<Document> doc) {
 void TextltApp::EnsureOneOpenDocument() {
     if (!document_workspace_.Empty()) {
         document_workspace_.ClampActiveDocumentIndex();
-        AssignDocumentToActivePane(document_workspace_.ActiveDocumentIndex());
-        SyncEditorPaneDocuments();
+        document_workspace_.AssignDocumentToActivePane(document_workspace_.ActiveDocumentIndex());
+        document_workspace_.SyncEditorPaneDocuments(VisibleEditorPaneCount());
+        BindEditorComponentsToWorkspace();
         RefreshOpenedDocumentsSidebar();
         return;
     }
 
     const size_t document_index = document_workspace_.AddUntitledDocument();
-    AssignDocumentToActivePane(document_index);
+    document_workspace_.AssignDocumentToActivePane(document_index);
+    BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
 }
 
@@ -169,7 +170,8 @@ void TextltApp::RemoveOpenDocument(size_t index) {
         return;
     }
 
-    SyncEditorPaneDocuments();
+    document_workspace_.SyncEditorPaneDocuments(VisibleEditorPaneCount());
+    BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
 }
 
@@ -304,8 +306,9 @@ void TextltApp::RestoreOpenedDocuments() {
 
     if (!document_workspace_.OpenDocuments().empty()) {
         document_workspace_.SetActiveDocumentIndex(std::min(opened_config.active_index, document_workspace_.OpenDocuments().size() - 1));
-        AssignDocumentToActivePane(document_workspace_.ActiveDocumentIndex());
-        SyncEditorPaneDocuments();
+        document_workspace_.AssignDocumentToActivePane(document_workspace_.ActiveDocumentIndex());
+        document_workspace_.SyncEditorPaneDocuments(VisibleEditorPaneCount());
+        BindEditorComponentsToWorkspace();
         RefreshOpenedDocumentsSidebar();
     }
 
@@ -320,7 +323,8 @@ void TextltApp::ActivateOpenDocument(size_t index) {
     }
 
     PersistActiveFavoriteCursor();
-    AssignDocumentToActivePane(index);
+    document_workspace_.AssignDocumentToActivePane(index);
+    BindEditorComponentsToWorkspace();
     auto editor_ptr = ActiveEditor();
     RestoreFavoriteCursor(document->path.string());
     RefreshOpenedDocumentsSidebar();
