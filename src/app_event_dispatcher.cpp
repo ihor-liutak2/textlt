@@ -49,6 +49,12 @@ bool IsOpenedSidebarChordKey(const ftxui::Event& event) {
         event == ftxui::Event::Special("Ctrl+O");
 }
 
+bool IsPrimaryMousePress(ftxui::Event event) {
+    return event.is_mouse() &&
+        event.mouse().button == ftxui::Mouse::Left &&
+        event.mouse().motion == ftxui::Mouse::Pressed;
+}
+
 } // namespace
 
 AppEventDispatcher::AppEventDispatcher(TextltApp& app) : app_(app) {}
@@ -65,6 +71,59 @@ bool AppEventDispatcher::Handle(ftxui::Event event) {
     }
 
     return HandleMainEvent(event);
+}
+
+bool AppEventDispatcher::HandleBodyEvent(ftxui::Event event) {
+    if (IsPrimaryMousePress(event) && app_.ActiveLayer() == TextltApp::UiLayer::Main) {
+        auto sidebar = std::static_pointer_cast<SidebarPanel>(app_.sidebar_panel_);
+        const bool inside_sidebar = sidebar && sidebar->ContainsPoint(event.mouse().x, event.mouse().y);
+        if (app_.editor_config_.show_file_explorer && inside_sidebar) {
+            app_.FocusSidebar();
+        } else if (!inside_sidebar) {
+            app_.FocusEditor();
+        }
+    }
+
+    if (event == ftxui::Event::Tab &&
+        app_.ActiveLayer() == TextltApp::UiLayer::Main &&
+        (!app_.menu_bar_ || !app_.menu_bar_->IsDropdownOpen()) &&
+        !app_.help_dialog_.IsOpen() &&
+        !app_.keyboard_shortcuts_modal_.IsOpen() &&
+        !app_.custom_processor_builder_modal_.IsOpen() &&
+        !app_.recent_files_modal_.IsOpen() &&
+        !app_.search_files_modal_.IsOpen() &&
+        !app_.files_modal_.IsOpen() &&
+        !app_.text_processors_modal_.IsOpen() &&
+        !app_.remote_connections_modal_.IsOpen() &&
+        !app_.remote_files_modal_.IsOpen() &&
+        !app_.git_modal_.IsOpen() &&
+        !app_.git_settings_modal_.IsOpen() &&
+        !app_.tts_modal_.IsOpen() &&
+        !app_.view_layout_modal_.IsOpen() &&
+        !app_.ai_actions_modal_.IsOpen() &&
+        !app_.assistant_settings_modal_.IsOpen() &&
+        !app_.theme_dialog_.IsOpen() &&
+        !app_.sidebar_has_focus_) {
+        app_.text_editor_->OnEvent(event);
+        return true;
+    }
+
+    return false;
+}
+
+bool AppEventDispatcher::HandleEditorPaneEvent(size_t pane_index, ftxui::Event event) {
+    if (IsPrimaryMousePress(event) &&
+        pane_index < app_.VisibleEditorPaneCount() &&
+        app_.MainViewCanActivateEditorPane() &&
+        !app_.sidebar_has_focus_) {
+        app_.SetActiveEditorPane(pane_index);
+        auto editor = std::static_pointer_cast<EditorComponent>(app_.editor_pane_components_[pane_index]);
+        if (editor) {
+            editor->TakeFocus();
+        }
+    }
+
+    return false;
 }
 
 bool AppEventDispatcher::RestoreClosedModalFocus() {

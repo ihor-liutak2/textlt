@@ -326,18 +326,7 @@ TextltApp::TextltApp()
         editor_pane_renderers_.push_back(ftxui::CatchEvent(
             pane_renderer,
             [this, pane_index](ftxui::Event event) {
-                if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left &&
-                    event.mouse().motion == ftxui::Mouse::Pressed &&
-                    pane_index < VisibleEditorPaneCount() &&
-                    MainViewCanActivateEditorPane() &&
-                    !sidebar_has_focus_) {
-                    SetActiveEditorPane(pane_index);
-                    auto editor = std::static_pointer_cast<EditorComponent>(editor_pane_components_[pane_index]);
-                    if (editor) {
-                        editor->TakeFocus();
-                    }
-                }
-                return false;
+                return app_event_dispatcher_.HandleEditorPaneEvent(pane_index, event);
             }));
     }
 
@@ -358,40 +347,7 @@ TextltApp::TextltApp()
         editor_workspace_container_,
     });
     body_container_ = ftxui::CatchEvent(body_content, [this](ftxui::Event event) {
-        if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left &&
-            event.mouse().motion == ftxui::Mouse::Pressed &&
-            ActiveLayer() == UiLayer::Main) {
-            auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
-            if (editor_config_.show_file_explorer && sidebar->ContainsPoint(event.mouse().x, event.mouse().y)) {
-                FocusSidebar();
-            } else if (!sidebar->ContainsPoint(event.mouse().x, event.mouse().y)) {
-                FocusEditor();
-            }
-        }
-        if (event == ftxui::Event::Tab &&
-            ActiveLayer() == UiLayer::Main &&
-            (!menu_bar_ || !menu_bar_->IsDropdownOpen()) &&
-            !help_dialog_.IsOpen() &&
-            !keyboard_shortcuts_modal_.IsOpen() &&
-            !custom_processor_builder_modal_.IsOpen() &&
-            !recent_files_modal_.IsOpen() &&
-            !search_files_modal_.IsOpen() &&
-            !files_modal_.IsOpen() &&
-            !text_processors_modal_.IsOpen() &&
-            !remote_connections_modal_.IsOpen() &&
-            !remote_files_modal_.IsOpen() &&
-            !git_modal_.IsOpen() &&
-            !git_settings_modal_.IsOpen() &&
-            !tts_modal_.IsOpen() &&
-            !view_layout_modal_.IsOpen() &&
-            !ai_actions_modal_.IsOpen() &&
-            !assistant_settings_modal_.IsOpen() &&
-            !theme_dialog_.IsOpen() &&
-            !sidebar_has_focus_) {
-            text_editor_->OnEvent(event);
-            return true;
-        }
-        return false;
+        return app_event_dispatcher_.HandleBodyEvent(event);
     });
 
     // FIXED: Added missing underscore to match class declaration

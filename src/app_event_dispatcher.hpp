@@ -2,6 +2,8 @@
 
 #include "ftxui/component/event.hpp"
 
+#include <cstddef>
+
 namespace textlt {
 
 class TextltApp;
@@ -11,6 +13,8 @@ public:
     explicit AppEventDispatcher(TextltApp& app);
 
     bool Handle(ftxui::Event event);
+    bool HandleBodyEvent(ftxui::Event event);
+    bool HandleEditorPaneEvent(size_t pane_index, ftxui::Event event);
 
 private:
     bool RestoreClosedModalFocus();
