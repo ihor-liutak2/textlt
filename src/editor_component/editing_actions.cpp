@@ -7,12 +7,12 @@
         ClampCursorToBuffer();
         SaveSnapshot();
 
-        size_t start_row = session_->cursor_row;
-        size_t end_row = session_->cursor_row;
+        size_t start_row = session_->CursorRow();
+        size_t end_row = session_->CursorRow();
         if (HasSelection()) {
             auto [start, end] = utils::OrderedSelection(
-                {session_->selection.anchor_x, session_->selection.anchor_y},
-                {session_->cursor_col, session_->cursor_row},
+                {session_->SelectionState().anchor_x, session_->SelectionState().anchor_y},
+                {session_->CursorCol(), session_->CursorRow()},
                 session_->lines);
             start_row = start.y;
             end_row = end.y;
@@ -53,12 +53,12 @@
         }
 
         EndTypingGroup();
-        size_t insertion_row = session_->cursor_row;
-        size_t insertion_col = session_->cursor_col;
+        size_t insertion_row = session_->CursorRow();
+        size_t insertion_col = session_->CursorCol();
         if (keep_cursor && session_->HasSelection()) {
             const auto ordered_selection = utils::OrderedSelection(
-                {session_->selection.anchor_x, session_->selection.anchor_y},
-                {session_->cursor_col, session_->cursor_row},
+                {session_->SelectionState().anchor_x, session_->SelectionState().anchor_y},
+                {session_->CursorCol(), session_->CursorRow()},
                 session_->lines);
             insertion_row = ordered_selection.first.y;
             insertion_col = ordered_selection.first.x;
@@ -79,10 +79,10 @@
 
         const char character = input.front();
         if (IsPairClosingCharacter(character) &&
-            session_->cursor_col < session_->lines[session_->cursor_row].size() &&
-            session_->lines[session_->cursor_row][session_->cursor_col] == character) {
+            session_->CursorCol() < session_->lines[session_->CursorRow()].size() &&
+            session_->lines[session_->CursorRow()][session_->CursorCol()] == character) {
             EndTypingGroup();
-            session_->cursor_col++;
+            session_->CursorCol()++;
             ClearSelection();
             UpdateScroll();
             return true;
@@ -115,7 +115,7 @@
 
         if (!session_) return false;
 
-        const std::string line_before_cursor = session_->lines[session_->cursor_row].substr(0, session_->cursor_col);
+        const std::string line_before_cursor = session_->lines[session_->CursorRow()].substr(0, session_->CursorCol());
         std::string indent;
         if (!config_ || config_->auto_indent) {
             const int configured_tab_size = config_ ? config_->tab_size : 4;
@@ -131,11 +131,11 @@
                 }
         }
 
-        std::string next_line = session_->lines[session_->cursor_row].substr(session_->cursor_col);
-        session_->lines[session_->cursor_row].erase(session_->cursor_col);
-        session_->lines.insert(session_->lines.begin() + session_->cursor_row + 1, indent + next_line);
-        session_->cursor_row++;
-        session_->cursor_col = indent.size();
+        std::string next_line = session_->lines[session_->CursorRow()].substr(session_->CursorCol());
+        session_->lines[session_->CursorRow()].erase(session_->CursorCol());
+        session_->lines.insert(session_->lines.begin() + session_->CursorRow() + 1, indent + next_line);
+        session_->CursorRow()++;
+        session_->CursorCol() = indent.size();
         session_->is_dirty = true;
         ClearSelection();
         UpdateScroll();

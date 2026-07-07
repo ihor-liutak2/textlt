@@ -1,17 +1,17 @@
     std::optional<std::pair<size_t, size_t>> EditorComponent::FindBracketNearCursor() const {
-        if (!session_ || session_->lines.empty() || session_->cursor_row >= session_->lines.size()) {
+        if (!session_ || session_->lines.empty() || session_->CursorRow() >= session_->lines.size()) {
             return std::nullopt;
         }
 
-        const std::string& line = session_->lines[session_->cursor_row];
+        const std::string& line = session_->lines[session_->CursorRow()];
 
-        if (session_->cursor_col > 0 && session_->cursor_col - 1 < line.size() &&
-            utils::IsBracketCharacter(line[session_->cursor_col - 1])) {
-            return std::make_pair(session_->cursor_col - 1, session_->cursor_row);
+        if (session_->CursorCol() > 0 && session_->CursorCol() - 1 < line.size() &&
+            utils::IsBracketCharacter(line[session_->CursorCol() - 1])) {
+            return std::make_pair(session_->CursorCol() - 1, session_->CursorRow());
             }
 
-            if (session_->cursor_col < line.size() && utils::IsBracketCharacter(line[session_->cursor_col])) {
-                return std::make_pair(session_->cursor_col, session_->cursor_row);
+            if (session_->CursorCol() < line.size() && utils::IsBracketCharacter(line[session_->CursorCol()])) {
+                return std::make_pair(session_->CursorCol(), session_->CursorRow());
             }
 
             return std::nullopt;
@@ -143,9 +143,9 @@
         }
 
         // Check if the match is currently being traversed by the cursor
-        return session_ && match.y == session_->cursor_row &&
-        session_->cursor_col >= match.x &&
-        session_->cursor_col < match.x + match.length;
+        return session_ && match.y == session_->CursorRow() &&
+        session_->CursorCol() >= match.x &&
+        session_->CursorCol() < match.x + match.length;
     }
 
     void EditorComponent::BeginSelection() {

@@ -3,6 +3,7 @@
 namespace textlt {
 
 bool EditorComponent::OnEvent(ftxui::Event event) {
+    BindViewportCursorState();
     if (event.is_mouse() && HandleMouseEvent(event)) {
         return true;
     }

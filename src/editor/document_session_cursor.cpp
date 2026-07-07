@@ -27,14 +27,14 @@ void DocumentSession::ClampCursor() {
     if (lines.empty()) {
         lines.push_back("");
     }
-    cursor_row = std::min(cursor_row, lines.size() - 1);
-    cursor_col = std::min(cursor_col, lines[cursor_row].size());
+    CursorRow() = std::min(CursorRow(), lines.size() - 1);
+    CursorCol() = std::min(CursorCol(), lines[CursorRow()].size());
 }
 
 void DocumentSession::SetCursorPosition(size_t row, size_t column) {
     EnsureValidBuffer();
-    cursor_row = std::min(row, lines.size() - 1);
-    cursor_col = std::min(column, lines[cursor_row].size());
+    CursorRow() = std::min(row, lines.size() - 1);
+    CursorCol() = std::min(column, lines[CursorRow()].size());
 }
 
 void DocumentSession::JumpToLine(size_t line_number) {
@@ -42,81 +42,81 @@ void DocumentSession::JumpToLine(size_t line_number) {
     if (line_number < 1) {
         line_number = 1;
     }
-    cursor_row = std::min(line_number, lines.size()) - 1;
-    cursor_col = 0;
+    CursorRow() = std::min(line_number, lines.size()) - 1;
+    CursorCol() = 0;
 }
 
 void DocumentSession::MoveCursorHome() {
-    cursor_col = 0;
+    CursorCol() = 0;
 }
 
 void DocumentSession::MoveCursorEnd() {
     ClampCursor();
-    cursor_col = lines[cursor_row].size();
+    CursorCol() = lines[CursorRow()].size();
 }
 
 void DocumentSession::MoveCursorLeft() {
     ClampCursor();
-    if (cursor_col > 0) {
-        cursor_col = utils::PreviousUtf8CodepointStart(lines[cursor_row], cursor_col);
-    } else if (cursor_row > 0) {
-        --cursor_row;
-        cursor_col = lines[cursor_row].size();
+    if (CursorCol() > 0) {
+        CursorCol() = utils::PreviousUtf8CodepointStart(lines[CursorRow()], CursorCol());
+    } else if (CursorRow() > 0) {
+        --CursorRow();
+        CursorCol() = lines[CursorRow()].size();
     }
 }
 
 void DocumentSession::MoveCursorRight() {
     ClampCursor();
-    if (cursor_col < lines[cursor_row].size()) {
-        cursor_col = utils::NextUtf8CodepointStart(lines[cursor_row], cursor_col);
-    } else if (cursor_row + 1 < lines.size()) {
-        ++cursor_row;
-        cursor_col = 0;
+    if (CursorCol() < lines[CursorRow()].size()) {
+        CursorCol() = utils::NextUtf8CodepointStart(lines[CursorRow()], CursorCol());
+    } else if (CursorRow() + 1 < lines.size()) {
+        ++CursorRow();
+        CursorCol() = 0;
     }
 }
 
 void DocumentSession::MoveCursorUp() {
     ClampCursor();
-    if (cursor_row > 0) {
+    if (CursorRow() > 0) {
         const size_t display_column =
-            utils::Utf8DisplayWidth(lines[cursor_row], 0, cursor_col);
-        --cursor_row;
-        cursor_col = utils::Utf8ByteIndexAtDisplayColumn(
-            lines[cursor_row], 0, display_column);
+            utils::Utf8DisplayWidth(lines[CursorRow()], 0, CursorCol());
+        --CursorRow();
+        CursorCol() = utils::Utf8ByteIndexAtDisplayColumn(
+            lines[CursorRow()], 0, display_column);
     }
 }
 
 void DocumentSession::MoveCursorDown() {
     ClampCursor();
-    if (cursor_row + 1 < lines.size()) {
+    if (CursorRow() + 1 < lines.size()) {
         const size_t display_column =
-            utils::Utf8DisplayWidth(lines[cursor_row], 0, cursor_col);
-        ++cursor_row;
-        cursor_col = utils::Utf8ByteIndexAtDisplayColumn(
-            lines[cursor_row], 0, display_column);
+            utils::Utf8DisplayWidth(lines[CursorRow()], 0, CursorCol());
+        ++CursorRow();
+        CursorCol() = utils::Utf8ByteIndexAtDisplayColumn(
+            lines[CursorRow()], 0, display_column);
     }
 }
 
 void DocumentSession::MoveCursorToPreviousParagraph() {
     ClampCursor();
-    if (cursor_row == 0) {
-        cursor_col = 0;
+    if (CursorRow() == 0) {
+        CursorCol() = 0;
         return;
     }
 
-    if (!IsBlankLine(lines[cursor_row])) {
-        size_t paragraph_start = cursor_row;
+    if (!IsBlankLine(lines[CursorRow()])) {
+        size_t paragraph_start = CursorRow();
         while (paragraph_start > 0 && !IsBlankLine(lines[paragraph_start - 1])) {
             --paragraph_start;
         }
-        if (cursor_row != paragraph_start || cursor_col != 0) {
-            cursor_row = paragraph_start;
-            cursor_col = 0;
+        if (CursorRow() != paragraph_start || CursorCol() != 0) {
+            CursorRow() = paragraph_start;
+            CursorCol() = 0;
             return;
         }
     }
 
-    size_t target = cursor_row;
+    size_t target = CursorRow();
     if (target > 0) --target;
     while (target > 0 && IsBlankLine(lines[target])) {
         --target;
@@ -124,13 +124,13 @@ void DocumentSession::MoveCursorToPreviousParagraph() {
     while (target > 0 && !IsBlankLine(lines[target - 1])) {
         --target;
     }
-    cursor_row = target;
-    cursor_col = 0;
+    CursorRow() = target;
+    CursorCol() = 0;
 }
 
 void DocumentSession::MoveCursorToNextParagraph() {
     ClampCursor();
-    size_t target = cursor_row;
+    size_t target = CursorRow();
     if (!IsBlankLine(lines[target])) {
         while (target + 1 < lines.size() && !IsBlankLine(lines[target + 1])) {
             ++target;
@@ -141,44 +141,44 @@ void DocumentSession::MoveCursorToNextParagraph() {
     }
 
     if (target + 1 < lines.size()) {
-        cursor_row = target + 1;
-        cursor_col = 0;
+        CursorRow() = target + 1;
+        CursorCol() = 0;
         return;
     }
 
-    cursor_row = lines.size() - 1;
-    cursor_col = lines[cursor_row].size();
+    CursorRow() = lines.size() - 1;
+    CursorCol() = lines[CursorRow()].size();
 }
 
 void DocumentSession::MoveCursorToPreviousWord() {
     ClampCursor();
-    if (cursor_col == 0) {
-        if (cursor_row == 0) return;
-        --cursor_row;
-        cursor_col = lines[cursor_row].size();
+    if (CursorCol() == 0) {
+        if (CursorRow() == 0) return;
+        --CursorRow();
+        CursorCol() = lines[CursorRow()].size();
     }
 
-    const std::string& line = lines[cursor_row];
-    while (cursor_col > 0 && !utils::IsWordCharacter(line[cursor_col - 1])) {
-        --cursor_col;
+    const std::string& line = lines[CursorRow()];
+    while (CursorCol() > 0 && !utils::IsWordCharacter(line[CursorCol() - 1])) {
+        --CursorCol();
     }
-    while (cursor_col > 0 && utils::IsWordCharacter(line[cursor_col - 1])) {
-        --cursor_col;
+    while (CursorCol() > 0 && utils::IsWordCharacter(line[CursorCol() - 1])) {
+        --CursorCol();
     }
 }
 
 void DocumentSession::MoveCursorToNextWord() {
     ClampCursor();
-    const std::string& line = lines[cursor_row];
-    while (cursor_col < line.size() && utils::IsWordCharacter(line[cursor_col])) {
-        ++cursor_col;
+    const std::string& line = lines[CursorRow()];
+    while (CursorCol() < line.size() && utils::IsWordCharacter(line[CursorCol()])) {
+        ++CursorCol();
     }
-    while (cursor_col < line.size() && !utils::IsWordCharacter(line[cursor_col])) {
-        ++cursor_col;
+    while (CursorCol() < line.size() && !utils::IsWordCharacter(line[CursorCol()])) {
+        ++CursorCol();
     }
-    if (cursor_col == line.size() && cursor_row + 1 < lines.size()) {
-        ++cursor_row;
-        cursor_col = 0;
+    if (CursorCol() == line.size() && CursorRow() + 1 < lines.size()) {
+        ++CursorRow();
+        CursorCol() = 0;
     }
 }
 

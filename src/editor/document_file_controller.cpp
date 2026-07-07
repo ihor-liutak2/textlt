@@ -371,7 +371,7 @@ void DocumentFileController::PersistActiveFavoriteCursor() {
         return;
     }
 
-    UpdateFavoriteCursor(favorite_path, session->cursor_row, session->cursor_col);
+    UpdateFavoriteCursor(favorite_path, session->CursorRow(), session->CursorCol());
 }
 
 void DocumentFileController::RestoreFavoriteCursor(const std::filesystem::path& path) {
@@ -575,8 +575,8 @@ DocumentFileController::OpenedConfig DocumentFileController::CurrentOpenedConfig
         }
 
         OpenedFileState entry;
-        entry.row = session->cursor_row;
-        entry.column = session->cursor_col;
+        entry.row = session->CursorRow();
+        entry.column = session->CursorCol();
 
         if (DocumentWorkspace::IsMemoryOnlySession(session)) {
             const std::string content = document->ToContent();

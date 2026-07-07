@@ -9,6 +9,8 @@
 #include "ftxui/component/mouse.hpp"
 #include "ftxui/dom/elements.hpp"
 
+#include "editor/editor_cursor_state.hpp"
+
 namespace textlt {
 
 class DocumentSession;
@@ -32,6 +34,9 @@ struct EditorViewportMouseCallbacks {
 class EditorViewport {
 public:
     void Reset();
+
+    EditorCursorState& CursorState();
+    const EditorCursorState& CursorState() const;
 
     void SetBox(ftxui::Box box);
     const ftxui::Box& Box() const;
@@ -67,6 +72,7 @@ public:
     size_t drag_start_scroll_y = 0;
     int drag_start_y = 0;
     ftxui::Box box;
+    EditorCursorState cursor_state;
 
 private:
     std::pair<size_t, size_t> PositionAtMouse(

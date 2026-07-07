@@ -29,10 +29,10 @@
         session_->ClampCursor();
         const size_t width = VisibleTextWidth();
         const auto current_segments =
-            utils::BuildUtf8WrapSegments(session_->lines[session_->cursor_row], width);
+            utils::BuildUtf8WrapSegments(session_->lines[session_->CursorRow()], width);
         size_t segment_index = current_segments.size() - 1;
         for (size_t index = 0; index < current_segments.size(); ++index) {
-            if (session_->cursor_col < current_segments[index].end ||
+            if (session_->CursorCol() < current_segments[index].end ||
                 index + 1 == current_segments.size()) {
                 segment_index = index;
                 break;
@@ -40,24 +40,24 @@
         }
 
         const size_t display_column = utils::Utf8DisplayWidth(
-            session_->lines[session_->cursor_row],
+            session_->lines[session_->CursorRow()],
             current_segments[segment_index].start,
-            session_->cursor_col);
+            session_->CursorCol());
 
         utils::Utf8WrapSegment target;
         if (segment_index > 0) {
             target = current_segments[segment_index - 1];
         } else {
-            if (session_->cursor_row == 0) return;
-            --session_->cursor_row;
+            if (session_->CursorRow() == 0) return;
+            --session_->CursorRow();
             const auto target_segments =
-                utils::BuildUtf8WrapSegments(session_->lines[session_->cursor_row], width);
+                utils::BuildUtf8WrapSegments(session_->lines[session_->CursorRow()], width);
             target = target_segments.back();
         }
-        session_->cursor_col = std::min(
+        session_->CursorCol() = std::min(
             target.end,
             utils::Utf8ByteIndexAtDisplayColumn(
-                session_->lines[session_->cursor_row], target.start, display_column));
+                session_->lines[session_->CursorRow()], target.start, display_column));
     }
 
     void EditorComponent::MoveCursorDown() {
@@ -70,10 +70,10 @@
         session_->ClampCursor();
         const size_t width = VisibleTextWidth();
         const auto current_segments =
-            utils::BuildUtf8WrapSegments(session_->lines[session_->cursor_row], width);
+            utils::BuildUtf8WrapSegments(session_->lines[session_->CursorRow()], width);
         size_t segment_index = current_segments.size() - 1;
         for (size_t index = 0; index < current_segments.size(); ++index) {
-            if (session_->cursor_col < current_segments[index].end ||
+            if (session_->CursorCol() < current_segments[index].end ||
                 index + 1 == current_segments.size()) {
                 segment_index = index;
                 break;
@@ -81,40 +81,40 @@
         }
 
         const size_t display_column = utils::Utf8DisplayWidth(
-            session_->lines[session_->cursor_row],
+            session_->lines[session_->CursorRow()],
             current_segments[segment_index].start,
-            session_->cursor_col);
+            session_->CursorCol());
 
         utils::Utf8WrapSegment target;
         if (segment_index + 1 < current_segments.size()) {
             target = current_segments[segment_index + 1];
         } else {
-            if (session_->cursor_row + 1 >= session_->lines.size()) return;
-            ++session_->cursor_row;
+            if (session_->CursorRow() + 1 >= session_->lines.size()) return;
+            ++session_->CursorRow();
             const auto target_segments =
-                utils::BuildUtf8WrapSegments(session_->lines[session_->cursor_row], width);
+                utils::BuildUtf8WrapSegments(session_->lines[session_->CursorRow()], width);
             target = target_segments.front();
         }
-        session_->cursor_col = std::min(
+        session_->CursorCol() = std::min(
             target.end,
             utils::Utf8ByteIndexAtDisplayColumn(
-                session_->lines[session_->cursor_row], target.start, display_column));
+                session_->lines[session_->CursorRow()], target.start, display_column));
     }
 
     void EditorComponent::MoveCursorPageUp() {
         ClampCursorToBuffer();
         if (!session_) return;
         const size_t page_step = std::max<size_t>(1, VisibleHeight() - 1);
-        session_->cursor_row = session_->cursor_row > page_step ? session_->cursor_row - page_step : 0;
-        session_->cursor_col = std::min(session_->cursor_col, session_->lines[session_->cursor_row].size());
+        session_->CursorRow() = session_->CursorRow() > page_step ? session_->CursorRow() - page_step : 0;
+        session_->CursorCol() = std::min(session_->CursorCol(), session_->lines[session_->CursorRow()].size());
     }
 
     void EditorComponent::MoveCursorPageDown() {
         ClampCursorToBuffer();
         if (!session_) return;
         const size_t page_step = std::max<size_t>(1, VisibleHeight() - 1);
-        session_->cursor_row = std::min(session_->cursor_row + page_step, session_->lines.size() - 1);
-        session_->cursor_col = std::min(session_->cursor_col, session_->lines[session_->cursor_row].size());
+        session_->CursorRow() = std::min(session_->CursorRow() + page_step, session_->lines.size() - 1);
+        session_->CursorCol() = std::min(session_->CursorCol(), session_->lines[session_->CursorRow()].size());
     }
 
     void EditorComponent::MoveCursorToPreviousParagraph() {

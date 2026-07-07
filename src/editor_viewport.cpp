@@ -108,9 +108,9 @@ ftxui::Element EditorComponent::RenderViewport() {
         if (text_left_padding > 0) {
             line_parts.push_back(ftxui::text(std::string(text_left_padding, ' ')));
         }
-        const bool is_cursor_line = (session_ && line_index == session_->cursor_row);
+        const bool is_cursor_line = (session_ && line_index == session_->CursorRow());
         const bool has_selection = session_ && session_->HasSelection();
-        const size_t cursor_x = is_cursor_line ? std::min(session_->cursor_col, line_content.size()) : line_content.size();
+        const size_t cursor_x = is_cursor_line ? std::min(session_->CursorCol(), line_content.size()) : line_content.size();
         const size_t render_start = smart_word_wrap ? segment.start : viewport_->scroll_x;
         const size_t render_end = smart_word_wrap
             ? segment.end

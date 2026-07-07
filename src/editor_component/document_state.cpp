@@ -1,3 +1,12 @@
+    EditorCursorState* EditorComponent::BindViewportCursorState() const {
+        if (!session_ || !viewport_) {
+            return nullptr;
+        }
+        EditorCursorState* previous = session_->ActiveCursorStatePointer();
+        session_->SetActiveCursorState(&viewport_->CursorState());
+        return previous;
+    }
+
     /**
      * @brief Sets the active session for the editor.
      * * Switches the editor context to a new document, synchronizes UI state,
@@ -9,8 +18,16 @@
             return;
         }
 
+        const bool same_session = session_ == doc;
+        const EditorCursorState initial_cursor_state = doc->CursorState();
+
         // Update the local session reference
         session_ = doc;
+
+        if (!same_session && viewport_) {
+            viewport_->CursorState() = initial_cursor_state;
+        }
+        BindViewportCursorState();
 
         // Ensure cursor is within buffer limits to prevent out-of-bounds access
         ClampCursorToBuffer();
@@ -19,8 +36,10 @@
         UpdateScroll();
 
         // Clear previous search highlights and selections to avoid stale UI states
-        ClearSearchHighlights();
-        ClearSelection();
+        if (!same_session) {
+            ClearSearchHighlights();
+            ClearSelection();
+        }
     }
 
     std::shared_ptr<DocumentSession> EditorComponent::GetSession() const { return session_; }
@@ -28,6 +47,7 @@
 
     void EditorComponent::SetViewport(EditorViewport* viewport) {
         viewport_ = viewport ? viewport : &owned_viewport_;
+        BindViewportCursorState();
         UpdateScroll();
     }
 
@@ -43,7 +63,12 @@
     }
 
     ftxui::Element EditorComponent::Render() {
-        return RenderViewport();
+        EditorCursorState* previous = BindViewportCursorState();
+        ftxui::Element element = RenderViewport();
+        if (session_) {
+            session_->SetActiveCursorState(previous);
+        }
+        return element;
     }
 
     void EditorComponent::SaveToFile(const std::string& path) {
@@ -115,11 +140,11 @@
     }
 
     size_t EditorComponent::GetCursorRow() const {
-        return session_ ? session_->cursor_row : 0;
+        return session_ ? session_->CursorRow() : 0;
     }
 
     size_t EditorComponent::GetCursorCol() const {
-        return session_ ? session_->cursor_col : 0;
+        return session_ ? session_->CursorCol() : 0;
     }
 
     size_t EditorComponent::GetLineCount() const {
@@ -186,8 +211,8 @@
 
         for (size_t i = 0; i < search_matches_.size(); ++i) {
             const SearchMatch& match = search_matches_[i];
-            if (match.y > session_->cursor_row ||
-                (match.y == session_->cursor_row && match.x + match.length > session_->cursor_col)) {
+            if (match.y > session_->CursorRow() ||
+                (match.y == session_->CursorRow() && match.x + match.length > session_->CursorCol())) {
                 return i;
                 }
         }
@@ -197,8 +222,8 @@
 
     void EditorComponent::MoveCursorToSearchMatch(const SearchMatch& match) {
         if (!session_) return;
-        session_->cursor_row = match.y;
-        session_->cursor_col = match.x;
+        session_->CursorRow() = match.y;
+        session_->CursorCol() = match.x;
         ClearSelection();
         UpdateScroll();
     }

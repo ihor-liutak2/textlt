@@ -19,8 +19,8 @@ void DocumentSession::LoadContent(const std::string& content, std::filesystem::p
 
     buffer.SetText(content);
     SetPath(std::move(p));
-    cursor_row = 0;
-    cursor_col = 0;
+    CursorRow() = 0;
+    CursorCol() = 0;
     is_dirty = false;
     history.Clear();
     EnsureValidBuffer();
@@ -38,8 +38,8 @@ size_t DocumentSession::LineCount() const {
 }
 
 std::string DocumentSession::CurrentLineText() const {
-    if (cursor_row < lines.size()) {
-        return lines[cursor_row];
+    if (CursorRow() < lines.size()) {
+        return lines[CursorRow()];
     }
     return "";
 }
@@ -49,8 +49,8 @@ std::string DocumentSession::TextFromCursor() const {
         return "";
     }
 
-    const size_t row = std::min(cursor_row, lines.size() - 1);
-    const size_t column = std::min(cursor_col, lines[row].size());
+    const size_t row = std::min(CursorRow(), lines.size() - 1);
+    const size_t column = std::min(CursorCol(), lines[row].size());
     std::string text = lines[row].substr(column);
     for (size_t line_index = row + 1; line_index < lines.size(); ++line_index) {
         text.push_back('\n');

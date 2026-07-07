@@ -5,6 +5,7 @@
 #include <string>
 
 using textlt::DocumentSession;
+using textlt::EditorCursorState;
 
 int main() {
     const std::string one = u8"один";
@@ -25,33 +26,37 @@ int main() {
     assert(textlt::utils::FindWordDeleteEnd(line, 0) == one.size());
 
     DocumentSession doc;
+    EditorCursorState doc_cursor;
+    doc.SetActiveCursorState(&doc_cursor);
     doc.lines = {line};
-    doc.cursor_row = 0;
-    doc.cursor_col = line.size();
+    doc.CursorRow() = 0;
+    doc.CursorCol() = line.size();
     doc.BeginSelection();
     doc.MoveCursorToPreviousWord();
 
-    assert(doc.cursor_col == line.size() - three.size());
+    assert(doc.CursorCol() == line.size() - three.size());
     assert(doc.GetSelectedText() == three);
 
     doc.ClearSelection();
     doc.MoveCursorToPreviousWord();
-    assert(doc.cursor_col == one.size() + 1);
+    assert(doc.CursorCol() == one.size() + 1);
 
-    doc.cursor_col = 0;
+    doc.CursorCol() = 0;
     doc.MoveCursorToNextWord();
-    assert(doc.cursor_col == one.size() + 1);
+    assert(doc.CursorCol() == one.size() + 1);
 
     DocumentSession vertical;
+    EditorCursorState vertical_cursor;
+    vertical.SetActiveCursorState(&vertical_cursor);
     vertical.lines = {u8"абвгд", u8"ёжзий", u8"abcde"};
-    vertical.cursor_row = 0;
-    vertical.cursor_col = std::string(u8"абв").size();
+    vertical.CursorRow() = 0;
+    vertical.CursorCol() = std::string(u8"абв").size();
     vertical.MoveCursorDown();
-    assert(vertical.cursor_row == 1);
-    assert(vertical.cursor_col == std::string(u8"ёжз").size());
+    assert(vertical.CursorRow() == 1);
+    assert(vertical.CursorCol() == std::string(u8"ёжз").size());
     vertical.MoveCursorDown();
-    assert(vertical.cursor_row == 2);
-    assert(vertical.cursor_col == 3);
+    assert(vertical.CursorRow() == 2);
+    assert(vertical.CursorCol() == 3);
 
     return 0;
 }

@@ -31,13 +31,13 @@ bool DocumentSession::InsertText(const std::string& text) {
         }
     }
 
-    const size_t insertion_row = cursor_row;
-    const std::string suffix = lines[insertion_row].substr(cursor_col);
-    lines[insertion_row].erase(cursor_col);
+    const size_t insertion_row = CursorRow();
+    const std::string suffix = lines[insertion_row].substr(CursorCol());
+    lines[insertion_row].erase(CursorCol());
     lines[insertion_row] += inserted_lines.front();
 
     if (inserted_lines.size() == 1) {
-        cursor_col = lines[insertion_row].size();
+        CursorCol() = lines[insertion_row].size();
         lines[insertion_row] += suffix;
     } else {
         inserted_lines.back() += suffix;
@@ -45,8 +45,8 @@ bool DocumentSession::InsertText(const std::string& text) {
             lines.begin() + static_cast<std::ptrdiff_t>(insertion_row + 1),
             std::make_move_iterator(inserted_lines.begin() + 1),
             std::make_move_iterator(inserted_lines.end()));
-        cursor_row = insertion_row + inserted_lines.size() - 1;
-        cursor_col = lines[cursor_row].size() - suffix.size();
+        CursorRow() = insertion_row + inserted_lines.size() - 1;
+        CursorCol() = lines[CursorRow()].size() - suffix.size();
     }
 
     buffer.MarkDirty();
@@ -58,8 +58,8 @@ bool DocumentSession::InsertCharacter(const std::string& input) {
         return false;
     }
     EnsureValidBuffer();
-    lines[cursor_row].insert(cursor_col, input);
-    cursor_col += input.size();
+    lines[CursorRow()].insert(CursorCol(), input);
+    CursorCol() += input.size();
     buffer.MarkDirty();
     return true;
 }
@@ -78,25 +78,25 @@ bool DocumentSession::InsertPairedCharacter(char opening, char closing) {
                 continue;
             }
             if (character == '\n') {
-                std::string next_line = lines[cursor_row].substr(cursor_col);
-                lines[cursor_row].erase(cursor_col);
+                std::string next_line = lines[CursorRow()].substr(CursorCol());
+                lines[CursorRow()].erase(CursorCol());
                 lines.insert(
-                    lines.begin() + static_cast<std::ptrdiff_t>(cursor_row + 1),
+                    lines.begin() + static_cast<std::ptrdiff_t>(CursorRow() + 1),
                     std::move(next_line));
-                ++cursor_row;
-                cursor_col = 0;
+                ++CursorRow();
+                CursorCol() = 0;
                 continue;
             }
-            lines[cursor_row].insert(cursor_col, std::string(1, character));
-            ++cursor_col;
+            lines[CursorRow()].insert(CursorCol(), std::string(1, character));
+            ++CursorCol();
         }
         buffer.MarkDirty();
         ClearSelection();
         return true;
     }
 
-    lines[cursor_row].insert(cursor_col, std::string(1, opening) + closing);
-    ++cursor_col;
+    lines[CursorRow()].insert(CursorCol(), std::string(1, opening) + closing);
+    ++CursorCol();
     buffer.MarkDirty();
     ClearSelection();
     return true;
@@ -104,21 +104,21 @@ bool DocumentSession::InsertPairedCharacter(char opening, char closing) {
 
 bool DocumentSession::Backspace() {
     EnsureValidBuffer();
-    if (cursor_col > 0) {
+    if (CursorCol() > 0) {
         SaveSnapshot();
         const size_t erase_start =
-            utils::PreviousUtf8CodepointStart(lines[cursor_row], cursor_col);
-        lines[cursor_row].erase(erase_start, cursor_col - erase_start);
-        cursor_col = erase_start;
+            utils::PreviousUtf8CodepointStart(lines[CursorRow()], CursorCol());
+        lines[CursorRow()].erase(erase_start, CursorCol() - erase_start);
+        CursorCol() = erase_start;
         buffer.MarkDirty();
         return true;
     }
-    if (cursor_row > 0) {
+    if (CursorRow() > 0) {
         SaveSnapshot();
-        cursor_col = lines[cursor_row - 1].size();
-        lines[cursor_row - 1] += lines[cursor_row];
-        lines.erase(lines.begin() + static_cast<std::ptrdiff_t>(cursor_row));
-        --cursor_row;
+        CursorCol() = lines[CursorRow() - 1].size();
+        lines[CursorRow() - 1] += lines[CursorRow()];
+        lines.erase(lines.begin() + static_cast<std::ptrdiff_t>(CursorRow()));
+        --CursorRow();
         buffer.MarkDirty();
         return true;
     }
@@ -127,18 +127,18 @@ bool DocumentSession::Backspace() {
 
 bool DocumentSession::DeleteForward() {
     EnsureValidBuffer();
-    if (cursor_col < lines[cursor_row].size()) {
+    if (CursorCol() < lines[CursorRow()].size()) {
         SaveSnapshot();
         const size_t erase_end =
-            utils::NextUtf8CodepointStart(lines[cursor_row], cursor_col);
-        lines[cursor_row].erase(cursor_col, erase_end - cursor_col);
+            utils::NextUtf8CodepointStart(lines[CursorRow()], CursorCol());
+        lines[CursorRow()].erase(CursorCol(), erase_end - CursorCol());
         buffer.MarkDirty();
         return true;
     }
-    if (cursor_row + 1 < lines.size()) {
+    if (CursorRow() + 1 < lines.size()) {
         SaveSnapshot();
-        lines[cursor_row] += lines[cursor_row + 1];
-        lines.erase(lines.begin() + static_cast<std::ptrdiff_t>(cursor_row + 1));
+        lines[CursorRow()] += lines[CursorRow() + 1];
+        lines.erase(lines.begin() + static_cast<std::ptrdiff_t>(CursorRow() + 1));
         buffer.MarkDirty();
         return true;
     }
@@ -147,70 +147,70 @@ bool DocumentSession::DeleteForward() {
 
 bool DocumentSession::DeleteWordBackward() {
     EnsureValidBuffer();
-    if (cursor_col == 0) {
-        if (cursor_row == 0) return false;
+    if (CursorCol() == 0) {
+        if (CursorRow() == 0) return false;
         SaveSnapshot();
-        cursor_col = lines[cursor_row - 1].size();
-        lines[cursor_row - 1] += lines[cursor_row];
-        lines.erase(lines.begin() + static_cast<std::ptrdiff_t>(cursor_row));
-        --cursor_row;
+        CursorCol() = lines[CursorRow() - 1].size();
+        lines[CursorRow() - 1] += lines[CursorRow()];
+        lines.erase(lines.begin() + static_cast<std::ptrdiff_t>(CursorRow()));
+        --CursorRow();
         buffer.MarkDirty();
         return true;
     }
 
-    const size_t target = utils::FindWordDeleteStart(lines[cursor_row], cursor_col);
-    if (target == cursor_col) return false;
+    const size_t target = utils::FindWordDeleteStart(lines[CursorRow()], CursorCol());
+    if (target == CursorCol()) return false;
     SaveSnapshot();
-    lines[cursor_row].erase(target, cursor_col - target);
-    cursor_col = target;
+    lines[CursorRow()].erase(target, CursorCol() - target);
+    CursorCol() = target;
     buffer.MarkDirty();
     return true;
 }
 
 bool DocumentSession::DeleteWordForward() {
     EnsureValidBuffer();
-    if (cursor_col >= lines[cursor_row].size()) {
-        if (cursor_row + 1 >= lines.size()) return false;
+    if (CursorCol() >= lines[CursorRow()].size()) {
+        if (CursorRow() + 1 >= lines.size()) return false;
         SaveSnapshot();
-        lines[cursor_row] += lines[cursor_row + 1];
-        lines.erase(lines.begin() + static_cast<std::ptrdiff_t>(cursor_row + 1));
+        lines[CursorRow()] += lines[CursorRow() + 1];
+        lines.erase(lines.begin() + static_cast<std::ptrdiff_t>(CursorRow() + 1));
         buffer.MarkDirty();
         return true;
     }
 
-    const size_t target = utils::FindWordDeleteEnd(lines[cursor_row], cursor_col);
-    if (target == cursor_col) return false;
+    const size_t target = utils::FindWordDeleteEnd(lines[CursorRow()], CursorCol());
+    if (target == CursorCol()) return false;
     SaveSnapshot();
-    lines[cursor_row].erase(cursor_col, target - cursor_col);
+    lines[CursorRow()].erase(CursorCol(), target - CursorCol());
     buffer.MarkDirty();
     return true;
 }
 
 bool DocumentSession::DeleteCurrentLine() {
     EnsureValidBuffer();
-    if (cursor_row >= lines.size()) {
+    if (CursorRow() >= lines.size()) {
         return false;
     }
     SaveSnapshot();
-    lines.erase(lines.begin() + static_cast<std::ptrdiff_t>(cursor_row));
+    lines.erase(lines.begin() + static_cast<std::ptrdiff_t>(CursorRow()));
     if (lines.empty()) {
         lines.push_back("");
-        cursor_row = 0;
-    } else if (cursor_row >= lines.size()) {
-        cursor_row = lines.size() - 1;
+        CursorRow() = 0;
+    } else if (CursorRow() >= lines.size()) {
+        CursorRow() = lines.size() - 1;
     }
-    cursor_col = 0;
+    CursorCol() = 0;
     buffer.MarkDirty();
     return true;
 }
 
 bool DocumentSession::MoveLineUp() {
     EnsureValidBuffer();
-    if (lines.size() < 2 || cursor_row == 0) return false;
+    if (lines.size() < 2 || CursorRow() == 0) return false;
     SaveSnapshot();
-    std::swap(lines[cursor_row], lines[cursor_row - 1]);
-    --cursor_row;
-    cursor_col = std::min(cursor_col, lines[cursor_row].size());
+    std::swap(lines[CursorRow()], lines[CursorRow() - 1]);
+    --CursorRow();
+    CursorCol() = std::min(CursorCol(), lines[CursorRow()].size());
     buffer.MarkDirty();
     return true;
 }
@@ -224,8 +224,8 @@ bool DocumentSession::MoveLinesUp() {
     }
 
     auto [start, end] = utils::OrderedSelection(
-        {selection.anchor_x, selection.anchor_y},
-        {cursor_col, cursor_row},
+        {SelectionState().anchor_x, SelectionState().anchor_y},
+        {CursorCol(), CursorRow()},
         lines);
 
     size_t start_row = start.y;
@@ -239,23 +239,23 @@ bool DocumentSession::MoveLinesUp() {
         lines.begin() + static_cast<std::ptrdiff_t>(start_row),
         lines.begin() + static_cast<std::ptrdiff_t>(end_row + 1));
 
-    --cursor_row;
-    --selection.anchor_y;
+    --CursorRow();
+    --SelectionState().anchor_y;
     ClampCursor();
-    selection.anchor_y = std::min(selection.anchor_y, lines.size() - 1);
-    selection.anchor_x = std::min(selection.anchor_x, lines[selection.anchor_y].size());
-    selection.active = true;
+    SelectionState().anchor_y = std::min(SelectionState().anchor_y, lines.size() - 1);
+    SelectionState().anchor_x = std::min(SelectionState().anchor_x, lines[SelectionState().anchor_y].size());
+    SelectionState().active = true;
     buffer.MarkDirty();
     return true;
 }
 
 bool DocumentSession::MoveLineDown() {
     EnsureValidBuffer();
-    if (lines.size() < 2 || cursor_row + 1 >= lines.size()) return false;
+    if (lines.size() < 2 || CursorRow() + 1 >= lines.size()) return false;
     SaveSnapshot();
-    std::swap(lines[cursor_row], lines[cursor_row + 1]);
-    ++cursor_row;
-    cursor_col = std::min(cursor_col, lines[cursor_row].size());
+    std::swap(lines[CursorRow()], lines[CursorRow() + 1]);
+    ++CursorRow();
+    CursorCol() = std::min(CursorCol(), lines[CursorRow()].size());
     buffer.MarkDirty();
     return true;
 }
@@ -269,8 +269,8 @@ bool DocumentSession::MoveLinesDown() {
     }
 
     auto [start, end] = utils::OrderedSelection(
-        {selection.anchor_x, selection.anchor_y},
-        {cursor_col, cursor_row},
+        {SelectionState().anchor_x, SelectionState().anchor_y},
+        {CursorCol(), CursorRow()},
         lines);
 
     size_t start_row = start.y;
@@ -284,12 +284,12 @@ bool DocumentSession::MoveLinesDown() {
         lines.begin() + static_cast<std::ptrdiff_t>(end_row + 1),
         lines.begin() + static_cast<std::ptrdiff_t>(end_row + 2));
 
-    ++cursor_row;
-    ++selection.anchor_y;
+    ++CursorRow();
+    ++SelectionState().anchor_y;
     ClampCursor();
-    selection.anchor_y = std::min(selection.anchor_y, lines.size() - 1);
-    selection.anchor_x = std::min(selection.anchor_x, lines[selection.anchor_y].size());
-    selection.active = true;
+    SelectionState().anchor_y = std::min(SelectionState().anchor_y, lines.size() - 1);
+    SelectionState().anchor_x = std::min(SelectionState().anchor_x, lines[SelectionState().anchor_y].size());
+    SelectionState().active = true;
     buffer.MarkDirty();
     return true;
 }
@@ -297,9 +297,9 @@ bool DocumentSession::MoveLinesDown() {
 bool DocumentSession::DuplicateLine() {
     EnsureValidBuffer();
     SaveSnapshot();
-    lines.insert(lines.begin() + static_cast<std::ptrdiff_t>(cursor_row + 1), lines[cursor_row]);
-    ++cursor_row;
-    cursor_col = std::min(cursor_col, lines[cursor_row].size());
+    lines.insert(lines.begin() + static_cast<std::ptrdiff_t>(CursorRow() + 1), lines[CursorRow()]);
+    ++CursorRow();
+    CursorCol() = std::min(CursorCol(), lines[CursorRow()].size());
     buffer.MarkDirty();
     return true;
 }
@@ -312,8 +312,8 @@ bool DocumentSession::DuplicateLines() {
     }
 
     auto [start, end] = utils::OrderedSelection(
-        {selection.anchor_x, selection.anchor_y},
-        {cursor_col, cursor_row},
+        {SelectionState().anchor_x, SelectionState().anchor_y},
+        {CursorCol(), CursorRow()},
         lines);
 
     size_t start_row = start.y;
@@ -329,7 +329,7 @@ bool DocumentSession::DuplicateLines() {
     std::vector<std::string> copied_lines(first, last);
     lines.insert(lines.begin() + static_cast<std::ptrdiff_t>(end_row + 1),
                  copied_lines.begin(), copied_lines.end());
-    selection.active = true;
+    SelectionState().active = true;
     buffer.MarkDirty();
     return true;
 }

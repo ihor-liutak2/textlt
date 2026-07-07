@@ -24,7 +24,7 @@ void TextltApp::QueueTtsBookPreparationFromCursor(bool force_rebuild) {
     cloud_tts_pipeline_.Submit(
         document->ToContent(),
         document->CurrentFilePath(),
-        document->cursor_row,
+        document->CursorRow(),
         force_rebuild);
 
     active_action_ = "Queued TTS book preparation";

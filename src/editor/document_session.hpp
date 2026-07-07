@@ -7,6 +7,7 @@
 
 #include "history_manager.hpp"
 #include "text_transformer.hpp"
+#include "editor/editor_cursor_state.hpp"
 #include "editor/text_buffer.hpp"
 
 namespace textlt {
@@ -38,12 +39,6 @@ enum class LineEnding {
     CRLF,
 };
 
-struct Selection {
-    bool active = false;
-    size_t anchor_x = 0;
-    size_t anchor_y = 0;
-};
-
 class DocumentSession {
 public:
     DocumentSession();
@@ -59,15 +54,23 @@ public:
     std::vector<std::string>& lines;
     bool& is_dirty;
 
-    size_t cursor_row = 0;
-    size_t cursor_col = 0;
-    Selection selection;
-
     std::filesystem::path path = "Untitled";
     DocumentType type = DocumentType::PlainText;
     LineEnding line_ending = LineEnding::LF;
     bool read_only = false;
     bool temporary = false;
+
+    void SetActiveCursorState(EditorCursorState* cursor_state);
+    void ClearActiveCursorState();
+    EditorCursorState* ActiveCursorStatePointer() const;
+    EditorCursorState& CursorState();
+    const EditorCursorState& CursorState() const;
+    size_t& CursorRow();
+    size_t CursorRow() const;
+    size_t& CursorCol();
+    size_t CursorCol() const;
+    Selection& SelectionState();
+    const Selection& SelectionState() const;
 
     void SetPath(std::filesystem::path p);
     void Reset();
@@ -152,6 +155,8 @@ public:
 
 private:
     void BindFrom(const DocumentSession& other);
+    EditorCursorState fallback_cursor_state_;
+    EditorCursorState* active_cursor_state_ = &fallback_cursor_state_;
     HistoryManager::State CurrentTextProcessorState() const;
     void ClampTextProcessorCursor();
     void SelectWholeTextProcessorBuffer();

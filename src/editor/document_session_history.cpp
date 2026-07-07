@@ -5,15 +5,15 @@ namespace textlt {
 HistoryManager::State DocumentSession::CurrentState() const {
     return {
         lines.empty() ? std::vector<std::string>{""} : lines,
-        static_cast<int>(cursor_col),
-        static_cast<int>(cursor_row),
+        static_cast<int>(CursorCol()),
+        static_cast<int>(CursorRow()),
     };
 }
 
 void DocumentSession::ApplyState(const HistoryManager::State& state) {
     buffer.SetLines(state.lines);
-    cursor_col = state.cursor_x < 0 ? 0 : static_cast<size_t>(state.cursor_x);
-    cursor_row = state.cursor_y < 0 ? 0 : static_cast<size_t>(state.cursor_y);
+    CursorCol() = state.cursor_x < 0 ? 0 : static_cast<size_t>(state.cursor_x);
+    CursorRow() = state.cursor_y < 0 ? 0 : static_cast<size_t>(state.cursor_y);
     EnsureValidBuffer();
 }
 

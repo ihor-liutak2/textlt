@@ -174,6 +174,7 @@ bool DocumentWorkspace::ActivateEditorPane(size_t pane_index, size_t visible_pan
     const size_t session_index = editor_panes_[pane_index].session_index;
     if (session_index < sessions_.size() && sessions_[session_index]) {
         active_session_index_ = session_index;
+        sessions_[session_index]->SetActiveCursorState(&editor_panes_[pane_index].viewport.CursorState());
     }
     return true;
 }
@@ -186,6 +187,9 @@ bool DocumentWorkspace::AssignSessionToPane(size_t pane_index, size_t session_in
     editor_panes_[pane_index].session_index = session_index;
     if (pane_index == active_editor_pane_index_) {
         active_session_index_ = session_index;
+        if (sessions_[session_index]) {
+            sessions_[session_index]->SetActiveCursorState(&editor_panes_[pane_index].viewport.CursorState());
+        }
     }
     return true;
 }
@@ -205,6 +209,9 @@ bool DocumentWorkspace::AssignSessionToActivePane(size_t session_index) {
     }
     editor_panes_[active_editor_pane_index_].session_index = session_index;
     active_session_index_ = session_index;
+    if (sessions_[session_index]) {
+        sessions_[session_index]->SetActiveCursorState(&editor_panes_[active_editor_pane_index_].viewport.CursorState());
+    }
     return true;
 }
 
@@ -283,6 +290,7 @@ bool DocumentWorkspace::SplitActiveSessionToNextPane(
 
     AssignSessionToPane(source_pane, session_index);
     AssignSessionToPane(target_pane, session_index);
+    editor_panes_[target_pane].viewport.CursorState() = editor_panes_[source_pane].viewport.CursorState();
     ActivateEditorPane(source_pane, visible_count);
     return true;
 }

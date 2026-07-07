@@ -101,6 +101,7 @@ namespace textlt {
         std::string LineNumberText(size_t line_index, size_t width) const;
         void UpdateScroll();
         bool HandleMouseEvent(ftxui::Event event);
+        EditorCursorState* BindViewportCursorState() const;
         static bool IsWordCharacter(char character);
         bool IsCharacterSelected(size_t x, size_t y) const;
         std::optional<std::pair<size_t, size_t>> FindBracketNearCursor() const;

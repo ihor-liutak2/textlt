@@ -25,6 +25,15 @@ void EditorViewport::Reset() {
     is_dragging_scrollbar = false;
     drag_start_scroll_y = 0;
     drag_start_y = 0;
+    cursor_state = {};
+}
+
+EditorCursorState& EditorViewport::CursorState() {
+    return cursor_state;
+}
+
+const EditorCursorState& EditorViewport::CursorState() const {
+    return cursor_state;
 }
 
 void EditorViewport::SetBox(ftxui::Box value) {
@@ -166,11 +175,11 @@ void EditorViewport::ScrollToCursor(DocumentSession& session, const EditorConfig
 
     const size_t visible_height = VisibleHeight();
     const bool smart_word_wrap = config && config->smart_word_wrap;
-    if (session.cursor_row >= scroll_y + visible_height) {
-        scroll_y = session.cursor_row - visible_height + 1;
+    if (session.CursorRow() >= scroll_y + visible_height) {
+        scroll_y = session.CursorRow() - visible_height + 1;
     }
-    if (session.cursor_row < scroll_y) {
-        scroll_y = session.cursor_row;
+    if (session.CursorRow() < scroll_y) {
+        scroll_y = session.CursorRow();
     }
 
     if (session.lines.size() <= visible_height && !smart_word_wrap) {
@@ -178,8 +187,8 @@ void EditorViewport::ScrollToCursor(DocumentSession& session, const EditorConfig
     } else if (smart_word_wrap) {
         const size_t visible_width = VisibleTextWidth(&session, config);
         const size_t max_scroll_y = utils::WordWrapMaxScrollY(session.lines, visible_height, visible_width);
-        if (session.cursor_row > max_scroll_y) {
-            scroll_y = session.cursor_row;
+        if (session.CursorRow() > max_scroll_y) {
+            scroll_y = session.CursorRow();
         }
         scroll_y = std::min(scroll_y, max_scroll_y);
     } else {
@@ -193,13 +202,13 @@ void EditorViewport::ScrollToCursor(DocumentSession& session, const EditorConfig
         return;
     }
 
-    if (session.cursor_col < scroll_x) {
-        scroll_x = session.cursor_col;
+    if (session.CursorCol() < scroll_x) {
+        scroll_x = session.CursorCol();
     }
 
-    const std::string& current_line = session.lines[session.cursor_row];
-    while (scroll_x < session.cursor_col &&
-           utils::Utf8DisplayWidth(current_line, scroll_x, session.cursor_col) >= visible_width) {
+    const std::string& current_line = session.lines[session.CursorRow()];
+    while (scroll_x < session.CursorCol() &&
+           utils::Utf8DisplayWidth(current_line, scroll_x, session.CursorCol()) >= visible_width) {
         scroll_x = utils::NextUtf8CodepointStart(current_line, scroll_x);
     }
 
@@ -262,6 +271,7 @@ bool EditorViewport::HandleMouseEvent(
     const EditorConfig* config,
     ftxui::Event event,
     const EditorViewportMouseCallbacks& callbacks) {
+    session.SetActiveCursorState(&cursor_state);
     auto mouse = event.mouse();
 
     const bool inside_editor =
@@ -308,12 +318,12 @@ bool EditorViewport::HandleMouseEvent(
         mouse.x >= scrollbar_x_min &&
         mouse.x <= box.x_max;
     auto clamp_cursor_to_visible_scroll = [&]() {
-        if (session.cursor_row < scroll_y) {
-            session.cursor_row = scroll_y;
-            session.cursor_col = std::min(session.cursor_col, session.lines[session.cursor_row].size());
-        } else if (session.cursor_row >= scroll_y + visible_height) {
-            session.cursor_row = std::min(scroll_y + visible_height - 1, session.lines.size() - 1);
-            session.cursor_col = std::min(session.cursor_col, session.lines[session.cursor_row].size());
+        if (session.CursorRow() < scroll_y) {
+            session.CursorRow() = scroll_y;
+            session.CursorCol() = std::min(session.CursorCol(), session.lines[session.CursorRow()].size());
+        } else if (session.CursorRow() >= scroll_y + visible_height) {
+            session.CursorRow() = std::min(scroll_y + visible_height - 1, session.lines.size() - 1);
+            session.CursorCol() = std::min(session.CursorCol(), session.lines[session.CursorRow()].size());
         }
     };
     auto jump_to_scrollbar_y = [&](int screen_y) {
@@ -391,9 +401,9 @@ bool EditorViewport::HandleMouseEvent(
     if (inside_editor && mouse.button == ftxui::Mouse::WheelUp) {
         if (callbacks.end_typing_group) callbacks.end_typing_group();
         scroll_y = scroll_y > kMouseWheelScrollLines ? scroll_y - kMouseWheelScrollLines : 0;
-        if (session.cursor_row >= scroll_y + visible_height) {
-            session.cursor_row = scroll_y + visible_height - 1;
-            session.cursor_col = std::min(session.cursor_col, session.lines[session.cursor_row].size());
+        if (session.CursorRow() >= scroll_y + visible_height) {
+            session.CursorRow() = scroll_y + visible_height - 1;
+            session.CursorCol() = std::min(session.CursorCol(), session.lines[session.CursorRow()].size());
         }
         return true;
     }
@@ -403,9 +413,9 @@ bool EditorViewport::HandleMouseEvent(
         const size_t max_scroll_val = max_scroll_y();
         scroll_y = std::min(scroll_y + kMouseWheelScrollLines, max_scroll_val);
 
-        if (session.cursor_row < scroll_y) {
-            session.cursor_row = scroll_y;
-            session.cursor_col = std::min(session.cursor_col, session.lines[session.cursor_row].size());
+        if (session.CursorRow() < scroll_y) {
+            session.CursorRow() = scroll_y;
+            session.CursorCol() = std::min(session.CursorCol(), session.lines[session.CursorRow()].size());
         }
         return true;
     }
@@ -425,12 +435,12 @@ bool EditorViewport::HandleMouseEvent(
 
         const auto [clicked_row, clicked_col] = PositionAtMouse(session, config, mouse);
         const bool extend_existing_selection = mouse.shift && session.HasSelection();
-        const size_t anchor_row = session.selection.anchor_y;
-        const size_t anchor_col = session.selection.anchor_x;
+        const size_t anchor_row = session.SelectionState().anchor_y;
+        const size_t anchor_col = session.SelectionState().anchor_x;
         session.SetCursorPosition(clicked_row, clicked_col);
         if (extend_existing_selection) {
-            session.selection.anchor_y = anchor_row;
-            session.selection.anchor_x = anchor_col;
+            session.SelectionState().anchor_y = anchor_row;
+            session.SelectionState().anchor_x = anchor_col;
             session.SetSelectionActive(true);
         } else {
             session.SetSelectionAnchor(clicked_row, clicked_col);
@@ -446,11 +456,11 @@ bool EditorViewport::HandleMouseEvent(
         mouse.motion != ftxui::Mouse::Pressed &&
         mouse.motion != ftxui::Mouse::Released) {
         const auto [clicked_row, clicked_col] = PositionAtMouse(session, config, mouse);
-        if (session.cursor_row != clicked_row || session.cursor_col != clicked_col) {
+        if (session.CursorRow() != clicked_row || session.CursorCol() != clicked_col) {
             session.SetSelectionActive(true);
         }
-        session.cursor_row = clicked_row;
-        session.cursor_col = clicked_col;
+        session.CursorRow() = clicked_row;
+        session.CursorCol() = clicked_col;
         ScrollToCursor(session, config);
         return true;
     }

@@ -46,7 +46,7 @@
         current_search_match_ = 0;
         for (size_t i = 0; i < search_matches_.size(); ++i) {
             const SearchMatch& match = search_matches_[i];
-            if (match.y > session_->cursor_row || (match.y == session_->cursor_row && match.x > session_->cursor_col)) {
+            if (match.y > session_->CursorRow() || (match.y == session_->CursorRow() && match.x > session_->CursorCol())) {
                 current_search_match_ = i;
                 break;
             }
@@ -62,7 +62,7 @@
         current_search_match_ = search_matches_.size() - 1;
         for (size_t i = search_matches_.size(); i-- > 0;) {
             const SearchMatch& match = search_matches_[i];
-            if (match.y < session_->cursor_row || (match.y == session_->cursor_row && match.x < session_->cursor_col)) {
+            if (match.y < session_->CursorRow() || (match.y == session_->CursorRow() && match.x < session_->CursorCol())) {
                 current_search_match_ = i;
                 break;
             }
@@ -79,8 +79,8 @@
         const SearchMatch match = search_matches_[current_search_match_];
         SaveSnapshot();
         session_->lines[match.y].replace(match.x, match.length, replacement);
-        session_->cursor_row = match.y;
-        session_->cursor_col = match.x + replacement.size();
+        session_->CursorRow() = match.y;
+        session_->CursorCol() = match.x + replacement.size();
         ClearSelection();
         HighlightMatches(query);
         UpdateScroll();

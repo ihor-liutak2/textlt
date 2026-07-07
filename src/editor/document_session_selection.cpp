@@ -7,42 +7,42 @@
 namespace textlt {
 
 bool DocumentSession::HasSelection() const {
-    return selection.active &&
-        (cursor_col != selection.anchor_x || cursor_row != selection.anchor_y);
+    return SelectionState().active &&
+        (CursorCol() != SelectionState().anchor_x || CursorRow() != SelectionState().anchor_y);
 }
 
 void DocumentSession::BeginSelection() {
-    if (!selection.active) {
-        selection.anchor_x = cursor_col;
-        selection.anchor_y = cursor_row;
+    if (!SelectionState().active) {
+        SelectionState().anchor_x = CursorCol();
+        SelectionState().anchor_y = CursorRow();
     }
-    selection.active = true;
+    SelectionState().active = true;
 }
 
 void DocumentSession::ClearSelection() {
     ClampCursor();
-    selection.active = false;
-    selection.anchor_x = cursor_col;
-    selection.anchor_y = cursor_row;
+    SelectionState().active = false;
+    SelectionState().anchor_x = CursorCol();
+    SelectionState().anchor_y = CursorRow();
 }
 
 void DocumentSession::SetSelectionAnchor(size_t row, size_t column) {
     EnsureValidBuffer();
-    selection.anchor_y = std::min(row, lines.size() - 1);
-    selection.anchor_x = std::min(column, lines[selection.anchor_y].size());
+    SelectionState().anchor_y = std::min(row, lines.size() - 1);
+    SelectionState().anchor_x = std::min(column, lines[SelectionState().anchor_y].size());
 }
 
 void DocumentSession::SetSelectionActive(bool active) {
-    selection.active = active;
+    SelectionState().active = active;
 }
 
 void DocumentSession::SelectAll() {
     EnsureValidBuffer();
-    selection.anchor_x = 0;
-    selection.anchor_y = 0;
-    cursor_row = lines.size() - 1;
-    cursor_col = lines[cursor_row].size();
-    selection.active = true;
+    SelectionState().anchor_x = 0;
+    SelectionState().anchor_y = 0;
+    CursorRow() = lines.size() - 1;
+    CursorCol() = lines[CursorRow()].size();
+    SelectionState().active = true;
 }
 
 std::string DocumentSession::GetSelectedText() const {
@@ -51,8 +51,8 @@ std::string DocumentSession::GetSelectedText() const {
     }
 
     auto [start, end] = utils::OrderedSelection(
-        {selection.anchor_x, selection.anchor_y},
-        {cursor_col, cursor_row},
+        {SelectionState().anchor_x, SelectionState().anchor_y},
+        {CursorCol(), CursorRow()},
         lines);
 
     if (start.y == end.y) {
@@ -75,8 +75,8 @@ bool DocumentSession::IsPositionSelected(size_t x, size_t y) const {
     }
 
     auto [start, end] = utils::OrderedSelection(
-        {selection.anchor_x, selection.anchor_y},
-        {cursor_col, cursor_row},
+        {SelectionState().anchor_x, SelectionState().anchor_y},
+        {CursorCol(), CursorRow()},
         lines);
     const utils::Position position{x, y};
     return !utils::PositionLess(position, start) && utils::PositionLess(position, end);
@@ -98,8 +98,8 @@ bool DocumentSession::DeleteSelectionWithoutSnapshot() {
     }
 
     auto [start, end] = utils::OrderedSelection(
-        {selection.anchor_x, selection.anchor_y},
-        {cursor_col, cursor_row},
+        {SelectionState().anchor_x, SelectionState().anchor_y},
+        {CursorCol(), CursorRow()},
         lines);
 
     if (start.y == end.y) {
@@ -115,8 +115,8 @@ bool DocumentSession::DeleteSelectionWithoutSnapshot() {
         lines.push_back("");
     }
 
-    cursor_col = start.x;
-    cursor_row = start.y;
+    CursorCol() = start.x;
+    CursorRow() = start.y;
     ClampCursor();
     ClearSelection();
     buffer.MarkDirty();

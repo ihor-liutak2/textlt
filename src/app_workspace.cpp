@@ -230,6 +230,7 @@ void TextltApp::BindEditorComponentsToWorkspace() {
 
     document_workspace_.ClampActiveEditorPaneIndex(VisibleEditorPaneCount());
     const size_t active_pane = document_workspace_.ActiveEditorPaneIndex();
+    document_workspace_.ActivateEditorPane(active_pane, VisibleEditorPaneCount());
     if (active_pane < editor_pane_components_.size()) {
         text_editor_ = editor_pane_components_[active_pane];
     }

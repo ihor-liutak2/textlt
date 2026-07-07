@@ -42,9 +42,8 @@ DocumentSession::DocumentSession(const DocumentSession& other)
       history(other.history),
       lines(buffer.MutableLines()),
       is_dirty(buffer.DirtyFlag()),
-      cursor_row(other.cursor_row),
-      cursor_col(other.cursor_col),
-      selection(other.selection),
+      fallback_cursor_state_(other.CursorState()),
+      active_cursor_state_(&fallback_cursor_state_),
       path(other.path),
       type(other.type),
       line_ending(other.line_ending),
@@ -63,9 +62,8 @@ DocumentSession::DocumentSession(DocumentSession&& other) noexcept
       history(std::move(other.history)),
       lines(buffer.MutableLines()),
       is_dirty(buffer.DirtyFlag()),
-      cursor_row(other.cursor_row),
-      cursor_col(other.cursor_col),
-      selection(other.selection),
+      fallback_cursor_state_(other.CursorState()),
+      active_cursor_state_(&fallback_cursor_state_),
       path(std::move(other.path)),
       type(other.type),
       line_ending(other.line_ending),
@@ -76,9 +74,8 @@ DocumentSession& DocumentSession::operator=(DocumentSession&& other) noexcept {
     if (this != &other) {
         buffer = std::move(other.buffer);
         history = std::move(other.history);
-        cursor_row = other.cursor_row;
-        cursor_col = other.cursor_col;
-        selection = other.selection;
+        fallback_cursor_state_ = other.CursorState();
+        active_cursor_state_ = &fallback_cursor_state_;
         path = std::move(other.path);
         type = other.type;
         line_ending = other.line_ending;
@@ -91,14 +88,61 @@ DocumentSession& DocumentSession::operator=(DocumentSession&& other) noexcept {
 void DocumentSession::BindFrom(const DocumentSession& other) {
     buffer = other.buffer;
     history = other.history;
-    cursor_row = other.cursor_row;
-    cursor_col = other.cursor_col;
-    selection = other.selection;
+    fallback_cursor_state_ = other.CursorState();
+    active_cursor_state_ = &fallback_cursor_state_;
     path = other.path;
     type = other.type;
     line_ending = other.line_ending;
     read_only = other.read_only;
     temporary = other.temporary;
+}
+
+
+void DocumentSession::SetActiveCursorState(EditorCursorState* cursor_state) {
+    active_cursor_state_ = cursor_state ? cursor_state : &fallback_cursor_state_;
+}
+
+void DocumentSession::ClearActiveCursorState() {
+    active_cursor_state_ = &fallback_cursor_state_;
+}
+
+EditorCursorState* DocumentSession::ActiveCursorStatePointer() const {
+    return active_cursor_state_;
+}
+
+EditorCursorState& DocumentSession::CursorState() {
+    if (!active_cursor_state_) {
+        active_cursor_state_ = &fallback_cursor_state_;
+    }
+    return *active_cursor_state_;
+}
+
+const EditorCursorState& DocumentSession::CursorState() const {
+    return active_cursor_state_ ? *active_cursor_state_ : fallback_cursor_state_;
+}
+
+size_t& DocumentSession::CursorRow() {
+    return CursorState().cursor_row;
+}
+
+size_t DocumentSession::CursorRow() const {
+    return CursorState().cursor_row;
+}
+
+size_t& DocumentSession::CursorCol() {
+    return CursorState().cursor_col;
+}
+
+size_t DocumentSession::CursorCol() const {
+    return CursorState().cursor_col;
+}
+
+Selection& DocumentSession::SelectionState() {
+    return CursorState().selection;
+}
+
+const Selection& DocumentSession::SelectionState() const {
+    return CursorState().selection;
 }
 
 DocumentType DocumentSession::DetermineDocumentType(const std::filesystem::path& path) {
@@ -140,9 +184,9 @@ DocumentType DocumentSession::DetermineDocumentType(const std::filesystem::path&
 }
 
 void DocumentSession::Reset() {
-    cursor_row = 0;
-    cursor_col = 0;
-    selection = {};
+    CursorRow() = 0;
+    CursorCol() = 0;
+    SelectionState() = {};
     path = "Untitled";
     type = DocumentType::PlainText;
     line_ending = LineEnding::LF;
@@ -271,36 +315,36 @@ std::string DocumentSession::LineEndingText() const {
 HistoryManager::State DocumentSession::CurrentTextProcessorState() const {
     return {
         buffer.Lines().empty() ? std::vector<std::string>{""} : buffer.Lines(),
-        static_cast<int>(cursor_col),
-        static_cast<int>(cursor_row),
+        static_cast<int>(CursorCol()),
+        static_cast<int>(CursorRow()),
     };
 }
 
 void DocumentSession::ClampTextProcessorCursor() {
     buffer.EnsureValid();
     const auto& lines = buffer.Lines();
-    cursor_row = std::min(cursor_row, lines.size() - 1);
-    cursor_col = std::min(cursor_col, lines[cursor_row].size());
-    if (selection.active) {
-        selection.anchor_y = std::min(selection.anchor_y, lines.size() - 1);
-        selection.anchor_x = std::min(selection.anchor_x, lines[selection.anchor_y].size());
+    CursorRow() = std::min(CursorRow(), lines.size() - 1);
+    CursorCol() = std::min(CursorCol(), lines[CursorRow()].size());
+    if (SelectionState().active) {
+        SelectionState().anchor_y = std::min(SelectionState().anchor_y, lines.size() - 1);
+        SelectionState().anchor_x = std::min(SelectionState().anchor_x, lines[SelectionState().anchor_y].size());
     }
 }
 
 void DocumentSession::SelectWholeTextProcessorBuffer() {
     buffer.EnsureValid();
     const auto& lines = buffer.Lines();
-    selection.anchor_x = 0;
-    selection.anchor_y = 0;
-    cursor_row = lines.size() - 1;
-    cursor_col = lines[cursor_row].size();
-    selection.active = true;
+    SelectionState().anchor_x = 0;
+    SelectionState().anchor_y = 0;
+    CursorRow() = lines.size() - 1;
+    CursorCol() = lines[CursorRow()].size();
+    SelectionState().active = true;
 }
 
 void DocumentSession::ClearTextProcessorSelection() {
-    selection.active = false;
-    selection.anchor_x = cursor_col;
-    selection.anchor_y = cursor_row;
+    SelectionState().active = false;
+    SelectionState().anchor_x = CursorCol();
+    SelectionState().anchor_y = CursorRow();
 }
 
 std::string DocumentSession::SelectedTextFromBuffer() const {
@@ -310,8 +354,8 @@ std::string DocumentSession::SelectedTextFromBuffer() const {
     }
 
     auto [start, end] = utils::OrderedSelection(
-        {selection.anchor_x, selection.anchor_y},
-        {cursor_col, cursor_row},
+        {SelectionState().anchor_x, SelectionState().anchor_y},
+        {CursorCol(), CursorRow()},
         lines);
 
     if (start.y == end.y) {
@@ -335,8 +379,8 @@ bool DocumentSession::DeleteTextProcessorSelection() {
     }
 
     auto [start, end] = utils::OrderedSelection(
-        {selection.anchor_x, selection.anchor_y},
-        {cursor_col, cursor_row},
+        {SelectionState().anchor_x, SelectionState().anchor_y},
+        {CursorCol(), CursorRow()},
         lines);
 
     if (start.y == end.y) {
@@ -352,8 +396,8 @@ bool DocumentSession::DeleteTextProcessorSelection() {
         lines.push_back("");
     }
 
-    cursor_col = start.x;
-    cursor_row = start.y;
+    CursorCol() = start.x;
+    CursorRow() = start.y;
     ClearTextProcessorSelection();
     ClampTextProcessorCursor();
     return true;
@@ -379,13 +423,13 @@ bool DocumentSession::InsertTextProcessorText(const std::string& text) {
         }
     }
 
-    const size_t insertion_row = cursor_row;
-    const std::string suffix = lines[insertion_row].substr(cursor_col);
-    lines[insertion_row].erase(cursor_col);
+    const size_t insertion_row = CursorRow();
+    const std::string suffix = lines[insertion_row].substr(CursorCol());
+    lines[insertion_row].erase(CursorCol());
     lines[insertion_row] += inserted_lines.front();
 
     if (inserted_lines.size() == 1) {
-        cursor_col = lines[insertion_row].size();
+        CursorCol() = lines[insertion_row].size();
         lines[insertion_row] += suffix;
     } else {
         inserted_lines.back() += suffix;
@@ -393,8 +437,8 @@ bool DocumentSession::InsertTextProcessorText(const std::string& text) {
             lines.begin() + static_cast<std::ptrdiff_t>(insertion_row + 1),
             std::make_move_iterator(inserted_lines.begin() + 1),
             std::make_move_iterator(inserted_lines.end()));
-        cursor_row = insertion_row + inserted_lines.size() - 1;
-        cursor_col = lines[cursor_row].size() - suffix.size();
+        CursorRow() = insertion_row + inserted_lines.size() - 1;
+        CursorCol() = lines[CursorRow()].size() - suffix.size();
     }
 
     ClearTextProcessorSelection();

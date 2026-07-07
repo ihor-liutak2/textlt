@@ -10,6 +10,7 @@ bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
     if (!session_ || !viewport_) {
         return false;
     }
+    BindViewportCursorState();
 
     EditorViewportMouseCallbacks callbacks;
     callbacks.end_typing_group = [this]() { EndTypingGroup(); };
