@@ -272,6 +272,13 @@ TextltApp::TextltApp()
             [this] { return tts_header_active_button_; },
         });
 
+    bottom_bar_row_ = ftxui::Make<BottomBarRowComponent>(
+        &current_theme_,
+        BottomBarRowComponent::Callbacks{
+            [this] { return CurrentBottomBarRowState(); },
+            [this](const std::string& command_id) { RunCommand(command_id); },
+        });
+
     document_workspace_.SetEditorPaneCount(3);
     editor_pane_components_.clear();
     editor_pane_components_.push_back(text_editor_);
@@ -315,6 +322,7 @@ TextltApp::TextltApp()
         top_bar_row_,
         menu_bar_,
         body_container_,
+        bottom_bar_row_,
     });
 
     ftxui::InputOption find_input_option;

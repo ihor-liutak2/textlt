@@ -21,16 +21,6 @@ bool IsLightTheme(const Theme& theme) {
     return theme.name.find("Light") != std::string::npos;
 }
 
-std::string TruncateLabel(const std::string& value, size_t max_length) {
-    if (value.size() <= max_length) {
-        return value;
-    }
-    if (max_length <= 3) {
-        return value.substr(0, max_length);
-    }
-    return value.substr(0, max_length - 3) + "...";
-}
-
 ftxui::Color MainWindowSeparatorColor(const Theme& theme) {
     if (IsLightTheme(theme)) {
         return ftxui::Color::RGB(70, 70, 70);
@@ -40,6 +30,34 @@ ftxui::Color MainWindowSeparatorColor(const Theme& theme) {
 
 
 } // namespace
+
+BottomBarRowState TextltApp::CurrentBottomBarRowState() {
+    const auto editor = std::static_pointer_cast<EditorComponent>(text_editor_);
+
+    BottomBarRowState state;
+    const int cursor_row_index = editor ? editor->GetCursorRow() : 0;
+    state.cursor_row = cursor_row_index + 1;
+    state.cursor_col = editor ? editor->GetCursorCol() + 1 : 1;
+    state.total_lines = editor ? editor->GetLineCount() : 1;
+    state.document_percent = 100;
+    if (state.total_lines > 1) {
+        state.document_percent =
+            (cursor_row_index * 100) / static_cast<int>(state.total_lines - 1);
+    }
+    state.line_ending = editor ? editor->ActiveLineEndingLabel() : "LF";
+    state.theme_name = current_theme_.name;
+
+    const std::string file_path = editor ? editor->CurrentFilePath() : std::string();
+    const auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
+    const std::filesystem::path git_workspace = editor_config_.show_file_explorer && sidebar
+        ? sidebar->CurrentPath()
+        : std::filesystem::path(file_path).parent_path();
+    git_manager_.SetWorkingDirectory(
+        git_workspace.empty() ? std::filesystem::current_path() : git_workspace);
+    state.git_branch = git_manager_.GetCurrentBranch();
+
+    return state;
+}
 
 ftxui::Element TextltApp::Render() {
     using namespace ftxui;
@@ -83,35 +101,11 @@ ftxui::Element TextltApp::Render() {
     }
 
     base_rows.push_back(separator() | color(MainWindowSeparatorColor(current_theme_)));
-    const int cursor_row_index = editor->GetCursorRow();
-    const int cursor_row = cursor_row_index + 1;
-    const int cursor_col = editor->GetCursorCol() + 1;
-    const size_t total_lines = editor->GetLineCount();
-    int document_percent = 100;
-    if (total_lines > 1) {
-        document_percent =
-            (cursor_row_index * 100) / static_cast<int>(total_lines - 1);
-    }
-    const std::string file_path = editor->CurrentFilePath();
-    const auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
-    const std::filesystem::path git_workspace = editor_config_.show_file_explorer
-        ? sidebar->CurrentPath()
-        : std::filesystem::path(file_path).parent_path();
-    git_manager_.SetWorkingDirectory(
-        git_workspace.empty() ? std::filesystem::current_path() : git_workspace);
-    const std::string git_branch = git_manager_.GetCurrentBranch();
-    const std::string git_branch_badge =
-        git_branch.empty() ? "" : " | branch: " + TruncateLabel(git_branch, 15);
-
-    auto doc = editor->GetSession();
-
     base_rows.push_back(
-        text(" Ln " + std::to_string(cursor_row) + ", Col " + std::to_string(cursor_col) +
-        " | " + editor->ActiveLineEndingLabel() +
-        git_branch_badge +
-        " | " + std::to_string(document_percent) + "%" +
-        " | Theme: " + current_theme_.name) |
-        color(current_theme_.menu_foreground));
+        bottom_bar_row_
+            ? bottom_bar_row_->Render()
+            : text(" Ln 1, Col 1 | LF | 100% | Theme: " + current_theme_.name) |
+                  color(current_theme_.menu_foreground));
 
     Element base_layout = vbox(std::move(base_rows)) |
         bgcolor(current_theme_.background);

@@ -40,6 +40,7 @@
 #include "remote/remote_config_store.hpp"
 #include "sidebar_component.hpp"
 #include "top_bar_row.hpp"
+#include "bottom_bar_row.hpp"
 #include "modals/theme_dialog.hpp"
 #include "modals/unsaved_changes_dialog.hpp"
 #include "file_manager.hpp"
@@ -231,6 +232,7 @@ private:
     ftxui::Element Render();
     ftxui::Element RenderFindPanel();
     ftxui::Element RenderGoToLinePanel();
+    BottomBarRowState CurrentBottomBarRowState();
     bool HandleGlobalEvent(ftxui::Event event);
     int DropdownX() const;
     void OpenFindPanel(bool replace_mode);
@@ -364,6 +366,7 @@ private:
     std::string terminal_bracketed_paste_buffer_;
     std::shared_ptr<MenuBarComponent> menu_bar_;
     ftxui::Component top_bar_row_;
+    ftxui::Component bottom_bar_row_;
     ftxui::Component body_container_;
     ftxui::Component main_container_;
     ftxui::Component root_container_;
