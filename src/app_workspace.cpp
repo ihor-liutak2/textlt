@@ -34,39 +34,22 @@ std::shared_ptr<EditorComponent> TextltApp::ActiveEditor() const {
 }
 
 size_t TextltApp::VisibleEditorPaneCount() const {
-    switch (editor_layout_mode_) {
-        case EditorLayoutMode::TwoColumns: return 2;
-        case EditorLayoutMode::ThreeColumns: return 3;
-        case EditorLayoutMode::Single:
-        default: return 1;
-    }
+    return layout_controller_.VisiblePaneCount();
 }
 
 std::string TextltApp::EditorLayoutModeLabel(EditorLayoutMode mode) const {
-    switch (mode) {
-        case EditorLayoutMode::TwoColumns: return "Two columns";
-        case EditorLayoutMode::ThreeColumns: return "Three columns";
-        case EditorLayoutMode::Single:
-        default: return "Single column";
-    }
+    return LayoutController::ModeLabel(mode);
 }
 
 int TextltApp::EditorLayoutModeIndex() const {
-    switch (editor_layout_mode_) {
-        case EditorLayoutMode::TwoColumns: return 1;
-        case EditorLayoutMode::ThreeColumns: return 2;
-        case EditorLayoutMode::Single:
-        default: return 0;
-    }
+    return layout_controller_.ModeIndex();
 }
 
 void TextltApp::SetEditorLayoutMode(EditorLayoutMode mode) {
-    editor_layout_mode_ = mode;
-    document_workspace_.ClampActiveEditorPaneIndex(VisibleEditorPaneCount());
-    document_workspace_.EnsureEditorPanesHaveSessions(VisibleEditorPaneCount());
+    layout_controller_.SetMode(mode);
     BindEditorComponentsToWorkspace();
     SetActiveEditorPane(document_workspace_.ActiveEditorPaneIndex());
-    active_action_ = "View layout: " + EditorLayoutModeLabel(mode);
+    active_action_ = "View layout: " + layout_controller_.ModeLabel();
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
@@ -93,21 +76,18 @@ bool TextltApp::MainViewCanActivateEditorPane() const {
 }
 
 void TextltApp::SetActiveEditorPane(size_t pane_index) {
-    if (editor_pane_components_.empty()) {
-        return;
-    }
-
-    const size_t visible_count = VisibleEditorPaneCount();
-    if (visible_count == 0) {
+    if (editor_pane_components_.empty() || !layout_controller_.HasVisiblePane(pane_index)) {
         return;
     }
 
     const bool editor_layer_is_active = ActiveLayer() == UiLayer::Main;
-    document_workspace_.ActivateEditorPane(pane_index, visible_count);
+    if (!layout_controller_.ActivatePane(pane_index)) {
+        return;
+    }
     BindEditorComponentsToWorkspace();
     sidebar_has_focus_ = false;
 
-    const size_t active_pane = document_workspace_.ActiveEditorPaneIndex();
+    const size_t active_pane = layout_controller_.ActivePaneIndex();
     if (active_pane < editor_pane_components_.size()) {
         text_editor_ = editor_pane_components_[active_pane];
     }
@@ -119,36 +99,29 @@ void TextltApp::SetActiveEditorPane(size_t pane_index) {
 }
 
 void TextltApp::FocusNextEditorPane() {
-    const size_t visible_count = VisibleEditorPaneCount();
-    if (visible_count <= 1) {
+    if (!layout_controller_.FocusNextPane()) {
         active_action_ = "Only one editor pane is visible";
         screen_.PostEvent(ftxui::Event::Custom);
         return;
     }
-    SetActiveEditorPane((document_workspace_.ActiveEditorPaneIndex() + 1) % visible_count);
-    active_action_ = "Active pane: " + std::to_string(document_workspace_.ActiveEditorPaneIndex() + 1);
+    SetActiveEditorPane(layout_controller_.ActivePaneIndex());
+    active_action_ = "Active pane: " + std::to_string(layout_controller_.ActivePaneIndex() + 1);
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
 void TextltApp::FocusPreviousEditorPane() {
-    const size_t visible_count = VisibleEditorPaneCount();
-    if (visible_count <= 1) {
+    if (!layout_controller_.FocusPreviousPane()) {
         active_action_ = "Only one editor pane is visible";
         screen_.PostEvent(ftxui::Event::Custom);
         return;
     }
-    const size_t next_index = document_workspace_.ActiveEditorPaneIndex() == 0
-        ? visible_count - 1
-        : document_workspace_.ActiveEditorPaneIndex() - 1;
-    SetActiveEditorPane(next_index);
-    active_action_ = "Active pane: " + std::to_string(document_workspace_.ActiveEditorPaneIndex() + 1);
+    SetActiveEditorPane(layout_controller_.ActivePaneIndex());
+    active_action_ = "Active pane: " + std::to_string(layout_controller_.ActivePaneIndex() + 1);
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
 void TextltApp::EqualizeEditorPaneWidths() {
-    editor_two_left_width_ = 72;
-    editor_three_left_width_ = 48;
-    editor_three_right_width_ = 48;
+    layout_controller_.EqualizePaneWidths();
     active_action_ = "Editor pane widths reset";
     screen_.PostEvent(ftxui::Event::Custom);
 }
@@ -187,7 +160,7 @@ void TextltApp::SplitActiveSessionToNextPane() {
         return;
     }
 
-    if (VisibleEditorPaneCount() <= 1) {
+    if (layout_controller_.VisiblePaneCount() <= 1) {
         SetEditorLayoutMode(EditorLayoutMode::TwoColumns);
     }
 
@@ -195,7 +168,7 @@ void TextltApp::SplitActiveSessionToNextPane() {
     size_t target_pane = 0;
     size_t session_index = 0;
     if (!document_workspace_.SplitActiveSessionToNextPane(
-            VisibleEditorPaneCount(),
+            layout_controller_.VisiblePaneCount(),
             source_pane,
             target_pane,
             session_index)) {
@@ -217,20 +190,25 @@ void TextltApp::SplitActiveSessionToNextPane() {
 
 void TextltApp::BindEditorComponentsToWorkspace() {
     document_workspace_.SetEditorPaneCount(editor_pane_components_.size());
-    document_workspace_.EnsureEditorPanesHaveSessions(VisibleEditorPaneCount());
+    document_workspace_.EnsureEditorPanesHaveSessions(layout_controller_.VisiblePaneCount());
 
     for (size_t pane_index = 0; pane_index < editor_pane_components_.size(); ++pane_index) {
         const size_t session_index = document_workspace_.PaneSessionIndex(pane_index);
         auto editor = std::static_pointer_cast<EditorComponent>(editor_pane_components_[pane_index]);
         if (editor) {
-            editor->SetViewport(document_workspace_.PaneViewport(pane_index));
+            if (auto* viewport = document_workspace_.PaneViewport(pane_index)) {
+                viewport->SetOptions(layout_controller_.ViewportOptionsForPane(pane_index));
+                editor->SetViewport(viewport);
+            } else {
+                editor->SetViewport(nullptr);
+            }
             editor->SetSession(document_workspace_.SessionPtrAt(session_index));
         }
     }
 
-    document_workspace_.ClampActiveEditorPaneIndex(VisibleEditorPaneCount());
+    document_workspace_.ClampActiveEditorPaneIndex(layout_controller_.VisiblePaneCount());
     const size_t active_pane = document_workspace_.ActiveEditorPaneIndex();
-    document_workspace_.ActivateEditorPane(active_pane, VisibleEditorPaneCount());
+    layout_controller_.ActivatePane(active_pane);
     if (active_pane < editor_pane_components_.size()) {
         text_editor_ = editor_pane_components_[active_pane];
     }
@@ -239,7 +217,7 @@ void TextltApp::BindEditorComponentsToWorkspace() {
 ftxui::Element TextltApp::RenderEditorPane(size_t pane_index) {
     using namespace ftxui;
 
-    if (pane_index >= VisibleEditorPaneCount() ||
+    if (!layout_controller_.HasVisiblePane(pane_index) ||
         pane_index >= editor_pane_components_.size()) {
         return emptyElement() | size(WIDTH, EQUAL, 0);
     }
@@ -285,46 +263,7 @@ ftxui::Element TextltApp::RenderEditorPane(size_t pane_index) {
 }
 
 ViewLayoutSnapshot TextltApp::CurrentViewLayoutSnapshot() const {
-    ViewLayoutSnapshot snapshot;
-    snapshot.layout_index = EditorLayoutModeIndex();
-    snapshot.layout_name = EditorLayoutModeLabel(editor_layout_mode_);
-    snapshot.active_pane_index = document_workspace_.ActiveEditorPaneIndex();
-    snapshot.two_left_width = editor_two_left_width_;
-    snapshot.three_left_width = editor_three_left_width_;
-    snapshot.three_right_width = editor_three_right_width_;
-
-    for (size_t doc_index = 0; doc_index < document_workspace_.OpenSessions().size(); ++doc_index) {
-        const auto& doc = document_workspace_.OpenSessions()[doc_index];
-        if (!doc) {
-            continue;
-        }
-        ViewLayoutDocumentInfo doc_info;
-        doc_info.title = ShortDocumentTitle(doc);
-        const DocumentSession& session = *doc;
-        doc_info.path = session.path.string();
-        doc_info.dirty = doc->is_dirty;
-        doc_info.memory_only = DocumentWorkspace::IsMemoryOnlySession(&session);
-        doc_info.active = doc_index == document_workspace_.ActiveSessionIndex();
-        snapshot.documents.push_back(std::move(doc_info));
-    }
-
-    const size_t visible_count = VisibleEditorPaneCount();
-    for (size_t pane_index = 0; pane_index < visible_count; ++pane_index) {
-        ViewLayoutPaneInfo info;
-        info.role = document_workspace_.PaneRole(pane_index);
-        info.active = pane_index == document_workspace_.ActiveEditorPaneIndex();
-        info.session_index = document_workspace_.PaneSessionIndex(pane_index);
-        if (info.session_index < document_workspace_.OpenSessions().size()) {
-            const auto& doc = document_workspace_.OpenSessions()[info.session_index];
-            info.title = ShortDocumentTitle(doc);
-            info.path = doc ? doc->path.string() : "";
-        }
-        if (info.title.empty()) {
-            info.title = "Untitled";
-        }
-        snapshot.panes.push_back(std::move(info));
-    }
-    return snapshot;
+    return layout_controller_.Snapshot();
 }
 
 } // namespace textlt

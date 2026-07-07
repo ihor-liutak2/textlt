@@ -42,6 +42,7 @@
 #include "modals/theme_dialog.hpp"
 #include "modals/unsaved_changes_dialog.hpp"
 #include "file_manager.hpp"
+#include "layout_controller.hpp"
 
 namespace textlt {
 
@@ -65,11 +66,7 @@ private:
         Replace,
     };
 
-    enum class EditorLayoutMode {
-        Single = 0,
-        TwoColumns = 1,
-        ThreeColumns = 2,
-    };
+    using EditorLayoutMode = LayoutController::EditorLayoutMode;
 
     // Keep application layer selection type-safe. FTXUI's Container::Tab API
     // requires an int pointer, so active_layer_index_ is only an adapter at
@@ -314,6 +311,7 @@ private:
     GitManager git_manager_;
     FileManager file_manager_;
     DocumentWorkspace document_workspace_;
+    LayoutController layout_controller_;
     DocumentFileController document_file_controller_;
     ClipboardController clipboard_controller_;
     RemoteConfigStore remote_config_store_;
@@ -345,12 +343,6 @@ private:
     AssistantSettingsModal assistant_settings_modal_;
     ThemeDialog theme_dialog_;
     UnsavedChangesDialog unsaved_changes_dialog_;
-    EditorLayoutMode editor_layout_mode_ = EditorLayoutMode::Single;
-    int editor_workspace_tab_index_ = 0;
-    int editor_two_left_width_ = 72;
-    int editor_three_left_width_ = 48;
-    int editor_three_right_width_ = 48;
-
     std::string find_query_;
     std::string replace_text_;
     std::string goto_line_input_;

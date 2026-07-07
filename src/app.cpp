@@ -72,6 +72,7 @@ TextltApp::TextltApp()
       app_event_dispatcher_(*this),
       file_manager_(),
       document_workspace_(),
+      layout_controller_(document_workspace_),
       document_file_controller_(file_manager_, document_workspace_),
       remote_config_store_(),
       text_editor_(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_)),
@@ -219,13 +220,11 @@ TextltApp::TextltApp()
           &current_theme_,
           [this] { return CurrentViewLayoutSnapshot(); },
           [this](int layout_index) {
-              if (layout_index == 1) {
-                  SetEditorLayoutMode(EditorLayoutMode::TwoColumns);
-              } else if (layout_index == 2) {
-                  SetEditorLayoutMode(EditorLayoutMode::ThreeColumns);
-              } else {
-                  SetEditorLayoutMode(EditorLayoutMode::Single);
-              }
+              layout_controller_.SetModeByIndex(layout_index);
+              BindEditorComponentsToWorkspace();
+              SetActiveEditorPane(document_workspace_.ActiveEditorPaneIndex());
+              active_action_ = "View layout: " + layout_controller_.ModeLabel();
+              screen_.PostEvent(ftxui::Event::Custom);
           },
           [this](size_t pane_index) {
               SetActiveEditorPane(pane_index);

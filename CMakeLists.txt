@@ -190,6 +190,7 @@ add_executable(textlt
   src/app_event_dispatcher.cpp
   src/app_commands.cpp
   src/app_find_replace.cpp
+  src/layout_controller.cpp
   src/app_modals.cpp
   src/app_menu_actions.cpp
   src/app_file_actions.cpp
