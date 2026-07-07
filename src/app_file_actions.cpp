@@ -210,7 +210,7 @@ bool TextltApp::AddFileModalDirectory(
 
 
 void TextltApp::CopyFileModalPathText(const std::string& text) {
-    WriteSystemClipboard(text);
+    clipboard_controller_.WriteText(text);
     active_action_ = "Copied path";
     screen_.PostEvent(ftxui::Event::Custom);
 }

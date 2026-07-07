@@ -68,7 +68,7 @@ namespace textlt {
     }
 
     void TextltApp::PasteIntoFindPanelInput() {
-        std::string clipboard_text = ReadSystemClipboard();
+        std::string clipboard_text = clipboard_controller_.ReadText();
         if (clipboard_text.empty()) {
             active_action_ = "Clipboard empty.";
             return;

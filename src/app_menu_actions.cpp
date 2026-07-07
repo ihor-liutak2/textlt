@@ -1,68 +1,12 @@
 #include "app.hpp"
 
-#include <cstdio>
-#include <cstdlib>
-#include <filesystem>
 #include <memory>
 #include <string>
-#include <system_error>
 
 #include "document.hpp"
 #include "ftxui/component/event.hpp"
 
 namespace textlt {
-namespace {
-
-bool CommandAvailable(const std::string& command) {
-#ifdef _WIN32
-    const std::string check_command = "where " + command + " >nul 2>nul";
-#else
-    const std::string check_command = "command -v " + command + " >/dev/null 2>&1";
-#endif
-    return std::system(check_command.c_str()) == 0;
-}
-
-bool IsWslEnvironment() {
-#ifdef _WIN32
-    return false;
-#else
-    std::error_code error;
-    if (std::filesystem::exists("/proc/sys/fs/binfmt_misc/WSLInterop", error)) {
-        return true;
-    }
-    return CommandAvailable("clip.exe");
-#endif
-}
-
-FILE* OpenPipe(const std::string& command, const char* mode) {
-#ifdef _WIN32
-    return _popen(command.c_str(), mode);
-#else
-    return popen(command.c_str(), mode);
-#endif
-}
-
-int ClosePipe(FILE* pipe) {
-#ifdef _WIN32
-    return _pclose(pipe);
-#else
-    return pclose(pipe);
-#endif
-}
-
-bool WriteTextToPipe(const std::string& command, const std::string& text) {
-    FILE* pipe = OpenPipe(command, "w");
-    if (!pipe) {
-        return false;
-    }
-
-    const size_t written = std::fwrite(text.data(), 1, text.size(), pipe);
-    std::fflush(pipe);
-    const int close_status = ClosePipe(pipe);
-    return written == text.size() && close_status == 0;
-}
-
-} // namespace
 
 
 void TextltApp::CloseDropdown() {
@@ -216,40 +160,16 @@ void TextltApp::CommandEditSelectAll() {
 void TextltApp::CommandEditCut() {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
     FocusEditor();
-    if (editor_ptr->HasSelection()) {
-        const std::string selected_text = editor_ptr->GetSelectedText();
-        WriteSystemClipboard(selected_text);
-        editor_ptr->DeleteSelection();
-        active_action_ = "Cut selection to clipboard";
-    } else {
-        const std::string current_line = editor_ptr->GetCurrentLineText();
-        if (!current_line.empty()) {
-            WriteSystemClipboard(current_line);
-            editor_ptr->DeleteCurrentLine();
-            active_action_ = "Cut line to clipboard";
-        } else {
-            active_action_ = "Nothing to cut";
-        }
-    }
+    const auto result = clipboard_controller_.CutFromEditor(*editor_ptr);
+    active_action_ = result.message;
     CloseDropdown();
 }
 
 
 void TextltApp::CommandEditCopy() {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-    if (editor_ptr->HasSelection()) {
-        const std::string selected_text = editor_ptr->GetSelectedText();
-        WriteSystemClipboard(selected_text);
-        active_action_ = "Copied selection to clipboard";
-    } else {
-        const std::string current_line = editor_ptr->GetCurrentLineText();
-        if (!current_line.empty()) {
-            WriteSystemClipboard(current_line);
-            active_action_ = "Copied line to clipboard";
-        } else {
-            active_action_ = "Nothing to copy";
-        }
-    }
+    const auto result = clipboard_controller_.CopyFromEditor(*editor_ptr);
+    active_action_ = result.message;
     CloseDropdown();
 }
 
@@ -258,14 +178,8 @@ void TextltApp::CommandEditPaste() {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
     CloseDropdown();
     FocusEditor();
-
-    const std::string clipboard_text = ReadSystemClipboard();
-    if (!clipboard_text.empty()) {
-        active_action_ = "Pasted text (" + std::to_string(clipboard_text.size()) + " chars)";
-        editor_ptr->InsertText(clipboard_text);
-    } else {
-        active_action_ = "Clipboard empty.";
-    }
+    const auto result = clipboard_controller_.PasteIntoEditor(*editor_ptr);
+    active_action_ = result.message;
 }
 
 
@@ -454,72 +368,6 @@ void TextltApp::CommandTtsNext() {
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
-
-std::string TextltApp::ReadSystemClipboard() {
-    std::string clipboard_text;
-    char buffer[256];
-
-#ifdef _WIN32
-    FILE* pipe = OpenPipe("powershell -NoProfile -Command Get-Clipboard 2>nul", "r");
-    if (pipe) {
-        while (std::fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-            clipboard_text += buffer;
-        }
-        ClosePipe(pipe);
-    }
-    return clipboard_text;
-#else
-    // Attempt 1: Standard X11 Clipboard via xclip
-    FILE* pipe = OpenPipe("xclip -selection clipboard -o 2>/dev/null", "r");
-    if (pipe) {
-        while (std::fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-            clipboard_text += buffer;
-        }
-        ClosePipe(pipe);
-    }
-
-    // Attempt 2: Fallback to xsel
-    if (clipboard_text.empty()) {
-        pipe = OpenPipe("xsel --clipboard --output 2>/dev/null", "r");
-        if (pipe) {
-            while (std::fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-                clipboard_text += buffer;
-            }
-            ClosePipe(pipe);
-        }
-    }
-
-    // Attempt 3: Fallback to X11 Primary selection (mouse highlight)
-    if (clipboard_text.empty()) {
-        pipe = OpenPipe("xclip -selection primary -o 2>/dev/null", "r");
-        if (pipe) {
-            while (std::fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-                clipboard_text += buffer;
-            }
-            ClosePipe(pipe);
-        }
-    }
-
-    return clipboard_text;
-#endif
-}
-
-
-void TextltApp::WriteSystemClipboard(const std::string& text) {
-    if (text.empty()) return;
-
-#ifdef _WIN32
-    WriteTextToPipe("clip 2>nul", text);
-#else
-    if (IsWslEnvironment() &&
-        CommandAvailable("clip.exe") &&
-        WriteTextToPipe("clip.exe 2>/dev/null", text)) {
-        return;
-    }
-
-    WriteTextToPipe("xclip -selection clipboard -i 2>/dev/null", text);
-#endif
-}
 
 
 } // namespace textlt

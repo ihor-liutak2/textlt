@@ -402,13 +402,11 @@ bool DocumentFileController::LoadState() {
     favorite_files_.clear();
     opened_config_ = {};
 
-    const bool loaded_unified_state = LoadUnifiedState();
-    if (!loaded_unified_state) {
-        LoadLegacyState();
+    const bool loaded_state = LoadUnifiedState();
+    if (RemoveMissingRecentFiles()) {
+        SaveState();
     }
-    RemoveMissingRecentFiles();
-    SaveState();
-    return loaded_unified_state;
+    return loaded_state;
 }
 
 bool DocumentFileController::SaveState() const {
@@ -639,31 +637,6 @@ bool DocumentFileController::LoadUnifiedState() {
     return true;
 }
 
-bool DocumentFileController::LoadLegacyState() {
-    bool loaded = false;
-    if (std::filesystem::exists(LegacyRecentFilesPath())) {
-        LoadRecentFilesFromJson(LegacyRecentFilesPath());
-        loaded = true;
-    }
-    if (std::filesystem::exists(LegacyOpenedFilesPath())) {
-        LoadOpenedFilesFromJson(LegacyOpenedFilesPath());
-        loaded = true;
-    }
-
-    const std::filesystem::path legacy_config_path = LegacyConfigPath();
-    if (std::filesystem::exists(legacy_config_path)) {
-        LoadFavoritesFromJson(legacy_config_path);
-        loaded = true;
-    } else {
-        const std::filesystem::path fallback_path = LegacyFallbackConfigPath();
-        if (!fallback_path.empty() && std::filesystem::exists(fallback_path)) {
-            LoadFavoritesFromJson(fallback_path);
-            loaded = true;
-        }
-    }
-    return loaded;
-}
-
 void DocumentFileController::LoadRecentFilesFromJson(const std::filesystem::path& path) {
     const Json root = LoadJsonObject(path);
     const auto files = root.find("recent_files");
@@ -735,60 +708,6 @@ void DocumentFileController::LoadOpenedFilesFromJson(const std::filesystem::path
     SetOpenedConfig(std::move(config));
 }
 
-void DocumentFileController::LoadFavoritesFromJson(const std::filesystem::path& path) {
-    const Json root = LoadJsonObject(path);
-
-    auto load_objects = [this, &root](const char* key) {
-        const auto iter = root.find(key);
-        if (iter == root.end() || !iter->is_array()) {
-            return false;
-        }
-        bool loaded = false;
-        for (const Json& object : *iter) {
-            if (!object.is_object()) {
-                continue;
-            }
-            const std::filesystem::path normalized_path = NormalizeDocumentPath(JsonString(object, "path"));
-            if (normalized_path.empty() || IsFavorite(normalized_path)) {
-                continue;
-            }
-            favorite_files_.push_back({
-                normalized_path,
-                JsonSize(object, "row", 0),
-                JsonSize(object, "column", 0),
-            });
-            loaded = true;
-        }
-        return loaded;
-    };
-
-    if (load_objects("favorites_") || load_objects("favorites")) {
-        return;
-    }
-
-    auto load_strings = [this, &root](const char* key) {
-        const auto iter = root.find(key);
-        if (iter == root.end() || !iter->is_array()) {
-            return false;
-        }
-        bool loaded = false;
-        for (const Json& value : *iter) {
-            if (!value.is_string()) {
-                continue;
-            }
-            const std::filesystem::path normalized_path = NormalizeDocumentPath(value.get<std::string>());
-            if (normalized_path.empty() || IsFavorite(normalized_path)) {
-                continue;
-            }
-            favorite_files_.push_back({normalized_path, 0, 0});
-            loaded = true;
-        }
-        return loaded;
-    };
-
-    load_strings("favorites_") || load_strings("favorites");
-}
-
 bool DocumentFileController::RemoveMissingRecentFiles() {
     const size_t old_size = recent_files_.size();
     recent_files_.erase(
@@ -811,38 +730,6 @@ std::filesystem::path DocumentFileController::DefaultStatePath() {
     return directory / "document_files.json";
 }
 
-std::filesystem::path DocumentFileController::LegacyRecentFilesPath() {
-    const std::filesystem::path directory = UserConfigDirectory();
-    if (directory.empty()) {
-        return "recent_files.json";
-    }
-    return directory / "recent_files.json";
-}
-
-std::filesystem::path DocumentFileController::LegacyOpenedFilesPath() {
-    const std::filesystem::path directory = UserConfigDirectory();
-    if (directory.empty()) {
-        return "opened_config.json";
-    }
-    return directory / "opened_config.json";
-}
-
-std::filesystem::path DocumentFileController::LegacyConfigPath() {
-    const std::filesystem::path directory = UserConfigDirectory();
-    if (directory.empty()) {
-        return "config.json";
-    }
-    return directory / "config.json";
-}
-
-std::filesystem::path DocumentFileController::LegacyFallbackConfigPath() {
-    const std::filesystem::path home = UserHomeDirectory();
-    if (home.empty()) {
-        return {};
-    }
-    return home / ".textlt_config.json";
-}
-
 std::filesystem::path DocumentFileController::UserConfigDirectory() {
 #ifdef _WIN32
     const char* app_data = std::getenv("APPDATA");
@@ -861,22 +748,6 @@ std::filesystem::path DocumentFileController::UserConfigDirectory() {
         return {};
     }
     return std::filesystem::path(home) / ".config" / "textlt";
-#endif
-}
-
-std::filesystem::path DocumentFileController::UserHomeDirectory() {
-#ifdef _WIN32
-    const char* user_profile = std::getenv("USERPROFILE");
-    if (!user_profile || std::string(user_profile).empty()) {
-        return {};
-    }
-    return std::filesystem::path(user_profile);
-#else
-    const char* home = std::getenv("HOME");
-    if (!home || std::string(home).empty()) {
-        return {};
-    }
-    return std::filesystem::path(home);
 #endif
 }
 

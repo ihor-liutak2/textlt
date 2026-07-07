@@ -216,6 +216,7 @@ add_executable(textlt
   src/editor/text_buffer.cpp
   src/editor/document_workspace.cpp
   src/editor/document_file_controller.cpp
+  src/editor/clipboard_controller.cpp
   src/file_utils.cpp
   src/git_manager.cpp
   src/history_manager.cpp

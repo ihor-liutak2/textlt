@@ -18,6 +18,7 @@
 #include "editor_config.hpp"
 #include "editor/document_workspace.hpp"
 #include "editor/document_file_controller.hpp"
+#include "editor/clipboard_controller.hpp"
 #include "git_manager.hpp"
 #include "modals/assistant_modals.hpp"
 #include "modals/help_dialog.hpp"
@@ -298,10 +299,6 @@ private:
     void CommandTtsStop();
     void CommandTtsNext();
 
-    // Platform-specific clipboard abstraction utilities
-    std::string ReadSystemClipboard();
-    void WriteSystemClipboard(const std::string& text);
-
     AppCommandRegistry command_registry_;
     ShortcutStore shortcut_store_;
     ShortcutRegistry shortcut_registry_;
@@ -315,6 +312,7 @@ private:
     FileManager file_manager_;
     DocumentWorkspace document_workspace_;
     DocumentFileController document_file_controller_;
+    ClipboardController clipboard_controller_;
     RemoteConfigStore remote_config_store_;
     ftxui::Component text_editor_;
     std::vector<ftxui::Component> editor_pane_components_;

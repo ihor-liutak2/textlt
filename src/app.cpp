@@ -92,8 +92,8 @@ TextltApp::TextltApp()
           [this](std::string& error) { return SaveShortcutOverrides(error); }),
       custom_processor_builder_modal_(
           &current_theme_,
-          [this] { return ReadSystemClipboard(); },
-          [this](const std::string& text) { WriteSystemClipboard(text); }),
+          [this] { return clipboard_controller_.ReadText(); },
+          [this](const std::string& text) { clipboard_controller_.WriteText(text); }),
       recent_files_modal_(
           &current_theme_,
           &document_file_controller_,
@@ -114,10 +114,10 @@ TextltApp::TextltApp()
                   return OpenSearchFileMatch(match, error);
               },
               [this] {
-                  return ReadSystemClipboard();
+                  return clipboard_controller_.ReadText();
               },
               [this](const std::string& text) {
-                  WriteSystemClipboard(text);
+                  clipboard_controller_.WriteText(text);
               }),
       files_modal_(
           &current_theme_,
@@ -159,7 +159,7 @@ TextltApp::TextltApp()
           &current_theme_,
           &remote_config_store_,
           [this](const std::string& text) {
-              WriteSystemClipboard(text);
+              clipboard_controller_.WriteText(text);
           }),
       remote_files_modal_(
           &current_theme_,
@@ -175,7 +175,7 @@ TextltApp::TextltApp()
               return opened;
           },
           [this](const std::string& text) {
-              WriteSystemClipboard(text);
+              clipboard_controller_.WriteText(text);
           }),
       git_modal_(
           &current_theme_,
@@ -202,7 +202,7 @@ TextltApp::TextltApp()
                   error);
           },
           [this](const std::string& text) {
-              WriteSystemClipboard(text);
+              clipboard_controller_.WriteText(text);
           },
           [this] { screen_.PostEvent(ftxui::Event::Custom); }),
       tts_modal_(
@@ -483,7 +483,7 @@ TextltApp::TextltApp()
     git_settings_modal_.Configure(
         &current_theme_,
         &git_manager_,
-        [this](const std::string& text) { WriteSystemClipboard(text); },
+        [this](const std::string& text) { clipboard_controller_.WriteText(text); },
         [this] { CloseGitSettingsModal(); });
 
     find_panel_find_container_ = ftxui::Container::Horizontal({

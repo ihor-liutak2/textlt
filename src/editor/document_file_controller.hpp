@@ -108,19 +108,12 @@ private:
     OpenedConfig CurrentOpenedConfig() const;
     void SetOpenedConfig(OpenedConfig config);
     bool LoadUnifiedState();
-    bool LoadLegacyState();
     void LoadRecentFilesFromJson(const std::filesystem::path& path);
     void LoadOpenedFilesFromJson(const std::filesystem::path& path);
-    void LoadFavoritesFromJson(const std::filesystem::path& path);
     bool RemoveMissingRecentFiles();
 
     static std::filesystem::path DefaultStatePath();
-    static std::filesystem::path LegacyRecentFilesPath();
-    static std::filesystem::path LegacyOpenedFilesPath();
-    static std::filesystem::path LegacyConfigPath();
-    static std::filesystem::path LegacyFallbackConfigPath();
     static std::filesystem::path UserConfigDirectory();
-    static std::filesystem::path UserHomeDirectory();
     static std::filesystem::path NormalizePath(const std::filesystem::path& path);
     static std::filesystem::path NormalizeDocumentPath(const std::filesystem::path& path);
     static RecentFileEntry MakeRecentEntry(const std::filesystem::path& path);
