@@ -79,6 +79,13 @@ void TextltApp::InitializeCommands() {
     add("editor.convert_tabs_to_spaces", "Convert Tabs to Spaces", "Options", "", [this] { CommandEditorConvertTabsToSpaces(); });
     add("theme.open", "Theme", "Options", "", [this] { CommandThemeOpen(); });
     add("view.layout", "View Layout", "Options", "", [this] { CommandViewLayoutOpen(); });
+    add("distraction.open_options", "Distraction Mode", "Options", "", [this] { CommandDistractionOpenOptions(); });
+    add("distraction.enter", "Enter Distraction Mode", "Options", "", [this] { CommandDistractionEnter(); });
+    add("distraction.exit", "Exit Distraction Mode", "Options", "", [this] { CommandDistractionExit(); });
+    add("distraction.toggle", "Toggle Distraction Mode", "Options", "", [this] { CommandDistractionToggle(); });
+    add("distraction.next_page", "Distraction Next Page", "Options", "", [this] { CommandDistractionNextPage(); });
+    add("distraction.previous_page", "Distraction Previous Page", "Options", "", [this] { CommandDistractionPreviousPage(); });
+    add("distraction.go_to_page", "Distraction Go To Page", "Options", "", [this] { CommandDistractionGoToPage(); });
 
     add("tts.open_modal", "TTS", "AI", "Alt+H", [this] { OpenTtsModal(); });
     add("tts.play", "Play TTS", "TTS", "", [this] { CommandTtsPlay(); });

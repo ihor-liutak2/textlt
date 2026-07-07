@@ -77,6 +77,20 @@ EditorConfig ConfigManager::Load() const {
     config.tts_player_voice_id = JsonString(
         root, "tts_player_voice_id", config.tts_player_voice_id);
 
+    config.distraction_mode.enabled = JsonBool(
+        root, "distraction_enabled", config.distraction_mode.enabled);
+    config.distraction_mode.column_count = JsonInt(
+        root, "distraction_column_count", config.distraction_mode.column_count);
+    config.distraction_mode.column_width = JsonInt(
+        root, "distraction_column_width", config.distraction_mode.column_width);
+    config.distraction_mode.column_gap = JsonInt(
+        root, "distraction_column_gap", config.distraction_mode.column_gap);
+    config.distraction_mode.top_padding = JsonInt(
+        root, "distraction_top_padding", config.distraction_mode.top_padding);
+    config.distraction_mode.bottom_padding = JsonInt(
+        root, "distraction_bottom_padding", config.distraction_mode.bottom_padding);
+    config.distraction_mode = DistractionModeController::NormalizeSettings(config.distraction_mode);
+
     for (const std::string& path : ExtractStringArray(root, "file_modal_directories")) {
         const std::string normalized_path = EditorConfig::NormalizeDirectoryPath(path);
         if (!normalized_path.empty() && !config.IsFileModalDirectory(normalized_path)) {

@@ -66,13 +66,14 @@ ftxui::ButtonOption MakeFindPanelTextButtonOption(
 TextltApp::TextltApp()
     : config_manager_("config.json"),
       editor_config_(config_manager_.Load()),
+      distraction_controller_(editor_config_.distraction_mode),
       themes_(LoadThemesFromConfiguredLocations()),
       current_theme_(FindThemeByName(themes_, editor_config_.active_theme_name)),
       screen_(ftxui::ScreenInteractive::Fullscreen()),
       app_event_dispatcher_(*this),
       file_manager_(),
       document_workspace_(),
-      layout_controller_(document_workspace_),
+      layout_controller_(document_workspace_, &distraction_controller_),
       document_file_controller_(file_manager_, document_workspace_),
       remote_config_store_(),
       text_editor_(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_)),
@@ -239,6 +240,12 @@ TextltApp::TextltApp()
           [this] { SplitActiveSessionToNextPane(); },
           [this] { EqualizeEditorPaneWidths(); },
           [this] { CloseViewLayoutModal(); }),
+      distraction_options_modal_(
+          &current_theme_,
+          [this] { return distraction_controller_.Settings(); },
+          [this](DistractionModeSettings settings) { ApplyDistractionSettings(settings); },
+          [this](const std::string& command_id) { RunCommand(command_id); },
+          [this] { CloseDistractionOptionsModal(); }),
       ai_actions_modal_(&current_theme_),
       assistant_settings_modal_(
           &current_theme_,
@@ -270,6 +277,9 @@ TextltApp::TextltApp()
             [this] { return tts_modal_.ShouldShowHeaderControls(); },
             [this] { return tts_modal_.HeaderStatus(); },
             [this] { return tts_header_active_button_; },
+            [this] { return distraction_controller_.Enabled(); },
+            [this] { return CurrentDistractionTopBarState(); },
+            [this](const std::string& page_input) { SetDistractionPageInput(page_input); },
         });
 
     bottom_bar_row_ = ftxui::Make<BottomBarRowComponent>(
@@ -466,6 +476,7 @@ TextltApp::TextltApp()
         git_settings_modal_.View(),
         tts_modal_.View(),
         view_layout_modal_.View(),
+        distraction_options_modal_.View(),
         ai_actions_modal_.View(),
         assistant_settings_modal_.View(),
     }, &active_layer_index_);

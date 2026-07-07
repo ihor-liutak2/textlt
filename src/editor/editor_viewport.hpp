@@ -22,6 +22,7 @@ struct EditorViewportOptions {
     bool show_line_numbers = true;
     bool show_scrollbar = true;
     size_t max_text_width = 0;
+    size_t column_gap = 0;
     size_t top_padding = 0;
     size_t bottom_padding = 0;
 };

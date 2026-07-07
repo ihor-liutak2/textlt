@@ -196,6 +196,7 @@ add_executable(textlt
   src/app_file_actions.cpp
   src/app_document_actions.cpp
   src/app_tts_actions.cpp
+  src/app_distraction_actions.cpp
   src/app_workspace.cpp
   src/app_resources.cpp
   src/app_view.cpp
@@ -205,6 +206,7 @@ add_executable(textlt
   src/custom_processor_builder.cpp
   src/cloud_tts_pipeline.cpp
   src/builtin_text_processors.cpp
+  src/distraction_mode_controller.cpp
   src/config_manager.cpp
   src/curl_manager.cpp
   src/editor_config.cpp
@@ -254,6 +256,7 @@ add_executable(textlt
   src/modals/modal_recent_files.cpp
   src/modals/modal_tts.cpp
   src/modals/modal_view_layout.cpp
+  src/modals/modal_distraction_options.cpp
   src/modals/modal_window.cpp
   src/modals/theme_dialog.cpp
   src/modals/unsaved_changes_dialog.cpp

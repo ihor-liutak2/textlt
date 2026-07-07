@@ -87,6 +87,7 @@ MenuBarComponent::MenuBarComponent(
               {" Convert Tabs to Spaces ", "editor.convert_tabs_to_spaces"},
               {" Theme... ", "theme.open"},
               {" View Layout... ", "view.layout"},
+              {" Distraction Mode... ", "distraction.open_options"},
           },
           {
               {" TTS                 (Alt+H) ", "tts.open_modal"},

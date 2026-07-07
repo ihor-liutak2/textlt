@@ -20,6 +20,7 @@
 #include "editor/document_workspace.hpp"
 #include "editor/document_file_controller.hpp"
 #include "editor/clipboard_controller.hpp"
+#include "distraction_mode_controller.hpp"
 #include "git_manager.hpp"
 #include "modals/assistant_modals.hpp"
 #include "modals/help_dialog.hpp"
@@ -31,6 +32,7 @@
 #include "modals/modal_recent_files.hpp"
 #include "modals/modal_tts.hpp"
 #include "modals/modal_view_layout.hpp"
+#include "modals/modal_distraction_options.hpp"
 #include "modals/modal_search_files.hpp"
 #include "modals/modal_files.hpp"
 #include "modals/modal_text_processors.hpp"
@@ -92,6 +94,7 @@ private:
         GitSettings,
         Tts,
         ViewLayout,
+        DistractionOptions,
         AiActions,
         AssistantSettings,
     };
@@ -162,6 +165,8 @@ private:
     void CloseTtsModal();
     void OpenViewLayoutModal();
     void CloseViewLayoutModal();
+    void OpenDistractionOptionsModal();
+    void CloseDistractionOptionsModal();
     void OpenAiActionsModal();
     void CloseAiActionsModal();
     void OpenAssistantSettingsModal();
@@ -205,6 +210,10 @@ private:
     void BindEditorComponentsToWorkspace();
     ftxui::Element RenderEditorPane(size_t pane_index);
     ViewLayoutSnapshot CurrentViewLayoutSnapshot() const;
+    DistractionTopBarState CurrentDistractionTopBarState() const;
+    void SetDistractionPageInput(const std::string& page_input);
+    void ApplyDistractionSettings(DistractionModeSettings settings);
+    void SetDistractionEnabled(bool enabled);
     void InitializeWithFiles(const std::vector<std::string>& files_to_open);
     void OpenSidebarFile(const std::filesystem::path& path);
     void SaveCurrentFile();
@@ -293,6 +302,13 @@ private:
     void CommandEditorConvertTabsToSpaces();
     void CommandThemeOpen();
     void CommandViewLayoutOpen();
+    void CommandDistractionOpenOptions();
+    void CommandDistractionEnter();
+    void CommandDistractionExit();
+    void CommandDistractionToggle();
+    void CommandDistractionNextPage();
+    void CommandDistractionPreviousPage();
+    void CommandDistractionGoToPage();
 
     void CommandTtsPlay();
     void CommandTtsPause();
@@ -305,6 +321,7 @@ private:
     EditorKeymap editor_keymap_;
     ConfigManager config_manager_;
     EditorConfig editor_config_;
+    DistractionModeController distraction_controller_;
     std::vector<Theme> themes_;
     Theme current_theme_;
     ftxui::ScreenInteractive screen_;
@@ -340,6 +357,7 @@ private:
     CloudTtsPipeline cloud_tts_pipeline_;
     TtsModal tts_modal_;
     ViewLayoutModal view_layout_modal_;
+    DistractionOptionsModal distraction_options_modal_;
     AiActionsModal ai_actions_modal_;
     AssistantSettingsModal assistant_settings_modal_;
     ThemeDialog theme_dialog_;

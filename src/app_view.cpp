@@ -63,16 +63,17 @@ ftxui::Element TextltApp::Render() {
     using namespace ftxui;
 
     const auto editor = std::static_pointer_cast<EditorComponent>(text_editor_);
+    const bool distraction_mode = layout_controller_.IsDistractionModeActive();
     UpdateFileMenuLabels();
     RefreshOpenedDocumentsSidebar();
 
-    Element top_menu_element = menu_bar_->Render();
+    Element top_menu_element = distraction_mode ? emptyElement() : menu_bar_->Render();
         
     Element editor_workspace = editor_workspace_container_
         ? editor_workspace_container_->Render() | xflex
         : text_editor_->Render() | xflex;
 
-    Element workspace = editor_config_.show_file_explorer
+    Element workspace = !distraction_mode && editor_config_.show_file_explorer
         ? hbox({
               sidebar_panel_->Render() | size(WIDTH, EQUAL, 28),
               separator() | color(MainWindowSeparatorColor(current_theme_)),
@@ -82,14 +83,17 @@ ftxui::Element TextltApp::Render() {
               editor_workspace | xflex,
           });
 
-    Element top_menu_separator = separator() | color(MainWindowSeparatorColor(current_theme_));
     Elements base_rows = {
         top_bar_row_ ? top_bar_row_->Render() : text(" textlt v1.0.0 - Native Non-Modal Text Editor"),
-        top_menu_separator,
-        top_menu_element,
-        separator() | color(MainWindowSeparatorColor(current_theme_)),
-        workspace | yflex,
     };
+
+    if (!distraction_mode) {
+        base_rows.push_back(separator() | color(MainWindowSeparatorColor(current_theme_)));
+        base_rows.push_back(top_menu_element);
+        base_rows.push_back(separator() | color(MainWindowSeparatorColor(current_theme_)));
+    }
+
+    base_rows.push_back(workspace | yflex);
 
     if (current_search_mode_ != SearchMode::None) {
         base_rows.push_back(separator() | color(MainWindowSeparatorColor(current_theme_)));
@@ -100,18 +104,20 @@ ftxui::Element TextltApp::Render() {
         base_rows.push_back(RenderGoToLinePanel());
     }
 
-    base_rows.push_back(separator() | color(MainWindowSeparatorColor(current_theme_)));
-    base_rows.push_back(
-        bottom_bar_row_
-            ? bottom_bar_row_->Render()
-            : text(" Ln 1, Col 1 | LF | 100% | Theme: " + current_theme_.name) |
-                  color(current_theme_.menu_foreground));
+    if (!distraction_mode) {
+        base_rows.push_back(separator() | color(MainWindowSeparatorColor(current_theme_)));
+        base_rows.push_back(
+            bottom_bar_row_
+                ? bottom_bar_row_->Render()
+                : text(" Ln 1, Col 1 | LF | 100% | Theme: " + current_theme_.name) |
+                      color(current_theme_.menu_foreground));
+    }
 
     Element base_layout = vbox(std::move(base_rows)) |
         bgcolor(current_theme_.background);
 
     Elements layers = {base_layout};
-    if (menu_bar_->IsDropdownOpen()) {
+    if (!distraction_mode && menu_bar_->IsDropdownOpen()) {
         layers.push_back(menu_bar_->RenderDropdown());
     }
 
@@ -156,6 +162,9 @@ ftxui::Element TextltApp::Render() {
     }
     if (view_layout_modal_.IsOpen()) {
         layers.push_back(view_layout_modal_.View()->Render() | clear_under | center);
+    }
+    if (distraction_options_modal_.IsOpen()) {
+        layers.push_back(distraction_options_modal_.View()->Render() | clear_under | center);
     }
     if (ai_actions_modal_.IsOpen()) {
         layers.push_back(ai_actions_modal_.View()->Render() | clear_under | center);
@@ -288,6 +297,7 @@ bool TextltApp::ActiveModalIsOpen() const {
         case UiLayer::GitSettings: return git_settings_modal_.IsOpen();
         case UiLayer::Tts: return tts_modal_.IsOpen();
         case UiLayer::ViewLayout: return view_layout_modal_.IsOpen();
+        case UiLayer::DistractionOptions: return distraction_options_modal_.IsOpen();
         case UiLayer::AiActions: return ai_actions_modal_.IsOpen();
         case UiLayer::AssistantSettings: return assistant_settings_modal_.IsOpen();
     }

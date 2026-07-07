@@ -76,8 +76,11 @@ bool AppEventDispatcher::Handle(ftxui::Event event) {
 bool AppEventDispatcher::HandleBodyEvent(ftxui::Event event) {
     if (IsPrimaryMousePress(event) && app_.ActiveLayer() == TextltApp::UiLayer::Main) {
         auto sidebar = std::static_pointer_cast<SidebarPanel>(app_.sidebar_panel_);
-        const bool inside_sidebar = sidebar && sidebar->ContainsPoint(event.mouse().x, event.mouse().y);
-        if (app_.editor_config_.show_file_explorer && inside_sidebar) {
+        const bool distraction_mode = app_.layout_controller_.IsDistractionModeActive();
+        const bool inside_sidebar = !distraction_mode &&
+            sidebar &&
+            sidebar->ContainsPoint(event.mouse().x, event.mouse().y);
+        if (!distraction_mode && app_.editor_config_.show_file_explorer && inside_sidebar) {
             app_.FocusSidebar();
         } else if (!inside_sidebar) {
             app_.FocusEditor();
@@ -100,6 +103,7 @@ bool AppEventDispatcher::HandleBodyEvent(ftxui::Event event) {
         !app_.git_settings_modal_.IsOpen() &&
         !app_.tts_modal_.IsOpen() &&
         !app_.view_layout_modal_.IsOpen() &&
+        !app_.distraction_options_modal_.IsOpen() &&
         !app_.ai_actions_modal_.IsOpen() &&
         !app_.assistant_settings_modal_.IsOpen() &&
         !app_.theme_dialog_.IsOpen() &&
@@ -212,6 +216,11 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
     // Let FTXUI route menu events through the component tree. Calling
     // MenuBarComponent::OnEvent directly from this outer CatchEvent changes
     // layers in the middle of a mouse sequence when an item opens a modal.
+    if (app_.layout_controller_.IsDistractionModeActive() && app_.menu_bar_->IsDropdownOpen()) {
+        app_.menu_bar_->CloseDropdown();
+        return true;
+    }
+
     if (app_.menu_bar_->IsDropdownOpen()) {
         return event.is_mouse() ? false : app_.menu_bar_->OnEvent(event);
     }
@@ -266,7 +275,10 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
 }
 
 bool AppEventDispatcher::HandleSidebarEvent(const ftxui::Event& event) {
-    const bool sidebar_is_focused = app_.ActiveLayer() == TextltApp::UiLayer::Main && app_.sidebar_has_focus_;
+    const bool sidebar_is_focused =
+        app_.ActiveLayer() == TextltApp::UiLayer::Main &&
+        app_.sidebar_has_focus_ &&
+        !app_.layout_controller_.IsDistractionModeActive();
     if (!sidebar_is_focused) {
         return false;
     }
@@ -320,20 +332,20 @@ bool AppEventDispatcher::HandleFunctionKeyEvent(const ftxui::Event& event) {
         return app_.RunCommand("app.help");
     }
 
-    if (event == ftxui::Event::F2) {
-        app_.menu_bar_->OpenDropdown(0);
-        app_.SetActiveLayer(TextltApp::UiLayer::Main);
-        return true;
-    }
+    if (event == ftxui::Event::F2 || event == ftxui::Event::F3 || event == ftxui::Event::F4) {
+        if (app_.layout_controller_.IsDistractionModeActive()) {
+            app_.active_action_ = "Menu is hidden in Distraction Mode";
+            app_.screen_.PostEvent(ftxui::Event::Custom);
+            return true;
+        }
 
-    if (event == ftxui::Event::F3) {
-        app_.menu_bar_->OpenDropdown(1);
-        app_.SetActiveLayer(TextltApp::UiLayer::Main);
-        return true;
-    }
-
-    if (event == ftxui::Event::F4) {
-        app_.menu_bar_->OpenDropdown(2);
+        if (event == ftxui::Event::F2) {
+            app_.menu_bar_->OpenDropdown(0);
+        } else if (event == ftxui::Event::F3) {
+            app_.menu_bar_->OpenDropdown(1);
+        } else {
+            app_.menu_bar_->OpenDropdown(2);
+        }
         app_.SetActiveLayer(TextltApp::UiLayer::Main);
         return true;
     }

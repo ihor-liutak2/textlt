@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "distraction_mode_controller.hpp"
+
 namespace textlt {
 
 struct EditorConfig {
@@ -21,6 +23,7 @@ struct EditorConfig {
     std::string tts_audio_player_id = "auto";
     std::string tts_audio_player_command;
     std::string tts_player_voice_id;
+    DistractionModeSettings distraction_mode;
     std::vector<std::string> file_modal_directories_;
 
     bool SetActiveThemeName(const std::string& name);

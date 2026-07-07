@@ -82,6 +82,12 @@ bool WriteConfigAtomically(const std::filesystem::path& path, const EditorConfig
         {"tts_audio_player_id", config.tts_audio_player_id.empty() ? "auto" : config.tts_audio_player_id},
         {"tts_audio_player_command", config.tts_audio_player_command},
         {"tts_player_voice_id", config.tts_player_voice_id},
+        {"distraction_enabled", config.distraction_mode.enabled},
+        {"distraction_column_count", config.distraction_mode.column_count},
+        {"distraction_column_width", config.distraction_mode.column_width},
+        {"distraction_column_gap", config.distraction_mode.column_gap},
+        {"distraction_top_padding", config.distraction_mode.top_padding},
+        {"distraction_bottom_padding", config.distraction_mode.bottom_padding},
         {"file_modal_directories", Json::array()},
     };
     for (const std::string& directory : config.file_modal_directories_) {

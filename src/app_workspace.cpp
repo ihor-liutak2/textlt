@@ -69,6 +69,7 @@ bool TextltApp::MainViewCanActivateEditorPane() const {
         !git_settings_modal_.IsOpen() &&
         !tts_modal_.IsOpen() &&
         !view_layout_modal_.IsOpen() &&
+        !distraction_options_modal_.IsOpen() &&
         !ai_actions_modal_.IsOpen() &&
         !assistant_settings_modal_.IsOpen() &&
         !theme_dialog_.IsOpen() &&
@@ -190,7 +191,7 @@ void TextltApp::SplitActiveSessionToNextPane() {
 
 void TextltApp::BindEditorComponentsToWorkspace() {
     document_workspace_.SetEditorPaneCount(editor_pane_components_.size());
-    document_workspace_.EnsureEditorPanesHaveSessions(layout_controller_.VisiblePaneCount());
+    layout_controller_.EnsureVisiblePanesHaveSessions();
 
     for (size_t pane_index = 0; pane_index < editor_pane_components_.size(); ++pane_index) {
         const size_t session_index = document_workspace_.PaneSessionIndex(pane_index);
@@ -252,14 +253,26 @@ ftxui::Element TextltApp::RenderEditorPane(size_t pane_index) {
         size(WIDTH, GREATER_THAN, 12);
 
     Element body = editor_pane_components_[pane_index]->Render() | flex;
-    return vbox({
-        header,
-        separator() | color(active ? theme.modal_accent : theme.gutter),
-        body | flex,
-    }) |
-        borderStyled(active ? HEAVY : LIGHT, active ? theme.modal_accent : theme.gutter) |
-        bgcolor(theme.background) |
-        xflex;
+    Element pane = layout_controller_.IsDistractionModeActive()
+        ? body | bgcolor(theme.background) | xflex
+        : vbox({
+              header,
+              separator() | color(active ? theme.modal_accent : theme.gutter),
+              body | flex,
+          }) |
+              borderStyled(active ? HEAVY : LIGHT, active ? theme.modal_accent : theme.gutter) |
+              bgcolor(theme.background) |
+              xflex;
+
+    const size_t column_gap = layout_controller_.ColumnGapAfterPane(pane_index);
+    if (column_gap > 0) {
+        return hbox({
+            pane,
+            text(std::string(column_gap, ' ')) | bgcolor(theme.background),
+        }) | xflex;
+    }
+
+    return pane;
 }
 
 ViewLayoutSnapshot TextltApp::CurrentViewLayoutSnapshot() const {

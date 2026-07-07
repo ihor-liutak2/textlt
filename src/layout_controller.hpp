@@ -10,6 +10,8 @@
 
 namespace textlt {
 
+class DistractionModeController;
+
 class LayoutController {
 public:
     enum class EditorLayoutMode {
@@ -18,7 +20,11 @@ public:
         ThreeColumns = 2,
     };
 
-    explicit LayoutController(DocumentWorkspace& workspace);
+    explicit LayoutController(
+        DocumentWorkspace& workspace,
+        const DistractionModeController* distraction_controller = nullptr);
+
+    void SetDistractionModeController(const DistractionModeController* distraction_controller);
 
     EditorLayoutMode Mode() const;
     void SetMode(EditorLayoutMode mode);
@@ -40,13 +46,19 @@ public:
     int ThreeLeftWidth() const;
     int ThreeRightWidth() const;
 
+    bool IsDistractionModeActive() const;
+    void EnsureVisiblePanesHaveSessions();
+    size_t ColumnGapAfterPane(size_t pane_index) const;
     EditorViewportOptions ViewportOptionsForPane(size_t pane_index) const;
     ViewLayoutSnapshot Snapshot() const;
 
 private:
     static std::string ShortSessionTitle(const std::shared_ptr<DocumentSession>& session);
 
+    EditorLayoutMode EffectiveMode() const;
+
     DocumentWorkspace& workspace_;
+    const DistractionModeController* distraction_controller_ = nullptr;
     EditorLayoutMode mode_ = EditorLayoutMode::Single;
     int two_left_width_ = 72;
     int three_left_width_ = 48;
