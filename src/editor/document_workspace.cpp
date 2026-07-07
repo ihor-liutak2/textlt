@@ -128,6 +128,21 @@ bool DocumentWorkspace::SetPaneRole(size_t pane_index, const std::string& role) 
     return true;
 }
 
+
+EditorViewport* DocumentWorkspace::PaneViewport(size_t pane_index) {
+    if (!HasEditorPaneAt(pane_index)) {
+        return nullptr;
+    }
+    return &editor_panes_[pane_index].viewport;
+}
+
+const EditorViewport* DocumentWorkspace::PaneViewport(size_t pane_index) const {
+    if (!HasEditorPaneAt(pane_index)) {
+        return nullptr;
+    }
+    return &editor_panes_[pane_index].viewport;
+}
+
 size_t DocumentWorkspace::ActiveEditorPaneIndex() const {
     return active_editor_pane_index_;
 }

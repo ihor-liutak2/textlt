@@ -214,6 +214,7 @@ add_executable(textlt
   src/editor_mouse.cpp
   src/editor_utils.cpp
   src/editor_viewport.cpp
+  src/editor/editor_viewport.cpp
   src/editor/text_buffer.cpp
   src/editor/document_session.cpp
   src/editor/document_session_content.cpp

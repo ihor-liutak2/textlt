@@ -14,9 +14,6 @@ namespace textlt {
 namespace {
 
 constexpr size_t kScrollbarColumns = 2;
-constexpr size_t kFallbackViewportWidth = 80;
-constexpr size_t kMaxSafeViewportWidth = 1000;
-constexpr size_t kMaxSafeViewportHeight = 300;
 
 } // namespace
 
@@ -49,7 +46,7 @@ ftxui::Element EditorComponent::RenderViewport() {
     ? visible_height - slider_height
     : 0;
     const size_t slider_top = needs_scrollbar && (effective_total > visible_height)
-    ? (utils::WordWrapVisualRowAtLine(session_->lines, scroll_y_, visible_width) * available_track_space) / (effective_total - visible_height)
+    ? (utils::WordWrapVisualRowAtLine(session_->lines, viewport_->scroll_y, visible_width) * available_track_space) / (effective_total - visible_height)
     : 0;
 
     const auto bracket_origin = FindBracketNearCursor();
@@ -62,7 +59,7 @@ ftxui::Element EditorComponent::RenderViewport() {
 
     SyntaxHighlighter::TokenizationContext syntax_context;
     if (syntax_highlighting && session_) {
-        for (size_t line_index = 0; line_index < scroll_y_; ++line_index) {
+        for (size_t line_index = 0; line_index < viewport_->scroll_y; ++line_index) {
             SyntaxHighlighter::TokenizeLine(session_->lines[line_index], file_path, &syntax_context);
         }
     }
@@ -89,10 +86,10 @@ ftxui::Element EditorComponent::RenderViewport() {
         const bool is_cursor_line = (session_ && line_index == session_->cursor_row);
         const bool has_selection = session_ && session_->HasSelection();
         const size_t cursor_x = is_cursor_line ? std::min(session_->cursor_col, line_content.size()) : line_content.size();
-        const size_t render_start = smart_word_wrap ? segment.start : scroll_x_;
+        const size_t render_start = smart_word_wrap ? segment.start : viewport_->scroll_x;
         const size_t render_end = smart_word_wrap
         ? segment.end
-        : utils::Utf8ByteIndexAtDisplayColumn(line_content, scroll_x_, visible_width);
+        : utils::Utf8ByteIndexAtDisplayColumn(line_content, viewport_->scroll_x, visible_width);
 
         size_t syntax_token_index = 0;
         if (syntax_tokens) {
@@ -166,7 +163,7 @@ ftxui::Element EditorComponent::RenderViewport() {
         };
 
         if (session_) {
-            for (size_t line_index = scroll_y_; line_index < session_->lines.size() && lines_elements.size() < visible_height; ++line_index) {
+            for (size_t line_index = viewport_->scroll_y; line_index < session_->lines.size() && lines_elements.size() < visible_height; ++line_index) {
                 std::vector<SyntaxHighlighter::Token> syntax_tokens;
                 const std::vector<SyntaxHighlighter::Token>* syntax_token_ptr = nullptr;
                 if (syntax_highlighting) {
@@ -177,9 +174,9 @@ ftxui::Element EditorComponent::RenderViewport() {
                 const std::vector<utils::Utf8WrapSegment> segments = smart_word_wrap
                 ? utils::BuildUtf8WrapSegments(session_->lines[line_index], visible_width)
                 : std::vector<utils::Utf8WrapSegment>{utils::Utf8WrapSegment{
-                    scroll_x_,
+                    viewport_->scroll_x,
                     utils::Utf8ByteIndexAtDisplayColumn(
-                        session_->lines[line_index], scroll_x_, visible_width)}};
+                        session_->lines[line_index], viewport_->scroll_x, visible_width)}};
 
                 for (const utils::Utf8WrapSegment& segment : segments) {
                     if (lines_elements.size() >= visible_height) break;
@@ -197,95 +194,21 @@ ftxui::Element EditorComponent::RenderViewport() {
             }));
         }
 
-        return ftxui::vbox(std::move(lines_elements)) | ftxui::reflect(editor_box_);
+        return ftxui::vbox(std::move(lines_elements)) | ftxui::reflect(viewport_->box);
 }
 
 size_t EditorComponent::VisibleHeight() const {
-    if (editor_box_.y_max < editor_box_.y_min) {
-        return 1;
-    }
-
-    const long long total_height =
-        static_cast<long long>(editor_box_.y_max) -
-        static_cast<long long>(editor_box_.y_min) + 1;
-    if (total_height <= 0) {
-        return 1;
-    }
-
-    // The viewport box can be uninitialized during early component composition
-    // or before a pane has been reflected by FTXUI. Clamp the value so a bad
-    // box cannot allocate an enormous number of rendered rows.
-    return std::min(static_cast<size_t>(total_height), kMaxSafeViewportHeight);
+    return viewport_ ? viewport_->VisibleHeight() : 1;
 }
 
 size_t EditorComponent::VisibleTextWidth() const {
-    size_t total_width = kFallbackViewportWidth;
-    if (editor_box_.x_max >= editor_box_.x_min) {
-        const long long measured_width =
-            static_cast<long long>(editor_box_.x_max) -
-            static_cast<long long>(editor_box_.x_min) + 1;
-        if (measured_width > 0 &&
-            static_cast<size_t>(measured_width) <= kMaxSafeViewportWidth) {
-            total_width = static_cast<size_t>(measured_width);
-        }
-    }
-
-    const bool show_line_numbers = config_ && config_->show_line_numbers;
-    const size_t line_number_columns =
-    show_line_numbers ? ftxui::string_width(LineNumberText(0, LineNumberWidth())) : 0;
-
-    if (line_number_columns + kScrollbarColumns >= total_width) {
-        return 1;
-    }
-    return total_width - line_number_columns - kScrollbarColumns;
+    return viewport_ ? viewport_->VisibleTextWidth(session_.get(), config_) : 1;
 }
 
 void EditorComponent::UpdateScroll() {
     ClampCursorToBuffer();
-    if (!session_) return;
-
-    const size_t visible_height = VisibleHeight();
-    const bool smart_word_wrap = config_ && config_->smart_word_wrap;
-    if (session_->cursor_row >= scroll_y_ + visible_height) {
-        scroll_y_ = session_->cursor_row - visible_height + 1;
-    }
-    if (session_->cursor_row < scroll_y_) {
-        scroll_y_ = session_->cursor_row;
-    }
-
-    if (session_->lines.size() <= visible_height && !smart_word_wrap) {
-        scroll_y_ = 0;
-    } else if (smart_word_wrap) {
-        const size_t visible_width = VisibleTextWidth();
-        const size_t max_scroll_y = utils::WordWrapMaxScrollY(session_->lines, visible_height, visible_width);
-        if (session_->cursor_row > max_scroll_y) {
-            scroll_y_ = session_->cursor_row;
-        }
-        scroll_y_ = std::min(scroll_y_, max_scroll_y);
-    } else {
-        const size_t max_scroll_y = session_->lines.size() - visible_height;
-        scroll_y_ = std::min(scroll_y_, max_scroll_y);
-    }
-
-    const size_t visible_width = VisibleTextWidth();
-    if (config_ && config_->smart_word_wrap) {
-        scroll_x_ = 0;
-        return;
-    }
-
-    if (session_->cursor_col < scroll_x_) {
-        scroll_x_ = session_->cursor_col;
-    }
-
-    const std::string& current_line = session_->lines[session_->cursor_row];
-    while (scroll_x_ < session_->cursor_col &&
-           utils::Utf8DisplayWidth(current_line, scroll_x_, session_->cursor_col) >= visible_width) {
-        scroll_x_ = utils::NextUtf8CodepointStart(current_line, scroll_x_);
-    }
-
-    if (utils::Utf8DisplayWidth(current_line) < visible_width) {
-        scroll_x_ = 0;
-    }
+    if (!session_ || !viewport_) return;
+    viewport_->ScrollToCursor(*session_, config_);
 }
 
 } // namespace textlt

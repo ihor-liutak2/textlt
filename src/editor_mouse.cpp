@@ -20,14 +20,14 @@ bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
     if (!session_) return false;
 
     const bool inside_editor =
-    mouse.x >= editor_box_.x_min && mouse.x <= editor_box_.x_max &&
-    mouse.y >= editor_box_.y_min && mouse.y <= editor_box_.y_max;
+    mouse.x >= viewport_->box.x_min && mouse.x <= viewport_->box.x_max &&
+    mouse.y >= viewport_->box.y_min && mouse.y <= viewport_->box.y_max;
     const size_t visible_height = VisibleHeight();
-    const int viewport_y_min = editor_box_.y_min;
+    const int viewport_y_min = viewport_->box.y_min;
     const int viewport_y_max =
-    editor_box_.y_min + static_cast<int>(visible_height) - 1;
+    viewport_->box.y_min + static_cast<int>(visible_height) - 1;
     const bool inside_visible_viewport =
-    mouse.x >= editor_box_.x_min && mouse.x <= editor_box_.x_max &&
+    mouse.x >= viewport_->box.x_min && mouse.x <= viewport_->box.x_max &&
     mouse.y >= viewport_y_min && mouse.y <= viewport_y_max;
 
     const bool smart_word_wrap = config_ && config_->smart_word_wrap;
@@ -56,25 +56,25 @@ bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
     };
 
     const bool needs_scrollbar = effective_total() > visible_height;
-    const int scrollbar_x_min = editor_box_.x_max - kScrollbarColumns + 1;
+    const int scrollbar_x_min = viewport_->box.x_max - kScrollbarColumns + 1;
     const bool on_scrollbar_column =
     needs_scrollbar &&
     inside_visible_viewport &&
     mouse.x >= scrollbar_x_min &&
-    mouse.x <= editor_box_.x_max;
+    mouse.x <= viewport_->box.x_max;
     auto clamp_cursor_to_visible_scroll = [&]() {
-        if (session_->cursor_row < scroll_y_) {
-            session_->cursor_row = scroll_y_;
+        if (session_->cursor_row < viewport_->scroll_y) {
+            session_->cursor_row = viewport_->scroll_y;
             session_->cursor_col = std::min(session_->cursor_col, session_->lines[session_->cursor_row].size());
-        } else if (session_->cursor_row >= scroll_y_ + visible_height) {
-            session_->cursor_row = std::min(scroll_y_ + visible_height - 1, session_->lines.size() - 1);
+        } else if (session_->cursor_row >= viewport_->scroll_y + visible_height) {
+            session_->cursor_row = std::min(viewport_->scroll_y + visible_height - 1, session_->lines.size() - 1);
             session_->cursor_col = std::min(session_->cursor_col, session_->lines[session_->cursor_row].size());
         }
     };
     auto jump_to_scrollbar_y = [&](int screen_y) {
         const size_t eff = effective_total();
         if (eff <= visible_height) {
-            scroll_y_ = 0;
+            viewport_->scroll_y = 0;
             return;
         }
 
@@ -83,7 +83,7 @@ bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
         ? visible_height - thumb_height
         : 0;
         if (available_track_space == 0) {
-            scroll_y_ = 0;
+            viewport_->scroll_y = 0;
             return;
         }
 
@@ -95,13 +95,13 @@ bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
             static_cast<int>(available_track_space));
         const size_t target_visual_row =
         (static_cast<size_t>(target_thumb_top) * (eff - visible_height)) / available_track_space;
-        scroll_y_ = utils::WordWrapLineAtVisualRow(session_->lines, target_visual_row, visible_width);
+        viewport_->scroll_y = utils::WordWrapLineAtVisualRow(session_->lines, target_visual_row, visible_width);
         clamp_cursor_to_visible_scroll();
     };
     auto drag_scrollbar_to_y = [&](int screen_y) {
         const size_t eff = effective_total();
         if (eff <= visible_height) {
-            scroll_y_ = 0;
+            viewport_->scroll_y = 0;
             return;
         }
 
@@ -110,13 +110,13 @@ bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
         ? visible_height - thumb_height
         : 0;
         if (available_track_space == 0) {
-            scroll_y_ = 0;
+            viewport_->scroll_y = 0;
             return;
         }
 
         const size_t start_visual_row = utils::WordWrapVisualRowAtLine(
-            session_->lines, drag_start_scroll_y_, visible_width);
-        const int drag_delta_y = screen_y - drag_start_y_;
+            session_->lines, viewport_->drag_start_scroll_y, visible_width);
+        const int drag_delta_y = screen_y - viewport_->drag_start_y;
         const long long visual_delta =
         (static_cast<long long>(drag_delta_y) * static_cast<long long>(eff - visible_height)) /
         static_cast<long long>(available_track_space);
@@ -124,24 +124,24 @@ bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
         static_cast<long long>(start_visual_row) + visual_delta;
         const size_t clamped_visual = static_cast<size_t>(
             std::clamp<long long>(target_visual, 0, static_cast<long long>(eff - visible_height)));
-        scroll_y_ = utils::WordWrapLineAtVisualRow(session_->lines, clamped_visual, visible_width);
+        viewport_->scroll_y = utils::WordWrapLineAtVisualRow(session_->lines, clamped_visual, visible_width);
         clamp_cursor_to_visible_scroll();
     };
     auto position_at_mouse = [&](const ftxui::Mouse& hit_mouse) {
-        const int relative_y = hit_mouse.y - editor_box_.y_min;
+        const int relative_y = hit_mouse.y - viewport_->box.y_min;
         const bool show_line_numbers = config_ && config_->show_line_numbers;
         const int line_number_gutter_width = show_line_numbers
             ? static_cast<int>(ftxui::string_width(LineNumberText(0, LineNumberWidth())))
             : 0;
-        const int relative_x = hit_mouse.x - editor_box_.x_min - line_number_gutter_width;
+        const int relative_x = hit_mouse.x - viewport_->box.x_min - line_number_gutter_width;
 
-        size_t clicked_row = scroll_y_;
-        size_t segment_start = scroll_x_;
+        size_t clicked_row = viewport_->scroll_y;
+        size_t segment_start = viewport_->scroll_x;
         size_t segment_end = session_->lines[clicked_row].size();
         if (config_ && config_->smart_word_wrap) {
             size_t visual_row = 0;
             const size_t target_visual_row = static_cast<size_t>(std::max(0, relative_y));
-            for (size_t row = scroll_y_; row < session_->lines.size(); ++row) {
+            for (size_t row = viewport_->scroll_y; row < session_->lines.size(); ++row) {
                 const auto segments =
                     utils::BuildUtf8WrapSegments(session_->lines[row], VisibleTextWidth());
                 if (segments.empty()) {
@@ -160,7 +160,7 @@ bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
             }
         } else {
             const size_t max_row = session_->lines.size() - 1;
-            const int raw_clicked_row = static_cast<int>(scroll_y_) + relative_y;
+            const int raw_clicked_row = static_cast<int>(viewport_->scroll_y) + relative_y;
             clicked_row = std::clamp(
                 static_cast<size_t>(std::max(0, raw_clicked_row)), size_t{0}, max_row);
         }
@@ -173,25 +173,25 @@ bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
     };
 
     if (mouse.motion == ftxui::Mouse::Released) {
-        is_dragging_scrollbar_ = false;
-        mouse_selecting_ = false;
+        viewport_->is_dragging_scrollbar = false;
+        viewport_->mouse_selecting = false;
         return true;
     }
 
-    if (is_dragging_scrollbar_ && mouse.motion == ftxui::Mouse::Pressed) {
+    if (viewport_->is_dragging_scrollbar && mouse.motion == ftxui::Mouse::Pressed) {
         drag_scrollbar_to_y(mouse.y);
         return true;
     }
 
-    if (!inside_editor && !mouse_selecting_) {
+    if (!inside_editor && !viewport_->mouse_selecting) {
         return false;
     }
 
     if (inside_editor && mouse.button == ftxui::Mouse::WheelUp) {
         EndTypingGroup();
-        scroll_y_ = scroll_y_ > 3 ? scroll_y_ - 3 : 0;
-        if (session_->cursor_row >= scroll_y_ + visible_height) {
-            session_->cursor_row = scroll_y_ + visible_height - 1;
+        viewport_->scroll_y = viewport_->scroll_y > 3 ? viewport_->scroll_y - 3 : 0;
+        if (session_->cursor_row >= viewport_->scroll_y + visible_height) {
+            session_->cursor_row = viewport_->scroll_y + visible_height - 1;
             session_->cursor_col = std::min(session_->cursor_col, session_->lines[session_->cursor_row].size());
         }
         return true;
@@ -201,10 +201,10 @@ bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
         EndTypingGroup();
         // Rename the variable to avoid conflicting with the lambda name
         const size_t max_scroll_val = max_scroll_y();
-        scroll_y_ = std::min(scroll_y_ + 3, max_scroll_val);
+        viewport_->scroll_y = std::min(viewport_->scroll_y + 3, max_scroll_val);
 
-        if (session_->cursor_row < scroll_y_) {
-            session_->cursor_row = scroll_y_;
+        if (session_->cursor_row < viewport_->scroll_y) {
+            session_->cursor_row = viewport_->scroll_y;
             session_->cursor_col = std::min(session_->cursor_col, session_->lines[session_->cursor_row].size());
         }
         return true;
@@ -214,12 +214,12 @@ bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
         EndTypingGroup();
         TakeFocus();
         if (on_scrollbar_column) {
-            is_dragging_scrollbar_ = true;
-            mouse_selecting_ = false;
+            viewport_->is_dragging_scrollbar = true;
+            viewport_->mouse_selecting = false;
             session_->SetSelectionActive(false);
             jump_to_scrollbar_y(mouse.y);
-            drag_start_y_ = mouse.y;
-            drag_start_scroll_y_ = scroll_y_;
+            viewport_->drag_start_y = mouse.y;
+            viewport_->drag_start_scroll_y = viewport_->scroll_y;
             return true;
         }
 
@@ -236,12 +236,12 @@ bool EditorComponent::HandleMouseEvent(ftxui::Event event) {
             session_->SetSelectionAnchor(clicked_row, clicked_col);
             session_->SetSelectionActive(false);
         }
-        mouse_selecting_ = true;
+        viewport_->mouse_selecting = true;
         UpdateScroll();
         return true;
     }
 
-    if (mouse_selecting_ &&
+    if (viewport_->mouse_selecting &&
         inside_editor &&
         mouse.motion != ftxui::Mouse::Pressed &&
         mouse.motion != ftxui::Mouse::Released) {

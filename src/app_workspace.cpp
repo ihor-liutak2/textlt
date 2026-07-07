@@ -205,8 +205,8 @@ void TextltApp::SplitActiveSessionToNextPane() {
     }
 
     // This is a view split, not a file copy: both panes point at the same
-    // shared Document object. EditorComponent keeps its own scroll state, so
-    // each pane can view a different part of the same file.
+    // shared session. Each pane owns its own EditorViewport, so the same file
+    // can be shown at different scroll positions.
     BindEditorComponentsToWorkspace();
     SetActiveEditorPane(source_pane);
 
@@ -223,6 +223,7 @@ void TextltApp::BindEditorComponentsToWorkspace() {
         const size_t session_index = document_workspace_.PaneSessionIndex(pane_index);
         auto editor = std::static_pointer_cast<EditorComponent>(editor_pane_components_[pane_index]);
         if (editor) {
+            editor->SetViewport(document_workspace_.PaneViewport(pane_index));
             editor->SetSession(document_workspace_.SessionPtrAt(session_index));
         }
     }

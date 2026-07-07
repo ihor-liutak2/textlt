@@ -25,6 +25,12 @@
 
     std::shared_ptr<DocumentSession> EditorComponent::GetSession() const { return session_; }
 
+
+    void EditorComponent::SetViewport(EditorViewport* viewport) {
+        viewport_ = viewport ? viewport : &owned_viewport_;
+        UpdateScroll();
+    }
+
     EditorComponent::EditorComponent(EditorConfig* config, const Theme* theme)
     : config_(config),
     theme_(theme),
@@ -70,8 +76,8 @@
 
         if (!session_) session_ = std::make_shared<DocumentSession>();
         session_->LoadContent(content, path);
-        scroll_x_ = 0;
-        scroll_y_ = 0;
+        viewport_->scroll_x = 0;
+        viewport_->scroll_y = 0;
         ClearSearchHighlights();
         ClearSelection();
     }
@@ -82,8 +88,8 @@
         session_->Reset();
         session_->SetPath(path.empty() ? "Untitled" : path);
 
-        scroll_x_ = 0;
-        scroll_y_ = 0;
+        viewport_->scroll_x = 0;
+        viewport_->scroll_y = 0;
         ClearSearchHighlights();
         ClearSelection();
     }

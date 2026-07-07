@@ -62,8 +62,6 @@ public:
     size_t cursor_row = 0;
     size_t cursor_col = 0;
     Selection selection;
-    size_t scroll_x = 0;
-    size_t scroll_y = 0;
 
     std::filesystem::path path = "Untitled";
     DocumentType type = DocumentType::PlainText;

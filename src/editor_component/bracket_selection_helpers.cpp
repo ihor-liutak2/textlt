@@ -108,16 +108,11 @@
     }
 
     size_t EditorComponent::LineNumberWidth() const {
-        // Calculate width based on the document's total lines
-        return session_ ? std::to_string(session_->lines.size()).size() : 1;
+        return viewport_ ? viewport_->LineNumberWidth(session_.get()) : 1;
     }
 
     std::string EditorComponent::LineNumberText(size_t line_index, size_t width) const {
-        std::string line_number = std::to_string(line_index + 1);
-        if (line_number.size() < width) {
-            line_number.insert(line_number.begin(), width - line_number.size(), ' ');
-        }
-        return line_number + " │ ";
+        return viewport_ ? viewport_->LineNumberText(line_index, width) : std::to_string(line_index + 1) + " │ ";
     }
 
     bool EditorComponent::IsWordCharacter(char character) {

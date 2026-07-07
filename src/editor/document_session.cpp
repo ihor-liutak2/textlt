@@ -45,8 +45,6 @@ DocumentSession::DocumentSession(const DocumentSession& other)
       cursor_row(other.cursor_row),
       cursor_col(other.cursor_col),
       selection(other.selection),
-      scroll_x(other.scroll_x),
-      scroll_y(other.scroll_y),
       path(other.path),
       type(other.type),
       line_ending(other.line_ending),
@@ -68,8 +66,6 @@ DocumentSession::DocumentSession(DocumentSession&& other) noexcept
       cursor_row(other.cursor_row),
       cursor_col(other.cursor_col),
       selection(other.selection),
-      scroll_x(other.scroll_x),
-      scroll_y(other.scroll_y),
       path(std::move(other.path)),
       type(other.type),
       line_ending(other.line_ending),
@@ -83,8 +79,6 @@ DocumentSession& DocumentSession::operator=(DocumentSession&& other) noexcept {
         cursor_row = other.cursor_row;
         cursor_col = other.cursor_col;
         selection = other.selection;
-        scroll_x = other.scroll_x;
-        scroll_y = other.scroll_y;
         path = std::move(other.path);
         type = other.type;
         line_ending = other.line_ending;
@@ -100,8 +94,6 @@ void DocumentSession::BindFrom(const DocumentSession& other) {
     cursor_row = other.cursor_row;
     cursor_col = other.cursor_col;
     selection = other.selection;
-    scroll_x = other.scroll_x;
-    scroll_y = other.scroll_y;
     path = other.path;
     type = other.type;
     line_ending = other.line_ending;
@@ -151,8 +143,6 @@ void DocumentSession::Reset() {
     cursor_row = 0;
     cursor_col = 0;
     selection = {};
-    scroll_x = 0;
-    scroll_y = 0;
     path = "Untitled";
     type = DocumentType::PlainText;
     line_ending = LineEnding::LF;

@@ -13,6 +13,7 @@
 #include "history_manager.hpp"
 #include "theme.hpp"
 #include "editor/document_session.hpp"
+#include "editor/editor_viewport.hpp"
 
 namespace textlt {
 
@@ -30,6 +31,7 @@ namespace textlt {
         bool Focusable() const override;
 
         void SetSession(std::shared_ptr<DocumentSession> doc);
+        void SetViewport(EditorViewport* viewport);
         std::shared_ptr<DocumentSession> GetSession() const;
 
         void SaveToFile(const std::string& path);
@@ -140,16 +142,11 @@ namespace textlt {
         std::vector<SearchMatch> search_matches_;
         EditorConfig* config_ = nullptr;
         const Theme* theme_ = nullptr;
-        size_t scroll_x_ = 0;
-        size_t scroll_y_ = 0;
+        EditorViewport owned_viewport_;
+        EditorViewport* viewport_ = &owned_viewport_;
         bool search_match_case_ = false;
         bool search_whole_word_ = false;
-        bool mouse_selecting_ = false;
-        bool is_dragging_scrollbar_ = false;
         size_t current_search_match_ = 0;
-        size_t drag_start_scroll_y_ = 0;
-        int drag_start_y_ = 0;
-        ftxui::Box editor_box_;
     };
 
 } // namespace textlt
