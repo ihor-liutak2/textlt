@@ -69,25 +69,4 @@ std::string Document::CommentPrefix() const {
     return session.CommentPrefix();
 }
 
-bool Document::GetTextProcessorTargetText(
-    bool whole_document,
-    std::string& text,
-    std::string& error) const {
-    return session.GetTextProcessorTargetText(buffer, whole_document, text, error);
-}
-
-bool Document::ReplaceTextProcessorTargetText(
-    bool whole_document,
-    const std::string& text,
-    std::string& error) {
-    const bool changed = session.ReplaceTextProcessorTargetText(
-        buffer,
-        history,
-        whole_document,
-        text,
-        error);
-    EnsureValidBuffer();
-    return changed;
-}
-
 } // namespace textlt

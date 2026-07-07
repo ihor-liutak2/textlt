@@ -106,8 +106,6 @@ struct Document {
     std::string LexerId() const;
     std::string DisplayTitle() const;
     bool IsMemoryOnly() const;
-    bool GetTextProcessorTargetText(bool whole_document, std::string& text, std::string& error) const;
-    bool ReplaceTextProcessorTargetText(bool whole_document, const std::string& text, std::string& error);
 
 private:
     void BindFrom(const Document& other);
