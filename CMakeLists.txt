@@ -279,6 +279,7 @@ add_executable(textlt
   src/remote/modal_remote_files.cpp
   src/sidebar_component.cpp
   src/syntax_highlighter.cpp
+  src/top_bar_row.cpp
   src/terminal_flow_control_guard.cpp
   src/text_transformer.cpp
   src/text_importer.cpp

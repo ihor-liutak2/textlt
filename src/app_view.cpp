@@ -41,44 +41,6 @@ ftxui::Color MainWindowSeparatorColor(const Theme& theme) {
 
 } // namespace
 
-ftxui::Element TextltApp::RenderTtsHeaderStrip() {
-    using namespace ftxui;
-
-    if (!tts_modal_.ShouldShowHeaderControls()) {
-        return text("");
-    }
-
-    const std::string status = tts_modal_.HeaderStatus();
-    Elements controls = {
-        text(" TTS: ") | bold | color(current_theme_.menu_foreground),
-        text(status.empty() ? "ready" : status) | color(current_theme_.menu_foreground),
-        text("  "),
-        title_bar_open_tts_button_ ? title_bar_open_tts_button_->Render() : text("[TTS]"),
-        text(" "),
-        title_bar_tts_play_button_ ? title_bar_tts_play_button_->Render() : text("[Play]"),
-        text(" "),
-        title_bar_tts_pause_button_ ? title_bar_tts_pause_button_->Render() : text("[Pause]"),
-        text(" "),
-        title_bar_tts_stop_button_ ? title_bar_tts_stop_button_->Render() : text("[Stop]"),
-        text(" "),
-        title_bar_tts_next_button_ ? title_bar_tts_next_button_->Render() : text("[Next]"),
-    };
-
-    return hbox(std::move(controls));
-}
-
-ftxui::Element TextltApp::RenderTitleBar() {
-    using namespace ftxui;
-
-    return hbox({
-        text(" textlt v1.0.0 - Native Non-Modal Text Editor") |
-            bold |
-            color(current_theme_.menu_foreground),
-        filler(),
-        RenderTtsHeaderStrip(),
-    });
-}
-
 ftxui::Element TextltApp::Render() {
     using namespace ftxui;
 
@@ -104,7 +66,7 @@ ftxui::Element TextltApp::Render() {
 
     Element top_menu_separator = separator() | color(MainWindowSeparatorColor(current_theme_));
     Elements base_rows = {
-        title_bar_component_ ? title_bar_component_->Render() : RenderTitleBar(),
+        top_bar_row_ ? top_bar_row_->Render() : text(" textlt v1.0.0 - Native Non-Modal Text Editor"),
         top_menu_separator,
         top_menu_element,
         separator() | color(MainWindowSeparatorColor(current_theme_)),

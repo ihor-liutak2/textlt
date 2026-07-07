@@ -263,53 +263,14 @@ TextltApp::TextltApp()
     InitializeTextShortcuts();
     shortcut_registry_.SetOverrides(shortcut_store_.Load());
 
-    title_bar_open_tts_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
-        "TTS",
-        [this] { RunCommand("tts.open_modal"); },
+    top_bar_row_ = ftxui::Make<TopBarRowComponent>(
         &current_theme_,
-        [this] { return tts_header_active_button_ == TtsHeaderButton::Open; },
-        ButtonRole::Media,
-        "▶"));
-    title_bar_tts_play_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
-        "Play",
-        [this] { RunCommand("tts.play"); },
-        &current_theme_,
-        [this] {
-            return tts_header_active_button_ == TtsHeaderButton::Play ||
-                   tts_header_active_button_ == TtsHeaderButton::Test;
-        },
-        ButtonRole::Media,
-        "▶"));
-    title_bar_tts_pause_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
-        "Pause",
-        [this] { RunCommand("tts.pause"); },
-        &current_theme_,
-        [this] { return tts_header_active_button_ == TtsHeaderButton::Pause; },
-        ButtonRole::Media,
-        "⏸"));
-    title_bar_tts_stop_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
-        "Stop",
-        [this] { RunCommand("tts.stop"); },
-        &current_theme_,
-        [this] { return tts_header_active_button_ == TtsHeaderButton::Stop; },
-        ButtonRole::Warning,
-        "■"));
-    title_bar_tts_next_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
-        "Next",
-        [this] { RunCommand("tts.next"); },
-        &current_theme_,
-        [this] { return tts_header_active_button_ == TtsHeaderButton::Next; },
-        ButtonRole::Media,
-        "⏭"));
-    title_bar_component_ = ftxui::Renderer(
-        ftxui::Container::Horizontal({
-            title_bar_open_tts_button_,
-            title_bar_tts_play_button_,
-            title_bar_tts_pause_button_,
-            title_bar_tts_stop_button_,
-            title_bar_tts_next_button_,
-        }),
-        [this] { return RenderTitleBar(); });
+        TopBarRowComponent::Callbacks{
+            [this](const std::string& command_id) { RunCommand(command_id); },
+            [this] { return tts_modal_.ShouldShowHeaderControls(); },
+            [this] { return tts_modal_.HeaderStatus(); },
+            [this] { return tts_header_active_button_; },
+        });
 
     document_workspace_.SetEditorPaneCount(3);
     editor_pane_components_.clear();
@@ -351,7 +312,7 @@ TextltApp::TextltApp()
 
     // FIXED: Added missing underscore to match class declaration
     main_container_ = ftxui::Container::Vertical({
-        title_bar_component_,
+        top_bar_row_,
         menu_bar_,
         body_container_,
     });

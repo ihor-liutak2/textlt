@@ -39,6 +39,7 @@
 #include "remote/modal_remote_files.hpp"
 #include "remote/remote_config_store.hpp"
 #include "sidebar_component.hpp"
+#include "top_bar_row.hpp"
 #include "modals/theme_dialog.hpp"
 #include "modals/unsaved_changes_dialog.hpp"
 #include "file_manager.hpp"
@@ -230,8 +231,6 @@ private:
     ftxui::Element Render();
     ftxui::Element RenderFindPanel();
     ftxui::Element RenderGoToLinePanel();
-    ftxui::Element RenderTitleBar();
-    ftxui::Element RenderTtsHeaderStrip();
     bool HandleGlobalEvent(ftxui::Event event);
     int DropdownX() const;
     void OpenFindPanel(bool replace_mode);
@@ -364,12 +363,7 @@ private:
     SearchPanelInput active_search_panel_input_ = SearchPanelInput::Find;
     std::string terminal_bracketed_paste_buffer_;
     std::shared_ptr<MenuBarComponent> menu_bar_;
-    ftxui::Component title_bar_component_;
-    ftxui::Component title_bar_open_tts_button_;
-    ftxui::Component title_bar_tts_play_button_;
-    ftxui::Component title_bar_tts_pause_button_;
-    ftxui::Component title_bar_tts_stop_button_;
-    ftxui::Component title_bar_tts_next_button_;
+    ftxui::Component top_bar_row_;
     ftxui::Component body_container_;
     ftxui::Component main_container_;
     ftxui::Component root_container_;
