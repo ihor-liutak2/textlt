@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "document.hpp"
 #include "ftxui/component/event.hpp"
@@ -135,58 +136,30 @@ void TextltApp::AddOpenDocument(std::shared_ptr<Document> doc) {
         return;
     }
 
-    const size_t document_index = document_workspace_.AddDocument(doc);
-    document_workspace_.AssignDocumentToActivePane(document_index);
+    document_file_controller_.AddDocument(std::move(doc));
     BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
 }
 
 
 void TextltApp::EnsureOneOpenDocument() {
-    if (!document_workspace_.Empty()) {
-        document_workspace_.ClampActiveDocumentIndex();
-        document_workspace_.AssignDocumentToActivePane(document_workspace_.ActiveDocumentIndex());
-        document_workspace_.SyncEditorPaneDocuments(VisibleEditorPaneCount());
-        BindEditorComponentsToWorkspace();
-        RefreshOpenedDocumentsSidebar();
-        return;
-    }
-
-    const size_t document_index = document_workspace_.AddUntitledDocument();
-    document_workspace_.AssignDocumentToActivePane(document_index);
+    document_file_controller_.EnsureOneDocument(VisibleEditorPaneCount());
     BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
 }
 
 
 void TextltApp::RemoveOpenDocument(size_t index) {
-    if (!document_workspace_.HasDocumentAt(index)) {
-        return;
-    }
-
-    document_workspace_.RemoveDocument(index);
-    if (document_workspace_.OpenDocuments().empty()) {
-        EnsureOneOpenDocument();
-        return;
-    }
-
-    document_workspace_.SyncEditorPaneDocuments(VisibleEditorPaneCount());
+    document_file_controller_.RemoveDocument(index, VisibleEditorPaneCount());
     BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
 }
 
 
 void TextltApp::CloseCurrentFile() {
-    if (document_workspace_.OpenDocuments().empty()) {
-        EnsureOneOpenDocument();
-        return;
-    }
-
-    const auto closed_document = document_workspace_.ActiveDocument();
-    const std::string closed_name =
-        closed_document ? closed_document->path.filename().string() : "";
-    RemoveOpenDocument(document_workspace_.ActiveDocumentIndex());
-    PersistOpenedDocuments();
+    std::string closed_name;
+    document_file_controller_.CloseActiveDocument(VisibleEditorPaneCount(), closed_name);
+    BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
     UpdateFileMenuLabels();
     active_action_ = "Closed " + (closed_name.empty() ? "file" : closed_name);
@@ -197,9 +170,8 @@ void TextltApp::CloseCurrentFile() {
 
 
 void TextltApp::CloseAllOpenedFiles() {
-    document_workspace_.ClearDocuments();
-    EnsureOneOpenDocument();
-    PersistOpenedDocuments();
+    document_file_controller_.CloseAllDocuments(VisibleEditorPaneCount());
+    BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
     UpdateFileMenuLabels();
     active_action_ = "Closed all files";
@@ -210,127 +182,28 @@ void TextltApp::CloseAllOpenedFiles() {
 
 
 void TextltApp::PersistOpenedDocuments() {
-    OpenedConfig opened_config;
-    bool active_index_saved = false;
-
-    for (size_t doc_index = 0; doc_index < document_workspace_.OpenDocuments().size(); ++doc_index) {
-        const auto& doc = document_workspace_.OpenDocuments()[doc_index];
-        if (!doc) {
-            continue;
-        }
-
-        OpenedFileState entry;
-        entry.row = doc->cursor_row;
-        entry.column = doc->cursor_col;
-
-        if (doc->temporary || doc->read_only) {
-            continue;
-        }
-
-        if (DocumentWorkspace::IsMemoryOnlyDocument(doc)) {
-            const std::string content = doc->ToContent();
-            if (content.empty()) {
-                continue;
-            }
-            entry.memory_only = true;
-            entry.path = "Untitled";
-            entry.content = content;
-            if (doc_index == document_workspace_.ActiveDocumentIndex()) {
-                opened_config.active_index = opened_config.files.size();
-                active_index_saved = true;
-            }
-            opened_config.files.push_back(std::move(entry));
-            continue;
-        }
-
-        const std::string normalized = EditorConfig::NormalizeFavoritePath(doc->path.string());
-        if (normalized.empty()) {
-            continue;
-        }
-        std::error_code error_code;
-        if (!std::filesystem::is_regular_file(normalized, error_code)) {
-            continue;
-        }
-        entry.memory_only = false;
-        entry.path = normalized;
-        if (doc_index == document_workspace_.ActiveDocumentIndex()) {
-            opened_config.active_index = opened_config.files.size();
-            active_index_saved = true;
-        }
-        opened_config.files.push_back(std::move(entry));
-    }
-
-    if (!active_index_saved || opened_config.active_index >= opened_config.files.size()) {
-        opened_config.active_index = opened_config.files.empty() ? 0 : opened_config.files.size() - 1;
-    }
-    opened_config_store_.Save(opened_config);
-}
-
-
-void TextltApp::OpenRestoredDocument(const OpenedFileState& entry) {
-    if (entry.memory_only) {
-        auto doc = std::make_shared<Document>();
-        doc->Reset();
-        doc->LoadContent(entry.content, "Untitled");
-        doc->is_dirty = true;
-        doc->SetCursorPosition(entry.row, entry.column);
-        AddOpenDocument(doc);
-        return;
-    }
-
-    std::error_code error_code;
-    if (!std::filesystem::is_regular_file(entry.path, error_code)) {
-        return;
-    }
-
-    std::string error;
-    auto doc = file_manager_.Open(entry.path, error);
-    if (!doc) {
-        return;
-    }
-    doc->SetCursorPosition(entry.row, entry.column);
-    AddOpenDocument(doc);
+    document_file_controller_.PersistOpenedDocuments();
 }
 
 
 void TextltApp::RestoreOpenedDocuments() {
-    const OpenedConfig opened_config = opened_config_store_.Load();
-    if (opened_config.files.empty()) {
-        return;
-    }
-
-    document_workspace_.ClearDocuments();
-    for (const OpenedFileState& entry : opened_config.files) {
-        OpenRestoredDocument(entry);
-    }
-
-    if (!document_workspace_.OpenDocuments().empty()) {
-        document_workspace_.SetActiveDocumentIndex(std::min(opened_config.active_index, document_workspace_.OpenDocuments().size() - 1));
-        document_workspace_.AssignDocumentToActivePane(document_workspace_.ActiveDocumentIndex());
-        document_workspace_.SyncEditorPaneDocuments(VisibleEditorPaneCount());
+    if (document_file_controller_.RestoreOpenedDocuments(VisibleEditorPaneCount())) {
         BindEditorComponentsToWorkspace();
         RefreshOpenedDocumentsSidebar();
     }
-
-    PersistOpenedDocuments();
 }
 
 
 void TextltApp::ActivateOpenDocument(size_t index) {
-    const auto document = document_workspace_.DocumentAt(index);
-    if (!document) {
+    if (!document_file_controller_.ActivateDocument(index, VisibleEditorPaneCount())) {
         return;
     }
 
-    PersistActiveFavoriteCursor();
-    document_workspace_.AssignDocumentToActivePane(index);
     BindEditorComponentsToWorkspace();
-    auto editor_ptr = ActiveEditor();
-    RestoreFavoriteCursor(document->path.string());
+    const auto editor_ptr = ActiveEditor();
     RefreshOpenedDocumentsSidebar();
     UpdateFileMenuLabels();
-    PersistOpenedDocuments();
-    active_action_ = "Switched to " + (editor_ptr ? editor_ptr->CurrentFilePath() : document->path.string());
+    active_action_ = "Switched to " + (editor_ptr ? editor_ptr->CurrentFilePath() : "file");
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
@@ -356,59 +229,33 @@ void TextltApp::RefreshOpenedDocumentsSidebar() {
 
 
 std::string TextltApp::ActiveDocumentFavoritePath() const {
-    const auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-    return EditorConfig::NormalizeFavoritePath(editor_ptr->CurrentFilePath());
+    return document_file_controller_.ActiveDocumentFavoritePath();
 }
 
 
 void TextltApp::PersistActiveFavoriteCursor() {
-    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-    const std::string favorite_path =
-        EditorConfig::NormalizeFavoritePath(editor_ptr->CurrentFilePath());
-    if (favorite_path.empty() || !editor_config_.IsFavorite(favorite_path)) {
-        return;
-    }
-
-    const size_t row = editor_ptr->GetCursorRow();
-    const size_t column = editor_ptr->GetCursorCol();
-    editor_config_.UpdateFavoriteCursor(favorite_path, row, column);
+    document_file_controller_.PersistActiveFavoriteCursor();
 }
 
 
 void TextltApp::RestoreFavoriteCursor(const std::string& path) {
-    const FavoriteEntry* favorite = editor_config_.FindFavorite(path);
-    if (!favorite) {
-        return;
-    }
-
-    std::static_pointer_cast<EditorComponent>(text_editor_)
-        ->SetCursorPosition(favorite->row, favorite->column);
+    document_file_controller_.RestoreFavoriteCursor(path);
 }
 
 
 void TextltApp::ToggleActiveFavorite() {
-    const std::string favorite_path = ActiveDocumentFavoritePath();
-    if (favorite_path.empty()) {
+    const auto result = document_file_controller_.ToggleActiveFavorite();
+    if (result.status == DocumentFileController::FavoriteToggleStatus::NeedsSave) {
         active_action_ = "Save the file before adding it to favorites";
         CloseDropdown();
         screen_.PostEvent(ftxui::Event::Custom);
         return;
     }
 
-    if (editor_config_.IsFavorite(favorite_path)) {
-        editor_config_.RemoveFavorite(favorite_path);
-        active_action_ = "Removed favorite " + favorite_path;
+    if (result.status == DocumentFileController::FavoriteToggleStatus::Removed) {
+        active_action_ = "Removed favorite " + result.path;
     } else {
-        std::error_code error;
-        if (!std::filesystem::is_regular_file(favorite_path, error)) {
-            active_action_ = "Save the file before adding it to favorites";
-            CloseDropdown();
-            screen_.PostEvent(ftxui::Event::Custom);
-            return;
-        }
-        editor_config_.AddFavorite(favorite_path);
-        PersistActiveFavoriteCursor();
-        active_action_ = "Added favorite " + favorite_path;
+        active_action_ = "Added favorite " + result.path;
     }
 
     UpdateFileMenuLabels();

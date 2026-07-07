@@ -18,20 +18,13 @@ namespace textlt {
     
 bool TextltApp::SaveFile(const std::string& path, std::string& error) {
     try {
-        const auto doc = ActiveDocument();
-        if (doc && doc->read_only) {
-            error = "Cannot save a read-only Git compare document.";
-            throw std::runtime_error(error);
-        }
-        if (!file_manager_.SaveAs(doc, path, error)) {
+        if (!document_file_controller_.SaveActiveDocumentAs(path, error)) {
             throw std::runtime_error(error);
         }
         RefreshOpenedDocumentsSidebar();
         RefreshProjectSidebar();
         git_manager_.SetWorkingDirectory(std::filesystem::path(path).parent_path());
         git_manager_.Invalidate();
-        PersistOpenedDocuments();
-
 
         active_action_ = "Saved " + path;
         return true;
@@ -45,27 +38,14 @@ bool TextltApp::SaveFile(const std::string& path, std::string& error) {
 
 bool TextltApp::OpenFile(const std::string& path, std::string& error) {
     try {
-        PersistActiveFavoriteCursor();
-        const int open_index = document_workspace_.FindDocumentByPath(path);
-        if (open_index >= 0) {
-            ActivateOpenDocument(static_cast<size_t>(open_index));
-            PersistOpenedDocuments();
-            recent_files_history_.AddFile(path);
-            active_action_ = "Opened " + path;
-            return true;
-        }
-
-        auto doc = file_manager_.Open(path, error);
-        if (!doc) {
+        if (!document_file_controller_.OpenDocument(path, error)) {
             throw std::runtime_error(error);
         }
 
-        AddOpenDocument(doc);
-
-        RestoreFavoriteCursor(path);
+        BindEditorComponentsToWorkspace();
+        RefreshOpenedDocumentsSidebar();
+        UpdateFileMenuLabels();
         git_manager_.SetWorkingDirectory(std::filesystem::path(path).parent_path());
-        PersistOpenedDocuments();
-        recent_files_history_.AddFile(path);
         active_action_ = "Opened " + path;
         return true;
     } catch (const std::exception& exception) {
@@ -81,30 +61,21 @@ void TextltApp::InitializeWithFiles(const std::vector<std::string>& files_to_ope
         return;
     }
 
-    const std::filesystem::path active_path = files_to_open.front();
     std::string error;
-    if (std::filesystem::exists(active_path)) {
-        OpenFile(active_path.string(), error);
-    } else {
-        auto doc = std::make_shared<Document>();
-        doc->Reset();
-        doc->SetPath(active_path);
-        AddOpenDocument(doc);
-        active_action_ = "New file " + active_path.string();
-    }
-
-    for (size_t index = 1; index < files_to_open.size(); ++index) {
+    for (size_t index = 0; index < files_to_open.size(); ++index) {
         const std::filesystem::path path = files_to_open[index];
-        if (std::filesystem::exists(path)) {
-            OpenFile(path.string(), error);
-        } else {
-            auto doc = std::make_shared<Document>();
-            doc->Reset();
-            doc->SetPath(path);
-            AddOpenDocument(doc);
+        if (!document_file_controller_.OpenOrCreateDocument(path, error)) {
+            active_action_ = error.empty() ? "Could not open " + path.string() : error;
+            continue;
         }
+        active_action_ = std::filesystem::exists(path)
+            ? "Opened " + path.string()
+            : "New file " + path.string();
     }
 
+    BindEditorComponentsToWorkspace();
+    RefreshOpenedDocumentsSidebar();
+    UpdateFileMenuLabels();
     FocusEditor();
 }
 
@@ -119,53 +90,39 @@ void TextltApp::OpenSidebarFile(const std::filesystem::path& path) {
 
 
 void TextltApp::SaveCurrentFile() {
-    const std::string& current_path =
-        std::static_pointer_cast<EditorComponent>(text_editor_)->CurrentFilePath();
-    if (current_path.empty() || current_path == "Untitled" || current_path == "untitled.txt") {
+    const auto document = document_workspace_.ActiveDocument();
+    if (!document || DocumentWorkspace::IsMemoryOnlyDocument(document)) {
         OpenFilesModal(FilesModalMode::SaveAs);
         return;
     }
 
     std::string error;
-    SaveFile(current_path, error);
+    if (!document_file_controller_.SaveActiveDocument(error)) {
+        active_action_ = error.empty() ? "Save failed" : error;
+        return;
+    }
+
+    RefreshOpenedDocumentsSidebar();
+    RefreshProjectSidebar();
+    git_manager_.SetWorkingDirectory(document->path.parent_path());
+    git_manager_.Invalidate();
+    active_action_ = "Saved " + document->path.string();
 }
 
 
 void TextltApp::SaveAllOpenedFiles() {
-    size_t saved_count = 0;
-    size_t skipped_count = 0;
-    std::string first_error;
-
-    for (const auto& doc : document_workspace_.OpenDocuments()) {
-        if (!doc || !doc->is_dirty) {
-            continue;
-        }
-
-        const std::string path = doc->path.string();
-        if (path.empty() || path == "Untitled" || path == "untitled.txt") {
-            ++skipped_count;
-            continue;
-        }
-
-        std::string error;
-        if (file_manager_.SaveAs(doc, path, error)) {
-            ++saved_count;
-        } else if (first_error.empty()) {
-            first_error = error;
-        }
-    }
+    const auto result = document_file_controller_.SaveAllDirtyDocuments();
 
     RefreshOpenedDocumentsSidebar();
     git_manager_.Invalidate();
-    PersistOpenedDocuments();
 
-    if (!first_error.empty()) {
-        active_action_ = first_error;
-    } else if (skipped_count > 0) {
-        active_action_ = "Saved " + std::to_string(saved_count) +
-            " file(s); " + std::to_string(skipped_count) + " unsaved draft(s) need Save As";
+    if (!result.first_error.empty()) {
+        active_action_ = result.first_error;
+    } else if (result.skipped_count > 0) {
+        active_action_ = "Saved " + std::to_string(result.saved_count) +
+            " file(s); " + std::to_string(result.skipped_count) + " unsaved draft(s) need Save As";
     } else {
-        active_action_ = "Saved " + std::to_string(saved_count) + " file(s)";
+        active_action_ = "Saved " + std::to_string(result.saved_count) + " file(s)";
     }
 
     CloseDropdown();

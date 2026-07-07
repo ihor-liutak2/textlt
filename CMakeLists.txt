@@ -215,6 +215,7 @@ add_executable(textlt
   src/editor_viewport.cpp
   src/editor/text_buffer.cpp
   src/editor/document_workspace.cpp
+  src/editor/document_file_controller.cpp
   src/file_utils.cpp
   src/git_manager.cpp
   src/history_manager.cpp
@@ -250,10 +251,8 @@ add_executable(textlt
   src/modals/modal_keyboard_shortcuts.cpp
   src/modals/modal_custom_processor_builder.cpp
   src/modals/modal_text_processors.cpp
-  src/opened_config.cpp
   src/piper_manager.cpp
   src/tts_audio_player.cpp
-  src/recent_files.cpp
   src/remote/remote_connection_config.cpp
   src/remote/remote_config_store.cpp
   src/remote/remote_oauth_token_store.cpp

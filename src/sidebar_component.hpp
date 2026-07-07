@@ -9,7 +9,6 @@
 #include "ftxui/component/component.hpp"
 #include "ftxui/component/component_base.hpp"
 #include "ftxui/dom/elements.hpp"
-#include "editor_config.hpp"
 #include "git_manager.hpp"
 #include "theme.hpp"
 
@@ -41,13 +40,16 @@ public:
 
     using FileOpenCallback = std::function<void(const std::filesystem::path&)>;
     using OpenedFileSelectCallback = std::function<void(size_t index)>;
+    using FavoriteFilesProvider = std::function<std::vector<std::filesystem::path>()>;
+    using RemoveFavoriteCallback = std::function<void(const std::filesystem::path&)>;
 
     SidebarPanel(
         FileOpenCallback on_file_open,
         OpenedFileSelectCallback on_opened_file_select,
         const Theme* theme,
         GitManager* git_manager,
-        EditorConfig* config);
+        FavoriteFilesProvider favorite_files_provider,
+        RemoveFavoriteCallback on_remove_favorite);
 
     ftxui::Element Render() override;
     bool OnEvent(ftxui::Event event) override;
@@ -130,7 +132,8 @@ private:
     OpenedFileSelectCallback on_opened_file_select_;
     const Theme* theme_ = nullptr;
     GitManager* git_manager_ = nullptr;
-    EditorConfig* config_ = nullptr;
+    FavoriteFilesProvider favorite_files_provider_;
+    RemoveFavoriteCallback on_remove_favorite_;
     std::filesystem::path current_path_;
     std::vector<OpenedFileEntry> opened_files_;
     size_t active_opened_file_index_ = 0;

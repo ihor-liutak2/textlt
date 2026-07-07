@@ -47,12 +47,14 @@ SidebarPanel::SidebarPanel(
     OpenedFileSelectCallback on_opened_file_select,
     const Theme* theme,
     GitManager* git_manager,
-    EditorConfig* config)
+    FavoriteFilesProvider favorite_files_provider,
+    RemoveFavoriteCallback on_remove_favorite)
     : on_file_open_(std::move(on_file_open)),
       on_opened_file_select_(std::move(on_opened_file_select)),
       theme_(theme),
       git_manager_(git_manager),
-      config_(config),
+      favorite_files_provider_(std::move(favorite_files_provider)),
+      on_remove_favorite_(std::move(on_remove_favorite)),
       current_path_(std::filesystem::current_path()) {
     ftxui::MenuOption option = ftxui::MenuOption::Vertical();
     option.on_enter = [this] { OpenSelectedEntry(); };
@@ -319,8 +321,8 @@ void SidebarPanel::OpenSelectedEntry() {
             on_file_open_(selected_path);
             return;
         }
-        if (config_) {
-            config_->RemoveFavorite(selected_path.string());
+        if (on_remove_favorite_) {
+            on_remove_favorite_(selected_path);
         }
         Refresh();
         return;
@@ -551,24 +553,25 @@ void SidebarPanel::RebuildProjectEntries() {
 }
 
 void SidebarPanel::RebuildFavoriteEntries() {
-    if (!config_) {
+    if (!favorite_files_provider_) {
         return;
     }
 
-    std::vector<std::string> unique_favorites;
-    for (const FavoriteEntry& favorite : config_->favorites_) {
-        const std::string normalized_path = EditorConfig::NormalizeFavoritePath(favorite.path);
-        if (!normalized_path.empty() &&
-            std::find(unique_favorites.begin(), unique_favorites.end(), normalized_path) ==
-                unique_favorites.end()) {
-            unique_favorites.push_back(normalized_path);
-            const std::string filename =
-                std::filesystem::path(normalized_path).filename().string();
-            AddEntry(
-                normalized_path,
-                " " + (filename.empty() ? normalized_path : filename),
-                EntryKind::FavoriteFile);
+    std::vector<std::filesystem::path> unique_favorites;
+    for (const std::filesystem::path& favorite_path : favorite_files_provider_()) {
+        if (favorite_path.empty()) {
+            continue;
         }
+        if (std::find(unique_favorites.begin(), unique_favorites.end(), favorite_path) !=
+            unique_favorites.end()) {
+            continue;
+        }
+        unique_favorites.push_back(favorite_path);
+        const std::string filename = favorite_path.filename().string();
+        AddEntry(
+            favorite_path,
+            " " + (filename.empty() ? favorite_path.string() : filename),
+            EntryKind::FavoriteFile);
     }
 }
 

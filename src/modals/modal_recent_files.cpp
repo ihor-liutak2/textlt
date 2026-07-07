@@ -13,11 +13,11 @@ namespace textlt {
 
 RecentFilesModalContent::RecentFilesModalContent(
     const Theme* theme,
-    RecentFilesHistory* history,
+    DocumentFileController* document_file_controller,
     OpenFileCallback on_open,
     CloseCallback on_close)
     : theme_(theme),
-      history_(history),
+      document_file_controller_(document_file_controller),
       on_open_(std::move(on_open)),
       on_close_(std::move(on_close)) {
     renderer_ = ftxui::CatchEvent(
@@ -35,10 +35,10 @@ void RecentFilesModalContent::Refresh() {
     last_clicked_entry_ = -1;
     last_click_time_ = {};
 
-    if (history_) {
-        history_->Refresh();
-        std::vector<std::vector<RecentFilesHistory::Entry>> grouped_entries;
-        for (const RecentFilesHistory::Entry& entry : history_->Entries()) {
+    if (document_file_controller_) {
+        document_file_controller_->RefreshRecentFiles();
+        std::vector<std::vector<DocumentFileController::RecentFileEntry>> grouped_entries;
+        for (const DocumentFileController::RecentFileEntry& entry : document_file_controller_->RecentFiles()) {
             auto group = std::find_if(
                 groups_.begin(),
                 groups_.end(),
@@ -81,8 +81,8 @@ void RecentFilesModalContent::OpenSelected() {
     const std::filesystem::path path = entries_[selected_entry_].full_path;
     std::error_code error_code;
     if (!std::filesystem::is_regular_file(path, error_code)) {
-        if (history_) {
-            history_->RemoveFile(path);
+        if (document_file_controller_) {
+            document_file_controller_->RemoveRecentFile(path);
         }
         Refresh();
         status_ = "Removed missing file";
@@ -98,8 +98,8 @@ void RecentFilesModalContent::OpenSelected() {
     }
 
     if (!std::filesystem::is_regular_file(path, error_code)) {
-        if (history_) {
-            history_->RemoveFile(path);
+        if (document_file_controller_) {
+            document_file_controller_->RemoveRecentFile(path);
         }
         Refresh();
         status_ = "Removed missing file";
@@ -129,7 +129,7 @@ ftxui::Element RecentFilesModalContent::Render() {
             color(theme.modal_accent));
         for (size_t offset = 0; offset < group.entry_count; ++offset) {
             const size_t index = group.first_entry + offset;
-            const RecentFilesHistory::Entry& entry = entries_[index];
+            const DocumentFileController::RecentFileEntry& entry = entries_[index];
             const bool selected = static_cast<int>(index) == selected_entry_;
             Element row =
                 text("  " + entry.file_name) |
@@ -213,12 +213,12 @@ int RecentFilesModalContent::EntryIndexAtMouse(const ftxui::Mouse& mouse) const 
 
 RecentFilesModal::RecentFilesModal(
     const Theme* theme,
-    RecentFilesHistory* history,
+    DocumentFileController* document_file_controller,
     OpenFileCallback on_open)
     : theme_(theme) {
     content_ = std::make_shared<RecentFilesModalContent>(
         theme_,
-        history,
+        document_file_controller,
         std::move(on_open),
         [this] { Close(); });
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });

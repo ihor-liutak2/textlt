@@ -70,6 +70,8 @@ TextltApp::TextltApp()
       current_theme_(FindThemeByName(themes_, editor_config_.active_theme_name)),
       screen_(ftxui::ScreenInteractive::Fullscreen()),
       file_manager_(),
+      document_workspace_(),
+      document_file_controller_(file_manager_, document_workspace_),
       remote_config_store_(),
       text_editor_(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_)),
       sidebar_panel_(ftxui::Make<SidebarPanel>(
@@ -77,7 +79,11 @@ TextltApp::TextltApp()
           [this](size_t index) { ActivateOpenDocument(index); },
           &current_theme_,
           &git_manager_,
-          &editor_config_)),
+          [this] { return document_file_controller_.FavoriteFilePaths(); },
+          [this](const std::filesystem::path& path) {
+              document_file_controller_.RemoveFavorite(path);
+              UpdateFileMenuLabels();
+          })),
       help_dialog_(&current_theme_),
       keyboard_shortcuts_modal_(
           &current_theme_,
@@ -90,7 +96,7 @@ TextltApp::TextltApp()
           [this](const std::string& text) { WriteSystemClipboard(text); }),
       recent_files_modal_(
           &current_theme_,
-          &recent_files_history_,
+          &document_file_controller_,
           [this](const std::filesystem::path& path, std::string& error) {
               const bool opened = OpenFile(path.string(), error);
               if (opened) {
@@ -246,9 +252,7 @@ TextltApp::TextltApp()
           &current_theme_,
           [this] { SaveAndExit(); },
           [this] { DiscardAndExit(); },
-          [this] { CloseExitConfirmationDialog(); }),
-      document_workspace_() {
-    recent_files_history_.Load();
+          [this] { CloseExitConfirmationDialog(); }) {
     menu_bar_ = ftxui::Make<MenuBarComponent>(
         [this](int menu_index, int item_index) {
             this->RunDropdownAction(menu_index, item_index);

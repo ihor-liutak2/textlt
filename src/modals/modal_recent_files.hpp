@@ -12,7 +12,7 @@
 #include "ftxui/dom/elements.hpp"
 #include "modal_interface.hpp"
 #include "modal_window.hpp"
-#include "recent_files.hpp"
+#include "editor/document_file_controller.hpp"
 #include "theme.hpp"
 
 namespace textlt {
@@ -25,7 +25,7 @@ public:
 
     RecentFilesModalContent(
         const Theme* theme,
-        RecentFilesHistory* history,
+        DocumentFileController* document_file_controller,
         OpenFileCallback on_open,
         CloseCallback on_close);
 
@@ -50,10 +50,10 @@ private:
     int EntryIndexAtMouse(const ftxui::Mouse& mouse) const;
 
     const Theme* theme_ = nullptr;
-    RecentFilesHistory* history_ = nullptr;
+    DocumentFileController* document_file_controller_ = nullptr;
     OpenFileCallback on_open_;
     CloseCallback on_close_;
-    std::vector<RecentFilesHistory::Entry> entries_;
+    std::vector<DocumentFileController::RecentFileEntry> entries_;
     std::vector<FolderGroup> groups_;
     std::vector<ftxui::Box> entry_boxes_;
     int selected_entry_ = 0;
@@ -70,7 +70,7 @@ public:
 
     RecentFilesModal(
         const Theme* theme,
-        RecentFilesHistory* history,
+        DocumentFileController* document_file_controller,
         OpenFileCallback on_open);
 
     ftxui::Component View() const;

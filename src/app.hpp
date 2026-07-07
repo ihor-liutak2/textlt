@@ -17,6 +17,7 @@
 #include "editor_keymap.hpp"
 #include "editor_config.hpp"
 #include "editor/document_workspace.hpp"
+#include "editor/document_file_controller.hpp"
 #include "git_manager.hpp"
 #include "modals/assistant_modals.hpp"
 #include "modals/help_dialog.hpp"
@@ -32,8 +33,6 @@
 #include "modals/modal_files.hpp"
 #include "modals/modal_text_processors.hpp"
 #include "menu_bar.hpp"
-#include "opened_config.hpp"
-#include "recent_files.hpp"
 #include "remote/modal_remote_connections.hpp"
 #include "remote/modal_remote_files.hpp"
 #include "remote/remote_config_store.hpp"
@@ -186,7 +185,6 @@ private:
     void CloseAllOpenedFiles();
     void PersistOpenedDocuments();
     void RestoreOpenedDocuments();
-    void OpenRestoredDocument(const OpenedFileState& entry);
     void RefreshOpenedDocumentsSidebar();
     std::shared_ptr<Document> ActiveDocument() const;
     std::shared_ptr<EditorComponent> ActiveEditor() const;
@@ -310,12 +308,13 @@ private:
     EditorKeymap editor_keymap_;
     ConfigManager config_manager_;
     EditorConfig editor_config_;
-    OpenedConfigStore opened_config_store_;
     std::vector<Theme> themes_;
     Theme current_theme_;
     ftxui::ScreenInteractive screen_;
     GitManager git_manager_;
     FileManager file_manager_;
+    DocumentWorkspace document_workspace_;
+    DocumentFileController document_file_controller_;
     RemoteConfigStore remote_config_store_;
     ftxui::Component text_editor_;
     std::vector<ftxui::Component> editor_pane_components_;
@@ -328,7 +327,6 @@ private:
     HelpDialog help_dialog_;
     KeyboardShortcutsModal keyboard_shortcuts_modal_;
     CustomProcessorBuilderModal custom_processor_builder_modal_;
-    RecentFilesHistory recent_files_history_;
     RecentFilesModal recent_files_modal_;
 
     SearchFilesModal search_files_modal_;
@@ -346,7 +344,6 @@ private:
     AssistantSettingsModal assistant_settings_modal_;
     ThemeDialog theme_dialog_;
     UnsavedChangesDialog unsaved_changes_dialog_;
-    DocumentWorkspace document_workspace_;
     EditorLayoutMode editor_layout_mode_ = EditorLayoutMode::Single;
     int editor_workspace_tab_index_ = 0;
     int editor_two_left_width_ = 72;

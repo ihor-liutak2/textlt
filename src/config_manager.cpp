@@ -1,9 +1,8 @@
 #include "config_manager.hpp"
 
-#include <algorithm>
-#include <cstdlib>
+#include <filesystem>
 #include <string>
-#include <utility>
+#include <vector>
 
 #include "json_utils.hpp"
 
@@ -22,32 +21,6 @@ std::vector<std::string> ExtractStringArray(const Json& root, const char* key) {
         }
     }
     return values;
-}
-
-std::vector<FavoriteEntry> ExtractFavoriteEntries(const Json& root, const char* key) {
-    std::vector<FavoriteEntry> favorites;
-    const auto iter = root.find(key);
-    if (iter == root.end() || !iter->is_array()) {
-        return favorites;
-    }
-
-    for (const Json& object : *iter) {
-        if (!object.is_object()) {
-            continue;
-        }
-        const std::string path = EditorConfig::NormalizeFavoritePath(
-            JsonString(object, "path"));
-        if (path.empty()) {
-            continue;
-        }
-        FavoriteEntry favorite;
-        favorite.path = path;
-        favorite.row = JsonSize(object, "row", 0);
-        favorite.column = JsonSize(object, "column", 0);
-        favorites.push_back(std::move(favorite));
-    }
-
-    return favorites;
 }
 
 std::filesystem::path ResolveConfigPath(const std::filesystem::path& requested_path) {
@@ -103,29 +76,6 @@ EditorConfig ConfigManager::Load() const {
         root, "tts_audio_player_command", config.tts_audio_player_command);
     config.tts_player_voice_id = JsonString(
         root, "tts_player_voice_id", config.tts_player_voice_id);
-
-    std::vector<FavoriteEntry> favorite_entries = ExtractFavoriteEntries(root, "favorites_");
-    if (favorite_entries.empty()) {
-        favorite_entries = ExtractFavoriteEntries(root, "favorites");
-    }
-    if (favorite_entries.empty()) {
-        std::vector<std::string> favorites = ExtractStringArray(root, "favorites_");
-        if (favorites.empty()) {
-            favorites = ExtractStringArray(root, "favorites");
-        }
-        for (const std::string& path : favorites) {
-            const std::string normalized_path = EditorConfig::NormalizeFavoritePath(path);
-            if (!normalized_path.empty() && config.FindFavorite(normalized_path) == nullptr) {
-                config.favorites_.push_back({normalized_path, 0, 0});
-            }
-        }
-    } else {
-        for (const FavoriteEntry& favorite : favorite_entries) {
-            if (config.FindFavorite(favorite.path) == nullptr) {
-                config.favorites_.push_back(favorite);
-            }
-        }
-    }
 
     for (const std::string& path : ExtractStringArray(root, "file_modal_directories")) {
         const std::string normalized_path = EditorConfig::NormalizeDirectoryPath(path);

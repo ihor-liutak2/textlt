@@ -82,16 +82,8 @@ bool WriteConfigAtomically(const std::filesystem::path& path, const EditorConfig
         {"tts_audio_player_id", config.tts_audio_player_id.empty() ? "auto" : config.tts_audio_player_id},
         {"tts_audio_player_command", config.tts_audio_player_command},
         {"tts_player_voice_id", config.tts_player_voice_id},
-        {"favorites_", Json::array()},
         {"file_modal_directories", Json::array()},
     };
-    for (const FavoriteEntry& favorite : config.favorites_) {
-        root["favorites_"].push_back({
-            {"path", favorite.path},
-            {"row", favorite.row},
-            {"column", favorite.column},
-        });
-    }
     for (const std::string& directory : config.file_modal_directories_) {
         root["file_modal_directories"].push_back(directory);
     }
@@ -99,84 +91,6 @@ bool WriteConfigAtomically(const std::filesystem::path& path, const EditorConfig
 }
 
 } // namespace
-
-bool EditorConfig::AddFavorite(const std::string& path) {
-    const std::string normalized_path = NormalizeFavoritePath(path);
-    if (normalized_path.empty() || IsFavorite(normalized_path)) {
-        return false;
-    }
-
-    favorites_.push_back({normalized_path, 0, 0});
-    Persist();
-    return true;
-}
-
-bool EditorConfig::RemoveFavorite(const std::string& path) {
-    const std::string normalized_path = NormalizeFavoritePath(path);
-    if (normalized_path.empty()) {
-        return false;
-    }
-
-    const size_t old_size = favorites_.size();
-    favorites_.erase(
-        std::remove_if(
-            favorites_.begin(),
-            favorites_.end(),
-            [&](const FavoriteEntry& favorite) {
-                return PathsEqual(favorite.path, normalized_path);
-            }),
-        favorites_.end());
-    if (favorites_.size() == old_size) {
-        return false;
-    }
-
-    Persist();
-    return true;
-}
-
-bool EditorConfig::IsFavorite(const std::string& path) const {
-    const std::string normalized_path = NormalizeFavoritePath(path);
-    if (normalized_path.empty()) {
-        return false;
-    }
-    return FindFavorite(normalized_path) != nullptr;
-}
-
-const FavoriteEntry* EditorConfig::FindFavorite(const std::string& path) const {
-    const std::string normalized_path = NormalizeFavoritePath(path);
-    if (normalized_path.empty()) {
-        return nullptr;
-    }
-
-    auto iter = std::find_if(
-        favorites_.begin(),
-        favorites_.end(),
-        [&](const FavoriteEntry& favorite) {
-            return PathsEqual(favorite.path, normalized_path);
-        });
-    return iter == favorites_.end() ? nullptr : &*iter;
-}
-
-bool EditorConfig::UpdateFavoriteCursor(const std::string& path, size_t row, size_t column) {
-    const std::string normalized_path = NormalizeFavoritePath(path);
-    if (normalized_path.empty()) {
-        return false;
-    }
-
-    auto iter = std::find_if(
-        favorites_.begin(),
-        favorites_.end(),
-        [&](const FavoriteEntry& favorite) {
-            return PathsEqual(favorite.path, normalized_path);
-        });
-    if (iter == favorites_.end()) {
-        return false;
-    }
-
-    iter->row = row;
-    iter->column = column;
-    return Persist();
-}
 
 bool EditorConfig::SetActiveThemeName(const std::string& name) {
     if (name.empty()) {
@@ -266,25 +180,6 @@ std::filesystem::path EditorConfig::FallbackConfigPath() {
         return {};
     }
     return home / ".textlt_config.json";
-}
-
-std::string EditorConfig::NormalizeFavoritePath(const std::string& path) {
-    if (path.empty() || path == "Untitled" || path == "untitled.txt") {
-        return {};
-    }
-
-    std::error_code error;
-    std::filesystem::path normalized_path =
-        std::filesystem::absolute(std::filesystem::path(path), error);
-    if (error) {
-        return {};
-    }
-
-    normalized_path = std::filesystem::weakly_canonical(normalized_path, error);
-    if (error) {
-        normalized_path = normalized_path.lexically_normal();
-    }
-    return normalized_path.string();
 }
 
 std::string EditorConfig::NormalizeDirectoryPath(const std::string& path) {

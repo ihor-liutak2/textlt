@@ -93,8 +93,7 @@ void TextltApp::UpdateFileMenuLabels() {
         return;
     }
 
-    const std::string favorite_path = ActiveDocumentFavoritePath();
-    menu_bar_->SetFileFavoriteLabel(editor_config_.IsFavorite(favorite_path));
+    menu_bar_->SetFileFavoriteLabel(document_file_controller_.IsActiveDocumentFavorite());
 }
 
 
@@ -125,12 +124,9 @@ void TextltApp::RunDropdownAction(int menu_index, int item_index) {
 }
     
 void TextltApp::CommandFileNew() {
-    PersistActiveFavoriteCursor();
-    const size_t document_index = document_workspace_.AddUntitledDocument();
-    document_workspace_.AssignDocumentToActivePane(document_index);
+    document_file_controller_.NewDocument();
     BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
-    PersistOpenedDocuments();
     active_action_ = "New file";
     CloseDropdown();
     FocusEditor();
