@@ -55,6 +55,14 @@ bool IsPrimaryMousePress(ftxui::Event event) {
         event.mouse().motion == ftxui::Mouse::Pressed;
 }
 
+bool IsMouseWheelUp(ftxui::Event event) {
+    return event.is_mouse() && event.mouse().button == ftxui::Mouse::WheelUp;
+}
+
+bool IsMouseWheelDown(ftxui::Event event) {
+    return event.is_mouse() && event.mouse().button == ftxui::Mouse::WheelDown;
+}
+
 } // namespace
 
 AppEventDispatcher::AppEventDispatcher(TextltApp& app) : app_(app) {}
@@ -116,6 +124,20 @@ bool AppEventDispatcher::HandleBodyEvent(ftxui::Event event) {
 }
 
 bool AppEventDispatcher::HandleEditorPaneEvent(size_t pane_index, ftxui::Event event) {
+    if (app_.layout_controller_.IsDistractionModeActive() &&
+        pane_index < app_.VisibleEditorPaneCount() &&
+        (IsMouseWheelUp(event) || IsMouseWheelDown(event))) {
+        const EditorViewport* viewport = app_.document_workspace_.PaneViewport(pane_index);
+        if (viewport && viewport->box.Contain(event.mouse().x, event.mouse().y)) {
+            if (IsMouseWheelUp(event)) {
+                app_.CommandDistractionPreviousPage();
+            } else {
+                app_.CommandDistractionNextPage();
+            }
+            return true;
+        }
+    }
+
     if (IsPrimaryMousePress(event) &&
         pane_index < app_.VisibleEditorPaneCount() &&
         app_.MainViewCanActivateEditorPane() &&
@@ -230,6 +252,15 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
     // and can consume a menu click before it reaches MenuBarComponent.
     if (event.is_mouse()) {
         return false;
+    }
+
+    if (app_.layout_controller_.IsDistractionModeActive()) {
+        auto top_bar = std::static_pointer_cast<TopBarRowComponent>(app_.top_bar_row_);
+        if (top_bar && top_bar->DistractionPagePopupOpen()) {
+            top_bar->OnEvent(event);
+            app_.screen_.PostEvent(ftxui::Event::Custom);
+            return true;
+        }
     }
 
     if (app_.pending_sidebar_chord_) {

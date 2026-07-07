@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstdlib>
 #include <string>
 
 #include "editor/document_session.hpp"
@@ -31,16 +30,22 @@ std::string PageInputFor(size_t page) {
 }
 
 size_t ParsePageInput(const std::string& value) {
-    std::string digits;
-    for (char character : value) {
-        if (std::isdigit(static_cast<unsigned char>(character))) {
-            digits.push_back(character);
+    size_t page = 0;
+    bool has_digit = false;
+    for (unsigned char character : value) {
+        if (!std::isdigit(character)) {
+            continue;
+        }
+        has_digit = true;
+        const size_t digit = static_cast<size_t>(character - '0');
+        constexpr size_t kMaxSafePage = 1000000;
+        if (page > (kMaxSafePage - digit) / 10) {
+            page = kMaxSafePage;
+        } else {
+            page = page * 10 + digit;
         }
     }
-    if (digits.empty()) {
-        return 1;
-    }
-    return std::max<size_t>(1, static_cast<size_t>(std::strtoull(digits.c_str(), nullptr, 10)));
+    return has_digit ? std::max<size_t>(1, page) : 1;
 }
 
 } // namespace
@@ -85,16 +90,7 @@ void DistractionModeController::SetColumnCount(int column_count) {
 }
 
 void DistractionModeController::SetPageInput(std::string input) {
-    input.erase(
-        std::remove_if(
-            input.begin(),
-            input.end(),
-            [](unsigned char character) { return !std::isdigit(character); }),
-        input.end());
-    if (input.size() > 4) {
-        input = input.substr(0, 4);
-    }
-    page_input_ = input.empty() ? "1" : std::move(input);
+    page_input_ = PageInputFor(ParsePageInput(input));
 }
 
 const std::string& DistractionModeController::PageInput() const {
@@ -276,9 +272,9 @@ size_t DistractionModeController::TotalPages(
     const EditorViewport* lead_viewport = workspace->PaneViewport(0);
     const std::shared_ptr<DocumentSession> session = workspace->ActiveSessionPtr();
     const size_t visible_height = VisiblePageHeight(lead_viewport);
+    const size_t text_pages = std::max<size_t>(1, (LineCount(session.get()) + visible_height - 1) / visible_height);
     const size_t columns = EffectiveColumnCount(visible_pane_count);
-    const size_t lines_per_page = std::max<size_t>(1, visible_height * columns);
-    return std::max<size_t>(1, (LineCount(session.get()) + lines_per_page - 1) / lines_per_page);
+    return std::max<size_t>(1, (text_pages + columns - 1) / columns);
 }
 
 size_t DistractionModeController::CurrentPage(
@@ -296,10 +292,10 @@ size_t DistractionModeController::CurrentPage(
     }
 
     const size_t visible_height = VisiblePageHeight(lead_viewport);
+    const size_t text_page = (lead_viewport->scroll_y / visible_height) + 1;
     const size_t columns = EffectiveColumnCount(visible_pane_count);
-    const size_t lines_per_page = std::max<size_t>(1, visible_height * columns);
-    const size_t page = (lead_viewport->scroll_y / lines_per_page) + 1;
-    return std::min(page, TotalPages(workspace, visible_pane_count, config));
+    const size_t display_page = ((text_page - 1) / columns) + 1;
+    return std::min(display_page, TotalPages(workspace, visible_pane_count, config));
 }
 
 bool DistractionModeController::SetPage(
@@ -326,15 +322,20 @@ bool DistractionModeController::SetPage(
 
     const size_t line_count = LineCount(session.get());
     const size_t max_scroll_y = line_count > visible_height ? line_count - visible_height : 0;
-    const size_t base_scroll_y = (page - 1) * visible_height * columns;
+    const size_t lead_text_page = (page - 1) * columns + 1;
+    const size_t base_scroll_y = (lead_text_page - 1) * visible_height;
 
     for (size_t pane_index = 0; pane_index < columns; ++pane_index) {
         EditorViewport* viewport = workspace->PaneViewport(pane_index);
         if (!viewport) {
             continue;
         }
-        viewport->scroll_y = std::min(base_scroll_y + pane_index * visible_height, max_scroll_y);
+        const size_t pane_scroll_y = std::min(base_scroll_y + pane_index * visible_height, max_scroll_y);
+        viewport->scroll_y = pane_scroll_y;
         viewport->scroll_x = 0;
+        viewport->CursorState().cursor_row = pane_scroll_y;
+        viewport->CursorState().cursor_col = 0;
+        viewport->CursorState().selection.active = false;
     }
 
     const size_t active_pane = std::min(workspace->ActiveEditorPaneIndex(), columns - 1);

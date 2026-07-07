@@ -174,7 +174,8 @@ void EditorViewport::ScrollToCursor(DocumentSession& session, const EditorConfig
     session.ClampCursor();
 
     const size_t visible_height = VisibleHeight();
-    const bool smart_word_wrap = config && config->smart_word_wrap;
+    const bool smart_word_wrap = options_.distraction_mode ||
+        (config && config->smart_word_wrap);
     if (session.CursorRow() >= scroll_y + visible_height) {
         scroll_y = session.CursorRow() - visible_height + 1;
     }
@@ -197,7 +198,7 @@ void EditorViewport::ScrollToCursor(DocumentSession& session, const EditorConfig
     }
 
     const size_t visible_width = VisibleTextWidth(&session, config);
-    if (config && config->smart_word_wrap) {
+    if (smart_word_wrap) {
         scroll_x = 0;
         return;
     }
@@ -228,11 +229,13 @@ std::pair<size_t, size_t> EditorViewport::PositionAtMouse(
         : 0;
     const int text_left_padding = static_cast<int>(TextLeftPadding(&session, config));
     const int relative_x = mouse.x - box.x_min - line_number_gutter_width - text_left_padding;
+    const bool smart_word_wrap = options_.distraction_mode ||
+        (config && config->smart_word_wrap);
 
     size_t clicked_row = scroll_y;
     size_t segment_start = scroll_x;
     size_t segment_end = session.lines[clicked_row].size();
-    if (config && config->smart_word_wrap) {
+    if (smart_word_wrap) {
         size_t visual_row = 0;
         const size_t target_visual_row = static_cast<size_t>(std::max(0, relative_y));
         for (size_t row = scroll_y; row < session.lines.size(); ++row) {
@@ -285,7 +288,8 @@ bool EditorViewport::HandleMouseEvent(
         mouse.x >= box.x_min && mouse.x <= box.x_max &&
         mouse.y >= viewport_y_min && mouse.y <= viewport_y_max;
 
-    const bool smart_word_wrap = config && config->smart_word_wrap;
+    const bool smart_word_wrap = options_.distraction_mode ||
+        (config && config->smart_word_wrap);
     const size_t visible_width = VisibleTextWidth(&session, config);
     auto effective_total = [&]() -> size_t {
         if (!smart_word_wrap) return session.lines.size();

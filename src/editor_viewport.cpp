@@ -26,7 +26,8 @@ ftxui::Element EditorComponent::RenderViewport() {
     const size_t scrollbar_columns = viewport_ ? viewport_->ScrollbarColumns() : 0;
     const size_t text_left_padding = viewport_ ? viewport_->TextLeftPadding(session_.get(), config_) : 0;
     const bool syntax_highlighting = !config_ || config_->syntax_highlighting;
-    const bool smart_word_wrap = config_ && config_->smart_word_wrap;
+    const bool smart_word_wrap = (viewport_ && viewport_->IsDistractionMode()) ||
+        (config_ && config_->smart_word_wrap);
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     const std::string file_path = CurrentFilePath();
 

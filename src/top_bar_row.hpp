@@ -35,6 +35,7 @@ public:
     ftxui::Element Render() override;
     bool OnEvent(ftxui::Event event) override;
     bool Focusable() const override;
+    bool DistractionPagePopupOpen() const;
 
     void SetTheme(const Theme* theme) { theme_ = theme; }
 
@@ -50,6 +51,11 @@ private:
         std::string command_id,
         ButtonRole role,
         std::string icon = {});
+    ftxui::ButtonOption MakeActionButtonOption(
+        std::string label,
+        std::function<void()> on_click,
+        ButtonRole role,
+        std::string icon = {});
 
     Mode CurrentMode() const;
     ftxui::Component ActiveButtonContainer() const;
@@ -59,8 +65,17 @@ private:
     std::string TtsStatus() const;
     DistractionTopBarState CurrentDistractionState() const;
     void SyncDistractionInputFromState();
+    void OpenPagePopup();
+    void ClosePagePopup();
+    void SubmitPagePopup();
+    void NormalizePagePopupInput(bool allow_empty);
+    void AppendPagePopupDigit(char digit);
+    void BackspacePagePopupInput();
+    bool HandlePagePopupKeyEvent(const ftxui::Event& event);
     ftxui::Element RenderTtsControls();
     ftxui::Element RenderDistractionControls();
+    ftxui::Element RenderPagePopup();
+    ftxui::Element RenderPagePopupInput();
 
     const Theme* theme_ = nullptr;
     Callbacks callbacks_;
@@ -73,11 +88,15 @@ private:
     ftxui::Component tts_next_button_;
     ftxui::Component distraction_prev_button_;
     ftxui::Component distraction_next_button_;
-    ftxui::Component distraction_page_input_;
-    ftxui::Component distraction_go_button_;
+    ftxui::Component distraction_page_button_;
     ftxui::Component distraction_exit_button_;
+    ftxui::Component page_popup_container_;
+    ftxui::Component page_popup_go_button_;
+    ftxui::Component page_popup_cancel_button_;
     std::string distraction_page_input_text_ = "1";
     int distraction_page_input_cursor_ = 0;
+    bool page_popup_open_ = false;
+    bool page_popup_replace_on_type_ = false;
     ftxui::Box box_;
 };
 
