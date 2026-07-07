@@ -466,14 +466,12 @@ bool TextltApp::OpenGitCompareDocuments(
     };
 
     auto left_doc = make_git_doc(left_title, left_content);
-    open_documents_.push_back(left_doc);
-    const size_t left_index = open_documents_.size() - 1;
+    const size_t left_index = document_workspace_.AddDocument(left_doc);
 
     size_t right_index = left_index;
     if (!right_title.empty()) {
         auto right_doc = make_git_doc(right_title, right_content);
-        open_documents_.push_back(right_doc);
-        right_index = open_documents_.size() - 1;
+        right_index = document_workspace_.AddDocument(right_doc);
     }
 
     if (right_title.empty()) {
@@ -489,7 +487,7 @@ bool TextltApp::OpenGitCompareDocuments(
         SetActiveEditorPane(0);
     }
 
-    active_document_index_ = left_index;
+    document_workspace_.ActiveDocumentIndex() = left_index;
     active_action_ = right_title.empty()
         ? "Opened Git diff"
         : "Opened Git side-by-side compare";
@@ -691,8 +689,8 @@ void TextltApp::CloseExitConfirmationDialog() {
 void TextltApp::RequestExit() {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
     const bool has_only_empty_memory_document =
-        open_documents_.size() == 1 &&
-        IsMemoryOnlyDocument(open_documents_.front()) &&
+        document_workspace_.OpenDocuments().size() == 1 &&
+        IsMemoryOnlyDocument(document_workspace_.OpenDocuments().front()) &&
         editor_ptr->GetAllText().empty();
     if (has_only_empty_memory_document) {
         PersistActiveFavoriteCursor();

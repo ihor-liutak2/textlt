@@ -136,7 +136,7 @@ void TextltApp::SaveAllOpenedFiles() {
     size_t skipped_count = 0;
     std::string first_error;
 
-    for (const auto& doc : open_documents_) {
+    for (const auto& doc : document_workspace_.OpenDocuments()) {
         if (!doc || !doc->is_dirty) {
             continue;
         }

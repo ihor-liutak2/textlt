@@ -62,9 +62,10 @@ size_t DocumentWorkspace::DocumentCount() const {
     return open_documents_.size();
 }
 
-void DocumentWorkspace::AddDocument(std::shared_ptr<Document> document) {
+size_t DocumentWorkspace::AddDocument(std::shared_ptr<Document> document) {
     open_documents_.push_back(std::move(document));
     active_document_index_ = open_documents_.empty() ? 0 : open_documents_.size() - 1;
+    return active_document_index_;
 }
 
 void DocumentWorkspace::RemoveDocument(size_t index) {

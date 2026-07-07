@@ -80,11 +80,11 @@ int TextltApp::EditorLayoutModeIndex() const {
 
 void TextltApp::SetEditorLayoutMode(EditorLayoutMode mode) {
     editor_layout_mode_ = mode;
-    if (active_editor_pane_index_ >= VisibleEditorPaneCount()) {
-        active_editor_pane_index_ = 0;
+    if (document_workspace_.ActiveEditorPaneIndex() >= VisibleEditorPaneCount()) {
+        document_workspace_.ActiveEditorPaneIndex() = 0;
     }
     EnsureEditorPanesHaveDocuments();
-    SetActiveEditorPane(active_editor_pane_index_);
+    SetActiveEditorPane(document_workspace_.ActiveEditorPaneIndex());
     active_action_ = "View layout: " + EditorLayoutModeLabel(mode);
     screen_.PostEvent(ftxui::Event::Custom);
 }
@@ -122,15 +122,15 @@ void TextltApp::SetActiveEditorPane(size_t pane_index) {
     pane_index = std::min(pane_index, visible_count - 1);
 
     const bool editor_layer_is_active = ActiveLayer() == UiLayer::Main;
-    active_editor_pane_index_ = pane_index;
+    document_workspace_.ActiveEditorPaneIndex() = pane_index;
     sidebar_has_focus_ = false;
 
-    if (pane_index < editor_panes_.size() &&
-        editor_panes_[pane_index].document_index < open_documents_.size()) {
-        active_document_index_ = editor_panes_[pane_index].document_index;
+    if (pane_index < document_workspace_.EditorPanes().size() &&
+        document_workspace_.EditorPanes()[pane_index].document_index < document_workspace_.OpenDocuments().size()) {
+        document_workspace_.ActiveDocumentIndex() = document_workspace_.EditorPanes()[pane_index].document_index;
     }
 
-    text_editor_ = editor_pane_components_[active_editor_pane_index_];
+    text_editor_ = editor_pane_components_[document_workspace_.ActiveEditorPaneIndex()];
     if (editor_layer_is_active && text_editor_) {
         text_editor_->TakeFocus();
     }
@@ -145,8 +145,8 @@ void TextltApp::FocusNextEditorPane() {
         screen_.PostEvent(ftxui::Event::Custom);
         return;
     }
-    SetActiveEditorPane((active_editor_pane_index_ + 1) % visible_count);
-    active_action_ = "Active pane: " + std::to_string(active_editor_pane_index_ + 1);
+    SetActiveEditorPane((document_workspace_.ActiveEditorPaneIndex() + 1) % visible_count);
+    active_action_ = "Active pane: " + std::to_string(document_workspace_.ActiveEditorPaneIndex() + 1);
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
@@ -157,11 +157,11 @@ void TextltApp::FocusPreviousEditorPane() {
         screen_.PostEvent(ftxui::Event::Custom);
         return;
     }
-    const size_t next_index = active_editor_pane_index_ == 0
+    const size_t next_index = document_workspace_.ActiveEditorPaneIndex() == 0
         ? visible_count - 1
-        : active_editor_pane_index_ - 1;
+        : document_workspace_.ActiveEditorPaneIndex() - 1;
     SetActiveEditorPane(next_index);
-    active_action_ = "Active pane: " + std::to_string(active_editor_pane_index_ + 1);
+    active_action_ = "Active pane: " + std::to_string(document_workspace_.ActiveEditorPaneIndex() + 1);
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
@@ -174,62 +174,62 @@ void TextltApp::EqualizeEditorPaneWidths() {
 }
 
 void TextltApp::SetEditorPaneRole(size_t pane_index, const std::string& role) {
-    if (pane_index >= editor_panes_.size()) {
+    if (pane_index >= document_workspace_.EditorPanes().size()) {
         return;
     }
-    editor_panes_[pane_index].role = role.empty() ? "General" : role;
-    active_action_ = "Pane " + std::to_string(pane_index + 1) + " role: " + editor_panes_[pane_index].role;
+    document_workspace_.EditorPanes()[pane_index].role = role.empty() ? "General" : role;
+    active_action_ = "Pane " + std::to_string(pane_index + 1) + " role: " + document_workspace_.EditorPanes()[pane_index].role;
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
 void TextltApp::AssignDocumentToEditorPane(size_t pane_index, size_t document_index) {
-    if (pane_index >= editor_panes_.size() ||
+    if (pane_index >= document_workspace_.EditorPanes().size() ||
         pane_index >= editor_pane_components_.size() ||
-        document_index >= open_documents_.size() ||
-        !open_documents_[document_index]) {
+        document_index >= document_workspace_.OpenDocuments().size() ||
+        !document_workspace_.OpenDocuments()[document_index]) {
         return;
     }
 
-    editor_panes_[pane_index].document_index = document_index;
+    document_workspace_.EditorPanes()[pane_index].document_index = document_index;
     auto editor = std::static_pointer_cast<EditorComponent>(editor_pane_components_[pane_index]);
     if (editor) {
-        editor->SetDocument(open_documents_[document_index]);
+        editor->SetDocument(document_workspace_.OpenDocuments()[document_index]);
     }
 
-    if (pane_index == active_editor_pane_index_) {
-        active_document_index_ = document_index;
+    if (pane_index == document_workspace_.ActiveEditorPaneIndex()) {
+        document_workspace_.ActiveDocumentIndex() = document_index;
         text_editor_ = editor_pane_components_[pane_index];
     }
 
     active_action_ = "Pane " + std::to_string(pane_index + 1) + " document: " +
-        ShortDocumentTitle(open_documents_[document_index]);
+        ShortDocumentTitle(document_workspace_.OpenDocuments()[document_index]);
     RefreshOpenedDocumentsSidebar();
     UpdateFileMenuLabels();
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
 void TextltApp::SplitActiveDocumentToNextPane() {
-    if (open_documents_.empty()) {
+    if (document_workspace_.OpenDocuments().empty()) {
         EnsureOneOpenDocument();
     }
-    if (open_documents_.empty()) {
+    if (document_workspace_.OpenDocuments().empty()) {
         return;
     }
 
-    size_t source_pane = active_editor_pane_index_;
-    if (source_pane >= editor_panes_.size()) {
+    size_t source_pane = document_workspace_.ActiveEditorPaneIndex();
+    if (source_pane >= document_workspace_.EditorPanes().size()) {
         source_pane = 0;
-        active_editor_pane_index_ = 0;
+        document_workspace_.ActiveEditorPaneIndex() = 0;
     }
 
-    size_t source_document_index = active_document_index_;
-    if (source_pane < editor_panes_.size() &&
-        editor_panes_[source_pane].document_index < open_documents_.size()) {
-        source_document_index = editor_panes_[source_pane].document_index;
+    size_t source_document_index = document_workspace_.ActiveDocumentIndex();
+    if (source_pane < document_workspace_.EditorPanes().size() &&
+        document_workspace_.EditorPanes()[source_pane].document_index < document_workspace_.OpenDocuments().size()) {
+        source_document_index = document_workspace_.EditorPanes()[source_pane].document_index;
     }
-    if (source_document_index >= open_documents_.size() ||
-        !open_documents_[source_document_index]) {
-        source_document_index = std::min(active_document_index_, open_documents_.size() - 1);
+    if (source_document_index >= document_workspace_.OpenDocuments().size() ||
+        !document_workspace_.OpenDocuments()[source_document_index]) {
+        source_document_index = std::min(document_workspace_.ActiveDocumentIndex(), document_workspace_.OpenDocuments().size() - 1);
     }
 
     if (VisibleEditorPaneCount() <= 1) {
@@ -256,54 +256,54 @@ void TextltApp::SplitActiveDocumentToNextPane() {
     AssignDocumentToEditorPane(target_pane, source_document_index);
     SetActiveEditorPane(source_pane);
 
-    const std::string title = ShortDocumentTitle(open_documents_[source_document_index]);
+    const std::string title = ShortDocumentTitle(document_workspace_.OpenDocuments()[source_document_index]);
     active_action_ = "Split " + title + " into pane " + std::to_string(target_pane + 1);
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
 void TextltApp::EnsureEditorPanesHaveDocuments() {
-    if (editor_panes_.size() < editor_pane_components_.size()) {
-        editor_panes_.resize(editor_pane_components_.size());
+    if (document_workspace_.EditorPanes().size() < editor_pane_components_.size()) {
+        document_workspace_.EditorPanes().resize(editor_pane_components_.size());
     }
-    if (open_documents_.empty()) {
+    if (document_workspace_.OpenDocuments().empty()) {
         return;
     }
 
     const size_t visible_count = VisibleEditorPaneCount();
     for (size_t pane_index = 0; pane_index < editor_pane_components_.size(); ++pane_index) {
-        size_t document_index = editor_panes_[pane_index].document_index;
+        size_t document_index = document_workspace_.EditorPanes()[pane_index].document_index;
         if (pane_index < visible_count) {
-            if (pane_index == active_editor_pane_index_) {
-                document_index = active_document_index_;
-            } else if (document_index >= open_documents_.size()) {
-                document_index = std::min(pane_index, open_documents_.size() - 1);
+            if (pane_index == document_workspace_.ActiveEditorPaneIndex()) {
+                document_index = document_workspace_.ActiveDocumentIndex();
+            } else if (document_index >= document_workspace_.OpenDocuments().size()) {
+                document_index = std::min(pane_index, document_workspace_.OpenDocuments().size() - 1);
             }
-        } else if (document_index >= open_documents_.size()) {
-            document_index = active_document_index_;
+        } else if (document_index >= document_workspace_.OpenDocuments().size()) {
+            document_index = document_workspace_.ActiveDocumentIndex();
         }
-        document_index = std::min(document_index, open_documents_.size() - 1);
-        editor_panes_[pane_index].document_index = document_index;
+        document_index = std::min(document_index, document_workspace_.OpenDocuments().size() - 1);
+        document_workspace_.EditorPanes()[pane_index].document_index = document_index;
         auto editor = std::static_pointer_cast<EditorComponent>(editor_pane_components_[pane_index]);
-        if (editor && open_documents_[document_index]) {
-            editor->SetDocument(open_documents_[document_index]);
+        if (editor && document_workspace_.OpenDocuments()[document_index]) {
+            editor->SetDocument(document_workspace_.OpenDocuments()[document_index]);
         }
     }
 }
 
 void TextltApp::AssignDocumentToActivePane(size_t document_index) {
-    if (open_documents_.empty() || document_index >= open_documents_.size()) {
+    if (document_workspace_.OpenDocuments().empty() || document_index >= document_workspace_.OpenDocuments().size()) {
         return;
     }
-    if (active_editor_pane_index_ >= editor_panes_.size() ||
-        active_editor_pane_index_ >= editor_pane_components_.size()) {
-        active_editor_pane_index_ = 0;
+    if (document_workspace_.ActiveEditorPaneIndex() >= document_workspace_.EditorPanes().size() ||
+        document_workspace_.ActiveEditorPaneIndex() >= editor_pane_components_.size()) {
+        document_workspace_.ActiveEditorPaneIndex() = 0;
     }
-    editor_panes_[active_editor_pane_index_].document_index = document_index;
-    active_document_index_ = document_index;
-    text_editor_ = editor_pane_components_[active_editor_pane_index_];
+    document_workspace_.EditorPanes()[document_workspace_.ActiveEditorPaneIndex()].document_index = document_index;
+    document_workspace_.ActiveDocumentIndex() = document_index;
+    text_editor_ = editor_pane_components_[document_workspace_.ActiveEditorPaneIndex()];
     auto editor = std::static_pointer_cast<EditorComponent>(text_editor_);
     if (editor) {
-        editor->SetDocument(open_documents_[document_index]);
+        editor->SetDocument(document_workspace_.OpenDocuments()[document_index]);
         if (ActiveLayer() == UiLayer::Main) {
             editor->TakeFocus();
         }
@@ -313,16 +313,16 @@ void TextltApp::AssignDocumentToActivePane(size_t document_index) {
 }
 
 void TextltApp::SyncEditorPaneDocuments() {
-    if (open_documents_.empty()) {
+    if (document_workspace_.OpenDocuments().empty()) {
         return;
     }
-    for (EditorPaneState& pane : editor_panes_) {
-        if (pane.document_index >= open_documents_.size()) {
-            pane.document_index = std::min(active_document_index_, open_documents_.size() - 1);
+    for (EditorPaneState& pane : document_workspace_.EditorPanes()) {
+        if (pane.document_index >= document_workspace_.OpenDocuments().size()) {
+            pane.document_index = std::min(document_workspace_.ActiveDocumentIndex(), document_workspace_.OpenDocuments().size() - 1);
         }
     }
     EnsureEditorPanesHaveDocuments();
-    AssignDocumentToActivePane(std::min(active_document_index_, open_documents_.size() - 1));
+    AssignDocumentToActivePane(std::min(document_workspace_.ActiveDocumentIndex(), document_workspace_.OpenDocuments().size() - 1));
 }
 
 ftxui::Element TextltApp::RenderEditorPane(size_t pane_index) {
@@ -341,7 +341,7 @@ ftxui::Element TextltApp::RenderEditorPane(size_t pane_index) {
     const bool dirty = doc && doc->is_dirty;
     const std::string type_label = doc ? doc->Label() : "Plain Text";
 
-    const bool active = !sidebar_has_focus_ && pane_index == active_editor_pane_index_;
+    const bool active = !sidebar_has_focus_ && pane_index == document_workspace_.ActiveEditorPaneIndex();
     const std::string marker = active ? "●" : "○";
     std::string header_text = " " + marker + " " + std::to_string(pane_index + 1) + ": " + title;
     if (dirty) {
@@ -355,7 +355,7 @@ ftxui::Element TextltApp::RenderEditorPane(size_t pane_index) {
     Element header = hbox({
         text(header_text) | bold | color(active ? theme.modal_selected_item_fg : theme.menu_foreground),
         filler(),
-        text(editor_panes_[pane_index].role.empty() ? "General " : editor_panes_[pane_index].role + " ") |
+        text(document_workspace_.EditorPanes()[pane_index].role.empty() ? "General " : document_workspace_.EditorPanes()[pane_index].role + " ") |
             dim |
             color(active ? theme.modal_selected_item_fg : theme.menu_foreground),
     }) |
@@ -377,13 +377,13 @@ ViewLayoutSnapshot TextltApp::CurrentViewLayoutSnapshot() const {
     ViewLayoutSnapshot snapshot;
     snapshot.layout_index = EditorLayoutModeIndex();
     snapshot.layout_name = EditorLayoutModeLabel(editor_layout_mode_);
-    snapshot.active_pane_index = active_editor_pane_index_;
+    snapshot.active_pane_index = document_workspace_.ActiveEditorPaneIndex();
     snapshot.two_left_width = editor_two_left_width_;
     snapshot.three_left_width = editor_three_left_width_;
     snapshot.three_right_width = editor_three_right_width_;
 
-    for (size_t doc_index = 0; doc_index < open_documents_.size(); ++doc_index) {
-        const auto& doc = open_documents_[doc_index];
+    for (size_t doc_index = 0; doc_index < document_workspace_.OpenDocuments().size(); ++doc_index) {
+        const auto& doc = document_workspace_.OpenDocuments()[doc_index];
         if (!doc) {
             continue;
         }
@@ -392,18 +392,18 @@ ViewLayoutSnapshot TextltApp::CurrentViewLayoutSnapshot() const {
         doc_info.path = doc->path.string();
         doc_info.dirty = doc->is_dirty;
         doc_info.memory_only = IsMemoryOnlyPath(doc);
-        doc_info.active = doc_index == active_document_index_;
+        doc_info.active = doc_index == document_workspace_.ActiveDocumentIndex();
         snapshot.documents.push_back(std::move(doc_info));
     }
 
     const size_t visible_count = VisibleEditorPaneCount();
     for (size_t pane_index = 0; pane_index < visible_count; ++pane_index) {
         ViewLayoutPaneInfo info;
-        info.role = pane_index < editor_panes_.size() ? editor_panes_[pane_index].role : "General";
-        info.active = pane_index == active_editor_pane_index_;
-        info.document_index = pane_index < editor_panes_.size() ? editor_panes_[pane_index].document_index : 0;
-        if (info.document_index < open_documents_.size()) {
-            const auto& doc = open_documents_[info.document_index];
+        info.role = pane_index < document_workspace_.EditorPanes().size() ? document_workspace_.EditorPanes()[pane_index].role : "General";
+        info.active = pane_index == document_workspace_.ActiveEditorPaneIndex();
+        info.document_index = pane_index < document_workspace_.EditorPanes().size() ? document_workspace_.EditorPanes()[pane_index].document_index : 0;
+        if (info.document_index < document_workspace_.OpenDocuments().size()) {
+            const auto& doc = document_workspace_.OpenDocuments()[info.document_index];
             info.title = ShortDocumentTitle(doc);
             info.path = doc ? doc->path.string() : "";
         }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -32,7 +33,7 @@ public:
     void ClearDocuments();
     bool Empty() const;
     size_t DocumentCount() const;
-    void AddDocument(std::shared_ptr<Document> document);
+    size_t AddDocument(std::shared_ptr<Document> document);
     void RemoveDocument(size_t index);
 
 private:

@@ -351,10 +351,6 @@ private:
     ThemeDialog theme_dialog_;
     UnsavedChangesDialog unsaved_changes_dialog_;
     DocumentWorkspace document_workspace_;
-    std::vector<std::shared_ptr<Document>>& open_documents_;
-    size_t& active_document_index_;
-    std::vector<EditorPaneState>& editor_panes_;
-    size_t& active_editor_pane_index_;
     EditorLayoutMode editor_layout_mode_ = EditorLayoutMode::Single;
     int editor_workspace_tab_index_ = 0;
     int editor_two_left_width_ = 72;

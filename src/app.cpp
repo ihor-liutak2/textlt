@@ -247,11 +247,7 @@ TextltApp::TextltApp()
           [this] { SaveAndExit(); },
           [this] { DiscardAndExit(); },
           [this] { CloseExitConfirmationDialog(); }),
-      document_workspace_(),
-      open_documents_(document_workspace_.OpenDocuments()),
-      active_document_index_(document_workspace_.ActiveDocumentIndex()),
-      editor_panes_(document_workspace_.EditorPanes()),
-      active_editor_pane_index_(document_workspace_.ActiveEditorPaneIndex()) {
+      document_workspace_() {
     recent_files_history_.Load();
     menu_bar_ = ftxui::Make<MenuBarComponent>(
         [this](int menu_index, int item_index) {
@@ -311,7 +307,7 @@ TextltApp::TextltApp()
         }),
         [this] { return RenderTitleBar(); });
 
-    editor_panes_.assign(3, EditorPaneState{});
+    document_workspace_.EditorPanes().assign(3, EditorPaneState{});
     editor_pane_components_.clear();
     editor_pane_components_.push_back(text_editor_);
     editor_pane_components_.push_back(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_));
@@ -555,8 +551,7 @@ TextltApp::TextltApp()
 TextltApp::TextltApp(const std::vector<std::string>& files_to_open)
     : TextltApp() {
     if (!files_to_open.empty()) {
-        open_documents_.clear();
-        active_document_index_ = 0;
+        document_workspace_.ClearDocuments();
         std::static_pointer_cast<EditorComponent>(text_editor_)
             ->SetDocument(std::make_shared<Document>());
     }
