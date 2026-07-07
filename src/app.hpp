@@ -9,6 +9,7 @@
 #include "ftxui/component/screen_interactive.hpp"
 #include "ftxui/dom/elements.hpp"
 #include "app_command_registry.hpp"
+#include "app_event_dispatcher.hpp"
 #include "shortcut_registry.hpp"
 #include "shortcut_store.hpp"
 #include "cloud_tts_pipeline.hpp"
@@ -45,6 +46,7 @@
 namespace textlt {
 
 class TextltApp {
+    friend class AppEventDispatcher;
     friend class EditorKeymap;
 public:
     TextltApp();
@@ -308,6 +310,7 @@ private:
     std::vector<Theme> themes_;
     Theme current_theme_;
     ftxui::ScreenInteractive screen_;
+    AppEventDispatcher app_event_dispatcher_;
     GitManager git_manager_;
     FileManager file_manager_;
     DocumentWorkspace document_workspace_;

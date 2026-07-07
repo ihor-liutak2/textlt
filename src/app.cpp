@@ -69,6 +69,7 @@ TextltApp::TextltApp()
       themes_(LoadThemesFromConfiguredLocations()),
       current_theme_(FindThemeByName(themes_, editor_config_.active_theme_name)),
       screen_(ftxui::ScreenInteractive::Fullscreen()),
+      app_event_dispatcher_(*this),
       file_manager_(),
       document_workspace_(),
       document_file_controller_(file_manager_, document_workspace_),

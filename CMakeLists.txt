@@ -187,6 +187,7 @@ target_link_libraries(textlt-piper-server PRIVATE textlt_civetweb)
 add_executable(textlt
   src/app.cpp
   src/app_command_registry.cpp
+  src/app_event_dispatcher.cpp
   src/app_commands.cpp
   src/app_find_replace.cpp
   src/app_modals.cpp
