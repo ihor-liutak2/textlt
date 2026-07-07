@@ -63,7 +63,7 @@ int TextltApp::EditorLayoutModeIndex() const {
 void TextltApp::SetEditorLayoutMode(EditorLayoutMode mode) {
     editor_layout_mode_ = mode;
     document_workspace_.ClampActiveEditorPaneIndex(VisibleEditorPaneCount());
-    document_workspace_.EnsureEditorPanesHaveDocuments(VisibleEditorPaneCount());
+    document_workspace_.EnsureEditorPanesHaveSessions(VisibleEditorPaneCount());
     BindEditorComponentsToWorkspace();
     SetActiveEditorPane(document_workspace_.ActiveEditorPaneIndex());
     active_action_ = "View layout: " + EditorLayoutModeLabel(mode);
@@ -161,9 +161,9 @@ void TextltApp::SetEditorPaneRole(size_t pane_index, const std::string& role) {
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
-void TextltApp::AssignDocumentToEditorPane(size_t pane_index, size_t document_index) {
+void TextltApp::AssignSessionToEditorPane(size_t pane_index, size_t session_index) {
     if (pane_index >= editor_pane_components_.size() ||
-        !document_workspace_.AssignSessionToPane(pane_index, document_index)) {
+        !document_workspace_.AssignSessionToPane(pane_index, session_index)) {
         return;
     }
 
@@ -173,15 +173,15 @@ void TextltApp::AssignDocumentToEditorPane(size_t pane_index, size_t document_in
     }
 
     active_action_ = "Pane " + std::to_string(pane_index + 1) + " document: " +
-        ShortDocumentTitle(document_workspace_.DocumentAt(document_index));
+        ShortDocumentTitle(document_workspace_.SessionPtrAt(session_index));
     RefreshOpenedDocumentsSidebar();
     UpdateFileMenuLabels();
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
-void TextltApp::SplitActiveDocumentToNextPane() {
+void TextltApp::SplitActiveSessionToNextPane() {
     if (document_workspace_.Empty()) {
-        EnsureOneOpenDocumentSession();
+        EnsureOneOpenSession();
     }
     if (document_workspace_.Empty()) {
         return;
@@ -193,12 +193,12 @@ void TextltApp::SplitActiveDocumentToNextPane() {
 
     size_t source_pane = 0;
     size_t target_pane = 0;
-    size_t document_index = 0;
-    if (!document_workspace_.SplitActiveDocumentToNextPane(
+    size_t session_index = 0;
+    if (!document_workspace_.SplitActiveSessionToNextPane(
             VisibleEditorPaneCount(),
             source_pane,
             target_pane,
-            document_index)) {
+            session_index)) {
         active_action_ = "Could not split the active document";
         screen_.PostEvent(ftxui::Event::Custom);
         return;
@@ -210,20 +210,20 @@ void TextltApp::SplitActiveDocumentToNextPane() {
     BindEditorComponentsToWorkspace();
     SetActiveEditorPane(source_pane);
 
-    const std::string title = ShortDocumentTitle(document_workspace_.DocumentAt(document_index));
+    const std::string title = ShortDocumentTitle(document_workspace_.SessionPtrAt(session_index));
     active_action_ = "Split " + title + " into pane " + std::to_string(target_pane + 1);
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
 void TextltApp::BindEditorComponentsToWorkspace() {
     document_workspace_.SetEditorPaneCount(editor_pane_components_.size());
-    document_workspace_.EnsureEditorPanesHaveDocuments(VisibleEditorPaneCount());
+    document_workspace_.EnsureEditorPanesHaveSessions(VisibleEditorPaneCount());
 
     for (size_t pane_index = 0; pane_index < editor_pane_components_.size(); ++pane_index) {
-        const size_t document_index = document_workspace_.PaneSessionIndex(pane_index);
+        const size_t session_index = document_workspace_.PaneSessionIndex(pane_index);
         auto editor = std::static_pointer_cast<EditorComponent>(editor_pane_components_[pane_index]);
         if (editor) {
-            editor->SetDocumentSession(document_workspace_.DocumentAt(document_index));
+            editor->SetSession(document_workspace_.SessionPtrAt(session_index));
         }
     }
 
@@ -244,7 +244,7 @@ ftxui::Element TextltApp::RenderEditorPane(size_t pane_index) {
 
     const Theme& theme = current_theme_;
     auto editor = std::static_pointer_cast<EditorComponent>(editor_pane_components_[pane_index]);
-    std::shared_ptr<DocumentSession> doc = editor ? editor->GetDocumentSession() : nullptr;
+    std::shared_ptr<DocumentSession> doc = editor ? editor->GetSession() : nullptr;
 
     const std::string title = DocumentTitle(doc);
     const bool dirty = doc && doc->is_dirty;
@@ -291,14 +291,14 @@ ViewLayoutSnapshot TextltApp::CurrentViewLayoutSnapshot() const {
     snapshot.three_left_width = editor_three_left_width_;
     snapshot.three_right_width = editor_three_right_width_;
 
-    for (size_t doc_index = 0; doc_index < document_workspace_.OpenDocuments().size(); ++doc_index) {
-        const auto& doc = document_workspace_.OpenDocuments()[doc_index];
+    for (size_t doc_index = 0; doc_index < document_workspace_.OpenSessions().size(); ++doc_index) {
+        const auto& doc = document_workspace_.OpenSessions()[doc_index];
         if (!doc) {
             continue;
         }
         ViewLayoutDocumentInfo doc_info;
         doc_info.title = ShortDocumentTitle(doc);
-        const DocumentSession& session = doc->Session();
+        const DocumentSession& session = *doc;
         doc_info.path = session.path.string();
         doc_info.dirty = doc->is_dirty;
         doc_info.memory_only = DocumentWorkspace::IsMemoryOnlySession(&session);
@@ -311,11 +311,11 @@ ViewLayoutSnapshot TextltApp::CurrentViewLayoutSnapshot() const {
         ViewLayoutPaneInfo info;
         info.role = document_workspace_.PaneRole(pane_index);
         info.active = pane_index == document_workspace_.ActiveEditorPaneIndex();
-        info.document_index = document_workspace_.PaneSessionIndex(pane_index);
-        if (info.document_index < document_workspace_.OpenDocuments().size()) {
-            const auto& doc = document_workspace_.OpenDocuments()[info.document_index];
+        info.session_index = document_workspace_.PaneSessionIndex(pane_index);
+        if (info.session_index < document_workspace_.OpenSessions().size()) {
+            const auto& doc = document_workspace_.OpenSessions()[info.session_index];
             info.title = ShortDocumentTitle(doc);
-            info.path = doc ? doc->Session().path.string() : "";
+            info.path = doc ? doc->path.string() : "";
         }
         if (info.title.empty()) {
             info.title = "Untitled";

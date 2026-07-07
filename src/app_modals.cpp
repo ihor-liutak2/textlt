@@ -332,7 +332,7 @@ bool TextltApp::GetTextProcessorTargetText(
     std::string& text,
     std::string& error) {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-    const auto document = editor_ptr ? editor_ptr->GetDocumentSession() : document_workspace_.ActiveDocumentSession();
+    const auto document = editor_ptr ? editor_ptr->GetSession() : document_workspace_.ActiveSessionPtr();
     if (!document) {
         error = "No active document.";
         active_action_ = error;
@@ -340,7 +340,7 @@ bool TextltApp::GetTextProcessorTargetText(
         return false;
     }
 
-    auto& session = document->Session();
+    auto& session = *document;
     if (!session.GetTextProcessorTargetText(whole_document, text, error)) {
         active_action_ = error;
         screen_.PostEvent(ftxui::Event::Custom);
@@ -355,7 +355,7 @@ bool TextltApp::ReplaceTextProcessorTargetText(
     const std::string& text,
     std::string& error) {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-    const auto document = editor_ptr ? editor_ptr->GetDocumentSession() : document_workspace_.ActiveDocumentSession();
+    const auto document = editor_ptr ? editor_ptr->GetSession() : document_workspace_.ActiveSessionPtr();
     if (!document) {
         error = "No active document.";
         active_action_ = error;
@@ -363,7 +363,7 @@ bool TextltApp::ReplaceTextProcessorTargetText(
         return false;
     }
 
-    auto& session = document->Session();
+    auto& session = *document;
     if (!session.ReplaceTextProcessorTargetText(whole_document, text, error)) {
         active_action_ = error;
         screen_.PostEvent(ftxui::Event::Custom);
@@ -371,7 +371,7 @@ bool TextltApp::ReplaceTextProcessorTargetText(
     }
 
     if (editor_ptr) {
-        editor_ptr->SetDocumentSession(document);
+        editor_ptr->SetSession(document);
     }
 
     active_action_ = whole_document
@@ -479,12 +479,12 @@ bool TextltApp::OpenGitCompareDocuments(
 
     if (right_title.empty()) {
         SetEditorLayoutMode(EditorLayoutMode::Single);
-        AssignDocumentToEditorPane(0, left_index);
+        AssignSessionToEditorPane(0, left_index);
         SetActiveEditorPane(0);
     } else {
         SetEditorLayoutMode(EditorLayoutMode::TwoColumns);
-        AssignDocumentToEditorPane(0, left_index);
-        AssignDocumentToEditorPane(1, right_index);
+        AssignSessionToEditorPane(0, left_index);
+        AssignSessionToEditorPane(1, right_index);
         SetEditorPaneRole(0, "Git Left");
         SetEditorPaneRole(1, "Git Right");
         SetActiveEditorPane(0);

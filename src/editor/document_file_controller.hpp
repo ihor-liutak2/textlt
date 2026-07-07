@@ -48,28 +48,27 @@ public:
 
     DocumentFileController(FileManager& file_manager, DocumentWorkspace& workspace);
 
-    std::shared_ptr<DocumentSession> ActiveDocumentSession() const;
+    std::shared_ptr<DocumentSession> ActiveSessionPtr() const;
     DocumentSession* ActiveSession();
     const DocumentSession* ActiveSession() const;
 
-    size_t AddDocumentSession(std::shared_ptr<DocumentSession> document);
     size_t AddSession(std::shared_ptr<DocumentSession> document);
-    size_t NewDocumentSession();
-    void EnsureOneDocumentSession(size_t visible_pane_count);
-    bool RemoveDocumentSession(size_t index, size_t visible_pane_count);
-    bool ActivateDocumentSession(size_t index, size_t visible_pane_count);
+    size_t NewSession();
+    void EnsureOneSession(size_t visible_pane_count);
+    bool RemoveSession(size_t index, size_t visible_pane_count);
+    bool ActivateSession(size_t index, size_t visible_pane_count);
 
-    bool OpenDocumentSession(const std::filesystem::path& path, std::string& error);
-    bool OpenOrCreateDocumentSession(const std::filesystem::path& path, std::string& error);
-    bool SaveActiveDocumentSession(std::string& error);
-    bool SaveActiveDocumentAs(const std::filesystem::path& path, std::string& error);
-    SaveAllResult SaveAllDirtyDocuments();
+    bool OpenSession(const std::filesystem::path& path, std::string& error);
+    bool OpenOrCreateSession(const std::filesystem::path& path, std::string& error);
+    bool SaveActiveSession(std::string& error);
+    bool SaveActiveSessionAs(const std::filesystem::path& path, std::string& error);
+    SaveAllResult SaveAllDirtySessions();
 
-    bool CloseActiveDocumentSession(size_t visible_pane_count, std::string& closed_name);
-    void CloseAllDocuments(size_t visible_pane_count);
+    bool CloseActiveSession(size_t visible_pane_count, std::string& closed_name);
+    void CloseAllSessions(size_t visible_pane_count);
 
-    void PersistOpenedDocuments();
-    bool RestoreOpenedDocuments(size_t visible_pane_count);
+    void PersistOpenedSessions();
+    bool RestoreOpenedSessions(size_t visible_pane_count);
 
     const std::vector<RecentFileEntry>& RecentFiles() const;
     void RefreshRecentFiles();
@@ -78,8 +77,8 @@ public:
     const std::vector<FavoriteFileEntry>& FavoriteFiles() const;
     std::vector<std::filesystem::path> FavoriteFilePaths() const;
     bool RemoveFavorite(const std::filesystem::path& path);
-    std::string ActiveDocumentFavoritePath() const;
-    bool IsActiveDocumentFavorite() const;
+    std::string ActiveSessionFavoritePath() const;
+    bool IsActiveSessionFavorite() const;
     void PersistActiveFavoriteCursor();
     void RestoreFavoriteCursor(const std::filesystem::path& path);
     FavoriteToggleResult ToggleActiveFavorite();
@@ -102,7 +101,7 @@ private:
         size_t active_index = 0;
     };
 
-    void AddRestoredDocumentSession(const OpenedFileState& entry);
+    void AddRestoredSession(const OpenedFileState& entry);
     void AddRecentFile(const std::filesystem::path& path);
     bool AddFavorite(const std::filesystem::path& path);
     bool IsFavorite(const std::filesystem::path& path) const;

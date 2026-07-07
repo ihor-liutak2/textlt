@@ -109,22 +109,6 @@ void DocumentSession::BindFrom(const DocumentSession& other) {
     temporary = other.temporary;
 }
 
-DocumentSession& DocumentSession::Session() {
-    return *this;
-}
-
-const DocumentSession& DocumentSession::Session() const {
-    return *this;
-}
-
-TextBuffer& DocumentSession::Buffer() {
-    return buffer;
-}
-
-const TextBuffer& DocumentSession::Buffer() const {
-    return buffer;
-}
-
 DocumentType DocumentSession::DetermineDocumentType(const std::filesystem::path& path) {
     const std::string lower_ext = ToLowerCopy(path.extension().string());
     const std::string lower_filename = ToLowerCopy(path.filename().string());

@@ -35,7 +35,7 @@ ViewLayoutContent::ViewLayoutContent(
     SnapshotProvider snapshot_provider,
     ApplyLayoutCallback on_apply_layout,
     PaneCallback on_focus_pane,
-    PaneDocumentCallback on_assign_document,
+    PaneSessionCallback on_assign_session,
     PaneRoleCallback on_set_role,
     ActionCallback on_split_active,
     ActionCallback on_equal_widths)
@@ -43,7 +43,7 @@ ViewLayoutContent::ViewLayoutContent(
       snapshot_provider_(std::move(snapshot_provider)),
       on_apply_layout_(std::move(on_apply_layout)),
       on_focus_pane_(std::move(on_focus_pane)),
-      on_assign_document_(std::move(on_assign_document)),
+      on_assign_session_(std::move(on_assign_session)),
       on_set_role_(std::move(on_set_role)),
       on_split_active_(std::move(on_split_active)),
       on_equal_widths_(std::move(on_equal_widths)) {
@@ -65,7 +65,7 @@ ViewLayoutContent::ViewLayoutContent(
     pane_menu_ = ftxui::Menu(&pane_entries_, &selected_pane_index_, pane_option);
 
     ftxui::MenuOption document_option = ftxui::MenuOption::Vertical();
-    document_menu_ = ftxui::Menu(&document_entries_, &selected_document_index_, document_option);
+    document_menu_ = ftxui::Menu(&document_entries_, &selected_session_index_, document_option);
 
     role_toggle_ = ftxui::Toggle(&role_entries_, &selected_role_index_);
 
@@ -181,11 +181,11 @@ void ViewLayoutContent::ClampSelections() {
     if (!pane_entries_.empty() && selected_pane_index_ >= static_cast<int>(pane_entries_.size())) {
         selected_pane_index_ = static_cast<int>(pane_entries_.size()) - 1;
     }
-    if (selected_document_index_ < 0) {
-        selected_document_index_ = 0;
+    if (selected_session_index_ < 0) {
+        selected_session_index_ = 0;
     }
-    if (!document_entries_.empty() && selected_document_index_ >= static_cast<int>(document_entries_.size())) {
-        selected_document_index_ = static_cast<int>(document_entries_.size()) - 1;
+    if (!document_entries_.empty() && selected_session_index_ >= static_cast<int>(document_entries_.size())) {
+        selected_session_index_ = static_cast<int>(document_entries_.size()) - 1;
     }
     if (selected_role_index_ < 0) {
         selected_role_index_ = 0;
@@ -204,7 +204,7 @@ void ViewLayoutContent::SyncControlsFromSelectedPane() {
     }
 
     const ViewLayoutPaneInfo& pane = snapshot_.panes[static_cast<size_t>(selected_pane_index_)];
-    selected_document_index_ = static_cast<int>(pane.document_index);
+    selected_session_index_ = static_cast<int>(pane.session_index);
     const std::string role = pane.role.empty() ? "General" : pane.role;
     auto role_it = std::find(role_entries_.begin(), role_entries_.end(), role);
     if (role_it != role_entries_.end()) {
@@ -243,10 +243,10 @@ void ViewLayoutContent::FocusSelectedPane() {
 
 void ViewLayoutContent::AssignSelectedDocumentSession() {
     ClampSelections();
-    if (on_assign_document_) {
-        on_assign_document_(
+    if (on_assign_session_) {
+        on_assign_session_(
             static_cast<size_t>(selected_pane_index_),
-            static_cast<size_t>(selected_document_index_));
+            static_cast<size_t>(selected_session_index_));
     }
     RefreshFromApp();
 }
@@ -309,7 +309,7 @@ ftxui::Element ViewLayoutContent::RenderPaneManager(const Theme& theme) {
             text("Selected pane") | bold | color(theme.modal_accent),
             text("Title: " + (pane.title.empty() ? "Untitled" : pane.title)) | color(theme.modal_text_color),
             text("Role: " + (pane.role.empty() ? "General" : pane.role)) | color(theme.modal_text_color),
-            text("Document index: " + std::to_string(pane.document_index + 1)) | dim | color(theme.modal_text_color),
+            text("Document index: " + std::to_string(pane.session_index + 1)) | dim | color(theme.modal_text_color),
         });
     }
 
@@ -399,7 +399,7 @@ ViewLayoutModal::ViewLayoutModal(
     SnapshotProvider snapshot_provider,
     ApplyLayoutCallback on_apply_layout,
     PaneCallback on_focus_pane,
-    PaneDocumentCallback on_assign_document,
+    PaneSessionCallback on_assign_session,
     PaneRoleCallback on_set_role,
     ActionCallback on_split_active,
     ActionCallback on_equal_widths,
@@ -411,7 +411,7 @@ ViewLayoutModal::ViewLayoutModal(
         std::move(snapshot_provider),
         std::move(on_apply_layout),
         std::move(on_focus_pane),
-        std::move(on_assign_document),
+        std::move(on_assign_session),
         std::move(on_set_role),
         std::move(on_split_active),
         std::move(on_equal_widths));

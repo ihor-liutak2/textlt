@@ -9,82 +9,62 @@
 
 namespace textlt {
 
-std::vector<std::shared_ptr<DocumentSession>>& DocumentWorkspace::OpenDocuments() {
-    return open_documents_;
+std::vector<std::shared_ptr<DocumentSession>>& DocumentWorkspace::OpenSessions() {
+    return sessions_;
 }
 
-const std::vector<std::shared_ptr<DocumentSession>>& DocumentWorkspace::OpenDocuments() const {
-    return open_documents_;
-}
-
-size_t DocumentWorkspace::ActiveDocumentIndex() const {
-    return active_document_index_;
+const std::vector<std::shared_ptr<DocumentSession>>& DocumentWorkspace::OpenSessions() const {
+    return sessions_;
 }
 
 size_t DocumentWorkspace::ActiveSessionIndex() const {
-    return ActiveDocumentIndex();
-}
-
-void DocumentWorkspace::SetActiveDocumentIndex(size_t index) {
-    active_document_index_ = index;
-    ClampActiveDocumentIndex();
+    return active_session_index_;
 }
 
 void DocumentWorkspace::SetActiveSessionIndex(size_t index) {
-    SetActiveDocumentIndex(index);
-}
-
-void DocumentWorkspace::ClampActiveDocumentIndex() {
-    if (open_documents_.empty()) {
-        active_document_index_ = 0;
-        return;
-    }
-    active_document_index_ = std::min(active_document_index_, open_documents_.size() - 1);
+    active_session_index_ = index;
+    ClampActiveSessionIndex();
 }
 
 void DocumentWorkspace::ClampActiveSessionIndex() {
-    ClampActiveDocumentIndex();
+    if (sessions_.empty()) {
+        active_session_index_ = 0;
+        return;
+    }
+    active_session_index_ = std::min(active_session_index_, sessions_.size() - 1);
 }
 
-std::shared_ptr<DocumentSession> DocumentWorkspace::ActiveDocumentSession() const {
-    return DocumentAt(active_document_index_);
+std::shared_ptr<DocumentSession> DocumentWorkspace::ActiveSessionPtr() const {
+    return SessionPtrAt(active_session_index_);
 }
 
-std::shared_ptr<DocumentSession> DocumentWorkspace::DocumentAt(size_t index) const {
-    if (index >= open_documents_.size()) {
+std::shared_ptr<DocumentSession> DocumentWorkspace::SessionPtrAt(size_t index) const {
+    if (index >= sessions_.size()) {
         return nullptr;
     }
-    return open_documents_[index];
-}
-
-bool DocumentWorkspace::HasDocumentAt(size_t index) const {
-    return DocumentAt(index) != nullptr;
+    return sessions_[index];
 }
 
 DocumentSession* DocumentWorkspace::ActiveSession() {
-    return SessionAt(active_document_index_);
+    return SessionAt(active_session_index_);
 }
 
 const DocumentSession* DocumentWorkspace::ActiveSession() const {
-    return SessionAt(active_document_index_);
+    return SessionAt(active_session_index_);
 }
 
 DocumentSession* DocumentWorkspace::SessionAt(size_t index) {
-    const auto document = DocumentAt(index);
-    return document ? &document->Session() : nullptr;
+    const auto session = SessionPtrAt(index);
+    return session.get();
 }
 
 const DocumentSession* DocumentWorkspace::SessionAt(size_t index) const {
-    const auto document = DocumentAt(index);
-    return document ? &document->Session() : nullptr;
+    const auto session = SessionPtrAt(index);
+    return session.get();
 }
 
 bool DocumentWorkspace::HasSessionAt(size_t index) const {
-    return SessionAt(index) != nullptr;
-}
-
-int DocumentWorkspace::FindDocumentByPath(const std::filesystem::path& path) const {
-    return FindSessionByPath(path);
+    return SessionPtrAt(index) != nullptr;
 }
 
 int DocumentWorkspace::FindSessionByPath(const std::filesystem::path& path) const {
@@ -95,19 +75,18 @@ int DocumentWorkspace::FindSessionByPath(const std::filesystem::path& path) cons
         error.clear();
     }
 
-    for (size_t index = 0; index < open_documents_.size(); ++index) {
-        const auto& document = open_documents_[index];
-        if (!document) {
+    for (size_t index = 0; index < sessions_.size(); ++index) {
+        const auto& session = sessions_[index];
+        if (!session) {
             continue;
         }
 
-        const DocumentSession& session = document->Session();
-        std::filesystem::path document_path = std::filesystem::absolute(session.path, error);
+        std::filesystem::path session_path = std::filesystem::absolute(session->path, error);
         if (error) {
-            document_path = session.path;
+            session_path = session->path;
             error.clear();
         }
-        if (document_path == normalized) {
+        if (session_path == normalized) {
             return static_cast<int>(index);
         }
     }
@@ -127,15 +106,11 @@ bool DocumentWorkspace::HasEditorPaneAt(size_t index) const {
     return index < editor_panes_.size();
 }
 
-size_t DocumentWorkspace::PaneDocumentIndex(size_t pane_index) const {
+size_t DocumentWorkspace::PaneSessionIndex(size_t pane_index) const {
     if (!HasEditorPaneAt(pane_index)) {
         return 0;
     }
-    return editor_panes_[pane_index].document_index;
-}
-
-size_t DocumentWorkspace::PaneSessionIndex(size_t pane_index) const {
-    return PaneDocumentIndex(pane_index);
+    return editor_panes_[pane_index].session_index;
 }
 
 std::string DocumentWorkspace::PaneRole(size_t pane_index) const {
@@ -181,15 +156,11 @@ bool DocumentWorkspace::ActivateEditorPane(size_t pane_index, size_t visible_pan
     pane_index = std::min(pane_index, visible_count - 1);
     active_editor_pane_index_ = pane_index;
 
-    const size_t document_index = editor_panes_[pane_index].document_index;
-    if (document_index < open_documents_.size() && open_documents_[document_index]) {
-        active_document_index_ = document_index;
+    const size_t session_index = editor_panes_[pane_index].session_index;
+    if (session_index < sessions_.size() && sessions_[session_index]) {
+        active_session_index_ = session_index;
     }
     return true;
-}
-
-bool DocumentWorkspace::AssignDocumentToPane(size_t pane_index, size_t document_index) {
-    return AssignSessionToPane(pane_index, document_index);
 }
 
 bool DocumentWorkspace::AssignSessionToPane(size_t pane_index, size_t session_index) {
@@ -197,15 +168,11 @@ bool DocumentWorkspace::AssignSessionToPane(size_t pane_index, size_t session_in
         return false;
     }
 
-    editor_panes_[pane_index].document_index = session_index;
+    editor_panes_[pane_index].session_index = session_index;
     if (pane_index == active_editor_pane_index_) {
-        active_document_index_ = session_index;
+        active_session_index_ = session_index;
     }
     return true;
-}
-
-bool DocumentWorkspace::AssignDocumentToActivePane(size_t document_index) {
-    return AssignSessionToActivePane(document_index);
 }
 
 bool DocumentWorkspace::AssignSessionToActivePane(size_t session_index) {
@@ -214,63 +181,63 @@ bool DocumentWorkspace::AssignSessionToActivePane(size_t session_index) {
     }
 
     if (editor_panes_.empty()) {
-        active_document_index_ = session_index;
+        active_session_index_ = session_index;
         return true;
     }
 
     if (active_editor_pane_index_ >= editor_panes_.size()) {
         active_editor_pane_index_ = 0;
     }
-    editor_panes_[active_editor_pane_index_].document_index = session_index;
-    active_document_index_ = session_index;
+    editor_panes_[active_editor_pane_index_].session_index = session_index;
+    active_session_index_ = session_index;
     return true;
 }
 
-void DocumentWorkspace::EnsureEditorPanesHaveDocuments(size_t visible_pane_count) {
-    if (open_documents_.empty() || editor_panes_.empty()) {
+void DocumentWorkspace::EnsureEditorPanesHaveSessions(size_t visible_pane_count) {
+    if (sessions_.empty() || editor_panes_.empty()) {
         return;
     }
 
     ClampActiveEditorPaneIndex(visible_pane_count);
-    ClampActiveDocumentIndex();
+    ClampActiveSessionIndex();
 
     const size_t visible_count = std::min(visible_pane_count, editor_panes_.size());
     for (size_t pane_index = 0; pane_index < editor_panes_.size(); ++pane_index) {
-        size_t document_index = editor_panes_[pane_index].document_index;
+        size_t session_index = editor_panes_[pane_index].session_index;
         if (pane_index < visible_count) {
             if (pane_index == active_editor_pane_index_) {
-                document_index = active_document_index_;
-            } else if (document_index >= open_documents_.size()) {
-                document_index = std::min(pane_index, open_documents_.size() - 1);
+                session_index = active_session_index_;
+            } else if (session_index >= sessions_.size()) {
+                session_index = std::min(pane_index, sessions_.size() - 1);
             }
-        } else if (document_index >= open_documents_.size()) {
-            document_index = active_document_index_;
+        } else if (session_index >= sessions_.size()) {
+            session_index = active_session_index_;
         }
-        editor_panes_[pane_index].document_index = std::min(document_index, open_documents_.size() - 1);
+        editor_panes_[pane_index].session_index = std::min(session_index, sessions_.size() - 1);
     }
 }
 
-void DocumentWorkspace::SyncEditorPaneDocuments(size_t visible_pane_count) {
-    if (open_documents_.empty()) {
+void DocumentWorkspace::SyncEditorPaneSessions(size_t visible_pane_count) {
+    if (sessions_.empty()) {
         return;
     }
 
-    ClampActiveDocumentIndex();
+    ClampActiveSessionIndex();
     for (EditorPaneState& pane : editor_panes_) {
-        if (pane.document_index >= open_documents_.size()) {
-            pane.document_index = std::min(active_document_index_, open_documents_.size() - 1);
+        if (pane.session_index >= sessions_.size()) {
+            pane.session_index = std::min(active_session_index_, sessions_.size() - 1);
         }
     }
-    EnsureEditorPanesHaveDocuments(visible_pane_count);
-    AssignDocumentToActivePane(std::min(active_document_index_, open_documents_.size() - 1));
+    EnsureEditorPanesHaveSessions(visible_pane_count);
+    AssignSessionToActivePane(std::min(active_session_index_, sessions_.size() - 1));
 }
 
-bool DocumentWorkspace::SplitActiveDocumentToNextPane(
+bool DocumentWorkspace::SplitActiveSessionToNextPane(
     size_t visible_pane_count,
     size_t& source_pane,
     size_t& target_pane,
-    size_t& document_index) {
-    if (open_documents_.empty() || editor_panes_.empty() || visible_pane_count <= 1) {
+    size_t& session_index) {
+    if (sessions_.empty() || editor_panes_.empty() || visible_pane_count <= 1) {
         return false;
     }
 
@@ -282,14 +249,14 @@ bool DocumentWorkspace::SplitActiveDocumentToNextPane(
     ClampActiveEditorPaneIndex(visible_count);
     source_pane = active_editor_pane_index_;
 
-    document_index = active_document_index_;
-    if (source_pane < editor_panes_.size() && editor_panes_[source_pane].document_index < open_documents_.size()) {
-        document_index = editor_panes_[source_pane].document_index;
+    session_index = active_session_index_;
+    if (source_pane < editor_panes_.size() && editor_panes_[source_pane].session_index < sessions_.size()) {
+        session_index = editor_panes_[source_pane].session_index;
     }
-    if (!HasDocumentAt(document_index)) {
-        document_index = std::min(active_document_index_, open_documents_.size() - 1);
+    if (!HasSessionAt(session_index)) {
+        session_index = std::min(active_session_index_, sessions_.size() - 1);
     }
-    if (!HasDocumentAt(document_index)) {
+    if (!HasSessionAt(session_index)) {
         return false;
     }
 
@@ -299,78 +266,70 @@ bool DocumentWorkspace::SplitActiveDocumentToNextPane(
         target_pane = source_pane == 0 ? 1 : source_pane - 1;
     }
 
-    AssignDocumentToPane(source_pane, document_index);
-    AssignDocumentToPane(target_pane, document_index);
+    AssignSessionToPane(source_pane, session_index);
+    AssignSessionToPane(target_pane, session_index);
     ActivateEditorPane(source_pane, visible_count);
     return true;
 }
 
-void DocumentWorkspace::ClearDocuments() {
-    open_documents_.clear();
-    active_document_index_ = 0;
+void DocumentWorkspace::ClearSessions() {
+    sessions_.clear();
+    active_session_index_ = 0;
     for (EditorPaneState& pane : editor_panes_) {
-        pane.document_index = 0;
+        pane.session_index = 0;
     }
 }
 
 bool DocumentWorkspace::Empty() const {
-    return open_documents_.empty();
-}
-
-size_t DocumentWorkspace::DocumentCount() const {
-    return open_documents_.size();
+    return sessions_.empty();
 }
 
 size_t DocumentWorkspace::SessionCount() const {
-    return DocumentCount();
+    return sessions_.size();
 }
 
-size_t DocumentWorkspace::AddDocumentSession(std::shared_ptr<DocumentSession> document) {
-    return AddSession(std::move(document));
+size_t DocumentWorkspace::AddSession(std::shared_ptr<DocumentSession> session) {
+    sessions_.push_back(std::move(session));
+    active_session_index_ = sessions_.empty() ? 0 : sessions_.size() - 1;
+    return active_session_index_;
 }
 
-size_t DocumentWorkspace::AddSession(std::shared_ptr<DocumentSession> document) {
-    open_documents_.push_back(std::move(document));
-    active_document_index_ = open_documents_.empty() ? 0 : open_documents_.size() - 1;
-    return active_document_index_;
+size_t DocumentWorkspace::AddUntitledSession() {
+    auto session = std::make_shared<DocumentSession>();
+    session->Reset();
+    return AddSession(std::move(session));
 }
 
-size_t DocumentWorkspace::AddUntitledDocumentSession() {
-    auto document = std::make_shared<DocumentSession>();
-    document->Reset();
-    return AddDocumentSession(std::move(document));
-}
-
-void DocumentWorkspace::RemoveDocumentSession(size_t index) {
-    if (index >= open_documents_.size()) {
+void DocumentWorkspace::RemoveSession(size_t index) {
+    if (index >= sessions_.size()) {
         return;
     }
-    open_documents_.erase(open_documents_.begin() + static_cast<std::ptrdiff_t>(index));
-    if (open_documents_.empty()) {
-        active_document_index_ = 0;
+    sessions_.erase(sessions_.begin() + static_cast<std::ptrdiff_t>(index));
+    if (sessions_.empty()) {
+        active_session_index_ = 0;
         for (EditorPaneState& pane : editor_panes_) {
-            pane.document_index = 0;
+            pane.session_index = 0;
         }
         return;
     }
 
-    if (active_document_index_ >= open_documents_.size()) {
-        active_document_index_ = open_documents_.size() - 1;
-    } else if (index < active_document_index_) {
-        --active_document_index_;
+    if (active_session_index_ >= sessions_.size()) {
+        active_session_index_ = sessions_.size() - 1;
+    } else if (index < active_session_index_) {
+        --active_session_index_;
     }
 
     for (EditorPaneState& pane : editor_panes_) {
-        if (pane.document_index > index) {
-            --pane.document_index;
-        } else if (pane.document_index == index) {
-            pane.document_index = active_document_index_;
+        if (pane.session_index > index) {
+            --pane.session_index;
+        } else if (pane.session_index == index) {
+            pane.session_index = active_session_index_;
         }
     }
 }
 
-bool DocumentWorkspace::IsMemoryOnlyDocumentSession(const std::shared_ptr<DocumentSession>& document) {
-    return document && IsMemoryOnlySession(&document->Session());
+bool DocumentWorkspace::IsMemoryOnlySession(const std::shared_ptr<DocumentSession>& session) {
+    return session && session->IsMemoryOnly();
 }
 
 bool DocumentWorkspace::IsMemoryOnlySession(const DocumentSession* session) {

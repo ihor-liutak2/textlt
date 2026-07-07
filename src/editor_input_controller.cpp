@@ -297,7 +297,7 @@ bool EditorInputController::HandleEvent(EditorComponent& editor, ftxui::Event ev
         return true;
     }
 
-    if (event.is_character() && editor.doc_) {
+    if (event.is_character() && editor.session_) {
         if (read_only) {
             return true;
         }
@@ -318,20 +318,20 @@ bool EditorInputController::HandleEvent(EditorComponent& editor, ftxui::Event ev
         if (editor.HasSelection()) {
             editor.DeleteSelectionWithoutSnapshot();
         }
-        editor.doc_->InsertCharacter(event_input);
+        editor.session_->InsertCharacter(event_input);
         editor.ClearSelection();
         editor.UpdateScroll();
         return true;
     }
 
-    if (IsPrintableRawTextInput(event) && editor.doc_) {
+    if (IsPrintableRawTextInput(event) && editor.session_) {
         if (!read_only) {
             editor.InsertText(event.input());
         }
         return true;
     }
 
-    if (event == ftxui::Event::Backspace && editor.doc_) {
+    if (event == ftxui::Event::Backspace && editor.session_) {
         if (read_only) {
             return true;
         }
@@ -341,14 +341,14 @@ bool EditorInputController::HandleEvent(EditorComponent& editor, ftxui::Event ev
             return true;
         }
 
-        if (editor.doc_->Backspace()) {
+        if (editor.session_->Backspace()) {
             editor.ClearSelection();
             editor.UpdateScroll();
         }
         return true;
     }
 
-    if (event == ftxui::Event::Delete && editor.doc_) {
+    if (event == ftxui::Event::Delete && editor.session_) {
         if (read_only) {
             return true;
         }
@@ -358,7 +358,7 @@ bool EditorInputController::HandleEvent(EditorComponent& editor, ftxui::Event ev
             return true;
         }
 
-        if (editor.doc_->DeleteForward()) {
+        if (editor.session_->DeleteForward()) {
             editor.ClearSelection();
             editor.UpdateScroll();
         }

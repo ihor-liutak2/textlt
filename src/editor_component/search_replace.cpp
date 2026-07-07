@@ -2,13 +2,13 @@
         search_matches_.clear();
         current_search_match_ = 0;
 
-        if (query.empty() || !doc_) {
+        if (query.empty() || !session_) {
             return;
         }
 
         const std::string needle = search_match_case_ ? query : ToLowerCopy(query);
-        for (size_t y = 0; y < doc_->lines.size(); ++y) {
-            const std::string& line = doc_->lines[y];
+        for (size_t y = 0; y < session_->lines.size(); ++y) {
+            const std::string& line = session_->lines[y];
             const std::string searchable_line =
             search_match_case_ ? line : ToLowerCopy(line);
             size_t position = searchable_line.find(needle);
@@ -39,14 +39,14 @@
     }
 
     void EditorComponent::JumpToNextMatch() {
-        if (search_matches_.empty() || !doc_) {
+        if (search_matches_.empty() || !session_) {
             return;
         }
 
         current_search_match_ = 0;
         for (size_t i = 0; i < search_matches_.size(); ++i) {
             const SearchMatch& match = search_matches_[i];
-            if (match.y > doc_->cursor_row || (match.y == doc_->cursor_row && match.x > doc_->cursor_col)) {
+            if (match.y > session_->cursor_row || (match.y == session_->cursor_row && match.x > session_->cursor_col)) {
                 current_search_match_ = i;
                 break;
             }
@@ -55,14 +55,14 @@
     }
 
     void EditorComponent::JumpToPreviousMatch() {
-        if (search_matches_.empty() || !doc_) {
+        if (search_matches_.empty() || !session_) {
             return;
         }
 
         current_search_match_ = search_matches_.size() - 1;
         for (size_t i = search_matches_.size(); i-- > 0;) {
             const SearchMatch& match = search_matches_[i];
-            if (match.y < doc_->cursor_row || (match.y == doc_->cursor_row && match.x < doc_->cursor_col)) {
+            if (match.y < session_->cursor_row || (match.y == session_->cursor_row && match.x < session_->cursor_col)) {
                 current_search_match_ = i;
                 break;
             }
@@ -72,15 +72,15 @@
 
     void EditorComponent::ExecuteReplaceNext(const std::string& query, const std::string& replacement) {
         HighlightMatches(query);
-        if (search_matches_.empty() || !doc_) {
+        if (search_matches_.empty() || !session_) {
             return;
         }
 
         const SearchMatch match = search_matches_[current_search_match_];
         SaveSnapshot();
-        doc_->lines[match.y].replace(match.x, match.length, replacement);
-        doc_->cursor_row = match.y;
-        doc_->cursor_col = match.x + replacement.size();
+        session_->lines[match.y].replace(match.x, match.length, replacement);
+        session_->cursor_row = match.y;
+        session_->cursor_col = match.x + replacement.size();
         ClearSelection();
         HighlightMatches(query);
         UpdateScroll();
@@ -88,14 +88,14 @@
 
     void EditorComponent::ExecuteReplaceAll(const std::string& query, const std::string& replacement) {
         HighlightMatches(query);
-        if (search_matches_.empty() || !doc_) {
+        if (search_matches_.empty() || !session_) {
             return;
         }
 
         SaveSnapshot();
         for (size_t index = search_matches_.size(); index-- > 0;) {
             const SearchMatch& match = search_matches_[index];
-            doc_->lines[match.y].replace(match.x, match.length, replacement);
+            session_->lines[match.y].replace(match.x, match.length, replacement);
         }
 
         ClampCursorToBuffer();

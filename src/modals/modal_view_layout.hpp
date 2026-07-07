@@ -19,7 +19,7 @@ struct ViewLayoutPaneInfo {
     std::string title;
     std::string path;
     std::string role;
-    size_t document_index = 0;
+    size_t session_index = 0;
     bool active = false;
 };
 
@@ -47,7 +47,7 @@ public:
     using SnapshotProvider = std::function<ViewLayoutSnapshot()>;
     using ApplyLayoutCallback = std::function<void(int layout_index)>;
     using PaneCallback = std::function<void(size_t pane_index)>;
-    using PaneDocumentCallback = std::function<void(size_t pane_index, size_t document_index)>;
+    using PaneSessionCallback = std::function<void(size_t pane_index, size_t session_index)>;
     using PaneRoleCallback = std::function<void(size_t pane_index, const std::string& role)>;
     using ActionCallback = std::function<void()>;
 
@@ -56,7 +56,7 @@ public:
         SnapshotProvider snapshot_provider,
         ApplyLayoutCallback on_apply_layout,
         PaneCallback on_focus_pane,
-        PaneDocumentCallback on_assign_document,
+        PaneSessionCallback on_assign_session,
         PaneRoleCallback on_set_role,
         ActionCallback on_split_active,
         ActionCallback on_equal_widths);
@@ -93,7 +93,7 @@ private:
     SnapshotProvider snapshot_provider_;
     ApplyLayoutCallback on_apply_layout_;
     PaneCallback on_focus_pane_;
-    PaneDocumentCallback on_assign_document_;
+    PaneSessionCallback on_assign_session_;
     PaneRoleCallback on_set_role_;
     ActionCallback on_split_active_;
     ActionCallback on_equal_widths_;
@@ -101,7 +101,7 @@ private:
 
     int selected_layout_index_ = 0;
     int selected_pane_index_ = 0;
-    int selected_document_index_ = 0;
+    int selected_session_index_ = 0;
     int selected_role_index_ = 0;
 
     std::vector<std::string> pane_entries_;
@@ -134,7 +134,7 @@ public:
     using SnapshotProvider = ViewLayoutContent::SnapshotProvider;
     using ApplyLayoutCallback = ViewLayoutContent::ApplyLayoutCallback;
     using PaneCallback = ViewLayoutContent::PaneCallback;
-    using PaneDocumentCallback = ViewLayoutContent::PaneDocumentCallback;
+    using PaneSessionCallback = ViewLayoutContent::PaneSessionCallback;
     using PaneRoleCallback = ViewLayoutContent::PaneRoleCallback;
     using ActionCallback = ViewLayoutContent::ActionCallback;
     using CloseCallback = std::function<void()>;
@@ -144,7 +144,7 @@ public:
         SnapshotProvider snapshot_provider,
         ApplyLayoutCallback on_apply_layout,
         PaneCallback on_focus_pane,
-        PaneDocumentCallback on_assign_document,
+        PaneSessionCallback on_assign_session,
         PaneRoleCallback on_set_role,
         ActionCallback on_split_active,
         ActionCallback on_equal_widths,

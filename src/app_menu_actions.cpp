@@ -37,7 +37,7 @@ void TextltApp::UpdateFileMenuLabels() {
         return;
     }
 
-    menu_bar_->SetFileFavoriteLabel(document_file_controller_.IsActiveDocumentFavorite());
+    menu_bar_->SetFileFavoriteLabel(document_file_controller_.IsActiveSessionFavorite());
 }
 
 
@@ -68,7 +68,7 @@ void TextltApp::RunDropdownAction(int menu_index, int item_index) {
 }
     
 void TextltApp::CommandFileNew() {
-    document_file_controller_.NewDocumentSession();
+    document_file_controller_.NewSession();
     BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
     active_action_ = "New file";

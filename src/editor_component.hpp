@@ -29,15 +29,15 @@ namespace textlt {
         bool OnEvent(ftxui::Event event) override;
         bool Focusable() const override;
 
-        void SetDocumentSession(std::shared_ptr<DocumentSession> doc);
-        std::shared_ptr<DocumentSession> GetDocumentSession() const;
+        void SetSession(std::shared_ptr<DocumentSession> doc);
+        std::shared_ptr<DocumentSession> GetSession() const;
 
         void SaveToFile(const std::string& path);
         void LoadFromFile(const std::string& path);
         void NewFile(const std::string& path);
         std::string GetAllText() const;
 
-        // Accessors now delegate to doc_
+        // Accessors now delegate to session_
         std::string CurrentFilePath() const;
         bool IsDirty() const;
         bool IsReadOnly() const;
@@ -132,8 +132,8 @@ namespace textlt {
         void MoveCursorToSearchMatch(const SearchMatch& match);
         std::string GetCommentPrefix() const;
 
-        // The shared reference to the active document
-        std::shared_ptr<DocumentSession> doc_;
+        // The shared reference to the active session
+        std::shared_ptr<DocumentSession> session_;
 
         // View-specific state
         EditorInputController input_controller_;

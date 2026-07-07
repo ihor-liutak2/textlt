@@ -121,36 +121,36 @@ void TextltApp::RefreshProjectSidebar() {
 }
 
 
-std::shared_ptr<DocumentSession> TextltApp::ActiveDocumentSession() const {
-    const auto document = document_workspace_.ActiveDocumentSession();
+std::shared_ptr<DocumentSession> TextltApp::ActiveSessionPtr() const {
+    const auto document = document_workspace_.ActiveSessionPtr();
     if (document) {
         return document;
     }
     const auto editor = ActiveEditor();
-    return editor ? editor->GetDocumentSession() : nullptr;
+    return editor ? editor->GetSession() : nullptr;
 }
 
 
-void TextltApp::AddOpenDocumentSession(std::shared_ptr<DocumentSession> doc) {
+void TextltApp::AddOpenSession(std::shared_ptr<DocumentSession> doc) {
     if (!doc) {
         return;
     }
 
-    document_file_controller_.AddDocumentSession(std::move(doc));
+    document_file_controller_.AddSession(std::move(doc));
     BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
 }
 
 
-void TextltApp::EnsureOneOpenDocumentSession() {
-    document_file_controller_.EnsureOneDocumentSession(VisibleEditorPaneCount());
+void TextltApp::EnsureOneOpenSession() {
+    document_file_controller_.EnsureOneSession(VisibleEditorPaneCount());
     BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
 }
 
 
-void TextltApp::RemoveOpenDocumentSession(size_t index) {
-    document_file_controller_.RemoveDocumentSession(index, VisibleEditorPaneCount());
+void TextltApp::RemoveOpenSession(size_t index) {
+    document_file_controller_.RemoveSession(index, VisibleEditorPaneCount());
     BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
 }
@@ -158,7 +158,7 @@ void TextltApp::RemoveOpenDocumentSession(size_t index) {
 
 void TextltApp::CloseCurrentFile() {
     std::string closed_name;
-    document_file_controller_.CloseActiveDocumentSession(VisibleEditorPaneCount(), closed_name);
+    document_file_controller_.CloseActiveSession(VisibleEditorPaneCount(), closed_name);
     BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
     UpdateFileMenuLabels();
@@ -170,7 +170,7 @@ void TextltApp::CloseCurrentFile() {
 
 
 void TextltApp::CloseAllOpenedFiles() {
-    document_file_controller_.CloseAllDocuments(VisibleEditorPaneCount());
+    document_file_controller_.CloseAllSessions(VisibleEditorPaneCount());
     BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
     UpdateFileMenuLabels();
@@ -181,21 +181,21 @@ void TextltApp::CloseAllOpenedFiles() {
 }
 
 
-void TextltApp::PersistOpenedDocuments() {
-    document_file_controller_.PersistOpenedDocuments();
+void TextltApp::PersistOpenedSessions() {
+    document_file_controller_.PersistOpenedSessions();
 }
 
 
-void TextltApp::RestoreOpenedDocuments() {
-    if (document_file_controller_.RestoreOpenedDocuments(VisibleEditorPaneCount())) {
+void TextltApp::RestoreOpenedSessions() {
+    if (document_file_controller_.RestoreOpenedSessions(VisibleEditorPaneCount())) {
         BindEditorComponentsToWorkspace();
         RefreshOpenedDocumentsSidebar();
     }
 }
 
 
-void TextltApp::ActivateOpenDocumentSession(size_t index) {
-    if (!document_file_controller_.ActivateDocumentSession(index, VisibleEditorPaneCount())) {
+void TextltApp::ActivateOpenSession(size_t index) {
+    if (!document_file_controller_.ActivateSession(index, VisibleEditorPaneCount())) {
         return;
     }
 
@@ -211,13 +211,13 @@ void TextltApp::ActivateOpenDocumentSession(size_t index) {
 void TextltApp::RefreshOpenedDocumentsSidebar() {
     auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
     std::vector<SidebarPanel::OpenedFileEntry> entries;
-    entries.reserve(document_workspace_.OpenDocuments().size());
+    entries.reserve(document_workspace_.OpenSessions().size());
 
-    for (size_t index = 0; index < document_workspace_.OpenDocuments().size(); ++index) {
-        const auto& doc = document_workspace_.OpenDocuments()[index];
+    for (size_t index = 0; index < document_workspace_.OpenSessions().size(); ++index) {
+        const auto& doc = document_workspace_.OpenSessions()[index];
         if (!doc) continue;
 
-        const DocumentSession& session = doc->Session();
+        const DocumentSession& session = *doc;
         entries.push_back({
             session.path,
             session.DisplayTitle(),
@@ -229,8 +229,8 @@ void TextltApp::RefreshOpenedDocumentsSidebar() {
 }
 
 
-std::string TextltApp::ActiveDocumentFavoritePath() const {
-    return document_file_controller_.ActiveDocumentFavoritePath();
+std::string TextltApp::ActiveSessionFavoritePath() const {
+    return document_file_controller_.ActiveSessionFavoritePath();
 }
 
 

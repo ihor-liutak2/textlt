@@ -246,7 +246,7 @@ ftxui::Element TextltApp::Render() {
     const std::string git_branch_badge =
         git_branch.empty() ? "" : " | branch: " + TruncateLabel(git_branch, 15);
 
-    auto doc = editor->GetDocumentSession();
+    auto doc = editor->GetSession();
 
     base_rows.push_back(
         text(" Ln " + std::to_string(cursor_row) + ", Col " + std::to_string(cursor_col) +

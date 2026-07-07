@@ -1,17 +1,17 @@
     std::optional<std::pair<size_t, size_t>> EditorComponent::FindBracketNearCursor() const {
-        if (!doc_ || doc_->lines.empty() || doc_->cursor_row >= doc_->lines.size()) {
+        if (!session_ || session_->lines.empty() || session_->cursor_row >= session_->lines.size()) {
             return std::nullopt;
         }
 
-        const std::string& line = doc_->lines[doc_->cursor_row];
+        const std::string& line = session_->lines[session_->cursor_row];
 
-        if (doc_->cursor_col > 0 && doc_->cursor_col - 1 < line.size() &&
-            utils::IsBracketCharacter(line[doc_->cursor_col - 1])) {
-            return std::make_pair(doc_->cursor_col - 1, doc_->cursor_row);
+        if (session_->cursor_col > 0 && session_->cursor_col - 1 < line.size() &&
+            utils::IsBracketCharacter(line[session_->cursor_col - 1])) {
+            return std::make_pair(session_->cursor_col - 1, session_->cursor_row);
             }
 
-            if (doc_->cursor_col < line.size() && utils::IsBracketCharacter(line[doc_->cursor_col])) {
-                return std::make_pair(doc_->cursor_col, doc_->cursor_row);
+            if (session_->cursor_col < line.size() && utils::IsBracketCharacter(line[session_->cursor_col])) {
+                return std::make_pair(session_->cursor_col, session_->cursor_row);
             }
 
             return std::nullopt;
@@ -21,24 +21,24 @@
         static constexpr size_t kMaxBracketScanCharacters = 200000;
 
         const auto origin = FindBracketNearCursor();
-        if (!origin || !doc_) {
+        if (!origin || !session_) {
             return std::nullopt;
         }
 
         const size_t origin_x = origin->first;
         const size_t origin_y = origin->second;
-        if (origin_y >= doc_->lines.size() || origin_x >= doc_->lines[origin_y].size()) {
+        if (origin_y >= session_->lines.size() || origin_x >= session_->lines[origin_y].size()) {
             return std::nullopt;
         }
 
-        const char bracket = doc_->lines[origin_y][origin_x];
+        const char bracket = session_->lines[origin_y][origin_x];
         const char match = utils::MatchingBracketFor(bracket);
         if (match == '\0') {
             return std::nullopt;
         }
 
         const auto ignored_brackets =
-            BuildIgnoredBracketMask(doc_->lines, CurrentFilePath());
+            BuildIgnoredBracketMask(session_->lines, CurrentFilePath());
         if (origin_y < ignored_brackets.size() &&
             origin_x < ignored_brackets[origin_y].size() &&
             ignored_brackets[origin_y][origin_x]) {
@@ -49,8 +49,8 @@
         int balance = 0;
 
         if (utils::IsOpeningBracket(bracket)) {
-            for (size_t y = origin_y; y < doc_->lines.size(); ++y) {
-                const std::string& line = doc_->lines[y];
+            for (size_t y = origin_y; y < session_->lines.size(); ++y) {
+                const std::string& line = session_->lines[y];
                 const size_t start_x = y == origin_y ? origin_x : 0;
                 for (size_t x = start_x; x < line.size(); ++x) {
                     if (++scanned_characters > kMaxBracketScanCharacters) return std::nullopt;
@@ -72,7 +72,7 @@
         } else if (utils::IsClosingBracket(bracket)) {
             for (size_t y = origin_y + 1; y > 0; --y) {
                 const size_t line_index = y - 1;
-                const std::string& line = doc_->lines[line_index];
+                const std::string& line = session_->lines[line_index];
                 if (line.empty()) continue;
 
                 size_t x = line_index == origin_y ? origin_x : line.size() - 1;
@@ -109,7 +109,7 @@
 
     size_t EditorComponent::LineNumberWidth() const {
         // Calculate width based on the document's total lines
-        return doc_ ? std::to_string(doc_->lines.size()).size() : 1;
+        return session_ ? std::to_string(session_->lines.size()).size() : 1;
     }
 
     std::string EditorComponent::LineNumberText(size_t line_index, size_t width) const {
@@ -125,7 +125,7 @@
     }
 
     bool EditorComponent::IsCharacterSelected(size_t x, size_t y) const {
-        return doc_ && doc_->IsPositionSelected(x, y);
+        return session_ && session_->IsPositionSelected(x, y);
     }
 
     const EditorComponent::SearchMatch* EditorComponent::SearchMatchAt(size_t x, size_t y) const {
@@ -148,11 +148,11 @@
         }
 
         // Check if the match is currently being traversed by the cursor
-        return doc_ && match.y == doc_->cursor_row &&
-        doc_->cursor_col >= match.x &&
-        doc_->cursor_col < match.x + match.length;
+        return session_ && match.y == session_->cursor_row &&
+        session_->cursor_col >= match.x &&
+        session_->cursor_col < match.x + match.length;
     }
 
     void EditorComponent::BeginSelection() {
-        if (doc_) doc_->BeginSelection();
+        if (session_) session_->BeginSelection();
     }

@@ -18,7 +18,7 @@ namespace textlt {
     
 bool TextltApp::SaveFile(const std::string& path, std::string& error) {
     try {
-        if (!document_file_controller_.SaveActiveDocumentAs(path, error)) {
+        if (!document_file_controller_.SaveActiveSessionAs(path, error)) {
             throw std::runtime_error(error);
         }
         RefreshOpenedDocumentsSidebar();
@@ -38,7 +38,7 @@ bool TextltApp::SaveFile(const std::string& path, std::string& error) {
 
 bool TextltApp::OpenFile(const std::string& path, std::string& error) {
     try {
-        if (!document_file_controller_.OpenDocumentSession(path, error)) {
+        if (!document_file_controller_.OpenSession(path, error)) {
             throw std::runtime_error(error);
         }
 
@@ -64,7 +64,7 @@ void TextltApp::InitializeWithFiles(const std::vector<std::string>& files_to_ope
     std::string error;
     for (size_t index = 0; index < files_to_open.size(); ++index) {
         const std::filesystem::path path = files_to_open[index];
-        if (!document_file_controller_.OpenOrCreateDocumentSession(path, error)) {
+        if (!document_file_controller_.OpenOrCreateSession(path, error)) {
             active_action_ = error.empty() ? "Could not open " + path.string() : error;
             continue;
         }
@@ -90,7 +90,7 @@ void TextltApp::OpenSidebarFile(const std::filesystem::path& path) {
 
 
 void TextltApp::SaveCurrentFile() {
-    const auto document = document_workspace_.ActiveDocumentSession();
+    const auto document = document_workspace_.ActiveSessionPtr();
     const DocumentSession* session = document_workspace_.ActiveSession();
     if (!document || DocumentWorkspace::IsMemoryOnlySession(session)) {
         OpenFilesModal(FilesModalMode::SaveAs);
@@ -98,7 +98,7 @@ void TextltApp::SaveCurrentFile() {
     }
 
     std::string error;
-    if (!document_file_controller_.SaveActiveDocumentSession(error)) {
+    if (!document_file_controller_.SaveActiveSession(error)) {
         active_action_ = error.empty() ? "Save failed" : error;
         return;
     }
@@ -112,7 +112,7 @@ void TextltApp::SaveCurrentFile() {
 
 
 void TextltApp::SaveAllOpenedFiles() {
-    const auto result = document_file_controller_.SaveAllDirtyDocuments();
+    const auto result = document_file_controller_.SaveAllDirtySessions();
 
     RefreshOpenedDocumentsSidebar();
     git_manager_.Invalidate();

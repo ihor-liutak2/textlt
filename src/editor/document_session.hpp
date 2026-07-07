@@ -71,11 +71,6 @@ public:
     bool read_only = false;
     bool temporary = false;
 
-    DocumentSession& Session();
-    const DocumentSession& Session() const;
-    TextBuffer& Buffer();
-    const TextBuffer& Buffer() const;
-
     void SetPath(std::filesystem::path p);
     void Reset();
     void LoadContent(const std::string& content, std::filesystem::path p);

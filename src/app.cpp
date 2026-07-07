@@ -76,7 +76,7 @@ TextltApp::TextltApp()
       text_editor_(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_)),
       sidebar_panel_(ftxui::Make<SidebarPanel>(
           [this](const std::filesystem::path& path) { OpenSidebarFile(path); },
-          [this](size_t index) { ActivateOpenDocumentSession(index); },
+          [this](size_t index) { ActivateOpenSession(index); },
           &current_theme_,
           &git_manager_,
           [this] { return document_file_controller_.FavoriteFilePaths(); },
@@ -230,13 +230,13 @@ TextltApp::TextltApp()
               SetActiveEditorPane(pane_index);
               screen_.PostEvent(ftxui::Event::Custom);
           },
-          [this](size_t pane_index, size_t document_index) {
-              AssignDocumentToEditorPane(pane_index, document_index);
+          [this](size_t pane_index, size_t session_index) {
+              AssignSessionToEditorPane(pane_index, session_index);
           },
           [this](size_t pane_index, const std::string& role) {
               SetEditorPaneRole(pane_index, role);
           },
-          [this] { SplitActiveDocumentToNextPane(); },
+          [this] { SplitActiveSessionToNextPane(); },
           [this] { EqualizeEditorPaneWidths(); },
           [this] { CloseViewLayoutModal(); }),
       ai_actions_modal_(&current_theme_),
@@ -347,8 +347,8 @@ TextltApp::TextltApp()
     // are not part of the selected layout.
     editor_workspace_container_ = ftxui::Container::Horizontal(editor_pane_renderers_);
 
-    RestoreOpenedDocuments();
-    EnsureOneOpenDocumentSession();
+    RestoreOpenedSessions();
+    EnsureOneOpenSession();
     UpdateFileMenuLabels();
     UpdateOptionsMenuLabels();
 
@@ -555,19 +555,19 @@ TextltApp::TextltApp()
 TextltApp::TextltApp(const std::vector<std::string>& files_to_open)
     : TextltApp() {
     if (!files_to_open.empty()) {
-        document_workspace_.ClearDocuments();
+        document_workspace_.ClearSessions();
         std::static_pointer_cast<EditorComponent>(text_editor_)
-            ->SetDocumentSession(std::make_shared<DocumentSession>());
+            ->SetSession(std::make_shared<DocumentSession>());
     }
     InitializeWithFiles(files_to_open);
-    EnsureOneOpenDocumentSession();
-    PersistOpenedDocuments();
+    EnsureOneOpenSession();
+    PersistOpenedSessions();
 }
 
 void TextltApp::Run() {
     screen_.ForceHandleCtrlC(false);
     BracketedPasteModeGuard bracketed_paste_mode_guard;
     screen_.Loop(global_shortcuts_);
-    PersistOpenedDocuments();
+    PersistOpenedSessions();
 }
 } // namespace textlt
