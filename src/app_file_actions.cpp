@@ -91,7 +91,8 @@ void TextltApp::OpenSidebarFile(const std::filesystem::path& path) {
 
 void TextltApp::SaveCurrentFile() {
     const auto document = document_workspace_.ActiveDocument();
-    if (!document || DocumentWorkspace::IsMemoryOnlyDocument(document)) {
+    const DocumentSession* session = document_workspace_.ActiveSession();
+    if (!document || DocumentWorkspace::IsMemoryOnlySession(session)) {
         OpenFilesModal(FilesModalMode::SaveAs);
         return;
     }

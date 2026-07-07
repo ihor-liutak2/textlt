@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "editor/document_session.hpp"
 #include "editor/document_workspace.hpp"
 #include "file_manager.hpp"
 
@@ -49,8 +50,11 @@ public:
     DocumentFileController(FileManager& file_manager, DocumentWorkspace& workspace);
 
     std::shared_ptr<Document> ActiveDocument() const;
+    DocumentSession* ActiveSession();
+    const DocumentSession* ActiveSession() const;
 
     size_t AddDocument(std::shared_ptr<Document> document);
+    size_t AddSession(std::shared_ptr<Document> document);
     size_t NewDocument();
     void EnsureOneDocument(size_t visible_pane_count);
     bool RemoveDocument(size_t index, size_t visible_pane_count);

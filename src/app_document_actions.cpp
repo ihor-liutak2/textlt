@@ -217,14 +217,15 @@ void TextltApp::RefreshOpenedDocumentsSidebar() {
         const auto& doc = document_workspace_.OpenDocuments()[index];
         if (!doc) continue;
 
+        const DocumentSession& session = doc->Session();
         entries.push_back({
-            doc->path,
-            doc->DisplayTitle(),
+            session.path,
+            session.DisplayTitle(),
             doc->is_dirty,
-            index == document_workspace_.ActiveDocumentIndex()});
+            index == document_workspace_.ActiveSessionIndex()});
     }
 
-    sidebar->SetOpenedFiles(std::move(entries), document_workspace_.ActiveDocumentIndex());
+    sidebar->SetOpenedFiles(std::move(entries), document_workspace_.ActiveSessionIndex());
 }
 
 

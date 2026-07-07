@@ -23,6 +23,11 @@ struct Document {
     TextBuffer buffer;
     DocumentSession session;
 
+    DocumentSession& Session();
+    const DocumentSession& Session() const;
+    TextBuffer& Buffer();
+    const TextBuffer& Buffer() const;
+
     std::filesystem::path& path;
     std::vector<std::string>& lines;
     DocumentType& type;

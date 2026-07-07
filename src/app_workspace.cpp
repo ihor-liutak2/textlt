@@ -163,7 +163,7 @@ void TextltApp::SetEditorPaneRole(size_t pane_index, const std::string& role) {
 
 void TextltApp::AssignDocumentToEditorPane(size_t pane_index, size_t document_index) {
     if (pane_index >= editor_pane_components_.size() ||
-        !document_workspace_.AssignDocumentToPane(pane_index, document_index)) {
+        !document_workspace_.AssignSessionToPane(pane_index, document_index)) {
         return;
     }
 
@@ -180,10 +180,10 @@ void TextltApp::AssignDocumentToEditorPane(size_t pane_index, size_t document_in
 }
 
 void TextltApp::SplitActiveDocumentToNextPane() {
-    if (document_workspace_.OpenDocuments().empty()) {
+    if (document_workspace_.Empty()) {
         EnsureOneOpenDocument();
     }
-    if (document_workspace_.OpenDocuments().empty()) {
+    if (document_workspace_.Empty()) {
         return;
     }
 
@@ -220,7 +220,7 @@ void TextltApp::BindEditorComponentsToWorkspace() {
     document_workspace_.EnsureEditorPanesHaveDocuments(VisibleEditorPaneCount());
 
     for (size_t pane_index = 0; pane_index < editor_pane_components_.size(); ++pane_index) {
-        const size_t document_index = document_workspace_.PaneDocumentIndex(pane_index);
+        const size_t document_index = document_workspace_.PaneSessionIndex(pane_index);
         auto editor = std::static_pointer_cast<EditorComponent>(editor_pane_components_[pane_index]);
         if (editor) {
             editor->SetDocument(document_workspace_.DocumentAt(document_index));
@@ -298,10 +298,11 @@ ViewLayoutSnapshot TextltApp::CurrentViewLayoutSnapshot() const {
         }
         ViewLayoutDocumentInfo doc_info;
         doc_info.title = ShortDocumentTitle(doc);
-        doc_info.path = doc->path.string();
+        const DocumentSession& session = doc->Session();
+        doc_info.path = session.path.string();
         doc_info.dirty = doc->is_dirty;
-        doc_info.memory_only = DocumentWorkspace::IsMemoryOnlyDocument(doc);
-        doc_info.active = doc_index == document_workspace_.ActiveDocumentIndex();
+        doc_info.memory_only = DocumentWorkspace::IsMemoryOnlySession(&session);
+        doc_info.active = doc_index == document_workspace_.ActiveSessionIndex();
         snapshot.documents.push_back(std::move(doc_info));
     }
 
@@ -310,11 +311,11 @@ ViewLayoutSnapshot TextltApp::CurrentViewLayoutSnapshot() const {
         ViewLayoutPaneInfo info;
         info.role = document_workspace_.PaneRole(pane_index);
         info.active = pane_index == document_workspace_.ActiveEditorPaneIndex();
-        info.document_index = document_workspace_.PaneDocumentIndex(pane_index);
+        info.document_index = document_workspace_.PaneSessionIndex(pane_index);
         if (info.document_index < document_workspace_.OpenDocuments().size()) {
             const auto& doc = document_workspace_.OpenDocuments()[info.document_index];
             info.title = ShortDocumentTitle(doc);
-            info.path = doc ? doc->path.string() : "";
+            info.path = doc ? doc->Session().path.string() : "";
         }
         if (info.title.empty()) {
             info.title = "Untitled";

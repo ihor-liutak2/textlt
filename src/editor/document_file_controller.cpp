@@ -48,35 +48,47 @@ std::shared_ptr<Document> DocumentFileController::ActiveDocument() const {
     return workspace_.ActiveDocument();
 }
 
+DocumentSession* DocumentFileController::ActiveSession() {
+    return workspace_.ActiveSession();
+}
+
+const DocumentSession* DocumentFileController::ActiveSession() const {
+    return workspace_.ActiveSession();
+}
+
 size_t DocumentFileController::AddDocument(std::shared_ptr<Document> document) {
-    const size_t document_index = workspace_.AddDocument(std::move(document));
-    workspace_.AssignDocumentToActivePane(document_index);
-    return document_index;
+    return AddSession(std::move(document));
+}
+
+size_t DocumentFileController::AddSession(std::shared_ptr<Document> document) {
+    const size_t session_index = workspace_.AddSessionDocument(std::move(document));
+    workspace_.AssignSessionToActivePane(session_index);
+    return session_index;
 }
 
 size_t DocumentFileController::NewDocument() {
     PersistActiveFavoriteCursor();
-    const size_t document_index = workspace_.AddUntitledDocument();
-    workspace_.AssignDocumentToActivePane(document_index);
+    const size_t session_index = workspace_.AddUntitledDocument();
+    workspace_.AssignSessionToActivePane(session_index);
     PersistOpenedDocuments();
-    return document_index;
+    return session_index;
 }
 
 void DocumentFileController::EnsureOneDocument(size_t visible_pane_count) {
     if (!workspace_.Empty()) {
-        workspace_.ClampActiveDocumentIndex();
-        workspace_.AssignDocumentToActivePane(workspace_.ActiveDocumentIndex());
+        workspace_.ClampActiveSessionIndex();
+        workspace_.AssignSessionToActivePane(workspace_.ActiveSessionIndex());
         workspace_.SyncEditorPaneDocuments(visible_pane_count);
         return;
     }
 
-    const size_t document_index = workspace_.AddUntitledDocument();
-    workspace_.AssignDocumentToActivePane(document_index);
+    const size_t session_index = workspace_.AddUntitledDocument();
+    workspace_.AssignSessionToActivePane(session_index);
     workspace_.SyncEditorPaneDocuments(visible_pane_count);
 }
 
 bool DocumentFileController::RemoveDocument(size_t index, size_t visible_pane_count) {
-    if (!workspace_.HasDocumentAt(index)) {
+    if (!workspace_.HasSessionAt(index)) {
         return false;
     }
 
@@ -87,15 +99,15 @@ bool DocumentFileController::RemoveDocument(size_t index, size_t visible_pane_co
 }
 
 bool DocumentFileController::ActivateDocument(size_t index, size_t visible_pane_count) {
-    const auto document = workspace_.DocumentAt(index);
-    if (!document) {
+    DocumentSession* session = workspace_.SessionAt(index);
+    if (!session) {
         return false;
     }
 
     PersistActiveFavoriteCursor();
-    workspace_.AssignDocumentToActivePane(index);
+    workspace_.AssignSessionToActivePane(index);
     workspace_.SyncEditorPaneDocuments(visible_pane_count);
-    RestoreFavoriteCursor(document->path);
+    RestoreFavoriteCursor(session->path);
     PersistOpenedDocuments();
     return true;
 }
@@ -109,9 +121,9 @@ bool DocumentFileController::OpenDocument(const std::filesystem::path& path, std
         return false;
     }
 
-    const int open_index = workspace_.FindDocumentByPath(normalized_path);
+    const int open_index = workspace_.FindSessionByPath(normalized_path);
     if (open_index >= 0) {
-        workspace_.AssignDocumentToActivePane(static_cast<size_t>(open_index));
+        workspace_.AssignSessionToActivePane(static_cast<size_t>(open_index));
         RestoreFavoriteCursor(normalized_path);
         AddRecentFile(normalized_path);
         PersistOpenedDocuments();
@@ -123,7 +135,7 @@ bool DocumentFileController::OpenDocument(const std::filesystem::path& path, std
         return false;
     }
 
-    AddDocument(document);
+    AddSession(document);
     RestoreFavoriteCursor(normalized_path);
     AddRecentFile(normalized_path);
     PersistOpenedDocuments();
@@ -141,7 +153,7 @@ bool DocumentFileController::OpenOrCreateDocument(
     auto document = std::make_shared<Document>();
     document->Reset();
     document->SetPath(path);
-    AddDocument(document);
+    AddSession(document);
     PersistOpenedDocuments();
     return true;
 }
@@ -152,18 +164,19 @@ bool DocumentFileController::SaveActiveDocument(std::string& error) {
         error = "No active document.";
         return false;
     }
-    if (document->read_only) {
+    const DocumentSession& session = document->Session();
+    if (session.read_only) {
         error = "Cannot save a read-only Git compare document.";
         return false;
     }
-    if (DocumentWorkspace::IsMemoryOnlyDocument(document)) {
+    if (DocumentWorkspace::IsMemoryOnlySession(&session)) {
         error = "Save As required.";
         return false;
     }
-    if (!file_manager_.SaveAs(document, document->path, error)) {
+    if (!file_manager_.SaveAs(document, session.path, error)) {
         return false;
     }
-    AddRecentFile(document->path);
+    AddRecentFile(session.path);
     PersistOpenedDocuments();
     return true;
 }
@@ -176,7 +189,8 @@ bool DocumentFileController::SaveActiveDocumentAs(
         error = "No active document.";
         return false;
     }
-    if (document->read_only) {
+    const DocumentSession& session = document->Session();
+    if (session.read_only) {
         error = "Cannot save a read-only Git compare document.";
         return false;
     }
@@ -195,18 +209,20 @@ DocumentFileController::SaveAllResult DocumentFileController::SaveAllDirtyDocume
         if (!document || !document->is_dirty) {
             continue;
         }
-        if (document->read_only) {
+
+        const DocumentSession& session = document->Session();
+        if (session.read_only) {
             ++result.skipped_count;
             continue;
         }
-        if (DocumentWorkspace::IsMemoryOnlyDocument(document)) {
+        if (DocumentWorkspace::IsMemoryOnlySession(&session)) {
             ++result.skipped_count;
             continue;
         }
 
         std::string error;
-        if (file_manager_.SaveAs(document, document->path, error)) {
-            AddRecentFile(document->path);
+        if (file_manager_.SaveAs(document, session.path, error)) {
+            AddRecentFile(session.path);
             ++result.saved_count;
         } else if (result.first_error.empty()) {
             result.first_error = error;
@@ -228,7 +244,7 @@ bool DocumentFileController::CloseActiveDocument(
 
     const auto closed_document = workspace_.ActiveDocument();
     closed_name = DisplayName(closed_document);
-    RemoveDocument(workspace_.ActiveDocumentIndex(), visible_pane_count);
+    RemoveDocument(workspace_.ActiveSessionIndex(), visible_pane_count);
     PersistOpenedDocuments();
     return true;
 }
@@ -258,8 +274,8 @@ bool DocumentFileController::RestoreOpenedDocuments(size_t visible_pane_count) {
         return false;
     }
 
-    workspace_.SetActiveDocumentIndex(std::min(opened_config_.active_index, workspace_.DocumentCount() - 1));
-    workspace_.AssignDocumentToActivePane(workspace_.ActiveDocumentIndex());
+    workspace_.SetActiveSessionIndex(std::min(opened_config_.active_index, workspace_.SessionCount() - 1));
+    workspace_.AssignSessionToActivePane(workspace_.ActiveSessionIndex());
     workspace_.SyncEditorPaneDocuments(visible_pane_count);
     PersistOpenedDocuments();
     return true;
@@ -335,11 +351,11 @@ bool DocumentFileController::RemoveFavorite(const std::filesystem::path& path) {
 }
 
 std::string DocumentFileController::ActiveDocumentFavoritePath() const {
-    const auto document = workspace_.ActiveDocument();
-    if (!document) {
+    const DocumentSession* session = ActiveSession();
+    if (!session) {
         return {};
     }
-    const std::filesystem::path normalized_path = NormalizeDocumentPath(document->CurrentFilePath());
+    const std::filesystem::path normalized_path = NormalizeDocumentPath(session->CurrentFilePath());
     return normalized_path.string();
 }
 
@@ -349,17 +365,17 @@ bool DocumentFileController::IsActiveDocumentFavorite() const {
 }
 
 void DocumentFileController::PersistActiveFavoriteCursor() {
-    const auto document = workspace_.ActiveDocument();
-    if (!document) {
+    const DocumentSession* session = ActiveSession();
+    if (!session) {
         return;
     }
 
-    const std::filesystem::path favorite_path = NormalizeDocumentPath(document->CurrentFilePath());
+    const std::filesystem::path favorite_path = NormalizeDocumentPath(session->CurrentFilePath());
     if (favorite_path.empty() || !IsFavorite(favorite_path)) {
         return;
     }
 
-    UpdateFavoriteCursor(favorite_path, document->cursor_row, document->cursor_col);
+    UpdateFavoriteCursor(favorite_path, session->cursor_row, session->cursor_col);
 }
 
 void DocumentFileController::RestoreFavoriteCursor(const std::filesystem::path& path) {
@@ -455,7 +471,7 @@ void DocumentFileController::AddRestoredDocument(const OpenedFileState& entry) {
         document->LoadContent(entry.content, "Untitled");
         document->is_dirty = true;
         document->SetCursorPosition(entry.row, entry.column);
-        AddDocument(document);
+        AddSession(document);
         return;
     }
 
@@ -470,7 +486,7 @@ void DocumentFileController::AddRestoredDocument(const OpenedFileState& entry) {
         return;
     }
     document->SetCursorPosition(entry.row, entry.column);
-    AddDocument(document);
+    AddSession(document);
 }
 
 void DocumentFileController::AddRecentFile(const std::filesystem::path& path) {
@@ -555,17 +571,18 @@ DocumentFileController::OpenedConfig DocumentFileController::CurrentOpenedConfig
     OpenedConfig opened_config;
     bool active_index_saved = false;
 
-    for (size_t doc_index = 0; doc_index < workspace_.OpenDocuments().size(); ++doc_index) {
-        const auto& document = workspace_.OpenDocuments()[doc_index];
-        if (!document || document->temporary || document->read_only) {
+    for (size_t session_index = 0; session_index < workspace_.SessionCount(); ++session_index) {
+        const auto& document = workspace_.OpenDocuments()[session_index];
+        const DocumentSession* session = workspace_.SessionAt(session_index);
+        if (!document || !session || session->temporary || session->read_only) {
             continue;
         }
 
         OpenedFileState entry;
-        entry.row = document->cursor_row;
-        entry.column = document->cursor_col;
+        entry.row = session->cursor_row;
+        entry.column = session->cursor_col;
 
-        if (DocumentWorkspace::IsMemoryOnlyDocument(document)) {
+        if (DocumentWorkspace::IsMemoryOnlySession(session)) {
             const std::string content = document->ToContent();
             if (content.empty()) {
                 continue;
@@ -574,7 +591,7 @@ DocumentFileController::OpenedConfig DocumentFileController::CurrentOpenedConfig
             entry.path = "Untitled";
             entry.content = content;
         } else {
-            const std::filesystem::path normalized_path = NormalizeDocumentPath(document->path);
+            const std::filesystem::path normalized_path = NormalizeDocumentPath(session->path);
             if (normalized_path.empty()) {
                 continue;
             }
@@ -586,7 +603,7 @@ DocumentFileController::OpenedConfig DocumentFileController::CurrentOpenedConfig
             entry.path = normalized_path;
         }
 
-        if (doc_index == workspace_.ActiveDocumentIndex()) {
+        if (session_index == workspace_.ActiveSessionIndex()) {
             opened_config.active_index = opened_config.files.size();
             active_index_saved = true;
         }

@@ -8,6 +8,7 @@
 
 namespace textlt {
 
+class DocumentSession;
 struct Document;
 
 struct EditorPaneState {
@@ -21,18 +22,28 @@ public:
     const std::vector<std::shared_ptr<Document>>& OpenDocuments() const;
 
     size_t ActiveDocumentIndex() const;
+    size_t ActiveSessionIndex() const;
     void SetActiveDocumentIndex(size_t index);
+    void SetActiveSessionIndex(size_t index);
     void ClampActiveDocumentIndex();
+    void ClampActiveSessionIndex();
 
     std::shared_ptr<Document> ActiveDocument() const;
     std::shared_ptr<Document> DocumentAt(size_t index) const;
     bool HasDocumentAt(size_t index) const;
+    DocumentSession* ActiveSession();
+    const DocumentSession* ActiveSession() const;
+    DocumentSession* SessionAt(size_t index);
+    const DocumentSession* SessionAt(size_t index) const;
+    bool HasSessionAt(size_t index) const;
     int FindDocumentByPath(const std::filesystem::path& path) const;
+    int FindSessionByPath(const std::filesystem::path& path) const;
 
     void SetEditorPaneCount(size_t count);
     size_t EditorPaneCount() const;
     bool HasEditorPaneAt(size_t index) const;
     size_t PaneDocumentIndex(size_t pane_index) const;
+    size_t PaneSessionIndex(size_t pane_index) const;
     std::string PaneRole(size_t pane_index) const;
     bool SetPaneRole(size_t pane_index, const std::string& role);
 
@@ -41,7 +52,9 @@ public:
     void ClampActiveEditorPaneIndex(size_t visible_pane_count);
     bool ActivateEditorPane(size_t pane_index, size_t visible_pane_count);
     bool AssignDocumentToPane(size_t pane_index, size_t document_index);
+    bool AssignSessionToPane(size_t pane_index, size_t session_index);
     bool AssignDocumentToActivePane(size_t document_index);
+    bool AssignSessionToActivePane(size_t session_index);
     void EnsureEditorPanesHaveDocuments(size_t visible_pane_count);
     void SyncEditorPaneDocuments(size_t visible_pane_count);
     bool SplitActiveDocumentToNextPane(
@@ -53,11 +66,14 @@ public:
     void ClearDocuments();
     bool Empty() const;
     size_t DocumentCount() const;
+    size_t SessionCount() const;
     size_t AddDocument(std::shared_ptr<Document> document);
+    size_t AddSessionDocument(std::shared_ptr<Document> document);
     size_t AddUntitledDocument();
     void RemoveDocument(size_t index);
 
     static bool IsMemoryOnlyDocument(const std::shared_ptr<Document>& document);
+    static bool IsMemoryOnlySession(const DocumentSession* session);
 
 private:
     std::vector<std::shared_ptr<Document>> open_documents_;

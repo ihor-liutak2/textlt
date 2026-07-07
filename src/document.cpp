@@ -73,6 +73,23 @@ void Document::BindFrom(const Document& other) {
     history = other.history;
 }
 
+
+DocumentSession& Document::Session() {
+    return session;
+}
+
+const DocumentSession& Document::Session() const {
+    return session;
+}
+
+TextBuffer& Document::Buffer() {
+    return buffer;
+}
+
+const TextBuffer& Document::Buffer() const {
+    return buffer;
+}
+
 void Document::SetPath(std::filesystem::path p) {
     session.SetPath(std::move(p));
 }

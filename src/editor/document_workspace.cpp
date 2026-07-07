@@ -21,9 +21,17 @@ size_t DocumentWorkspace::ActiveDocumentIndex() const {
     return active_document_index_;
 }
 
+size_t DocumentWorkspace::ActiveSessionIndex() const {
+    return ActiveDocumentIndex();
+}
+
 void DocumentWorkspace::SetActiveDocumentIndex(size_t index) {
     active_document_index_ = index;
     ClampActiveDocumentIndex();
+}
+
+void DocumentWorkspace::SetActiveSessionIndex(size_t index) {
+    SetActiveDocumentIndex(index);
 }
 
 void DocumentWorkspace::ClampActiveDocumentIndex() {
@@ -32,6 +40,10 @@ void DocumentWorkspace::ClampActiveDocumentIndex() {
         return;
     }
     active_document_index_ = std::min(active_document_index_, open_documents_.size() - 1);
+}
+
+void DocumentWorkspace::ClampActiveSessionIndex() {
+    ClampActiveDocumentIndex();
 }
 
 std::shared_ptr<Document> DocumentWorkspace::ActiveDocument() const {
@@ -49,7 +61,33 @@ bool DocumentWorkspace::HasDocumentAt(size_t index) const {
     return DocumentAt(index) != nullptr;
 }
 
+DocumentSession* DocumentWorkspace::ActiveSession() {
+    return SessionAt(active_document_index_);
+}
+
+const DocumentSession* DocumentWorkspace::ActiveSession() const {
+    return SessionAt(active_document_index_);
+}
+
+DocumentSession* DocumentWorkspace::SessionAt(size_t index) {
+    const auto document = DocumentAt(index);
+    return document ? &document->Session() : nullptr;
+}
+
+const DocumentSession* DocumentWorkspace::SessionAt(size_t index) const {
+    const auto document = DocumentAt(index);
+    return document ? &document->Session() : nullptr;
+}
+
+bool DocumentWorkspace::HasSessionAt(size_t index) const {
+    return SessionAt(index) != nullptr;
+}
+
 int DocumentWorkspace::FindDocumentByPath(const std::filesystem::path& path) const {
+    return FindSessionByPath(path);
+}
+
+int DocumentWorkspace::FindSessionByPath(const std::filesystem::path& path) const {
     std::error_code error;
     std::filesystem::path normalized = std::filesystem::absolute(path, error);
     if (error) {
@@ -63,9 +101,10 @@ int DocumentWorkspace::FindDocumentByPath(const std::filesystem::path& path) con
             continue;
         }
 
-        std::filesystem::path document_path = std::filesystem::absolute(document->path, error);
+        const DocumentSession& session = document->Session();
+        std::filesystem::path document_path = std::filesystem::absolute(session.path, error);
         if (error) {
-            document_path = document->path;
+            document_path = session.path;
             error.clear();
         }
         if (document_path == normalized) {
@@ -93,6 +132,10 @@ size_t DocumentWorkspace::PaneDocumentIndex(size_t pane_index) const {
         return 0;
     }
     return editor_panes_[pane_index].document_index;
+}
+
+size_t DocumentWorkspace::PaneSessionIndex(size_t pane_index) const {
+    return PaneDocumentIndex(pane_index);
 }
 
 std::string DocumentWorkspace::PaneRole(size_t pane_index) const {
@@ -146,32 +189,40 @@ bool DocumentWorkspace::ActivateEditorPane(size_t pane_index, size_t visible_pan
 }
 
 bool DocumentWorkspace::AssignDocumentToPane(size_t pane_index, size_t document_index) {
-    if (!HasEditorPaneAt(pane_index) || !HasDocumentAt(document_index)) {
+    return AssignSessionToPane(pane_index, document_index);
+}
+
+bool DocumentWorkspace::AssignSessionToPane(size_t pane_index, size_t session_index) {
+    if (!HasEditorPaneAt(pane_index) || !HasSessionAt(session_index)) {
         return false;
     }
 
-    editor_panes_[pane_index].document_index = document_index;
+    editor_panes_[pane_index].document_index = session_index;
     if (pane_index == active_editor_pane_index_) {
-        active_document_index_ = document_index;
+        active_document_index_ = session_index;
     }
     return true;
 }
 
 bool DocumentWorkspace::AssignDocumentToActivePane(size_t document_index) {
-    if (!HasDocumentAt(document_index)) {
+    return AssignSessionToActivePane(document_index);
+}
+
+bool DocumentWorkspace::AssignSessionToActivePane(size_t session_index) {
+    if (!HasSessionAt(session_index)) {
         return false;
     }
 
     if (editor_panes_.empty()) {
-        active_document_index_ = document_index;
+        active_document_index_ = session_index;
         return true;
     }
 
     if (active_editor_pane_index_ >= editor_panes_.size()) {
         active_editor_pane_index_ = 0;
     }
-    editor_panes_[active_editor_pane_index_].document_index = document_index;
-    active_document_index_ = document_index;
+    editor_panes_[active_editor_pane_index_].document_index = session_index;
+    active_document_index_ = session_index;
     return true;
 }
 
@@ -270,7 +321,15 @@ size_t DocumentWorkspace::DocumentCount() const {
     return open_documents_.size();
 }
 
+size_t DocumentWorkspace::SessionCount() const {
+    return DocumentCount();
+}
+
 size_t DocumentWorkspace::AddDocument(std::shared_ptr<Document> document) {
+    return AddSessionDocument(std::move(document));
+}
+
+size_t DocumentWorkspace::AddSessionDocument(std::shared_ptr<Document> document) {
     open_documents_.push_back(std::move(document));
     active_document_index_ = open_documents_.empty() ? 0 : open_documents_.size() - 1;
     return active_document_index_;
@@ -311,7 +370,11 @@ void DocumentWorkspace::RemoveDocument(size_t index) {
 }
 
 bool DocumentWorkspace::IsMemoryOnlyDocument(const std::shared_ptr<Document>& document) {
-    return document && document->IsMemoryOnly();
+    return document && IsMemoryOnlySession(&document->Session());
+}
+
+bool DocumentWorkspace::IsMemoryOnlySession(const DocumentSession* session) {
+    return session && session->IsMemoryOnly();
 }
 
 } // namespace textlt
