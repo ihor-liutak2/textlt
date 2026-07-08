@@ -61,8 +61,16 @@ ftxui::Element FilesModalContent::RenderPathInput() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     return hbox({
-        text(" Path: ") | bold | color(theme.modal_accent),
-        path_input_->Render() | xflex | bgcolor(theme.modal_input_bg),
+        vbox({
+            text(""),
+            text(" Path: ") | bold | color(theme.modal_accent),
+            text(""),
+        }),
+        path_input_->Render() |
+            color(theme.modal_input_fg) |
+            bgcolor(theme.modal_input_bg) |
+            borderStyled(LIGHT, theme.modal_border) |
+            xflex,
     });
 }
 
@@ -73,8 +81,16 @@ ftxui::Element FilesModalContent::RenderFileNameInput() {
         return text("");
     }
     return hbox({
-        text(" File: ") | bold | color(theme.modal_accent),
-        file_name_input_->Render() | xflex | bgcolor(theme.modal_input_bg),
+        vbox({
+            text(""),
+            text(" File: ") | bold | color(theme.modal_accent),
+            text(""),
+        }),
+        file_name_input_->Render() |
+            color(theme.modal_input_fg) |
+            bgcolor(theme.modal_input_bg) |
+            borderStyled(LIGHT, theme.modal_border) |
+            xflex,
     });
 }
 
@@ -109,9 +125,10 @@ ftxui::Element FilesModalContent::RenderConfirmOverlay() {
     if (PendingOperationNeedsInput()) {
         rows.push_back(text(pending_operation_input_label_ + ":") | color(theme.modal_accent));
         rows.push_back(operation_input_->Render() |
-            border |
-            size(WIDTH, EQUAL, 42) |
-            bgcolor(theme.modal_input_bg));
+            color(theme.modal_input_fg) |
+            bgcolor(theme.modal_input_bg) |
+            borderStyled(LIGHT, theme.modal_border) |
+            size(WIDTH, EQUAL, 42));
     }
 
     rows.push_back(hbox({
@@ -248,6 +265,7 @@ ftxui::Element FilesModalContent::Render() {
         RenderHeaderRow(),
         separator() | color(theme.modal_border),
         RenderFavoriteDirectories(),
+        text(""),
         RenderPathInput(),
     };
     if (IsSaveLikeMode()) {
@@ -258,8 +276,8 @@ ftxui::Element FilesModalContent::Render() {
     rows.push_back(separator() | color(theme.modal_border));
     rows.push_back(RenderEntryList());
     rows.push_back(separator() | color(theme.modal_border));
-    rows.push_back(RenderSelectionSummary());
     rows.push_back(RenderStatusSummary());
+    rows.push_back(RenderSelectionSummary());
 
     Element body = vbox(std::move(rows)) |
         bgcolor(theme.modal_background) |

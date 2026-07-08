@@ -466,9 +466,7 @@ std::string SidebarPanel::ShortcutLabelForMode(SidebarMode mode) const {
 }
 
 std::string SidebarPanel::ActiveShortcutLabel() const {
-    return "P:" + ShortcutLabelForMode(SidebarMode::Project) + "  F:" +
-        ShortcutLabelForMode(SidebarMode::Favorites) + "  O:" +
-        ShortcutLabelForMode(SidebarMode::Opened);
+    return ShortcutLabelForMode(mode_);
 }
 
 ftxui::Element SidebarPanel::RenderModeButton(
