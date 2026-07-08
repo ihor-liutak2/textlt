@@ -28,13 +28,21 @@ void SearchFilesModalContent::ExecuteSearchFromFooter() {
 }
 
 ftxui::Element SearchFilesModalContent::RenderTitle() {
-    return ftxui::hbox({
+    return ftxui::text(GetTitle());
+}
+
+ftxui::Element SearchFilesModalContent::RenderHeaderRow() {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+
+    return hbox({
         search_tab_button_->Render(),
-        ftxui::text(" "),
+        text(" "),
         results_tab_button_->Render(),
-        ftxui::text(" "),
+        text(" "),
         filters_tab_button_->Render(),
-    });
+        filler(),
+    }) | bgcolor(theme.modal_background) | color(theme.modal_text_color);
 }
 
 ftxui::Element SearchFilesModalContent::Render() {
@@ -49,7 +57,11 @@ ftxui::Element SearchFilesModalContent::Render() {
         body = RenderFiltersTab();
     }
 
-    return body |
+    return ftxui::vbox({
+        RenderHeaderRow(),
+        ftxui::separator() | ftxui::color(theme.modal_border),
+        body | ftxui::flex,
+    }) |
     ftxui::bgcolor(theme.modal_background) |
     ftxui::color(theme.modal_foreground);
 }

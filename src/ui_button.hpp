@@ -505,6 +505,40 @@ inline ftxui::Element ApplyButtonStateBackground(ftxui::Element element,
     return element;
 }
 
+inline ftxui::Element RenderModalTabButton(const Theme& theme,
+                                             const std::string& caption,
+                                             bool selected,
+                                             bool focused = false) {
+    const bool active = selected || focused;
+    ftxui::Element element = ftxui::text("  " + caption + "  ") |
+        ftxui::color(active ? theme.button_selected_fg : theme.modal_text_color);
+    if (active) {
+        element |= ftxui::bgcolor(selected ? theme.button_selected_bg : theme.button_focused_bg);
+    }
+    if (selected) {
+        element |= ftxui::bold;
+    }
+    return element;
+}
+
+inline ftxui::Element RenderModalFlatButton(const Theme& theme,
+                                              const ButtonSpec& spec,
+                                              bool focused = false) {
+    const ButtonState state = ResolveButtonState(spec, focused);
+    const ButtonStyle style = ResolveButtonStyle(theme, spec.role, state);
+    ftxui::Element element = ftxui::text("  " + ButtonCaptionText(spec) + "  ") |
+        ftxui::color(state == ButtonState::Normal
+            ? ResolveButtonRoleAccent(theme, spec.role)
+            : style.text);
+    if (state == ButtonState::Focused || state == ButtonState::Selected) {
+        element |= ftxui::bgcolor(style.background) | ftxui::bold;
+    }
+    if (state == ButtonState::Disabled) {
+        element |= ftxui::dim;
+    }
+    return element;
+}
+
 inline ftxui::Element RenderButton(const Theme& theme,
                                    const ButtonSpec& spec,
                                    bool focused = false) {

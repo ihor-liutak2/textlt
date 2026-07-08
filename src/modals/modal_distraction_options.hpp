@@ -45,6 +45,7 @@ private:
         std::function<void()> on_click,
         ButtonRole role = ButtonRole::Default,
         std::string icon = {}) const;
+    ftxui::Component MakeTabButton(std::string label, int tab_index);
 
     ftxui::Element RenderModeTab(const Theme& theme);
     ftxui::Element RenderLayoutTab(const Theme& theme);
@@ -73,7 +74,9 @@ private:
     int top_padding_cursor_ = 0;
     int bottom_padding_cursor_ = 0;
 
-    ftxui::Component tab_toggle_;
+    ftxui::Component mode_tab_button_;
+    ftxui::Component layout_tab_button_;
+    ftxui::Component tab_buttons_;
     ftxui::Component one_column_button_;
     ftxui::Component two_column_button_;
     ftxui::Component enter_button_;

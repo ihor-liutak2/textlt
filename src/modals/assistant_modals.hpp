@@ -116,6 +116,7 @@ private:
     void ApplyTtsDownloadCompletion();
     void RequestRedraw() const;
     void SetTodoStatus(std::string action);
+    ftxui::Element RenderHeaderRow(const Theme& theme);
     ftxui::Element RenderTtsTab(const Theme& theme);
     ftxui::Element RenderTtsTestPopup(const Theme& theme) const;
     ftxui::Element RenderAiTab(const Theme& theme);

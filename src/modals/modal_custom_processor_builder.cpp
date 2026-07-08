@@ -62,6 +62,9 @@ ftxui::Element TextButtonElement(const std::string& label,
                                  bool focused,
                                  bool selected = false) {
     ButtonSpec spec = CustomProcessorButtonSpec(label);
+    if (spec.role == ButtonRole::Tab) {
+        return RenderModalTabButton(theme, label, selected, focused);
+    }
     spec.selected = selected;
     return RenderButton(theme, spec, focused);
 }
@@ -498,13 +501,7 @@ bool CustomProcessorBuilderModalContent::HandleEvent(ftxui::Event event) {
 }
 
 ftxui::Element CustomProcessorBuilderModalContent::RenderTitle() {
-    using namespace ftxui;
-    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    return hbox({
-        text(" Custom Processor Builder ") | bold | color(theme.modal_foreground),
-        filler(),
-        text("AI prompt → JSON → local Lua processor") | color(theme.modal_text_color),
-    });
+    return ftxui::text(GetTitle());
 }
 
 

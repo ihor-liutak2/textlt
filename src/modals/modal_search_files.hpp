@@ -108,6 +108,7 @@ private:
 
     size_t ParseContextValue(const std::string& value) const;
 
+    ftxui::Element RenderHeaderRow();
     ftxui::Element RenderSearchTab();
     ftxui::Element RenderResultsTab();
 

@@ -18,11 +18,14 @@ ftxui::Element TextButtonElement(const std::string& label,
                                const Theme& theme,
                                bool active,
                                bool selected = false) {
-    ButtonRole role = ButtonRoleFromLabel(label);
     if (label == "Menu shortcuts" || label == "Text shortcuts") {
-        role = ButtonRole::Tab;
+        return RenderModalTabButton(theme, label, selected, active);
     }
-    ButtonSpec spec = ButtonSpecFromLabel(label, role, ButtonVariant::AccentEdges, ButtonSize::Compact);
+    ButtonSpec spec = ButtonSpecFromLabel(
+        label,
+        ButtonRoleFromLabel(label),
+        ButtonVariant::AccentEdges,
+        ButtonSize::Compact);
     spec.selected = selected;
     return RenderButton(theme, spec, active);
 }
@@ -348,13 +351,7 @@ bool KeyboardShortcutsModalContent::HandleEvent(ftxui::Event event) {
 }
 
 ftxui::Element KeyboardShortcutsModalContent::RenderTitle() {
-    using namespace ftxui;
-    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    return hbox({
-        text(" Keyboard Shortcuts ") | bold | color(theme.modal_foreground),
-        filler(),
-        text("shortcuts.json overrides only") | color(theme.modal_text_color),
-    });
+    return ftxui::text(GetTitle());
 }
 
 ftxui::Element KeyboardShortcutsModalContent::RenderTabs() const {
@@ -367,7 +364,7 @@ ftxui::Element KeyboardShortcutsModalContent::RenderTabs() const {
         TextButtonElement("Text shortcuts", theme, false, tab_index_ == 1) |
             reflect(text_tab_box_),
         filler(),
-        text("Tab switches sections") | color(theme.modal_text_color),
+        text("Tab switches sections") | dim | color(theme.modal_text_color),
     });
 }
 

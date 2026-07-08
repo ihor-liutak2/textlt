@@ -573,18 +573,19 @@ ftxui::Component GitModalContent::MakeTextButton(
     std::string label,
     std::function<void()> on_click) {
     ButtonSpec spec = GitButtonSpec(std::move(label));
-    return MakeButton(theme_, std::move(spec), std::move(on_click));
+    ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
+    option.label = ButtonCaptionText(spec);
+    option.on_click = std::move(on_click);
+    option.transform = [this, spec = std::move(spec)](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return RenderModalFlatButton(theme, spec, state.focused || state.active);
+    };
+    return ftxui::Button(option);
 }
 
 ftxui::Component GitModalContent::MakeTabButton(std::string label, int tab_index) {
-    ButtonSpec spec;
-    spec.caption = std::move(label);
-    spec.role = ButtonRole::Tab;
-    spec.variant = ButtonVariant::AccentEdges;
-    spec.size = ButtonSize::Compact;
-
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
-    option.label = ButtonCaptionText(spec);
+    option.label = "  " + label + "  ";
     option.on_click = [this, tab_index] {
         selected_tab_ = tab_index;
         if (selected_tab_ == static_cast<int>(Tab::Status) && status_list_component_) {
@@ -607,17 +608,13 @@ ftxui::Component GitModalContent::MakeTabButton(std::string label, int tab_index
             compare_file_menu_->TakeFocus();
         }
     };
-    option.transform = [this, tab_index, spec = std::move(spec)](const ftxui::EntryState& state) {
+    option.transform = [this, tab_index, label = std::move(label)](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        ButtonSpec resolved_spec = spec;
-        resolved_spec.selected = selected_tab_ == tab_index;
-        ftxui::Element tab = RenderButton(theme, resolved_spec, state.focused || state.active);
-        if (resolved_spec.selected || state.focused || state.active) {
-            tab |= ftxui::bold;
-        } else {
-            tab |= ftxui::dim;
-        }
-        return tab;
+        return RenderModalTabButton(
+            theme,
+            label,
+            selected_tab_ == tab_index,
+            state.focused || state.active);
     };
     return ftxui::Button(option);
 }
@@ -645,23 +642,31 @@ void GitModalContent::Close() {
 }
 
 ftxui::Element GitModalContent::RenderTitle() {
-    return ftxui::hbox({
+    return ftxui::text(GetTitle());
+}
+
+ftxui::Element GitModalContent::RenderHeaderRow() {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+
+    return hbox({
         status_tab_button_->Render(),
-        ftxui::text(" "),
+        text(" "),
         diff_tab_button_->Render(),
-        ftxui::text(" "),
+        text(" "),
         commit_tab_button_->Render(),
-        ftxui::text(" "),
+        text(" "),
         branches_tab_button_->Render(),
-        ftxui::text(" "),
+        text(" "),
         remote_tab_button_->Render(),
-        ftxui::text(" "),
+        text(" "),
         tags_tab_button_->Render(),
-        ftxui::text(" "),
+        text(" "),
         server_tab_button_->Render(),
-        ftxui::text(" "),
+        text(" "),
         compare_tab_button_->Render(),
-    });
+        filler(),
+    }) | bgcolor(theme.modal_background) | color(theme.modal_text_color);
 }
 
 ftxui::Element GitModalContent::Render() {
@@ -687,7 +692,11 @@ ftxui::Element GitModalContent::Render() {
         body = RenderServerTab();
     }
 
-    body = body |
+    body = ftxui::vbox({
+        RenderHeaderRow(),
+        ftxui::separator() | ftxui::color(theme.modal_border),
+        body | ftxui::flex,
+    }) |
         ftxui::bgcolor(theme.modal_background) |
         ftxui::color(theme.modal_foreground);
 

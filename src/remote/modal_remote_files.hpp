@@ -48,6 +48,9 @@ public:
     ftxui::Component GetMainComponent() override { return container_; }
     std::string GetTitle() override { return "Remote Files"; }
     ModalSizePreference GetModalSizePreference() const override { return {120, 32}; }
+    ModalFrameStyle GetModalFrameStyle() const override {
+        return ModalFrameStyle::TitleInBorder;
+    }
     std::string GetFooterText() const override { return status_; }
     bool HasCustomFooter() const override { return !error_footer_.empty(); }
     int GetCustomFooterHeight() const override;

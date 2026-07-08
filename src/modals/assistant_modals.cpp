@@ -538,16 +538,16 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
         return ftxui::Button(option);
     };
     auto make_tab_button = [this](std::string label, int tab_index) {
-        ButtonSpec spec = ButtonSpecFromLabel(std::move(label), ButtonRole::Tab, ButtonVariant::AccentEdges, ButtonSize::Compact);
         ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
-        option.label = ButtonCaptionText(spec);
+        option.label = "  " + label + "  ";
         option.on_click = [this, tab_index] { selected_tab_ = tab_index; };
-        option.transform = [this, tab_index, spec = std::move(spec)](const ftxui::EntryState& state) {
+        option.transform = [this, tab_index, label = std::move(label)](const ftxui::EntryState& state) {
             const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-            ButtonSpec resolved_spec = spec;
-            resolved_spec.selected = selected_tab_ == tab_index;
-            ftxui::Element tab = RenderButton(theme, resolved_spec, state.focused || state.active);
-            return selected_tab_ == tab_index ? tab | ftxui::bold : tab | ftxui::dim;
+            return RenderModalTabButton(
+                theme,
+                label,
+                selected_tab_ == tab_index,
+                state.focused || state.active);
         };
         return ftxui::Button(option);
     };
@@ -748,12 +748,20 @@ ftxui::Element AssistantSettingsModalContent::Render() {
     } else {
         body = RenderPiperServerTab(theme);
     }
-    return body |
+    return ftxui::vbox({
+        RenderHeaderRow(theme),
+        ftxui::separator() | ftxui::color(theme.modal_border),
+        body | ftxui::flex,
+    }) |
         ftxui::bgcolor(theme.modal_input_bg) |
         ftxui::color(theme.modal_input_fg);
 }
 
 ftxui::Element AssistantSettingsModalContent::RenderTitle() {
+    return ftxui::text(GetTitle());
+}
+
+ftxui::Element AssistantSettingsModalContent::RenderHeaderRow(const Theme& theme) {
     using namespace ftxui;
     return hbox({
         tts_tab_button_->Render(),
@@ -761,7 +769,8 @@ ftxui::Element AssistantSettingsModalContent::RenderTitle() {
         ai_tab_button_->Render(),
         text(" "),
         piper_server_tab_button_->Render(),
-    });
+        filler(),
+    }) | bgcolor(theme.modal_background) | color(theme.modal_text_color);
 }
 
 std::string AssistantSettingsModalContent::GetFooterText() const {

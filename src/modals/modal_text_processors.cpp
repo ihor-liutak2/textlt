@@ -37,7 +37,7 @@ ButtonSpec ProcessorTabSpec(std::string label, bool selected = false) {
     ButtonSpec spec;
     spec.caption = std::move(label);
     spec.role = ButtonRole::Tab;
-    spec.variant = ButtonVariant::AccentEdges;
+    spec.variant = ButtonVariant::Minimal;
     spec.size = ButtonSize::Compact;
     spec.selected = selected;
     return spec;
@@ -213,9 +213,9 @@ ftxui::Component TextProcessorsModalContent::MakeTextButton(
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
     option.label = ButtonCaptionText(spec);
     option.on_click = std::move(on_click);
-    option.transform = [this, spec = std::move(spec)](const ftxui::EntryState& state) {
+    option.transform = [this](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return RenderButton(theme, spec, state.focused || state.active);
+        return RenderModalTabButton(theme, state.label, false, state.focused || state.active);
     };
 
     return ftxui::Button(option);

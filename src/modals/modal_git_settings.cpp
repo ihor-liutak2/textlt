@@ -286,14 +286,8 @@ ftxui::Component GitSettingsModalContent::MakeTextButton(
 }
 
 ftxui::Component GitSettingsModalContent::MakeTabButton(std::string label, int tab_index) {
-    ButtonSpec spec;
-    spec.caption = std::move(label);
-    spec.role = ButtonRole::Tab;
-    spec.variant = ButtonVariant::AccentEdges;
-    spec.size = ButtonSize::Compact;
-
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
-    option.label = ButtonCaptionText(spec);
+    option.label = "  " + label + "  ";
     option.on_click = [this, tab_index] {
         selected_tab_ = tab_index;
         if (selected_tab_ == static_cast<int>(Tab::Remotes) && remote_menu_) {
@@ -304,17 +298,13 @@ ftxui::Component GitSettingsModalContent::MakeTabButton(std::string label, int t
             config_filter_input_component_->TakeFocus();
         }
     };
-    option.transform = [this, tab_index, spec = std::move(spec)](const ftxui::EntryState& state) {
+    option.transform = [this, tab_index, label = std::move(label)](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        ButtonSpec resolved_spec = spec;
-        resolved_spec.selected = selected_tab_ == tab_index;
-        ftxui::Element tab = RenderButton(theme, resolved_spec, state.focused || state.active);
-        if (resolved_spec.selected || state.focused || state.active) {
-            tab |= ftxui::bold;
-        } else {
-            tab |= ftxui::dim;
-        }
-        return tab;
+        return RenderModalTabButton(
+            theme,
+            label,
+            selected_tab_ == tab_index,
+            state.focused || state.active);
     };
     return ftxui::Button(option);
 }
@@ -339,13 +329,20 @@ void GitSettingsModalContent::Close() {
 }
 
 ftxui::Element GitSettingsModalContent::RenderTitle() {
-    return ftxui::hbox({
+    return ftxui::text(GetTitle());
+}
+
+ftxui::Element GitSettingsModalContent::RenderHeaderRow() {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    return hbox({
         remotes_tab_button_->Render(),
-        ftxui::text(" "),
+        text(" "),
         identity_tab_button_->Render(),
-        ftxui::text(" "),
+        text(" "),
         config_tab_button_->Render(),
-    });
+        filler(),
+    }) | bgcolor(theme.modal_background) | color(theme.modal_text_color);
 }
 
 ftxui::Element GitSettingsModalContent::Render() {
@@ -360,7 +357,11 @@ ftxui::Element GitSettingsModalContent::Render() {
         body = RenderConfigTab();
     }
 
-    body = body |
+    body = ftxui::vbox({
+        RenderHeaderRow(),
+        ftxui::separator() | ftxui::color(theme.modal_border),
+        body | ftxui::flex,
+    }) |
         ftxui::bgcolor(theme.modal_background) |
         ftxui::color(theme.modal_foreground);
 

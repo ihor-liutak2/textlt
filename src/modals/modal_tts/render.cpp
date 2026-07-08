@@ -60,15 +60,7 @@ ftxui::Element RenderWrappedTextBox(const std::string& text,
 } // namespace
 
 ftxui::Element TtsModalContent::RenderTitle() {
-    return ftxui::hbox({
-        run_tab_button_->Render(),
-        ftxui::text(" "),
-        library_tab_button_->Render(),
-        ftxui::text(" "),
-        voice_tab_button_->Render(),
-        ftxui::text(" "),
-        player_tab_button_->Render(),
-    });
+    return ftxui::text(GetTitle());
 }
 
 ftxui::Element TtsModalContent::RenderSelectedBookSummary() const {
@@ -417,7 +409,22 @@ ftxui::Element TtsModalContent::Render() {
         body = RenderPlayerTab();
     }
 
-    body = body |
+    Element tab_header = hbox({
+        run_tab_button_->Render(),
+        text(" "),
+        library_tab_button_->Render(),
+        text(" "),
+        voice_tab_button_->Render(),
+        text(" "),
+        player_tab_button_->Render(),
+        filler(),
+    }) | bgcolor(theme.modal_background) | color(theme.modal_text_color);
+
+    body = vbox({
+        tab_header,
+        separator() | color(theme.modal_border),
+        body | flex,
+    }) |
         bgcolor(theme.modal_input_bg) |
         color(theme.modal_input_fg) |
         size(WIDTH, EQUAL, 118);

@@ -44,7 +44,10 @@ ftxui::ButtonOption ModalWindow::MakeTextButtonOption(const std::string& label,
     option.on_click = std::move(callback);
     option.transform = [this, spec = std::move(spec)](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return RenderButton(theme, spec, state.focused || state.active);
+        if (spec.caption == "■") {
+            return RenderButton(theme, spec, state.focused || state.active);
+        }
+        return RenderModalFlatButton(theme, spec, state.focused || state.active);
     };
     return option;
 }

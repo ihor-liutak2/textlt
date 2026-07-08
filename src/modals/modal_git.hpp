@@ -156,6 +156,7 @@ private:
     std::string TrimForDisplay(const std::string& text, size_t max_size) const;
     std::string StatusCodeForEntry(const GitManager::StatusEntry& entry) const;
 
+    ftxui::Element RenderHeaderRow();
     ftxui::Element RenderStatusTab();
     ftxui::Element RenderDiffTab();
     ftxui::Element RenderCommitTab();

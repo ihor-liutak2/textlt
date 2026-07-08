@@ -30,7 +30,9 @@ DistractionOptionsContent::DistractionOptionsContent(
       settings_provider_(std::move(settings_provider)),
       on_apply_settings_(std::move(on_apply_settings)),
       on_command_(std::move(on_command)) {
-    tab_toggle_ = ftxui::Toggle(&tabs_, &active_tab_index_);
+    mode_tab_button_ = MakeTabButton("Mode", 0);
+    layout_tab_button_ = MakeTabButton("Layout", 1);
+    tab_buttons_ = ftxui::Container::Horizontal({mode_tab_button_, layout_tab_button_});
 
     one_column_button_ = ftxui::Button(MakeButtonOption("1 column", [this] {
         SetColumnCount(1);
@@ -83,7 +85,7 @@ DistractionOptionsContent::DistractionOptionsContent(
         apply_button_,
     });
     tabs_container_ = ftxui::Container::Tab({mode_container_, layout_container_}, &active_tab_index_);
-    container_ = ftxui::Container::Vertical({tab_toggle_, tabs_container_});
+    container_ = ftxui::Container::Vertical({tab_buttons_, tabs_container_});
 
     RefreshFromApp();
 }
@@ -115,6 +117,20 @@ ftxui::ButtonOption DistractionOptionsContent::MakeButtonOption(
     return option;
 }
 
+ftxui::Component DistractionOptionsContent::MakeTabButton(std::string label, int tab_index) {
+    ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
+    option.label = "  " + label + "  ";
+    option.on_click = [this, tab_index] { active_tab_index_ = tab_index; };
+    option.transform = [this, tab_index, label = std::move(label)](const ftxui::EntryState& state) {
+        return RenderModalTabButton(
+            ResolveTheme(theme_),
+            label,
+            active_tab_index_ == tab_index,
+            state.focused || state.active);
+    };
+    return ftxui::Button(option);
+}
+
 void DistractionOptionsContent::RefreshFromApp() {
     if (settings_provider_) {
         draft_ = DistractionModeController::NormalizeSettings(settings_provider_());
@@ -125,8 +141,8 @@ void DistractionOptionsContent::RefreshFromApp() {
 }
 
 void DistractionOptionsContent::TakeFocus() {
-    if (tab_toggle_) {
-        tab_toggle_->TakeFocus();
+    if (mode_tab_button_) {
+        mode_tab_button_->TakeFocus();
     }
 }
 
@@ -239,7 +255,7 @@ ftxui::Element DistractionOptionsContent::Render() {
         : RenderLayoutTab(theme);
 
     return vbox({
-        tab_toggle_->Render(),
+        tab_buttons_->Render(),
         separator() | color(theme.modal_border),
         hbox({
             text(" Status: ") | color(theme.modal_text_color),

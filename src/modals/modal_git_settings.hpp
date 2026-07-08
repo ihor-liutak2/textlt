@@ -91,6 +91,7 @@ private:
         const std::string& empty_text,
         int scroll_offset = 0) const;
 
+    ftxui::Element RenderHeaderRow();
     ftxui::Element RenderRemotesTab();
     ftxui::Element RenderIdentityTab();
     ftxui::Element RenderConfigTab();

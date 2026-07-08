@@ -5,13 +5,20 @@ ftxui::Component FilesModalContent::MakeTextButton(
     ButtonVariant variant,
     std::string icon,
     ButtonSize size) {
-    ButtonSpec spec;
-    spec.caption = std::move(label);
-    spec.role = role;
-    spec.variant = variant;
-    spec.size = size;
-    spec.icon = std::move(icon);
-    return MakeButton(theme_, std::move(spec), std::move(on_click));
+    ButtonSpec spec = ButtonSpecFromLabel(
+        std::move(label),
+        role,
+        variant,
+        size,
+        std::move(icon));
+    ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
+    option.label = ButtonCaptionText(spec);
+    option.on_click = std::move(on_click);
+    option.transform = [this, spec = std::move(spec)](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return RenderModalFlatButton(theme, spec, state.focused || state.active);
+    };
+    return ftxui::Button(option);
 }
 
 void FilesModalContent::RebuildComponents() {

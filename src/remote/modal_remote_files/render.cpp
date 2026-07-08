@@ -11,7 +11,6 @@ ftxui::Element RemoteFilesModalContent::Render() {
             prev_connection_button_->Render(), text(" "),
             next_connection_button_->Render(), text(" "),
             refresh_button_->Render(), text(" "),
-            close_button_->Render(), text(" "),
             copy_error_button_->Render(),
         }),
         hbox({

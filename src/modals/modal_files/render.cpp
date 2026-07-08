@@ -17,6 +17,16 @@ ftxui::Element FilesModalContent::RenderTopButtons() {
     });
 }
 
+ftxui::Element FilesModalContent::RenderHeaderRow() {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+
+    return hbox({
+        RenderTopButtons(),
+        filler(),
+    }) | bgcolor(theme.modal_background) | color(theme.modal_text_color);
+}
+
 ftxui::Element FilesModalContent::RenderFavoriteDirectories() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
@@ -40,9 +50,9 @@ ftxui::Element FilesModalContent::RenderFavoriteDirectories() {
         ButtonSpec spec;
         spec.caption = TrimForDisplay(label, 16);
         spec.role = ButtonRole::Navigation;
-        spec.variant = ButtonVariant::AccentEdges;
+        spec.variant = ButtonVariant::Minimal;
         spec.size = ButtonSize::Compact;
-        buttons.push_back(RenderButton(theme, spec) | reflect(favorite_boxes_[index]));
+        buttons.push_back(RenderModalFlatButton(theme, spec) | reflect(favorite_boxes_[index]));
     }
     return hbox(std::move(buttons));
 }
@@ -235,7 +245,8 @@ ftxui::Element FilesModalContent::Render() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     Elements rows = {
-        RenderTopButtons(),
+        RenderHeaderRow(),
+        separator() | color(theme.modal_border),
         RenderFavoriteDirectories(),
         RenderPathInput(),
     };

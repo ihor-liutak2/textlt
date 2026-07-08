@@ -257,31 +257,21 @@ ftxui::Component SearchFilesModalContent::MakeTextButton(
 ftxui::Component SearchFilesModalContent::MakeTabButton(
     std::string label,
     int tab_index) {
-    ButtonSpec spec;
-    spec.caption = std::move(label);
-    spec.role = ButtonRole::Tab;
-    spec.variant = ButtonVariant::AccentEdges;
-    spec.size = ButtonSize::Compact;
-
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
-    option.label = ButtonCaptionText(spec);
+    option.label = "  " + label + "  ";
     option.on_click = [this, tab_index] {
         selected_tab_ = tab_index;
         if (selected_tab_ == 0 && query_input_) {
             query_input_->TakeFocus();
         }
     };
-    option.transform = [this, tab_index, spec = std::move(spec)](const ftxui::EntryState& state) {
+    option.transform = [this, tab_index, label = std::move(label)](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        ButtonSpec resolved_spec = spec;
-        resolved_spec.selected = selected_tab_ == tab_index;
-        ftxui::Element tab = RenderButton(theme, resolved_spec, state.focused || state.active);
-        if (resolved_spec.selected || state.focused || state.active) {
-            tab |= ftxui::bold;
-        } else {
-            tab |= ftxui::dim;
-        }
-        return tab;
+        return RenderModalTabButton(
+            theme,
+            label,
+            selected_tab_ == tab_index,
+            state.focused || state.active);
     };
 
     return ftxui::Button(option);

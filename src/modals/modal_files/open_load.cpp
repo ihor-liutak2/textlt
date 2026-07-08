@@ -54,15 +54,7 @@ std::string FilesModalContent::GetTitle() {
 }
 
 ftxui::Element FilesModalContent::RenderTitle() {
-    using namespace ftxui;
-    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    return hbox({
-        text(" " + ModeTitle() + " ") | bold | color(theme.modal_accent),
-        text(" "),
-        text(TrimForDisplay(FormatCurrentDirectory(), 72)) |
-            dim |
-            color(theme.modal_text_color),
-    });
+    return ftxui::text(GetTitle());
 }
 
 void FilesModalContent::Refresh() {

@@ -1,7 +1,5 @@
 ftxui::Element TextProcessorsModalContent::RenderTitle() {
-    using namespace ftxui;
-    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    return text(" Text Processors ") | bold | color(theme.modal_accent);
+    return ftxui::text(GetTitle());
 }
 
 ftxui::Element TextProcessorsModalContent::Render() {
@@ -42,15 +40,15 @@ ftxui::Element TextProcessorsModalContent::RenderScopeTabs() const {
     return hbox({
         text(" Scope: ") | bold | color(theme.modal_accent),
         active_scope_ == TextParserScope::Text
-            ? RenderButton(theme, ProcessorTabSpec("Text", true)) | bold
+            ? RenderModalTabButton(theme, "Text", true)
             : text_tab_button_->Render(),
         text(" "),
         active_scope_ == TextParserScope::Paragraph
-            ? RenderButton(theme, ProcessorTabSpec("Paragraph", true)) | bold
+            ? RenderModalTabButton(theme, "Paragraph", true)
             : paragraph_tab_button_->Render(),
         text(" "),
         active_scope_ == TextParserScope::Code
-            ? RenderButton(theme, ProcessorTabSpec("Code", true)) | bold
+            ? RenderModalTabButton(theme, "Code", true)
             : code_tab_button_->Render(),
         filler(),
     });
@@ -69,12 +67,12 @@ ftxui::Element TextProcessorsModalContent::RenderGroupTabs() const {
     auto render_group_button = [&](size_t index) -> Element {
         const std::string& group = kProcessorGroups[index];
         if (active_group_ == group) {
-            return RenderButton(theme, ProcessorTabSpec(group, true)) | bold;
+            return RenderModalTabButton(theme, group, true);
         }
         if (index < group_tab_buttons_.size() && group_tab_buttons_[index]) {
             return group_tab_buttons_[index]->Render();
         }
-        return RenderButton(theme, ProcessorTabSpec(group));
+        return RenderModalTabButton(theme, group, false);
     };
 
     auto build_row = [&](size_t begin, size_t end, const std::string& label) {

@@ -146,6 +146,7 @@ private:
     bool IsShiftArrowUpEvent(const ftxui::Event& event) const;
     bool IsShiftArrowDownEvent(const ftxui::Event& event) const;
 
+    ftxui::Element RenderHeaderRow();
     ftxui::Element RenderTopButtons();
     ftxui::Element RenderFavoriteDirectories();
     ftxui::Element RenderPathInput();
