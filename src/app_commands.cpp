@@ -69,7 +69,9 @@ void TextltApp::InitializeCommands() {
     add("view.toggle_line_numbers", "Toggle Line Numbers", "Options", "", [this] { CommandViewToggleLineNumbers(); });
     add("sidebar.toggle_file_explorer", "Toggle File Explorer", "Options", "", [this] { CommandSidebarToggleFileExplorer(); });
     add("sidebar.ctrl_b_file_explorer", "File Explorer Focus Toggle", "Options", "Ctrl+B", [this] { HandleCtrlBFileExplorer(); });
-    add("sidebar.show_opened_files", "Opened Files Sidebar", "Options", "Alt+B, O", [this] { ShowOpenedFilesSidebar(); });
+    add("sidebar.show_project", "Project Sidebar", "Options", "Alt+P", [this] { ShowProjectSidebar(); });
+    add("sidebar.show_favorites", "Favorites Sidebar", "Options", "Alt+F", [this] { ShowFavoritesSidebar(); });
+    add("sidebar.show_opened_files", "Opened Files Sidebar", "Options", "Alt+O", [this] { ShowOpenedFilesSidebar(); });
     add("sidebar.toggle_opened_project", "Toggle File Explorer Tab", "Options", "Alt+B", [this] { ToggleSidebarOpenedProject(); });
     add("editor.toggle_smart_word_wrap", "Toggle Smart Word Wrap", "Options", "", [this] { CommandEditorToggleSmartWordWrap(); });
     add("editor.toggle_syntax_highlighting", "Toggle Syntax Highlighting", "Options", "", [this] { CommandEditorToggleSyntaxHighlighting(); });

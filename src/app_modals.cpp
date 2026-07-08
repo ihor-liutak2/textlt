@@ -258,7 +258,11 @@ void TextltApp::OpenFilesModal(FilesModalMode mode) {
             mode == FilesModalMode::Import ? "Import" :
             "Files") +
         " modal";
+    sidebar_has_focus_ = false;
     SetActiveLayer(UiLayer::Files);
+    if (auto view = files_modal_.View()) {
+        view->TakeFocus();
+    }
     screen_.PostEvent(ftxui::Event::Custom);
 }
 

@@ -383,6 +383,31 @@ void DocumentFileController::RestoreFavoriteCursor(const std::filesystem::path& 
     document->SetCursorPosition(favorite->row, favorite->column);
 }
 
+DocumentFileController::FavoriteToggleResult DocumentFileController::AddActiveFavorite() {
+    FavoriteToggleResult result;
+    result.path = ActiveSessionFavoritePath();
+    if (result.path.empty()) {
+        result.status = FavoriteToggleStatus::NeedsSave;
+        return result;
+    }
+
+    if (IsFavorite(result.path)) {
+        result.status = FavoriteToggleStatus::AlreadyFavorite;
+        return result;
+    }
+
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(result.path, error)) {
+        result.status = FavoriteToggleStatus::NeedsSave;
+        return result;
+    }
+
+    AddFavorite(result.path);
+    PersistActiveFavoriteCursor();
+    result.status = FavoriteToggleStatus::Added;
+    return result;
+}
+
 DocumentFileController::FavoriteToggleResult DocumentFileController::ToggleActiveFavorite() {
     FavoriteToggleResult result;
     result.path = ActiveSessionFavoritePath();

@@ -1,6 +1,8 @@
 #include "editor/editor_viewport.hpp"
 
 #include <algorithm>
+#include <iterator>
+#include <string>
 
 #include "editor/document_session.hpp"
 #include "editor_config.hpp"
@@ -15,6 +17,12 @@ constexpr size_t kFallbackViewportWidth = 80;
 constexpr size_t kMaxSafeViewportWidth = 1000;
 constexpr size_t kMaxSafeViewportHeight = 300;
 constexpr size_t kMouseWheelScrollLines = 3;
+
+size_t EstimateWrappedLineRows(const std::string& line, size_t visible_width) {
+    visible_width = std::max<size_t>(1, visible_width);
+    const size_t display_width = utils::Utf8DisplayWidth(line);
+    return std::max<size_t>(1, (display_width + visible_width - 1) / visible_width);
+}
 
 } // namespace
 
@@ -170,12 +178,117 @@ std::string EditorViewport::LineNumberText(size_t line_index, size_t width) cons
     return line_number + " │ ";
 }
 
+const EditorViewport::EstimatedWrapMetricsCache& EditorViewport::EstimatedWrapMetricsFor(
+    const DocumentSession& session,
+    const EditorConfig* config) const {
+    const size_t visible_width = std::max<size_t>(1, VisibleTextWidth(&session, config));
+    const std::uint64_t buffer_version = session.buffer.Version();
+    const size_t line_count = session.lines.size();
+
+    if (estimated_wrap_metrics_cache_.valid &&
+        estimated_wrap_metrics_cache_.buffer_version == buffer_version &&
+        estimated_wrap_metrics_cache_.visible_width == visible_width &&
+        estimated_wrap_metrics_cache_.line_count == line_count) {
+        return estimated_wrap_metrics_cache_;
+    }
+
+    auto& cache = estimated_wrap_metrics_cache_;
+    cache.valid = true;
+    cache.buffer_version = buffer_version;
+    cache.visible_width = visible_width;
+    cache.line_count = line_count;
+    cache.prefix_visual_rows.assign(line_count + 1, 0);
+
+    size_t total_rows = 0;
+    for (size_t index = 0; index < line_count; ++index) {
+        cache.prefix_visual_rows[index] = total_rows;
+        total_rows += EstimateWrappedLineRows(session.lines[index], visible_width);
+    }
+    cache.prefix_visual_rows[line_count] = total_rows;
+    cache.total_visual_rows = std::max<size_t>(1, total_rows);
+    return cache;
+}
+
+size_t EditorViewport::EstimatedWrappedTotalRows(
+    const DocumentSession& session,
+    const EditorConfig* config) const {
+    return EstimatedWrapMetricsFor(session, config).total_visual_rows;
+}
+
+size_t EditorViewport::EstimatedWrappedVisualRowAtLine(
+    const DocumentSession& session,
+    const EditorConfig* config,
+    size_t line_index) const {
+    const auto& cache = EstimatedWrapMetricsFor(session, config);
+    if (cache.prefix_visual_rows.empty()) {
+        return 0;
+    }
+    line_index = std::min(line_index, cache.line_count);
+    return cache.prefix_visual_rows[line_index];
+}
+
+size_t EditorViewport::EstimatedWrappedLineAtVisualRow(
+    const DocumentSession& session,
+    const EditorConfig* config,
+    size_t visual_row) const {
+    const auto& cache = EstimatedWrapMetricsFor(session, config);
+    if (cache.line_count == 0 || cache.prefix_visual_rows.size() < 2) {
+        return 0;
+    }
+
+    visual_row = std::min(visual_row, cache.total_visual_rows - 1);
+    const auto iterator = std::upper_bound(
+        cache.prefix_visual_rows.begin(),
+        cache.prefix_visual_rows.end(),
+        visual_row);
+    if (iterator == cache.prefix_visual_rows.begin()) {
+        return 0;
+    }
+
+    const size_t line_index = static_cast<size_t>(
+        std::distance(cache.prefix_visual_rows.begin(), iterator) - 1);
+    return std::min(line_index, cache.line_count - 1);
+}
+
+size_t EditorViewport::EstimatedWrappedMaxScrollY(
+    const DocumentSession& session,
+    const EditorConfig* config,
+    size_t visible_height) const {
+    const size_t total_rows = EstimatedWrappedTotalRows(session, config);
+    if (total_rows <= visible_height) {
+        return 0;
+    }
+    return EstimatedWrappedLineAtVisualRow(session, config, total_rows - visible_height);
+}
+
 void EditorViewport::ScrollToCursor(DocumentSession& session, const EditorConfig* config) {
     session.ClampCursor();
 
     const size_t visible_height = VisibleHeight();
     const bool smart_word_wrap = options_.distraction_mode ||
         (config && config->smart_word_wrap);
+
+    if (smart_word_wrap) {
+        const size_t max_scroll_y = EstimatedWrappedMaxScrollY(session, config, visible_height);
+        const size_t cursor_visual_row = EstimatedWrappedVisualRowAtLine(
+            session, config, session.CursorRow());
+        const size_t scroll_visual_row = EstimatedWrappedVisualRowAtLine(
+            session, config, scroll_y);
+
+        if (cursor_visual_row < scroll_visual_row) {
+            scroll_y = session.CursorRow();
+        } else if (cursor_visual_row >= scroll_visual_row + visible_height) {
+            scroll_y = EstimatedWrappedLineAtVisualRow(
+                session,
+                config,
+                cursor_visual_row - visible_height + 1);
+        }
+
+        scroll_y = std::min(scroll_y, max_scroll_y);
+        scroll_x = 0;
+        return;
+    }
+
     if (session.CursorRow() >= scroll_y + visible_height) {
         scroll_y = session.CursorRow() - visible_height + 1;
     }
@@ -183,25 +296,14 @@ void EditorViewport::ScrollToCursor(DocumentSession& session, const EditorConfig
         scroll_y = session.CursorRow();
     }
 
-    if (session.lines.size() <= visible_height && !smart_word_wrap) {
+    if (session.lines.size() <= visible_height) {
         scroll_y = 0;
-    } else if (smart_word_wrap) {
-        const size_t visible_width = VisibleTextWidth(&session, config);
-        const size_t max_scroll_y = utils::WordWrapMaxScrollY(session.lines, visible_height, visible_width);
-        if (session.CursorRow() > max_scroll_y) {
-            scroll_y = session.CursorRow();
-        }
-        scroll_y = std::min(scroll_y, max_scroll_y);
     } else {
         const size_t max_scroll_y = session.lines.size() - visible_height;
         scroll_y = std::min(scroll_y, max_scroll_y);
     }
 
     const size_t visible_width = VisibleTextWidth(&session, config);
-    if (smart_word_wrap) {
-        scroll_x = 0;
-        return;
-    }
 
     if (session.CursorCol() < scroll_x) {
         scroll_x = session.CursorCol();
@@ -239,8 +341,13 @@ std::pair<size_t, size_t> EditorViewport::PositionAtMouse(
         size_t visual_row = 0;
         const size_t target_visual_row = static_cast<size_t>(std::max(0, relative_y));
         for (size_t row = scroll_y; row < session.lines.size(); ++row) {
-            const auto segments =
-                utils::BuildUtf8WrapSegments(session.lines[row], VisibleTextWidth(&session, config));
+            const size_t segments_needed = target_visual_row >= visual_row
+                ? target_visual_row - visual_row + 1
+                : 1;
+            const auto segments = utils::BuildUtf8WrapSegmentsLimited(
+                session.lines[row],
+                VisibleTextWidth(&session, config),
+                segments_needed);
             if (segments.empty()) {
                 continue;
             }
@@ -290,17 +397,18 @@ bool EditorViewport::HandleMouseEvent(
 
     const bool smart_word_wrap = options_.distraction_mode ||
         (config && config->smart_word_wrap);
-    const size_t visible_width = VisibleTextWidth(&session, config);
     auto effective_total = [&]() -> size_t {
-        if (!smart_word_wrap) return session.lines.size();
-        return utils::WordWrapTotalVisualRows(session.lines, visible_width);
+        return smart_word_wrap
+            ? EstimatedWrappedTotalRows(session, config)
+            : session.lines.size();
     };
     auto max_scroll_y = [&]() -> size_t {
-        if (!smart_word_wrap) {
-            return session.lines.size() > visible_height
-                ? session.lines.size() - visible_height : 0;
+        if (smart_word_wrap) {
+            return EstimatedWrappedMaxScrollY(session, config, visible_height);
         }
-        return utils::WordWrapMaxScrollY(session.lines, visible_height, visible_width);
+        return session.lines.size() > visible_height
+            ? session.lines.size() - visible_height
+            : 0;
     };
     auto scrollbar_thumb_height = [&]() -> size_t {
         const size_t eff = effective_total();
@@ -314,7 +422,8 @@ bool EditorViewport::HandleMouseEvent(
                 (visible_height * visible_height) / eff));
     };
 
-    const bool needs_scrollbar = ShouldShowScrollbar() && effective_total() > visible_height;
+    const bool needs_scrollbar = ShouldShowScrollbar() &&
+        effective_total() > visible_height;
     const int scrollbar_x_min = box.x_max - static_cast<int>(ScrollbarColumns()) + 1;
     const bool on_scrollbar_column =
         needs_scrollbar &&
@@ -322,6 +431,16 @@ bool EditorViewport::HandleMouseEvent(
         mouse.x >= scrollbar_x_min &&
         mouse.x <= box.x_max;
     auto clamp_cursor_to_visible_scroll = [&]() {
+        if (session.lines.empty()) {
+            return;
+        }
+
+        if (smart_word_wrap) {
+            session.CursorRow() = std::min(scroll_y, session.lines.size() - 1);
+            session.CursorCol() = std::min(session.CursorCol(), session.lines[session.CursorRow()].size());
+            return;
+        }
+
         if (session.CursorRow() < scroll_y) {
             session.CursorRow() = scroll_y;
             session.CursorCol() = std::min(session.CursorCol(), session.lines[session.CursorRow()].size());
@@ -354,7 +473,9 @@ bool EditorViewport::HandleMouseEvent(
             static_cast<int>(available_track_space));
         const size_t target_visual_row =
             (static_cast<size_t>(target_thumb_top) * (eff - visible_height)) / available_track_space;
-        scroll_y = utils::WordWrapLineAtVisualRow(session.lines, target_visual_row, visible_width);
+        scroll_y = smart_word_wrap
+            ? EstimatedWrappedLineAtVisualRow(session, config, target_visual_row)
+            : target_visual_row;
         clamp_cursor_to_visible_scroll();
     };
     auto drag_scrollbar_to_y = [&](int screen_y) {
@@ -373,8 +494,9 @@ bool EditorViewport::HandleMouseEvent(
             return;
         }
 
-        const size_t start_visual_row = utils::WordWrapVisualRowAtLine(
-            session.lines, drag_start_scroll_y, visible_width);
+        const size_t start_visual_row = smart_word_wrap
+            ? EstimatedWrappedVisualRowAtLine(session, config, drag_start_scroll_y)
+            : drag_start_scroll_y;
         const int drag_delta_y = screen_y - drag_start_y;
         const long long visual_delta =
             (static_cast<long long>(drag_delta_y) * static_cast<long long>(eff - visible_height)) /
@@ -383,7 +505,9 @@ bool EditorViewport::HandleMouseEvent(
             static_cast<long long>(start_visual_row) + visual_delta;
         const size_t clamped_visual = static_cast<size_t>(
             std::clamp<long long>(target_visual, 0, static_cast<long long>(eff - visible_height)));
-        scroll_y = utils::WordWrapLineAtVisualRow(session.lines, clamped_visual, visible_width);
+        scroll_y = smart_word_wrap
+            ? EstimatedWrappedLineAtVisualRow(session, config, clamped_visual)
+            : clamped_visual;
         clamp_cursor_to_visible_scroll();
     };
 
@@ -405,10 +529,7 @@ bool EditorViewport::HandleMouseEvent(
     if (inside_editor && mouse.button == ftxui::Mouse::WheelUp) {
         if (callbacks.end_typing_group) callbacks.end_typing_group();
         scroll_y = scroll_y > kMouseWheelScrollLines ? scroll_y - kMouseWheelScrollLines : 0;
-        if (session.CursorRow() >= scroll_y + visible_height) {
-            session.CursorRow() = scroll_y + visible_height - 1;
-            session.CursorCol() = std::min(session.CursorCol(), session.lines[session.CursorRow()].size());
-        }
+        clamp_cursor_to_visible_scroll();
         return true;
     }
 
@@ -416,11 +537,7 @@ bool EditorViewport::HandleMouseEvent(
         if (callbacks.end_typing_group) callbacks.end_typing_group();
         const size_t max_scroll_val = max_scroll_y();
         scroll_y = std::min(scroll_y + kMouseWheelScrollLines, max_scroll_val);
-
-        if (session.CursorRow() < scroll_y) {
-            session.CursorRow() = scroll_y;
-            session.CursorCol() = std::min(session.CursorCol(), session.lines[session.CursorRow()].size());
-        }
+        clamp_cursor_to_visible_scroll();
         return true;
     }
 

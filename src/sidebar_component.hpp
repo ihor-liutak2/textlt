@@ -11,6 +11,7 @@
 #include "ftxui/dom/elements.hpp"
 #include "git_manager.hpp"
 #include "theme.hpp"
+#include "ui_button.hpp"
 
 namespace textlt {
 
@@ -42,6 +43,11 @@ public:
     using OpenedFileSelectCallback = std::function<void(size_t index)>;
     using FavoriteFilesProvider = std::function<std::vector<std::filesystem::path>()>;
     using RemoveFavoriteCallback = std::function<void(const std::filesystem::path&)>;
+    using AddCurrentFavoriteCallback = std::function<void()>;
+    using CloseOpenedFileCallback = std::function<void(size_t index)>;
+    using CloseAllOpenedFilesCallback = std::function<void()>;
+    using OpenFilesModalCallback = std::function<void()>;
+    using ShortcutLabelProvider = std::function<std::string(const std::string& command_id)>;
 
     SidebarPanel(
         FileOpenCallback on_file_open,
@@ -49,7 +55,12 @@ public:
         const Theme* theme,
         GitManager* git_manager,
         FavoriteFilesProvider favorite_files_provider,
-        RemoveFavoriteCallback on_remove_favorite);
+        RemoveFavoriteCallback on_remove_favorite,
+        AddCurrentFavoriteCallback on_add_current_favorite,
+        CloseOpenedFileCallback on_close_opened_file,
+        CloseAllOpenedFilesCallback on_close_all_opened_files,
+        OpenFilesModalCallback on_open_files_modal,
+        ShortcutLabelProvider shortcut_label_provider);
 
     ftxui::Element Render() override;
     bool OnEvent(ftxui::Event event) override;
@@ -59,7 +70,11 @@ public:
     void SetOpenedFiles(std::vector<OpenedFileEntry> opened_files, size_t active_index);
     void ShowOpenedFiles();
     void ShowProject();
+    void ShowFavorites();
     void ToggleOpenedProject();
+    bool IsOpenedMode() const { return mode_ == SidebarMode::Opened; }
+    bool IsProjectMode() const { return mode_ == SidebarMode::Project; }
+    bool IsFavoritesMode() const { return mode_ == SidebarMode::Favorites; }
 
     std::filesystem::path CurrentPath() const { return current_path_; }
 
@@ -127,6 +142,23 @@ private:
     void RebuildProjectEntries();
     void RebuildFavoriteEntries();
     void AddEntry(std::filesystem::path path, std::string label, EntryKind kind);
+    std::string ShortcutLabelForMode(SidebarMode mode) const;
+    std::string ActiveShortcutLabel() const;
+    ftxui::Element RenderModeButton(
+        const std::string& label,
+        SidebarMode mode,
+        ftxui::Box& box) const;
+    ftxui::Element RenderFlatActionButton(
+        const std::string& label,
+        ButtonRole role,
+        ftxui::Box& box) const;
+    ftxui::Element RenderActionRow();
+    bool HandleActionButtonMouse(const ftxui::Mouse& mouse);
+    void AddCurrentFavorite();
+    void RemoveSelectedFavorite();
+    void CloseSelectedOpenedFile();
+    void CloseAllOpenedFiles();
+    void OpenFilesModal();
 
     FileOpenCallback on_file_open_;
     OpenedFileSelectCallback on_opened_file_select_;
@@ -134,6 +166,11 @@ private:
     GitManager* git_manager_ = nullptr;
     FavoriteFilesProvider favorite_files_provider_;
     RemoveFavoriteCallback on_remove_favorite_;
+    AddCurrentFavoriteCallback on_add_current_favorite_;
+    CloseOpenedFileCallback on_close_opened_file_;
+    CloseAllOpenedFilesCallback on_close_all_opened_files_;
+    OpenFilesModalCallback on_open_files_modal_;
+    ShortcutLabelProvider shortcut_label_provider_;
     std::filesystem::path current_path_;
     std::vector<OpenedFileEntry> opened_files_;
     size_t active_opened_file_index_ = 0;
@@ -148,6 +185,8 @@ private:
     ftxui::Box opened_tab_box_;
     ftxui::Box project_tab_box_;
     ftxui::Box favorites_tab_box_;
+    ftxui::Box action_primary_box_;
+    ftxui::Box action_secondary_box_;
     ftxui::Box panel_box_;
     ftxui::Box menu_box_;
     ftxui::Component menu_;

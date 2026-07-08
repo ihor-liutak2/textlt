@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <map>
+#include <string>
 #include <system_error>
 #include <utility>
 
@@ -48,13 +49,23 @@ SidebarPanel::SidebarPanel(
     const Theme* theme,
     GitManager* git_manager,
     FavoriteFilesProvider favorite_files_provider,
-    RemoveFavoriteCallback on_remove_favorite)
+    RemoveFavoriteCallback on_remove_favorite,
+    AddCurrentFavoriteCallback on_add_current_favorite,
+    CloseOpenedFileCallback on_close_opened_file,
+    CloseAllOpenedFilesCallback on_close_all_opened_files,
+    OpenFilesModalCallback on_open_files_modal,
+    ShortcutLabelProvider shortcut_label_provider)
     : on_file_open_(std::move(on_file_open)),
       on_opened_file_select_(std::move(on_opened_file_select)),
       theme_(theme),
       git_manager_(git_manager),
       favorite_files_provider_(std::move(favorite_files_provider)),
       on_remove_favorite_(std::move(on_remove_favorite)),
+      on_add_current_favorite_(std::move(on_add_current_favorite)),
+      on_close_opened_file_(std::move(on_close_opened_file)),
+      on_close_all_opened_files_(std::move(on_close_all_opened_files)),
+      on_open_files_modal_(std::move(on_open_files_modal)),
+      shortcut_label_provider_(std::move(shortcut_label_provider)),
       current_path_(std::filesystem::current_path()) {
     ftxui::MenuOption option = ftxui::MenuOption::Vertical();
     option.on_enter = [this] { OpenSelectedEntry(); };
@@ -73,39 +84,6 @@ ftxui::Element SidebarPanel::Render() {
 
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     const ftxui::Color sidebar_text = SidebarTextColor(theme);
-    Element opened_tab =
-        text("[ Opened ]") |
-        color(sidebar_text) |
-        dim |
-        reflect(opened_tab_box_);
-    Element project_tab =
-        text("[ Project ]") |
-        color(sidebar_text) |
-        dim |
-        reflect(project_tab_box_);
-    Element favorites_tab =
-        text("[ Favorites ]") |
-        color(sidebar_text) |
-        dim |
-        reflect(favorites_tab_box_);
-
-    // Active tabs mirror the modal menu selection palette.
-    if (mode_ == SidebarMode::Opened) {
-        opened_tab = opened_tab |
-            bgcolor(theme.modal_selected_item_bg) |
-            color(theme.modal_selected_item_fg) |
-            bold;
-    } else if (mode_ == SidebarMode::Project) {
-        project_tab = project_tab |
-            bgcolor(theme.modal_selected_item_bg) |
-            color(theme.modal_selected_item_fg) |
-            bold;
-    } else {
-        favorites_tab = favorites_tab |
-            bgcolor(theme.modal_selected_item_bg) |
-            color(theme.modal_selected_item_fg) |
-            bold;
-    }
 
     Elements rows;
     const size_t visible_entry_count = VisibleEntryCount();
@@ -139,11 +117,16 @@ ftxui::Element SidebarPanel::Render() {
 
     return vbox({
         hbox({
-            project_tab,
+            RenderModeButton("Project", SidebarMode::Project, project_tab_box_),
             text(" "),
-            favorites_tab,
+            RenderModeButton("Favorites", SidebarMode::Favorites, favorites_tab_box_),
         }),
-        opened_tab,
+        hbox({
+            RenderModeButton("Opened", SidebarMode::Opened, opened_tab_box_),
+            filler(),
+            text(" " + ActiveShortcutLabel() + " ") | color(theme.gutter),
+        }),
+        RenderActionRow(),
         separator() | color(SidebarBorderColor(theme)),
         vbox(std::move(rows)) | reflect(menu_box_) | frame | yflex,
     }) |
@@ -216,6 +199,15 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
 
     if (event.is_mouse() &&
         event.mouse().button == ftxui::Mouse::Left &&
+        event.mouse().motion == ftxui::Mouse::Pressed &&
+        HandleActionButtonMouse(event.mouse())) {
+        // Action buttons may open a modal. Do not steal focus back to the
+        // sidebar after the callback runs. The callback owns the next focus.
+        return true;
+    }
+
+    if (event.is_mouse() &&
+        event.mouse().button == ftxui::Mouse::Left &&
         event.mouse().motion == ftxui::Mouse::Pressed) {
         const int clicked_entry = EntryIndexAtMouse(event.mouse());
         if (clicked_entry >= 0) {
@@ -280,6 +272,10 @@ void SidebarPanel::ShowOpenedFiles() {
 
 void SidebarPanel::ShowProject() {
     SetMode(SidebarMode::Project);
+}
+
+void SidebarPanel::ShowFavorites() {
+    SetMode(SidebarMode::Favorites);
 }
 
 void SidebarPanel::ToggleOpenedProject() {
@@ -440,6 +436,162 @@ void SidebarPanel::ScrollEntries(int delta) {
     list_scroll_offset_ = static_cast<size_t>(
         std::clamp<long long>(target_offset, 0, static_cast<long long>(MaxScrollOffset())));
     ClampSelectedEntryToVisible();
+}
+
+std::string SidebarPanel::ShortcutLabelForMode(SidebarMode mode) const {
+    std::string command_id;
+    std::string fallback;
+    switch (mode) {
+        case SidebarMode::Project:
+            command_id = "sidebar.show_project";
+            fallback = "Alt+P";
+            break;
+        case SidebarMode::Favorites:
+            command_id = "sidebar.show_favorites";
+            fallback = "Alt+F";
+            break;
+        case SidebarMode::Opened:
+            command_id = "sidebar.show_opened_files";
+            fallback = "Alt+O";
+            break;
+    }
+
+    if (shortcut_label_provider_) {
+        const std::string configured = shortcut_label_provider_(command_id);
+        if (!configured.empty()) {
+            return configured;
+        }
+    }
+    return fallback;
+}
+
+std::string SidebarPanel::ActiveShortcutLabel() const {
+    return "P:" + ShortcutLabelForMode(SidebarMode::Project) + "  F:" +
+        ShortcutLabelForMode(SidebarMode::Favorites) + "  O:" +
+        ShortcutLabelForMode(SidebarMode::Opened);
+}
+
+ftxui::Element SidebarPanel::RenderModeButton(
+    const std::string& label,
+    SidebarMode mode,
+    ftxui::Box& box) const {
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    ButtonSpec spec = TabButtonSpec(label, mode_ == mode, "", ButtonSize::Compact);
+    return RenderModalFlatButton(theme, spec, mode_ == mode) | reflect(box);
+}
+
+ftxui::Element SidebarPanel::RenderFlatActionButton(
+    const std::string& label,
+    ButtonRole role,
+    ftxui::Box& box) const {
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    ButtonSpec spec = ButtonSpecFromLabel(label, role, ButtonVariant::Minimal, ButtonSize::Compact);
+    return RenderModalFlatButton(theme, spec) | reflect(box);
+}
+
+ftxui::Element SidebarPanel::RenderActionRow() {
+    using namespace ftxui;
+
+    action_primary_box_ = {};
+    action_secondary_box_ = {};
+
+    if (mode_ == SidebarMode::Favorites) {
+        return hbox({
+            RenderFlatActionButton("Remove", ButtonRole::Danger, action_primary_box_),
+            text(" "),
+            RenderFlatActionButton("Add Current", ButtonRole::Primary, action_secondary_box_),
+        });
+    }
+
+    if (mode_ == SidebarMode::Opened) {
+        return hbox({
+            RenderFlatActionButton("Close", ButtonRole::Warning, action_primary_box_),
+            text(" "),
+            RenderFlatActionButton("Close All", ButtonRole::Danger, action_secondary_box_),
+        });
+    }
+
+    return hbox({
+        RenderFlatActionButton("Files..", ButtonRole::Primary, action_primary_box_),
+    });
+}
+
+bool SidebarPanel::HandleActionButtonMouse(const ftxui::Mouse& mouse) {
+    if (action_primary_box_.Contain(mouse.x, mouse.y)) {
+        switch (mode_) {
+            case SidebarMode::Favorites:
+                RemoveSelectedFavorite();
+                return true;
+            case SidebarMode::Opened:
+                CloseSelectedOpenedFile();
+                return true;
+            case SidebarMode::Project:
+                OpenFilesModal();
+                return true;
+        }
+    }
+
+    if (action_secondary_box_.Contain(mouse.x, mouse.y)) {
+        switch (mode_) {
+            case SidebarMode::Favorites:
+                AddCurrentFavorite();
+                return true;
+            case SidebarMode::Opened:
+                CloseAllOpenedFiles();
+                return true;
+            case SidebarMode::Project:
+                return false;
+        }
+    }
+
+    return false;
+}
+
+void SidebarPanel::AddCurrentFavorite() {
+    if (on_add_current_favorite_) {
+        on_add_current_favorite_();
+    }
+    Refresh();
+}
+
+void SidebarPanel::RemoveSelectedFavorite() {
+    if (mode_ != SidebarMode::Favorites ||
+        selected_entry_ < 0 ||
+        selected_entry_ >= static_cast<int>(entry_paths_.size()) ||
+        selected_entry_ >= static_cast<int>(entry_kinds_.size()) ||
+        entry_kinds_[selected_entry_] != EntryKind::FavoriteFile) {
+        return;
+    }
+
+    if (on_remove_favorite_) {
+        on_remove_favorite_(entry_paths_[selected_entry_]);
+    }
+    Refresh();
+}
+
+void SidebarPanel::CloseSelectedOpenedFile() {
+    if (mode_ != SidebarMode::Opened ||
+        selected_entry_ < 0 ||
+        selected_entry_ >= static_cast<int>(entry_kinds_.size()) ||
+        entry_kinds_[selected_entry_] != EntryKind::OpenedFile) {
+        return;
+    }
+
+    if (on_close_opened_file_) {
+        on_close_opened_file_(static_cast<size_t>(selected_entry_));
+    }
+}
+
+void SidebarPanel::CloseAllOpenedFiles() {
+    if (on_close_all_opened_files_) {
+        on_close_all_opened_files_();
+    }
+}
+
+void SidebarPanel::OpenFilesModal() {
+    if (on_open_files_modal_) {
+        on_open_files_modal_();
+    }
 }
 
 char SidebarPanel::GitStatusForPath(const std::filesystem::path& path) const {

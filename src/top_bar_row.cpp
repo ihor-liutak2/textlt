@@ -81,7 +81,7 @@ TopBarRowComponent::TopBarRowComponent(const Theme* theme, Callbacks callbacks)
     distraction_next_button_ = ftxui::Button(MakeCommandButtonOption(
         "Next", "distraction.next_page", ButtonRole::Navigation, "▶"));
     ButtonSpec page_button_spec = ButtonSpecFromLabel(
-        "Page", ButtonRole::Navigation, ButtonVariant::AccentEdges, ButtonSize::Compact);
+        "Page", ButtonRole::Navigation, ButtonVariant::Minimal, ButtonSize::Compact);
     ftxui::ButtonOption page_button_option = ftxui::ButtonOption::Simple();
     page_button_option.label = ButtonCaptionText(page_button_spec);
     page_button_option.on_click = [this] { OpenPagePopup(); };
@@ -90,7 +90,7 @@ TopBarRowComponent::TopBarRowComponent(const Theme* theme, Callbacks callbacks)
         const DistractionTopBarState page_state = CurrentDistractionState();
         spec.caption = "Page " + FormatPageNumber(page_state.current_page) + "/" +
             FormatPageNumber(page_state.total_pages);
-        return RenderButton(ResolveTheme(theme_), spec, state.focused || state.active);
+        return RenderModalFlatButton(ResolveTheme(theme_), spec, state.focused || state.active);
     };
     distraction_page_button_ = ftxui::Button(page_button_option);
     distraction_exit_button_ = ftxui::Button(MakeCommandButtonOption(
@@ -124,7 +124,7 @@ ftxui::ButtonOption TopBarRowComponent::MakeTtsButtonOption(
     ButtonSpec base_spec = ButtonSpecFromLabel(
         std::move(label),
         role,
-        ButtonVariant::AccentEdges,
+        ButtonVariant::Minimal,
         ButtonSize::Compact,
         std::move(icon));
 
@@ -134,7 +134,7 @@ ftxui::ButtonOption TopBarRowComponent::MakeTtsButtonOption(
     option.transform = [this, active_button, base_spec](const ftxui::EntryState& state) {
         ButtonSpec spec = base_spec;
         spec.selected = IsActive(active_button);
-        return RenderButton(ResolveTheme(theme_), spec, state.focused || state.active);
+        return RenderModalFlatButton(ResolveTheme(theme_), spec, state.focused || state.active);
     };
     return option;
 }
@@ -147,7 +147,7 @@ ftxui::ButtonOption TopBarRowComponent::MakeCommandButtonOption(
     ButtonSpec base_spec = ButtonSpecFromLabel(
         std::move(label),
         role,
-        ButtonVariant::AccentEdges,
+        ButtonVariant::Minimal,
         ButtonSize::Compact,
         std::move(icon));
 
@@ -155,7 +155,7 @@ ftxui::ButtonOption TopBarRowComponent::MakeCommandButtonOption(
     option.label = ButtonCaptionText(base_spec);
     option.on_click = [this, command_id = std::move(command_id)] { RunCommand(command_id); };
     option.transform = [this, base_spec](const ftxui::EntryState& state) {
-        return RenderButton(ResolveTheme(theme_), base_spec, state.focused || state.active);
+        return RenderModalFlatButton(ResolveTheme(theme_), base_spec, state.focused || state.active);
     };
     return option;
 }
@@ -168,7 +168,7 @@ ftxui::ButtonOption TopBarRowComponent::MakeActionButtonOption(
     ButtonSpec base_spec = ButtonSpecFromLabel(
         std::move(label),
         role,
-        ButtonVariant::AccentEdges,
+        ButtonVariant::Minimal,
         ButtonSize::Compact,
         std::move(icon));
 
@@ -176,7 +176,7 @@ ftxui::ButtonOption TopBarRowComponent::MakeActionButtonOption(
     option.label = ButtonCaptionText(base_spec);
     option.on_click = std::move(on_click);
     option.transform = [this, base_spec](const ftxui::EntryState& state) {
-        return RenderButton(ResolveTheme(theme_), base_spec, state.focused || state.active);
+        return RenderModalFlatButton(ResolveTheme(theme_), base_spec, state.focused || state.active);
     };
     return option;
 }

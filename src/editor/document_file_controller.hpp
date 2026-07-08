@@ -38,6 +38,7 @@ public:
     enum class FavoriteToggleStatus {
         Added,
         Removed,
+        AlreadyFavorite,
         NeedsSave,
     };
 
@@ -82,6 +83,7 @@ public:
     void PersistActiveFavoriteCursor();
     void RestoreFavoriteCursor(const std::filesystem::path& path);
     FavoriteToggleResult ToggleActiveFavorite();
+    FavoriteToggleResult AddActiveFavorite();
 
     bool LoadState();
     bool SaveState() const;

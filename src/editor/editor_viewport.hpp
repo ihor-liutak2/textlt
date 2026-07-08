@@ -1,9 +1,11 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "ftxui/component/event.hpp"
 #include "ftxui/component/mouse.hpp"
@@ -58,6 +60,19 @@ public:
     size_t TextLeftPadding(const DocumentSession* session, const EditorConfig* config) const;
     size_t LineNumberWidth(const DocumentSession* session) const;
     std::string LineNumberText(size_t line_index, size_t width) const;
+    size_t EstimatedWrappedTotalRows(const DocumentSession& session, const EditorConfig* config) const;
+    size_t EstimatedWrappedVisualRowAtLine(
+        const DocumentSession& session,
+        const EditorConfig* config,
+        size_t line_index) const;
+    size_t EstimatedWrappedLineAtVisualRow(
+        const DocumentSession& session,
+        const EditorConfig* config,
+        size_t visual_row) const;
+    size_t EstimatedWrappedMaxScrollY(
+        const DocumentSession& session,
+        const EditorConfig* config,
+        size_t visible_height) const;
 
     void ScrollToCursor(DocumentSession& session, const EditorConfig* config);
     bool HandleMouseEvent(
@@ -76,12 +91,25 @@ public:
     EditorCursorState cursor_state;
 
 private:
+    struct EstimatedWrapMetricsCache {
+        bool valid = false;
+        std::uint64_t buffer_version = 0;
+        size_t visible_width = 0;
+        size_t line_count = 0;
+        size_t total_visual_rows = 1;
+        std::vector<size_t> prefix_visual_rows;
+    };
+
+    const EstimatedWrapMetricsCache& EstimatedWrapMetricsFor(
+        const DocumentSession& session,
+        const EditorConfig* config) const;
     std::pair<size_t, size_t> PositionAtMouse(
         const DocumentSession& session,
         const EditorConfig* config,
         const ftxui::Mouse& mouse) const;
 
     EditorViewportOptions options_;
+    mutable EstimatedWrapMetricsCache estimated_wrap_metrics_cache_;
 };
 
 } // namespace textlt

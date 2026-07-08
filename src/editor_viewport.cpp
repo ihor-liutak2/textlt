@@ -32,10 +32,11 @@ ftxui::Element EditorComponent::RenderViewport() {
     const std::string file_path = CurrentFilePath();
 
     const size_t total_lines = session_ ? session_->lines.size() : 0;
-    const size_t effective_total = (smart_word_wrap && session_)
-        ? utils::WordWrapTotalVisualRows(session_->lines, visible_width)
+    const size_t effective_total = (smart_word_wrap && session_ && viewport_)
+        ? viewport_->EstimatedWrappedTotalRows(*session_, config_)
         : total_lines;
-    const bool needs_scrollbar = show_scrollbar && effective_total > visible_height;
+    const bool needs_scrollbar = show_scrollbar &&
+        effective_total > visible_height;
 
     const size_t slider_height = needs_scrollbar
         ? std::min(visible_height,
@@ -45,8 +46,15 @@ ftxui::Element EditorComponent::RenderViewport() {
     const size_t available_track_space = visible_height > slider_height
         ? visible_height - slider_height
         : 0;
+    const size_t scrollbar_visual_position = needs_scrollbar && (effective_total > visible_height)
+        ? std::min(
+            (smart_word_wrap && session_ && viewport_)
+                ? viewport_->EstimatedWrappedVisualRowAtLine(*session_, config_, viewport_->scroll_y)
+                : viewport_->scroll_y,
+            effective_total - visible_height)
+        : 0;
     const size_t slider_top = needs_scrollbar && (effective_total > visible_height)
-        ? (utils::WordWrapVisualRowAtLine(session_->lines, viewport_->scroll_y, visible_width) * available_track_space) / (effective_total - visible_height)
+        ? (scrollbar_visual_position * available_track_space) / (effective_total - visible_height)
         : 0;
 
     const auto bracket_origin = FindBracketNearCursor();
@@ -199,7 +207,10 @@ ftxui::Element EditorComponent::RenderViewport() {
             }
 
             const std::vector<utils::Utf8WrapSegment> segments = smart_word_wrap
-                ? utils::BuildUtf8WrapSegments(session_->lines[line_index], visible_width)
+                ? utils::BuildUtf8WrapSegmentsLimited(
+                    session_->lines[line_index],
+                    visible_width,
+                    visible_height - rendered_content_rows)
                 : std::vector<utils::Utf8WrapSegment>{utils::Utf8WrapSegment{
                     viewport_->scroll_x,
                     utils::Utf8ByteIndexAtDisplayColumn(

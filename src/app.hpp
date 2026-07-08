@@ -190,6 +190,7 @@ private:
     void RemoveOpenSession(size_t index);
     void CloseCurrentFile();
     void CloseAllOpenedFiles();
+    void CloseSidebarOpenedFile(size_t index);
     void PersistOpenedSessions();
     void RestoreOpenedSessions();
     void RefreshOpenedDocumentsSidebar();
@@ -227,6 +228,7 @@ private:
     void SaveConfig();
     std::string ActiveSessionFavoritePath() const;
     void ToggleActiveFavorite();
+    void AddActiveFavoriteFromSidebar();
     void UpdateFileMenuLabels();
     void UpdateOptionsMenuLabels();
     void InitializeCommands();
@@ -252,6 +254,8 @@ private:
     void ToggleFileExplorer();
     void HandleCtrlBFileExplorer();
     void ShowOpenedFilesSidebar();
+    void ShowProjectSidebar();
+    void ShowFavoritesSidebar();
     void ToggleSidebarOpenedProject();
     void RefreshFindMatches();
     void FindNext();

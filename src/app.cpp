@@ -86,6 +86,21 @@ TextltApp::TextltApp()
           [this](const std::filesystem::path& path) {
               document_file_controller_.RemoveFavorite(path);
               UpdateFileMenuLabels();
+              active_action_ = "Removed favorite " + path.string();
+              screen_.PostEvent(ftxui::Event::Custom);
+          },
+          [this] { AddActiveFavoriteFromSidebar(); },
+          [this](size_t index) { CloseSidebarOpenedFile(index); },
+          [this] { CloseAllOpenedFiles(); },
+          [this] { OpenFilesModal(FilesModalMode::Manage); },
+          [this](const std::string& command_id) {
+              std::string shortcut = shortcut_registry_.EffectiveShortcut(ShortcutContext::Menu, command_id);
+              if (shortcut.empty()) {
+                  if (command_id == "sidebar.show_project") return std::string("Alt+P");
+                  if (command_id == "sidebar.show_favorites") return std::string("Alt+F");
+                  if (command_id == "sidebar.show_opened_files") return std::string("Alt+O");
+              }
+              return shortcut;
           })),
       help_dialog_(&current_theme_),
       keyboard_shortcuts_modal_(

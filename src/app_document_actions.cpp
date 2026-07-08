@@ -99,6 +99,46 @@ void TextltApp::ShowOpenedFilesSidebar() {
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
+void TextltApp::ShowProjectSidebar() {
+    auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
+    if (!editor_config_.show_file_explorer) {
+        editor_config_.show_file_explorer = true;
+        sidebar->ShowProject();
+        SaveConfig();
+        active_action_ = "Project files";
+        FocusSidebar();
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+
+    if (sidebar_has_focus_ && sidebar->IsProjectMode()) {
+        editor_config_.show_file_explorer = false;
+        SaveConfig();
+        active_action_ = "File Explorer disabled";
+        FocusEditor();
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+
+    sidebar->ShowProject();
+    active_action_ = "Project files";
+    FocusSidebar();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::ShowFavoritesSidebar() {
+    if (!editor_config_.show_file_explorer) {
+        editor_config_.show_file_explorer = true;
+        SaveConfig();
+    }
+
+    auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
+    sidebar->ShowFavorites();
+    FocusSidebar();
+    active_action_ = "Favorite files";
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
 
 void TextltApp::ToggleSidebarOpenedProject() {
     if (!editor_config_.show_file_explorer) {
@@ -177,6 +217,14 @@ void TextltApp::CloseAllOpenedFiles() {
     active_action_ = "Closed all files";
     CloseDropdown();
     FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::CloseSidebarOpenedFile(size_t index) {
+    RemoveOpenSession(index);
+    UpdateFileMenuLabels();
+    active_action_ = "Closed opened file";
+    FocusSidebar();
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
@@ -262,6 +310,21 @@ void TextltApp::ToggleActiveFavorite() {
     UpdateFileMenuLabels();
     std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->Refresh();
     CloseDropdown();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::AddActiveFavoriteFromSidebar() {
+    const auto result = document_file_controller_.AddActiveFavorite();
+    if (result.status == DocumentFileController::FavoriteToggleStatus::NeedsSave) {
+        active_action_ = "Save the file before adding it to favorites";
+    } else if (result.status == DocumentFileController::FavoriteToggleStatus::AlreadyFavorite) {
+        active_action_ = "Already favorite " + result.path;
+    } else {
+        active_action_ = "Added favorite " + result.path;
+    }
+
+    UpdateFileMenuLabels();
+    std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->Refresh();
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
