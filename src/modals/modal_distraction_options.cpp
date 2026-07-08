@@ -25,11 +25,13 @@ DistractionOptionsContent::DistractionOptionsContent(
     const Theme* theme,
     SettingsProvider settings_provider,
     ApplySettingsCallback on_apply_settings,
-    CommandCallback on_command)
+    CommandCallback on_command,
+    CloseCallback on_close)
     : theme_(theme),
       settings_provider_(std::move(settings_provider)),
       on_apply_settings_(std::move(on_apply_settings)),
-      on_command_(std::move(on_command)) {
+      on_command_(std::move(on_command)),
+      on_close_(std::move(on_close)) {
     mode_tab_button_ = MakeTabButton("Mode", 0);
     layout_tab_button_ = MakeTabButton("Layout", 1);
     tab_buttons_ = ftxui::Container::Horizontal({mode_tab_button_, layout_tab_button_});
@@ -46,15 +48,15 @@ DistractionOptionsContent::DistractionOptionsContent(
             on_command_("distraction.enter");
         }
     }, ButtonRole::Primary));
-    exit_button_ = ftxui::Button(MakeButtonOption("Exit", [this] {
-        if (on_command_) {
-            on_command_("distraction.exit");
-        }
-    }, ButtonRole::Cancel));
     apply_button_ = ftxui::Button(MakeButtonOption("Apply", [this] {
         ApplyInputsToDraft();
         ApplyDraft();
     }, ButtonRole::Primary));
+    close_button_ = ftxui::Button(MakeButtonOption("Close", [this] {
+        if (on_close_) {
+            on_close_();
+        }
+    }, ButtonRole::Cancel));
 
     auto make_input = [this](std::string* value, int* cursor) {
         ftxui::InputOption option;
@@ -63,6 +65,9 @@ DistractionOptionsContent::DistractionOptionsContent(
         option.on_enter = [this] {
             ApplyInputsToDraft();
             ApplyDraft();
+        };
+        option.transform = [this](ftxui::InputState state) {
+            return ResolveTheme(theme_).InputTransform(std::move(state));
         };
         return ftxui::Input(value, "", option);
     };
@@ -74,18 +79,20 @@ DistractionOptionsContent::DistractionOptionsContent(
     mode_container_ = ftxui::Container::Horizontal({
         one_column_button_,
         two_column_button_,
-        enter_button_,
-        exit_button_,
     });
     layout_container_ = ftxui::Container::Vertical({
         column_width_input_component_,
         column_gap_input_component_,
         top_padding_input_component_,
         bottom_padding_input_component_,
-        apply_button_,
     });
     tabs_container_ = ftxui::Container::Tab({mode_container_, layout_container_}, &active_tab_index_);
-    container_ = ftxui::Container::Vertical({tab_buttons_, tabs_container_});
+    footer_container_ = ftxui::Container::Horizontal({
+        enter_button_,
+        apply_button_,
+        close_button_,
+    });
+    container_ = ftxui::Container::Vertical({tab_buttons_, tabs_container_, footer_container_});
 
     RefreshFromApp();
 }
@@ -98,7 +105,7 @@ ftxui::ButtonOption DistractionOptionsContent::MakeButtonOption(
     ButtonSpec base_spec = ButtonSpecFromLabel(
         std::move(label),
         role,
-        ButtonVariant::AccentEdges,
+        ButtonVariant::Minimal,
         ButtonSize::Compact,
         std::move(icon));
 
@@ -112,7 +119,7 @@ ftxui::ButtonOption DistractionOptionsContent::MakeButtonOption(
         } else if (spec.caption.find("2 columns") != std::string::npos) {
             spec.selected = draft_.column_count == 2;
         }
-        return RenderButton(ResolveTheme(theme_), spec, state.focused || state.active);
+        return RenderModalFlatButton(ResolveTheme(theme_), spec, state.focused || state.active);
     };
     return option;
 }
@@ -191,65 +198,65 @@ void DistractionOptionsContent::ApplyDraft() {
         on_apply_settings_(draft_);
     }
     status_ = "Applied " + ColumnModeLabel(draft_.column_count) +
-        ", width " + std::to_string(draft_.column_width) +
-        ", gap " + std::to_string(draft_.column_gap) + ".";
+        ", width " + std::to_string(draft_.column_width);
+    if (draft_.column_count == 2) {
+        status_ += ", gap " + std::to_string(draft_.column_gap);
+    }
+    status_ += ".";
 }
 
 ftxui::Element DistractionOptionsContent::RenderModeTab(const Theme& theme) {
     using namespace ftxui;
 
     return vbox({
-        text(" Mode ") | bold | color(theme.modal_accent),
-        text(" Choose the reading column preset. Layout hiding will be added later.") |
-            color(theme.modal_text_color),
-        separator() | color(theme.modal_border),
+        filler(),
         hbox({
+            filler(),
             one_column_button_->Render(),
             text("  "),
             two_column_button_->Render(),
+            filler(),
         }),
         filler(),
-        hbox({
-            text(" Current: ") | color(theme.modal_text_color),
-            text(ColumnModeLabel(draft_.column_count)) | bold | color(theme.modal_accent),
-            filler(),
-            enter_button_->Render(),
-            text(" "),
-            exit_button_->Render(),
-        }),
-    });
+    }) | bgcolor(theme.modal_background);
 }
 
 ftxui::Element DistractionOptionsContent::RenderLayoutTab(const Theme& theme) {
     using namespace ftxui;
 
-    auto field = [&](const std::string& label, ftxui::Component input, const std::string& hint) {
+    auto input_box = [&](ftxui::Component input) {
+        return input->Render() |
+            size(WIDTH, EQUAL, 8) |
+            borderStyled(LIGHT, theme.modal_border);
+    };
+
+    auto field = [&](const std::string& label, ftxui::Component input) {
         return hbox({
-            text(" " + label) | color(theme.modal_text_color) | size(WIDTH, EQUAL, 19),
-            input->Render() | size(WIDTH, EQUAL, 6),
-            text("  " + hint) | dim | color(theme.modal_text_color),
+            vbox({
+                text(""),
+                text(" " + label) |
+                    color(theme.modal_text_color) |
+                    size(WIDTH, EQUAL, 17),
+            }),
+            input_box(input),
         });
     };
 
-    return vbox({
-        text(" Layout ") | bold | color(theme.modal_accent),
-        text(" Defaults: 1 column width 92; 2 columns width 72 and gap 6.") |
-            color(theme.modal_text_color),
-        separator() | color(theme.modal_border),
-        field("column width", column_width_input_component_, "text width used by the viewport"),
-        field("column gap", column_gap_input_component_, "stored for future two-column rendering"),
-        field("top padding", top_padding_input_component_, "blank rows above text"),
-        field("bottom padding", bottom_padding_input_component_, "blank rows below text"),
-        filler(),
-        hbox({filler(), apply_button_->Render()}),
-    });
+    Elements fields;
+    fields.push_back(field("column width", column_width_input_component_));
+    if (draft_.column_count == 2) {
+        fields.push_back(field("column gap", column_gap_input_component_));
+    }
+    fields.push_back(field("top padding", top_padding_input_component_));
+    fields.push_back(field("bottom padding", bottom_padding_input_component_));
+
+    return vbox(std::move(fields)) | bgcolor(theme.modal_background);
 }
 
 ftxui::Element DistractionOptionsContent::Render() {
     using namespace ftxui;
 
     const Theme& theme = ResolveTheme(theme_);
-    const bool enabled = draft_.enabled;
     Element tab_body = active_tab_index_ == 0
         ? RenderModeTab(theme)
         : RenderLayoutTab(theme);
@@ -257,17 +264,42 @@ ftxui::Element DistractionOptionsContent::Render() {
     return vbox({
         tab_buttons_->Render(),
         separator() | color(theme.modal_border),
+        tab_body | flex,
+    }) | bgcolor(theme.modal_background);
+}
+
+ftxui::Element DistractionOptionsContent::RenderCustomFooter() {
+    using namespace ftxui;
+
+    const Theme& theme = ResolveTheme(theme_);
+    const bool enabled = draft_.enabled;
+
+    Elements actions;
+    if (active_tab_index_ == 0) {
+        actions.push_back(enter_button_->Render());
+    } else {
+        actions.push_back(apply_button_->Render());
+    }
+
+    return vbox({
         hbox({
             text(" Status: ") | color(theme.modal_text_color),
             text(enabled ? "enabled" : "disabled") |
                 bold |
                 color(enabled ? theme.modal_accent : theme.modal_text_color),
             filler(),
-            text("Esc closes") | dim | color(theme.modal_text_color),
+        }),
+        hbox({
+            text(" " + status_) | color(theme.modal_text_color),
+            filler(),
         }),
         separator() | color(theme.modal_border),
-        tab_body | flex,
-    }) | bgcolor(theme.modal_background);
+        hbox({
+            hbox(std::move(actions)),
+            filler(),
+            close_button_->Render(),
+        }),
+    });
 }
 
 DistractionOptionsModal::DistractionOptionsModal(
@@ -281,14 +313,12 @@ DistractionOptionsModal::DistractionOptionsModal(
         theme_,
         std::move(settings_provider),
         std::move(on_apply_settings),
-        std::move(on_command));
+        std::move(on_command),
+        [this] { RequestClose(); });
     modal_window_ = std::make_shared<ModalWindow>(
         content_,
         theme_,
         [this] { RequestClose(); });
-    modal_window_->SetFooterButtons({
-        ModalWindow::FooterButton{"Close", [this] { RequestClose(); }, ButtonRole::Cancel},
-    });
     modal_window_->SetBodyFrameScrolling(false);
 }
 

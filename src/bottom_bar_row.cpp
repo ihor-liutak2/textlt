@@ -110,8 +110,8 @@ ftxui::Element BottomBarRowComponent::Render() {
     };
 
     ftxui::Elements parts;
-    parts.push_back(static_text(" Ln " + std::to_string(state.cursor_row) +
-        ", Col " + std::to_string(state.cursor_col)));
+    parts.push_back(clickable_text(" Ln " + std::to_string(state.cursor_row) +
+        ", Col " + std::to_string(state.cursor_col), Segment::Line, true));
     parts.push_back(static_text(" | " + state.line_ending));
     if (has_branch) {
         parts.push_back(static_text(" | branch: "));
@@ -130,6 +130,10 @@ ftxui::Element BottomBarRowComponent::Render() {
 
 void BottomBarRowComponent::ActivateSegment(Segment segment) {
     if (!callbacks_.run_command) {
+        return;
+    }
+    if (segment == Segment::Line) {
+        callbacks_.run_command("editor.go_to_line");
         return;
     }
     if (segment == Segment::Branch) {

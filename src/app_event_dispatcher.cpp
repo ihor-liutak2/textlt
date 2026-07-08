@@ -255,14 +255,6 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
         return false;
     }
 
-    if (app_.layout_controller_.IsDistractionModeActive()) {
-        auto top_bar = std::static_pointer_cast<TopBarRowComponent>(app_.top_bar_row_);
-        if (top_bar && top_bar->DistractionPagePopupOpen()) {
-            top_bar->OnEvent(event);
-            app_.screen_.PostEvent(ftxui::Event::Custom);
-            return true;
-        }
-    }
 
     if (app_.pending_sidebar_chord_) {
         app_.pending_sidebar_chord_ = false;

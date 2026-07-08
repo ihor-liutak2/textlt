@@ -73,6 +73,7 @@ MenuBarComponent::MenuBarComponent(
               {" Convert Indents: 2 -> 4 Spaces ", "edit.convert_indents_2_to_4"},
               {" Find...            (Ctrl+F) ", "edit.find"},
               {" Replace...         (Ctrl+R) ", "edit.replace"},
+              {" Go to Line...      (Alt+T) ", "editor.go_to_line"},
               {" Search in Files...", "search.files"},
               {" Text Processors...", "text_processors.open"},
           },

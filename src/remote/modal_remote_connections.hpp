@@ -34,6 +34,7 @@ public:
     ftxui::Component GetMainComponent() override { return container_; }
     std::string GetTitle() override { return "Remote Connections"; }
     ModalSizePreference GetModalSizePreference() const override { return {112, 31}; }
+    ModalFrameStyle GetModalFrameStyle() const override { return ModalFrameStyle::TitleInBorder; }
     std::string GetFooterText() const override { return status_; }
 
     void Open();
@@ -49,6 +50,7 @@ private:
         ButtonVariant variant = ButtonVariant::AccentEdges,
         std::string icon = {},
         ButtonSize size = ButtonSize::Normal);
+    ftxui::Component MakeTypeButton(std::string label, RemoteConnectionType type);
     ftxui::Element RenderConnectionList();
     ftxui::Element RenderForm();
     ftxui::Element RenderHelpOverlay();

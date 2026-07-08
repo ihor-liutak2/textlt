@@ -128,14 +128,6 @@ void TextltApp::EqualizeEditorPaneWidths() {
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
-void TextltApp::SetEditorPaneRole(size_t pane_index, const std::string& role) {
-    if (!document_workspace_.SetPaneRole(pane_index, role)) {
-        return;
-    }
-    active_action_ = "Pane " + std::to_string(pane_index + 1) + " role: " + document_workspace_.PaneRole(pane_index);
-    screen_.PostEvent(ftxui::Event::Custom);
-}
-
 void TextltApp::AssignSessionToEditorPane(size_t pane_index, size_t session_index) {
     if (pane_index >= editor_pane_components_.size() ||
         !document_workspace_.AssignSessionToPane(pane_index, session_index)) {
@@ -246,9 +238,6 @@ ftxui::Element TextltApp::RenderEditorPane(size_t pane_index) {
     Element header = hbox({
         text(header_text) | bold | color(active ? theme.modal_selected_item_fg : theme.menu_foreground),
         filler(),
-        text(document_workspace_.PaneRole(pane_index) + " ") |
-            dim |
-            color(active ? theme.modal_selected_item_fg : theme.menu_foreground),
     }) |
         bgcolor(active ? theme.modal_selected_item_bg : theme.menu_background) |
         size(WIDTH, GREATER_THAN, 12);

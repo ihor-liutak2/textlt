@@ -25,6 +25,10 @@ bool IsLetterKey(const std::string& key) {
     return key.size() == 1 && key[0] >= 'A' && key[0] <= 'Z';
 }
 
+bool IsDigitKey(const std::string& key) {
+    return key.size() == 1 && key[0] >= '0' && key[0] <= '9';
+}
+
 bool IsFunctionKey(const std::string& key, int* number = nullptr) {
     if (key.size() < 2 || key[0] != 'F') {
         return false;
@@ -208,6 +212,9 @@ std::vector<std::string> ShortcutKeyChoices(ShortcutKeyModifier modifier) {
     for (char key = 'A'; key <= 'Z'; ++key) {
         keys.emplace_back(1, key);
     }
+    for (char key = '0'; key <= '9'; ++key) {
+        keys.emplace_back(1, key);
+    }
     keys.push_back("Slash");
     keys.push_back("Left");
     keys.push_back("Right");
@@ -311,6 +318,19 @@ bool ShortcutKeyMatchesEvent(const ShortcutKey& shortcut, const ftxui::Event& ev
             return MatchesShortcut(event, ShortcutModifier::Ctrl, '/');
         }
         return IsNamedEvent(event, ShortcutKeyToString(shortcut));
+    }
+
+    if (IsDigitKey(key)) {
+        const std::string name = ShortcutKeyToString({shortcut.modifier, key});
+        if (IsNamedEvent(event, name)) {
+            return true;
+        }
+        if (shortcut.modifier == ShortcutKeyModifier::Ctrl) {
+            const std::string code = std::to_string(static_cast<int>(key[0]));
+            return event.input() == "\x1B[" + code + ";5u" ||
+                event.input() == "\x1B[27;5;" + code + "~";
+        }
+        return false;
     }
 
     if (shortcut.modifier == ShortcutKeyModifier::Ctrl && MatchesFunctionKey(key, event)) {

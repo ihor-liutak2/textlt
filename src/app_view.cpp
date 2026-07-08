@@ -99,11 +99,6 @@ ftxui::Element TextltApp::Render() {
         base_rows.push_back(separator() | color(MainWindowSeparatorColor(current_theme_)));
         base_rows.push_back(RenderFindPanel());
     }
-    if (show_goto_line_bar_) {
-        base_rows.push_back(separator() | color(MainWindowSeparatorColor(current_theme_)));
-        base_rows.push_back(RenderGoToLinePanel());
-    }
-
     if (!distraction_mode) {
         base_rows.push_back(separator() | color(MainWindowSeparatorColor(current_theme_)));
         base_rows.push_back(
@@ -117,6 +112,9 @@ ftxui::Element TextltApp::Render() {
         bgcolor(current_theme_.background);
 
     Elements layers = {base_layout};
+    if (show_goto_line_bar_) {
+        layers.push_back(RenderGoToLinePanel() | clear_under | center);
+    }
     if (!distraction_mode && menu_bar_->IsDropdownOpen()) {
         layers.push_back(menu_bar_->RenderDropdown());
     }
@@ -260,15 +258,35 @@ ftxui::Element TextltApp::RenderFindPanel() {
 ftxui::Element TextltApp::RenderGoToLinePanel() {
     using namespace ftxui;
 
-    return hbox({
-        text(" Go to Line: ") | bold | color(current_theme_.menu_foreground),
-        goto_line_input_component_->Render() | size(WIDTH, GREATER_THAN, 12) | xflex,
-        separator() | color(MainWindowSeparatorColor(current_theme_)),
-        text(" Enter jumps | Esc closes ") | dim | color(current_theme_.foreground),
+    const bool page_mode = navigation_popup_mode_ == NavigationPopupMode::GoToPage;
+    const size_t maximum_value = page_mode
+        ? std::max<size_t>(CurrentDistractionTopBarState().total_pages, 1)
+        : std::max<size_t>(
+              std::static_pointer_cast<EditorComponent>(text_editor_)->GetLineCount(),
+              1);
+    const std::string title = page_mode ? " Goto page " : " Goto line ";
+    const std::string label = page_mode ? " Page " : " Line ";
+
+    const Element input = goto_line_input_component_
+        ? goto_line_input_component_->Render() |
+              size(WIDTH, EQUAL, 14) |
+              borderStyled(LIGHT, current_theme_.modal_border)
+        : text("") | size(WIDTH, EQUAL, 14);
+
+    return vbox({
+        text(title) | bold | color(current_theme_.modal_accent),
+        hbox({
+            vbox({text(""), text(label) | color(current_theme_.modal_text_color)}),
+            input,
+            vbox({text(""), text(" / " + std::to_string(maximum_value) + "  ") | color(current_theme_.modal_text_color)}),
+            vbox({text(""), goto_line_go_button_ ? goto_line_go_button_->Render() : text("Go")}),
+            text(" "),
+            vbox({text(""), goto_line_cancel_button_ ? goto_line_cancel_button_->Render() : text("Cancel")}),
+        }),
     }) |
-        border |
-        bgcolor(current_theme_.menu_background) |
-        color(current_theme_.menu_foreground);
+        borderStyled(LIGHT, current_theme_.modal_border) |
+        bgcolor(current_theme_.modal_background) |
+        color(current_theme_.modal_text_color);
 }
 
 void TextltApp::SetActiveLayer(UiLayer layer) {

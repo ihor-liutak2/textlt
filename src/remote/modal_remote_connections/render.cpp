@@ -3,17 +3,16 @@ ftxui::Element RemoteConnectionsModalContent::Render() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
     Element body = vbox({
+        RenderTypeButtons(),
+        separator() | color(theme.modal_border),
         hbox({
             add_button_->Render(), text(" "),
             save_button_->Render(), text(" "),
             delete_button_->Render(), text(" "),
             test_button_->Render(), text(" "),
             token_button_->Render(), text(" "),
-            reload_button_->Render(), text(" "),
-            close_button_->Render(),
+            reload_button_->Render(),
         }),
-        RenderTypeButtons(),
-        separator() | color(theme.modal_border),
         hbox({
             vbox({
                 text(" Connections ") | bold | color(theme.modal_accent),
@@ -127,24 +126,13 @@ ftxui::Element RemoteConnectionsModalContent::RenderConnectionList() {
 ftxui::Element RemoteConnectionsModalContent::RenderTypeButtons() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    auto chip = [&](RemoteConnectionType type, const ftxui::Component& component) {
-        Element rendered = component->Render();
-        if (CurrentType() == type) {
-            rendered = rendered |
-                bgcolor(theme.modal_selected_item_bg) |
-                color(theme.modal_selected_item_fg);
-        }
-        return rendered;
-    };
 
     return hbox({
-        text(" Type: ") | color(theme.modal_accent),
-        chip(RemoteConnectionType::Sftp, sftp_type_button_), text(" "),
-        chip(RemoteConnectionType::GoogleDrive, google_type_button_), text(" "),
-        chip(RemoteConnectionType::MicrosoftDrive, microsoft_type_button_), text(" "),
-        chip(RemoteConnectionType::Dropbox, dropbox_type_button_),
+        sftp_type_button_->Render(), text(" "),
+        google_type_button_->Render(), text(" "),
+        microsoft_type_button_->Render(), text(" "),
+        dropbox_type_button_->Render(),
         filler(),
-        text(" Current: " + TypeDisplayName(CurrentType()) + " ") | dim | color(theme.modal_text_color),
     });
 }
 

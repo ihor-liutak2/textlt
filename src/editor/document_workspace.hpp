@@ -14,7 +14,6 @@ class DocumentSession;
 
 struct EditorPaneState {
     size_t session_index = 0;
-    std::string role = "General";
     EditorViewport viewport;
 };
 
@@ -40,8 +39,6 @@ public:
     size_t EditorPaneCount() const;
     bool HasEditorPaneAt(size_t index) const;
     size_t PaneSessionIndex(size_t pane_index) const;
-    std::string PaneRole(size_t pane_index) const;
-    bool SetPaneRole(size_t pane_index, const std::string& role);
     EditorViewport* PaneViewport(size_t pane_index);
     const EditorViewport* PaneViewport(size_t pane_index) const;
 

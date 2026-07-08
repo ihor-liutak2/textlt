@@ -21,19 +21,24 @@ public:
     using SettingsProvider = std::function<DistractionModeSettings()>;
     using ApplySettingsCallback = std::function<void(DistractionModeSettings)>;
     using CommandCallback = std::function<void(const std::string& command_id)>;
+    using CloseCallback = std::function<void()>;
 
     DistractionOptionsContent(
         const Theme* theme,
         SettingsProvider settings_provider,
         ApplySettingsCallback on_apply_settings,
-        CommandCallback on_command);
+        CommandCallback on_command,
+        CloseCallback on_close);
 
     ftxui::Element Render() override;
     ftxui::Component GetMainComponent() override { return container_; }
     std::string GetTitle() override { return "Distraction Mode"; }
-    ModalSizePreference GetModalSizePreference() const override { return {74, 18}; }
+    ModalSizePreference GetModalSizePreference() const override { return {58, 24}; }
     ModalFrameStyle GetModalFrameStyle() const override { return ModalFrameStyle::TitleInBorder; }
     std::string GetFooterText() const override { return status_; }
+    bool HasCustomFooter() const override { return true; }
+    int GetCustomFooterHeight() const override { return 4; }
+    ftxui::Element RenderCustomFooter() override;
 
     void SetTheme(const Theme* theme) { theme_ = theme; }
     void RefreshFromApp();
@@ -59,6 +64,7 @@ private:
     SettingsProvider settings_provider_;
     ApplySettingsCallback on_apply_settings_;
     CommandCallback on_command_;
+    CloseCallback on_close_;
     DistractionModeSettings draft_;
     std::string status_ = "Configure reading layout, then Enter to enable.";
 
@@ -80,8 +86,8 @@ private:
     ftxui::Component one_column_button_;
     ftxui::Component two_column_button_;
     ftxui::Component enter_button_;
-    ftxui::Component exit_button_;
     ftxui::Component apply_button_;
+    ftxui::Component close_button_;
     ftxui::Component column_width_input_component_;
     ftxui::Component column_gap_input_component_;
     ftxui::Component top_padding_input_component_;
@@ -89,6 +95,7 @@ private:
     ftxui::Component mode_container_;
     ftxui::Component layout_container_;
     ftxui::Component tabs_container_;
+    ftxui::Component footer_container_;
     ftxui::Component container_;
 };
 

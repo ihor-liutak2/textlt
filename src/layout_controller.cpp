@@ -202,7 +202,6 @@ ViewLayoutSnapshot LayoutController::Snapshot() const {
     const size_t visible_count = VisiblePaneCount();
     for (size_t pane_index = 0; pane_index < visible_count; ++pane_index) {
         ViewLayoutPaneInfo info;
-        info.role = workspace_.PaneRole(pane_index);
         info.active = pane_index == workspace_.ActiveEditorPaneIndex();
         info.session_index = workspace_.PaneSessionIndex(pane_index);
         if (info.session_index < sessions.size()) {

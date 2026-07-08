@@ -113,22 +113,6 @@ size_t DocumentWorkspace::PaneSessionIndex(size_t pane_index) const {
     return editor_panes_[pane_index].session_index;
 }
 
-std::string DocumentWorkspace::PaneRole(size_t pane_index) const {
-    if (!HasEditorPaneAt(pane_index) || editor_panes_[pane_index].role.empty()) {
-        return "General";
-    }
-    return editor_panes_[pane_index].role;
-}
-
-bool DocumentWorkspace::SetPaneRole(size_t pane_index, const std::string& role) {
-    if (!HasEditorPaneAt(pane_index)) {
-        return false;
-    }
-    editor_panes_[pane_index].role = role.empty() ? "General" : role;
-    return true;
-}
-
-
 EditorViewport* DocumentWorkspace::PaneViewport(size_t pane_index) {
     if (!HasEditorPaneAt(pane_index)) {
         return nullptr;

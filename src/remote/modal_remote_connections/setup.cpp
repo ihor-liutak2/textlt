@@ -90,14 +90,10 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
         ButtonRole::Cancel, ButtonVariant::AccentEdges, "▶");
     token_button_ = MakeTextButton("Token", [this] { PrepareTokenFile(); },
         ButtonRole::Cancel, ButtonVariant::AccentEdges);
-    sftp_type_button_ = MakeTextButton("SFTP", [this] { SelectType(RemoteConnectionType::Sftp); },
-        ButtonRole::Toggle, ButtonVariant::Minimal);
-    google_type_button_ = MakeTextButton("Google", [this] { SelectType(RemoteConnectionType::GoogleDrive); },
-        ButtonRole::Toggle, ButtonVariant::Minimal);
-    microsoft_type_button_ = MakeTextButton("Microsoft", [this] { SelectType(RemoteConnectionType::MicrosoftDrive); },
-        ButtonRole::Toggle, ButtonVariant::Minimal);
-    dropbox_type_button_ = MakeTextButton("Dropbox", [this] { SelectType(RemoteConnectionType::Dropbox); },
-        ButtonRole::Toggle, ButtonVariant::Minimal);
+    sftp_type_button_ = MakeTypeButton("SFTP", RemoteConnectionType::Sftp);
+    google_type_button_ = MakeTypeButton("Google", RemoteConnectionType::GoogleDrive);
+    microsoft_type_button_ = MakeTypeButton("Microsoft", RemoteConnectionType::MicrosoftDrive);
+    dropbox_type_button_ = MakeTypeButton("Dropbox", RemoteConnectionType::Dropbox);
     reload_button_ = MakeTextButton("Reload", [this] { Reload(); },
         ButtonRole::Cancel, ButtonVariant::AccentEdges, "⟳");
     help_button_ = MakeTextButton("Help Connect", [this] { OpenHelp(); },
@@ -132,7 +128,6 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     toolbar_buttons.push_back(test_button_);
     toolbar_buttons.push_back(token_button_);
     toolbar_buttons.push_back(reload_button_);
-    toolbar_buttons.push_back(close_button_);
 
     ftxui::Components type_buttons;
     type_buttons.push_back(sftp_type_button_);
@@ -165,8 +160,8 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     form_area.push_back(ftxui::Container::Vertical(form_fields));
 
     ftxui::Components main_children;
-    main_children.push_back(ftxui::Container::Horizontal(toolbar_buttons));
     main_children.push_back(ftxui::Container::Horizontal(type_buttons));
+    main_children.push_back(ftxui::Container::Horizontal(toolbar_buttons));
     main_children.push_back(ftxui::Container::Horizontal(form_area));
     auto main_container = ftxui::Container::Vertical(main_children);
     main_container = ftxui::CatchEvent(main_container, [this](ftxui::Event event) {
@@ -229,7 +224,31 @@ ftxui::Component RemoteConnectionsModalContent::MakeTextButton(
     spec.variant = variant;
     spec.size = size;
     spec.icon = std::move(icon);
-    return MakeButton(theme_, std::move(spec), std::move(on_click));
+    ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
+    option.label = ButtonCaptionText(spec);
+    option.on_click = std::move(on_click);
+    option.transform = [this, spec = std::move(spec)](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return RenderModalFlatButton(theme, spec, state.focused || state.active);
+    };
+    return ftxui::Button(option);
+}
+
+ftxui::Component RemoteConnectionsModalContent::MakeTypeButton(
+    std::string label,
+    RemoteConnectionType type) {
+    ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
+    option.label = "  " + label + "  ";
+    option.on_click = [this, type] { SelectType(type); };
+    option.transform = [this, label = std::move(label), type](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return RenderModalTabButton(
+            theme,
+            label,
+            CurrentType() == type,
+            state.focused || state.active);
+    };
+    return ftxui::Button(option);
 }
 
 void RemoteConnectionsModalContent::Open() {

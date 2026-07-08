@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <utility>
 
 #include "app_resources.hpp"
 #include "ftxui/component/component_options.hpp"
@@ -57,6 +58,28 @@ ftxui::ButtonOption MakeFindPanelTextButtonOption(
         ButtonSpec spec = base_spec;
         spec.selected = is_active && is_active();
         return RenderButton(resolved_theme, spec, state.focused || state.active);
+    };
+    return option;
+}
+
+ftxui::ButtonOption MakePopupFlatButtonOption(
+    std::string label,
+    std::function<void()> on_click,
+    const Theme* theme,
+    ButtonRole role = ButtonRole::Default) {
+    ButtonSpec base_spec = ButtonSpecFromLabel(
+        std::move(label),
+        role,
+        ButtonVariant::Minimal,
+        ButtonSize::Compact);
+
+    ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
+    option.label = ButtonCaptionText(base_spec);
+    option.on_click = std::move(on_click);
+    option.transform = [theme, base_spec = std::move(base_spec)](const ftxui::EntryState& state) {
+        const Theme fallback_theme;
+        const Theme& resolved_theme = theme ? *theme : fallback_theme;
+        return RenderModalFlatButton(resolved_theme, base_spec, state.focused || state.active);
     };
     return option;
 }
@@ -242,17 +265,9 @@ TextltApp::TextltApp()
               active_action_ = "View layout: " + layout_controller_.ModeLabel();
               screen_.PostEvent(ftxui::Event::Custom);
           },
-          [this](size_t pane_index) {
-              SetActiveEditorPane(pane_index);
-              screen_.PostEvent(ftxui::Event::Custom);
-          },
           [this](size_t pane_index, size_t session_index) {
               AssignSessionToEditorPane(pane_index, session_index);
           },
-          [this](size_t pane_index, const std::string& role) {
-              SetEditorPaneRole(pane_index, role);
-          },
-          [this] { SplitActiveSessionToNextPane(); },
           [this] { EqualizeEditorPaneWidths(); },
           [this] { CloseViewLayoutModal(); }),
       distraction_options_modal_(
@@ -297,7 +312,7 @@ TextltApp::TextltApp()
             [this] { return tts_header_active_button_; },
             [this] { return distraction_controller_.Enabled(); },
             [this] { return CurrentDistractionTopBarState(); },
-            [this](const std::string& page_input) { SetDistractionPageInput(page_input); },
+            [this] { OpenDistractionPagePanel(); },
         });
 
     bottom_bar_row_ = ftxui::Make<BottomBarRowComponent>(
@@ -373,8 +388,21 @@ TextltApp::TextltApp()
     ftxui::InputOption goto_line_input_option;
     goto_line_input_option.multiline = false;
     goto_line_input_option.on_enter = [this] { SubmitGoToLine(); };
+    goto_line_input_option.cursor_position = &goto_line_input_cursor_position_;
+    goto_line_input_option.transform = [this](ftxui::InputState state) {
+        return current_theme_.InputTransform(std::move(state));
+    };
     goto_line_input_component_ = ftxui::Input(
         &goto_line_input_, "line number", goto_line_input_option);
+    goto_line_go_button_ = ftxui::Button(MakePopupFlatButtonOption(
+        "Go", [this] { SubmitGoToLine(); }, &current_theme_, ButtonRole::Primary));
+    goto_line_cancel_button_ = ftxui::Button(MakePopupFlatButtonOption(
+        "Cancel", [this] { CloseGoToLinePanel(); }, &current_theme_, ButtonRole::Cancel));
+    goto_line_popup_container_ = ftxui::Container::Horizontal({
+        goto_line_input_component_,
+        goto_line_go_button_,
+        goto_line_cancel_button_,
+    });
 
     find_paste_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
         "Paste", [this] { PasteIntoFindPanelInput(); }, &current_theme_, {}, ButtonRole::Navigation));
@@ -482,7 +510,7 @@ TextltApp::TextltApp()
         custom_processor_builder_modal_.View(),
         theme_dialog_.View(),
         find_panel_container_,
-        goto_line_input_component_,
+        goto_line_popup_container_,
         unsaved_changes_dialog_.View(),
         recent_files_modal_.View(),
         search_files_modal_.View(),

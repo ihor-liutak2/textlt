@@ -16,6 +16,31 @@
 namespace textlt {
 namespace {
 
+size_t ParsePositiveNumberClamped(const std::string& value, size_t maximum_value, bool* has_digits = nullptr) {
+    maximum_value = std::max<size_t>(maximum_value, 1);
+    size_t parsed = 0;
+    bool found_digit = false;
+    for (unsigned char character : value) {
+        if (character < '0' || character > '9') {
+            continue;
+        }
+        found_digit = true;
+        const size_t digit = static_cast<size_t>(character - '0');
+        if (parsed > (maximum_value - digit) / 10) {
+            parsed = maximum_value;
+        } else {
+            parsed = parsed * 10 + digit;
+        }
+    }
+    if (has_digits) {
+        *has_digits = found_digit;
+    }
+    if (!found_digit) {
+        return 1;
+    }
+    return std::clamp(parsed, size_t{1}, maximum_value);
+}
+
 std::vector<std::string> BuiltInHelpLines() {
     return {
         "textlt Help",
@@ -33,6 +58,7 @@ std::vector<std::string> BuiltInHelpLines() {
         "  Page Down     Move one page down",
         "  Ctrl+Left     Jump to the previous word",
         "  Ctrl+Right    Jump to the next word",
+        "  Alt+T         Go to line",
         "  Ctrl+Up       Jump to the previous paragraph",
         "  Ctrl+Down     Jump to the next paragraph",
         "  Shift+Ctrl+Up Select to the previous paragraph",
@@ -490,8 +516,6 @@ bool TextltApp::OpenGitCompareDocuments(
         SetEditorLayoutMode(EditorLayoutMode::TwoColumns);
         AssignSessionToEditorPane(0, left_index);
         AssignSessionToEditorPane(1, right_index);
-        SetEditorPaneRole(0, "Git Left");
-        SetEditorPaneRole(1, "Git Right");
         SetActiveEditorPane(0);
     }
 
@@ -766,36 +790,132 @@ void TextltApp::OpenGoToLinePanel() {
     }
     current_search_mode_ = SearchMode::None;
     std::static_pointer_cast<EditorComponent>(text_editor_)->ClearSearchHighlights();
+    navigation_popup_mode_ = NavigationPopupMode::GoToLine;
     show_goto_line_bar_ = true;
     goto_line_input_.clear();
+    goto_line_input_cursor_position_ = 0;
     SetActiveLayer(UiLayer::GoToLine);
-    goto_line_input_component_->TakeFocus();
+    if (goto_line_popup_container_) {
+        goto_line_popup_container_->TakeFocus();
+    }
+    if (goto_line_input_component_) {
+        goto_line_input_component_->TakeFocus();
+    }
     active_action_ = "Go to line";
+}
+
+
+void TextltApp::OpenDistractionPagePanel() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+    navigation_popup_mode_ = NavigationPopupMode::GoToPage;
+    show_goto_line_bar_ = true;
+    const DistractionTopBarState state = CurrentDistractionTopBarState();
+    goto_line_input_ = state.page_input.empty() ? std::to_string(std::max<size_t>(state.current_page, 1)) : state.page_input;
+    goto_line_input_cursor_position_ = static_cast<int>(goto_line_input_.size());
+    SetActiveLayer(UiLayer::GoToLine);
+    if (goto_line_popup_container_) {
+        goto_line_popup_container_->TakeFocus();
+    }
+    if (goto_line_input_component_) {
+        goto_line_input_component_->TakeFocus();
+    }
+    active_action_ = "Go to page";
 }
 
 
 void TextltApp::CloseGoToLinePanel() {
     show_goto_line_bar_ = false;
+    navigation_popup_mode_ = NavigationPopupMode::GoToLine;
     FocusEditor();
 }
 
 
 void TextltApp::SubmitGoToLine() {
-    try {
-        size_t parsed_chars = 0;
-        const int line_number = std::stoi(goto_line_input_, &parsed_chars);
-        if (parsed_chars != goto_line_input_.size()) {
-            active_action_ = "Invalid line number";
-        } else {
-            auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-            editor_ptr->JumpToLine(line_number);
-            active_action_ = "Jumped to line " + std::to_string(line_number);
+    if (navigation_popup_mode_ == NavigationPopupMode::GoToPage) {
+        const DistractionTopBarState state = CurrentDistractionTopBarState();
+        const size_t total_pages = std::max<size_t>(state.total_pages, 1);
+        bool has_digits = false;
+        const size_t page_number = ParsePositiveNumberClamped(
+            goto_line_input_,
+            total_pages,
+            &has_digits);
+        if (!has_digits) {
+            active_action_ = "Invalid page number";
+            if (goto_line_input_component_) {
+                goto_line_input_component_->TakeFocus();
+            }
+            screen_.PostEvent(ftxui::Event::Custom);
+            return;
         }
-    } catch (const std::exception&) {
-        active_action_ = "Invalid line number";
+
+        goto_line_input_ = std::to_string(page_number);
+        goto_line_input_cursor_position_ = static_cast<int>(goto_line_input_.size());
+        distraction_controller_.SetPageInput(goto_line_input_);
+        if (distraction_controller_.GoToPage(
+                &document_workspace_,
+                layout_controller_.VisiblePaneCount(),
+                &editor_config_)) {
+            active_action_ = "Jumped to page " + goto_line_input_;
+        } else {
+            active_action_ = "Unable to jump to page";
+        }
+        show_goto_line_bar_ = false;
+        navigation_popup_mode_ = NavigationPopupMode::GoToLine;
+        FocusEditor();
+        return;
     }
 
+    const size_t active_pane = document_workspace_.ActiveEditorPaneIndex();
+    DocumentSession* session = nullptr;
+    EditorViewport* viewport = nullptr;
+    if (document_workspace_.HasEditorPaneAt(active_pane)) {
+        const size_t session_index = document_workspace_.PaneSessionIndex(active_pane);
+        session = document_workspace_.SessionAt(session_index);
+        viewport = document_workspace_.PaneViewport(active_pane);
+    }
+    if (!session) {
+        session = document_workspace_.ActiveSession();
+    }
+
+    const size_t total_lines = std::max<size_t>(session ? session->LineCount() : 1, 1);
+
+    bool has_digits = false;
+    const size_t line_number = ParsePositiveNumberClamped(
+        goto_line_input_,
+        total_lines,
+        &has_digits);
+    if (!has_digits) {
+        active_action_ = "Invalid line number";
+        if (goto_line_input_component_) {
+            goto_line_input_component_->TakeFocus();
+        }
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+
+    goto_line_input_ = std::to_string(line_number);
+    goto_line_input_cursor_position_ = static_cast<int>(goto_line_input_.size());
+    if (session) {
+        const size_t line_index = line_number - 1;
+        if (viewport) {
+            session->SetActiveCursorState(&viewport->CursorState());
+        }
+        session->SetCursorPosition(line_index, 0);
+        if (viewport) {
+            viewport->CursorState().cursor_row = session->CursorRow();
+            viewport->CursorState().cursor_col = session->CursorCol();
+            viewport->CursorState().selection.active = false;
+            viewport->scroll_y = session->CursorRow();
+            viewport->scroll_x = 0;
+        }
+    }
+    active_action_ = "Jumped to line " + std::to_string(line_number);
+    screen_.PostEvent(ftxui::Event::Custom);
+
     show_goto_line_bar_ = false;
+    navigation_popup_mode_ = NavigationPopupMode::GoToLine;
     FocusEditor();
 }
 

@@ -30,9 +30,6 @@ DistractionTopBarState TextltApp::CurrentDistractionTopBarState() const {
         &editor_config_);
 }
 
-void TextltApp::SetDistractionPageInput(const std::string& page_input) {
-    distraction_controller_.SetPageInput(page_input);
-}
 
 void TextltApp::ApplyDistractionSettings(DistractionModeSettings settings) {
     distraction_controller_.SetSettings(settings);
@@ -111,14 +108,7 @@ void TextltApp::CommandDistractionPreviousPage() {
 }
 
 void TextltApp::CommandDistractionGoToPage() {
-    if (distraction_controller_.GoToPage(
-            &document_workspace_,
-            layout_controller_.VisiblePaneCount(),
-            &editor_config_)) {
-        active_action_ = "Distraction Mode: page " +
-            distraction_controller_.PageInput();
-    }
-    screen_.PostEvent(ftxui::Event::Custom);
+    OpenDistractionPagePanel();
 }
 
 } // namespace textlt

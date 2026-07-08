@@ -38,6 +38,7 @@ public:
 
 private:
     enum class Segment {
+        Line,
         Branch,
         Theme,
     };

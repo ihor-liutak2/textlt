@@ -10,13 +10,6 @@ namespace textlt {
 
 namespace {
 
-std::string LayoutNameForIndex(int index) {
-    switch (index) {
-        case 1: return "Two columns";
-        case 2: return "Three columns";
-        default: return "Single column";
-    }
-}
 
 std::string Shorten(const std::string& value, size_t max_size) {
     if (value.size() <= max_size) {
@@ -34,61 +27,50 @@ ViewLayoutContent::ViewLayoutContent(
     const Theme* theme,
     SnapshotProvider snapshot_provider,
     ApplyLayoutCallback on_apply_layout,
-    PaneCallback on_focus_pane,
     PaneSessionCallback on_assign_session,
-    PaneRoleCallback on_set_role,
-    ActionCallback on_split_active,
-    ActionCallback on_equal_widths)
+    ActionCallback on_equal_widths,
+    std::function<void()> on_close)
     : theme_(theme),
       snapshot_provider_(std::move(snapshot_provider)),
       on_apply_layout_(std::move(on_apply_layout)),
-      on_focus_pane_(std::move(on_focus_pane)),
       on_assign_session_(std::move(on_assign_session)),
-      on_set_role_(std::move(on_set_role)),
-      on_split_active_(std::move(on_split_active)),
-      on_equal_widths_(std::move(on_equal_widths)) {
+      on_equal_widths_(std::move(on_equal_widths)),
+      on_close_(std::move(on_close)) {
     single_button_ = ftxui::Button(MakeButtonOption("Single", [this] {
         selected_layout_index_ = 0;
+        ApplySelectedLayout();
     }, ButtonRole::Toggle));
     two_button_ = ftxui::Button(MakeButtonOption("Two columns", [this] {
         selected_layout_index_ = 1;
+        ApplySelectedLayout();
     }, ButtonRole::Toggle));
     three_button_ = ftxui::Button(MakeButtonOption("Three columns", [this] {
         selected_layout_index_ = 2;
+        ApplySelectedLayout();
     }, ButtonRole::Toggle));
-
-    ftxui::MenuOption pane_option = ftxui::MenuOption::Vertical();
-    pane_option.on_change = [this] {
-        ClampSelections();
-        SyncControlsFromSelectedPane();
-    };
-    pane_menu_ = ftxui::Menu(&pane_entries_, &selected_pane_index_, pane_option);
 
     ftxui::MenuOption document_option = ftxui::MenuOption::Vertical();
     document_menu_ = ftxui::Menu(&document_entries_, &selected_session_index_, document_option);
 
-    role_toggle_ = ftxui::Toggle(&role_entries_, &selected_role_index_);
-
-    focus_pane_button_ = ftxui::Button(MakeButtonOption("Set active pane", [this] {
-        FocusSelectedPane();
-    }, ButtonRole::Primary));
-    assign_document_button_ = ftxui::Button(MakeButtonOption("Assign document", [this] {
-        AssignSelectedDocumentSession();
-    }, ButtonRole::Primary));
-    set_role_button_ = ftxui::Button(MakeButtonOption("Set role", [this] {
-        ApplySelectedRole();
-    }, ButtonRole::Primary));
-    split_active_button_ = ftxui::Button(MakeButtonOption("Split active document", [this] {
-        if (on_split_active_) {
-            on_split_active_();
-        }
-        RefreshFromApp();
-    }, ButtonRole::Warning));
     equal_widths_button_ = ftxui::Button(MakeButtonOption("Equal widths", [this] {
         if (on_equal_widths_) {
             on_equal_widths_();
         }
         RefreshFromApp();
+    }, ButtonRole::Secondary));
+    set_pane_1_button_ = ftxui::Button(MakeButtonOption("Set pane 1", [this] {
+        AssignSelectedDocumentToPane(0);
+    }, ButtonRole::Primary));
+    set_pane_2_button_ = ftxui::Button(MakeButtonOption("Set pane 2", [this] {
+        AssignSelectedDocumentToPane(1);
+    }, ButtonRole::Primary));
+    set_pane_3_button_ = ftxui::Button(MakeButtonOption("Set pane 3", [this] {
+        AssignSelectedDocumentToPane(2);
+    }, ButtonRole::Primary));
+    close_button_ = ftxui::Button(MakeButtonOption("Close", [this] {
+        if (on_close_) {
+            on_close_();
+        }
     }, ButtonRole::Cancel));
 
     container_ = ftxui::Container::Vertical({
@@ -96,20 +78,14 @@ ViewLayoutContent::ViewLayoutContent(
             single_button_,
             two_button_,
             three_button_,
-        }),
-        ftxui::Container::Horizontal({
-            pane_menu_,
-            document_menu_,
-        }),
-        role_toggle_,
-        ftxui::Container::Horizontal({
-            focus_pane_button_,
-            assign_document_button_,
-            set_role_button_,
-        }),
-        ftxui::Container::Horizontal({
-            split_active_button_,
             equal_widths_button_,
+        }),
+        document_menu_,
+        ftxui::Container::Horizontal({
+            set_pane_1_button_,
+            set_pane_2_button_,
+            set_pane_3_button_,
+            close_button_,
         }),
     });
 }
@@ -119,7 +95,7 @@ ftxui::ButtonOption ViewLayoutContent::MakeButtonOption(
     std::function<void()> on_click,
     ButtonRole role,
     std::string icon) const {
-    ButtonSpec spec = ButtonSpecFromLabel(std::move(label), role, ButtonVariant::AccentEdges, ButtonSize::Compact, std::move(icon));
+    ButtonSpec spec = ButtonSpecFromLabel(std::move(label), role, ButtonVariant::Minimal, ButtonSize::Compact, std::move(icon));
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
     option.label = ButtonCaptionText(spec);
     option.on_click = std::move(on_click);
@@ -133,26 +109,12 @@ ftxui::ButtonOption ViewLayoutContent::MakeButtonOption(
         } else if (resolved_spec.caption == "Three columns") {
             resolved_spec.selected = selected_layout_index_ == 2;
         }
-        return RenderButton(theme, resolved_spec, state.focused || state.active);
+        return RenderModalFlatButton(theme, resolved_spec, state.focused || state.active);
     };
     return option;
 }
 
 void ViewLayoutContent::RefreshEntriesFromSnapshot() {
-    pane_entries_.clear();
-    for (size_t index = 0; index < snapshot_.panes.size(); ++index) {
-        const ViewLayoutPaneInfo& pane = snapshot_.panes[index];
-        std::string label = "Pane " + std::to_string(index + 1) + ": " +
-            Shorten(pane.title.empty() ? "Untitled" : pane.title, 28);
-        if (pane.active) {
-            label += " [active]";
-        }
-        pane_entries_.push_back(std::move(label));
-    }
-    if (pane_entries_.empty()) {
-        pane_entries_.push_back("Pane 1: Untitled");
-    }
-
     document_entries_.clear();
     for (size_t index = 0; index < snapshot_.documents.size(); ++index) {
         const ViewLayoutDocumentInfo& doc = snapshot_.documents[index];
@@ -175,41 +137,15 @@ void ViewLayoutContent::ClampSelections() {
     if (selected_layout_index_ > 2) {
         selected_layout_index_ = 2;
     }
-    if (selected_pane_index_ < 0) {
-        selected_pane_index_ = 0;
-    }
-    if (!pane_entries_.empty() && selected_pane_index_ >= static_cast<int>(pane_entries_.size())) {
-        selected_pane_index_ = static_cast<int>(pane_entries_.size()) - 1;
-    }
     if (selected_session_index_ < 0) {
         selected_session_index_ = 0;
     }
     if (!document_entries_.empty() && selected_session_index_ >= static_cast<int>(document_entries_.size())) {
         selected_session_index_ = static_cast<int>(document_entries_.size()) - 1;
     }
-    if (selected_role_index_ < 0) {
-        selected_role_index_ = 0;
-    }
-    if (!role_entries_.empty() && selected_role_index_ >= static_cast<int>(role_entries_.size())) {
-        selected_role_index_ = static_cast<int>(role_entries_.size()) - 1;
-    }
-
 }
 
 void ViewLayoutContent::SyncControlsFromSelectedPane() {
-    ClampSelections();
-    if (selected_pane_index_ < 0 ||
-        selected_pane_index_ >= static_cast<int>(snapshot_.panes.size())) {
-        return;
-    }
-
-    const ViewLayoutPaneInfo& pane = snapshot_.panes[static_cast<size_t>(selected_pane_index_)];
-    selected_session_index_ = static_cast<int>(pane.session_index);
-    const std::string role = pane.role.empty() ? "General" : pane.role;
-    auto role_it = std::find(role_entries_.begin(), role_entries_.end(), role);
-    if (role_it != role_entries_.end()) {
-        selected_role_index_ = static_cast<int>(std::distance(role_entries_.begin(), role_it));
-    }
     ClampSelections();
 }
 
@@ -217,7 +153,6 @@ void ViewLayoutContent::RefreshFromApp() {
     if (snapshot_provider_) {
         snapshot_ = snapshot_provider_();
         selected_layout_index_ = snapshot_.layout_index;
-        selected_pane_index_ = static_cast<int>(snapshot_.active_pane_index);
     } else {
         snapshot_ = ViewLayoutSnapshot{};
     }
@@ -233,36 +168,13 @@ void ViewLayoutContent::ApplySelectedLayout() {
     RefreshFromApp();
 }
 
-void ViewLayoutContent::FocusSelectedPane() {
+void ViewLayoutContent::AssignSelectedDocumentToPane(size_t pane_index) {
     ClampSelections();
-    if (on_focus_pane_) {
-        on_focus_pane_(static_cast<size_t>(selected_pane_index_));
+    if (pane_index >= snapshot_.panes.size()) {
+        return;
     }
-    RefreshFromApp();
-}
-
-void ViewLayoutContent::AssignSelectedDocumentSession() {
-    ClampSelections();
     if (on_assign_session_) {
-        on_assign_session_(
-            static_cast<size_t>(selected_pane_index_),
-            static_cast<size_t>(selected_session_index_));
-    }
-    RefreshFromApp();
-}
-
-std::string ViewLayoutContent::SelectedRoleLabel() const {
-    if (selected_role_index_ < 0 ||
-        selected_role_index_ >= static_cast<int>(role_entries_.size())) {
-        return "General";
-    }
-    return role_entries_[static_cast<size_t>(selected_role_index_)];
-}
-
-void ViewLayoutContent::ApplySelectedRole() {
-    ClampSelections();
-    if (on_set_role_) {
-        on_set_role_(static_cast<size_t>(selected_pane_index_), SelectedRoleLabel());
+        on_assign_session_(pane_index, static_cast<size_t>(selected_session_index_));
     }
     RefreshFromApp();
 }
@@ -276,25 +188,17 @@ void ViewLayoutContent::TakeFocus() {
 ftxui::Element ViewLayoutContent::RenderLayoutSection(const Theme& theme) {
     using namespace ftxui;
 
-    const std::string split_info = "Splits: 2-left=" + std::to_string(snapshot_.two_left_width) +
-        " | 3-left=" + std::to_string(snapshot_.three_left_width) +
-        " | 3-right=" + std::to_string(snapshot_.three_right_width);
-
     return vbox({
-        text("Layout") | bold | color(theme.modal_accent),
         hbox({
             single_button_->Render(),
-            text(" "),
+            text("  "),
             two_button_->Render(),
-            text(" "),
+            text("  "),
             three_button_->Render(),
             filler(),
             equal_widths_button_->Render(),
         }),
-        text("Selected: " + LayoutNameForIndex(selected_layout_index_) +
-             " | Current: " + snapshot_.layout_name) |
-            color(theme.modal_text_color),
-        text(split_info) | dim | color(theme.modal_text_color),
+        separator() | color(theme.modal_border),
     });
 }
 
@@ -302,79 +206,27 @@ ftxui::Element ViewLayoutContent::RenderPaneManager(const Theme& theme) {
     using namespace ftxui;
     ClampSelections();
 
-    Element selected_details = emptyElement();
-    if (selected_pane_index_ >= 0 && selected_pane_index_ < static_cast<int>(snapshot_.panes.size())) {
-        const ViewLayoutPaneInfo& pane = snapshot_.panes[static_cast<size_t>(selected_pane_index_)];
-        selected_details = vbox({
-            text("Selected pane") | bold | color(theme.modal_accent),
-            text("Title: " + (pane.title.empty() ? "Untitled" : pane.title)) | color(theme.modal_text_color),
-            text("Role: " + (pane.role.empty() ? "General" : pane.role)) | color(theme.modal_text_color),
-            text("Document index: " + std::to_string(pane.session_index + 1)) | dim | color(theme.modal_text_color),
-        });
+    Elements details;
+    if (selected_session_index_ >= 0 &&
+        selected_session_index_ < static_cast<int>(snapshot_.documents.size())) {
+        const ViewLayoutDocumentInfo& doc = snapshot_.documents[static_cast<size_t>(selected_session_index_)];
+        std::string status = doc.dirty ? "modified" : "saved";
+        if (doc.memory_only) {
+            status += ", memory only";
+        }
+        details.push_back(text("Selected: " + (doc.title.empty() ? "Untitled" : doc.title)) |
+            color(theme.modal_text_color));
+        details.push_back(text(status) | dim | color(theme.modal_text_color));
     }
-
-    Element pane_list = vbox({
-        text("Panes") | bold | color(theme.modal_accent),
-        pane_menu_->Render() | frame | size(HEIGHT, LESS_THAN, 7),
-        focus_pane_button_->Render(),
-    }) | size(WIDTH, GREATER_THAN, 30);
-
-    Element document_list = vbox({
-        text("Documents") | bold | color(theme.modal_accent),
-        document_menu_->Render() | frame | size(HEIGHT, LESS_THAN, 7),
-        assign_document_button_->Render(),
-    }) | size(WIDTH, GREATER_THAN, 36) | xflex;
 
     return vbox({
-        hbox({
-            pane_list,
-            separator() | color(theme.modal_border),
-            document_list,
-        }),
+        document_menu_->Render() |
+            frame |
+            size(HEIGHT, LESS_THAN, 11) |
+            flex,
         separator() | color(theme.modal_border),
-        hbox({
-            vbox({
-                text("Role") | bold | color(theme.modal_accent),
-                role_toggle_->Render(),
-                set_role_button_->Render(),
-            }) | xflex,
-            separator() | color(theme.modal_border),
-            vbox({
-                selected_details,
-                split_active_button_->Render(),
-            }) | xflex,
-        }),
-    });
-}
-
-ftxui::Element ViewLayoutContent::RenderPanePreview(const Theme& theme) {
-    using namespace ftxui;
-
-    Elements rows;
-    rows.push_back(text("Preview") | bold | color(theme.modal_accent));
-    if (snapshot_.panes.empty()) {
-        rows.push_back(text("No panes available") | dim | color(theme.modal_text_color));
-        return vbox(std::move(rows));
-    }
-
-    for (size_t index = 0; index < snapshot_.panes.size(); ++index) {
-        const ViewLayoutPaneInfo& pane = snapshot_.panes[index];
-        std::string label = "Pane " + std::to_string(index + 1) + ": ";
-        label += pane.title.empty() ? "Untitled" : pane.title;
-        label += "  role: " + (pane.role.empty() ? "General" : pane.role);
-        if (pane.active) {
-            label += "  [active]";
-        }
-        ftxui::Element row = text(label) | color(theme.modal_text_color);
-        if (pane.active) {
-            row = row |
-                bgcolor(theme.modal_selected_item_bg) |
-                color(theme.modal_selected_item_fg);
-        }
-        rows.push_back(std::move(row));
-    }
-
-    return vbox(std::move(rows));
+        vbox(std::move(details)),
+    }) | xflex;
 }
 
 ftxui::Element ViewLayoutContent::Render() {
@@ -384,24 +236,38 @@ ftxui::Element ViewLayoutContent::Render() {
 
     return vbox({
         RenderLayoutSection(theme),
-        separator() | color(theme.modal_border),
         RenderPaneManager(theme) | flex,
-        separator() | color(theme.modal_border),
-        RenderPanePreview(theme),
-        text("Alt+Left / Alt+Right switches panes. Mouse drag on split bars resizes columns.") |
-            dim |
-            color(theme.modal_text_color),
     }) | bgcolor(theme.modal_input_bg) | color(theme.modal_input_fg);
+}
+
+ftxui::Element ViewLayoutContent::RenderCustomFooter() {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+
+    Elements actions;
+    const size_t pane_count = std::max<size_t>(snapshot_.panes.size(), 1);
+    actions.push_back(set_pane_1_button_->Render());
+    if (pane_count >= 2) {
+        actions.push_back(text(" "));
+        actions.push_back(set_pane_2_button_->Render());
+    }
+    if (pane_count >= 3) {
+        actions.push_back(text(" "));
+        actions.push_back(set_pane_3_button_->Render());
+    }
+
+    return hbox({
+        hbox(std::move(actions)),
+        filler(),
+        close_button_->Render(),
+    }) | bgcolor(theme.modal_background) | color(theme.modal_text_color);
 }
 
 ViewLayoutModal::ViewLayoutModal(
     const Theme* theme,
     SnapshotProvider snapshot_provider,
     ApplyLayoutCallback on_apply_layout,
-    PaneCallback on_focus_pane,
     PaneSessionCallback on_assign_session,
-    PaneRoleCallback on_set_role,
-    ActionCallback on_split_active,
     ActionCallback on_equal_widths,
     CloseCallback on_close)
     : theme_(theme),
@@ -410,23 +276,13 @@ ViewLayoutModal::ViewLayoutModal(
         theme_,
         std::move(snapshot_provider),
         std::move(on_apply_layout),
-        std::move(on_focus_pane),
         std::move(on_assign_session),
-        std::move(on_set_role),
-        std::move(on_split_active),
-        std::move(on_equal_widths));
+        std::move(on_equal_widths),
+        [this] { RequestClose(); });
     modal_window_ = std::make_shared<ModalWindow>(
         content_,
         theme_,
         [this] { RequestClose(); });
-    modal_window_->SetFooterButtons({
-        {"Apply layout", [this] {
-            if (content_) {
-                content_->ApplySelectedLayout();
-            }
-        }},
-        {"Close", [this] { RequestClose(); }},
-    });
     modal_window_->SetBodyFrameScrolling(false);
 }
 

@@ -71,6 +71,11 @@ private:
         Replace,
     };
 
+    enum class NavigationPopupMode {
+        GoToLine,
+        GoToPage,
+    };
+
     using EditorLayoutMode = LayoutController::EditorLayoutMode;
 
     // Keep application layer selection type-safe. FTXUI's Container::Tab API
@@ -208,7 +213,6 @@ private:
     void FocusNextEditorPane();
     void FocusPreviousEditorPane();
     void EqualizeEditorPaneWidths();
-    void SetEditorPaneRole(size_t pane_index, const std::string& role);
     void AssignSessionToEditorPane(size_t pane_index, size_t session_index);
     void SplitActiveSessionToNextPane();
     bool MainViewCanActivateEditorPane() const;
@@ -216,7 +220,6 @@ private:
     ftxui::Element RenderEditorPane(size_t pane_index);
     ViewLayoutSnapshot CurrentViewLayoutSnapshot() const;
     DistractionTopBarState CurrentDistractionTopBarState() const;
-    void SetDistractionPageInput(const std::string& page_input);
     void ApplyDistractionSettings(DistractionModeSettings settings);
     void SetDistractionEnabled(bool enabled);
     void InitializeWithFiles(const std::vector<std::string>& files_to_open);
@@ -253,6 +256,7 @@ private:
     void OpenFindPanel(bool replace_mode);
     void CloseFindPanel();
     void OpenGoToLinePanel();
+    void OpenDistractionPagePanel();
     void CloseGoToLinePanel();
     void SubmitGoToLine();
     void ToggleFileExplorer();
@@ -383,9 +387,11 @@ private:
     int find_input_cursor_position_ = 0;
     int replace_find_input_cursor_position_ = 0;
     int replace_input_cursor_position_ = 0;
+    int goto_line_input_cursor_position_ = 0;
     bool sidebar_has_focus_ = false;
     bool pending_sidebar_chord_ = false;
     bool show_goto_line_bar_ = false;
+    NavigationPopupMode navigation_popup_mode_ = NavigationPopupMode::GoToLine;
     bool exit_after_save_as_ = false;
     bool terminal_bracketed_paste_active_ = false;
     SearchMode current_search_mode_ = SearchMode::None;
@@ -416,6 +422,9 @@ private:
     ftxui::Component search_match_case_checkbox_;
     ftxui::Component search_whole_word_checkbox_;
     ftxui::Component goto_line_input_component_;
+    ftxui::Component goto_line_go_button_;
+    ftxui::Component goto_line_cancel_button_;
+    ftxui::Component goto_line_popup_container_;
     ftxui::Component renderer_;
     ftxui::Component global_shortcuts_;
 };

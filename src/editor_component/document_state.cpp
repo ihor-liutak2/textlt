@@ -165,6 +165,10 @@
         EndTypingGroup();
         session_->JumpToLine(line_number);
         ClearSelection();
+        if (viewport_) {
+            viewport_->scroll_y = session_->CursorRow();
+            viewport_->scroll_x = 0;
+        }
         UpdateScroll();
     }
 

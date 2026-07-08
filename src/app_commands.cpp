@@ -64,7 +64,7 @@ void TextltApp::InitializeCommands() {
     add("search.files", "Search in Files", "Edit", "", [this] { CommandSearchFiles(); });
     add("text_processors.open", "Text Processors", "Edit", "", [this] { CommandTextProcessors(); });
     add("custom_processor_builder.open", "Custom Processor Builder", "Text Processors", "", [this] { CommandCustomProcessorBuilder(); });
-    add("editor.go_to_line", "Go to Line", "Edit", "Ctrl+G", [this] { OpenGoToLinePanel(); });
+    add("editor.go_to_line", "Go to Line", "Edit", "Alt+T", [this] { OpenGoToLinePanel(); });
 
     add("view.toggle_line_numbers", "Toggle Line Numbers", "Options", "", [this] { CommandViewToggleLineNumbers(); });
     add("sidebar.toggle_file_explorer", "Toggle File Explorer", "Options", "", [this] { CommandSidebarToggleFileExplorer(); });
