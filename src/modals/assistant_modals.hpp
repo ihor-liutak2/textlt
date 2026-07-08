@@ -79,18 +79,8 @@ public:
 private:
     void LoadRegistries();
     void LoadPiperRegistry();
-    void LoadAiRegistry();
     void RebuildTtsVoices();
     void FetchRegistries();
-    bool ResolveAiRuntimeDownload();
-    void StartAiRuntimeDownload();
-    void StartAiRuntimeDelete();
-    void ConfirmAiRuntimeDelete();
-    void CancelAiRuntimeDelete();
-    void StartAiModelDownload();
-    void StartAiModelDelete();
-    void ConfirmAiModelDelete();
-    void CancelAiModelDelete();
     void StartPiperRuntimeInstall();
     void StartTtsVoiceDownload();
     void StartTtsVoiceDelete();
@@ -115,11 +105,9 @@ private:
     void ShowTtsTestPopup(std::string text);
     void ApplyTtsDownloadCompletion();
     void RequestRedraw() const;
-    void SetTodoStatus(std::string action);
     ftxui::Element RenderHeaderRow(const Theme& theme);
     ftxui::Element RenderTtsTab(const Theme& theme);
     ftxui::Element RenderTtsTestPopup(const Theme& theme) const;
-    ftxui::Element RenderAiTab(const Theme& theme);
     ftxui::Element RenderPiperServerTab(const Theme& theme);
 
     const Theme* theme_ = nullptr;
@@ -132,7 +120,6 @@ private:
     int selected_tts_language_ = 0;
     int selected_tts_voice_ = 0;
 
-    std::string ai_status_ = "Registry not loaded";
     std::string piper_server_status_ = "Press Start server or Check status";
     std::string piper_server_running_ = "Stopped";
     std::string piper_server_uptime_ = "-";
@@ -145,12 +132,7 @@ private:
     std::string piper_server_sentence_silence_ = "0.15";
     std::string piper_server_speaker_id_ = "0";
     bool piper_server_use_cuda_ = false;
-    std::vector<std::string> ai_model_labels_ = {"No models"};
-    int selected_ai_model_ = 0;
-    std::string ai_runtime_download_url_;
-    std::string ai_runtime_asset_name_;
     float tts_progress_ = 0.0f;
-    std::atomic<float> ai_progress_{0.0f};
 
     std::thread tts_download_thread_;
     std::thread tts_runtime_thread_;
@@ -166,28 +148,13 @@ private:
     std::string tts_download_current_file_;
     float tts_progress_ratio_ = 0.0f;
     int popup_layer_index_ = 0;
-    std::thread ai_runtime_thread_;
-    mutable std::mutex ai_runtime_mutex_;
-    bool ai_runtime_downloading_ = false;
-    bool ai_runtime_delete_confirm_visible_ = false;
-    bool ai_runtime_progress_visible_ = false;
-    bool ai_runtime_extracting_ = false;
-    std::thread ai_model_thread_;
     std::thread fetch_thread_;
-    bool ai_model_downloading_ = false;
-    bool ai_model_deleting_ = false;
-    bool ai_model_progress_visible_ = false;
-    bool ai_model_delete_confirm_visible_ = false;
-    bool ai_refresh_after_model_download_ = false;
-    std::string ai_model_delete_pending_filename_;
 
     ftxui::Component tts_tab_button_;
-    ftxui::Component ai_tab_button_;
     ftxui::Component piper_server_tab_button_;
     ftxui::Component tab_buttons_;
     ftxui::Component tts_language_menu_;
     ftxui::Component tts_voice_menu_;
-    ftxui::Component ai_model_menu_;
     ftxui::Component piper_server_port_input_;
     ftxui::Component piper_server_noise_scale_input_;
     ftxui::Component piper_server_sentence_silence_input_;
@@ -206,15 +173,6 @@ private:
     ftxui::Component piper_server_reload_button_;
     ftxui::Component piper_server_health_button_;
     ftxui::Component piper_server_shutdown_button_;
-    ftxui::Component fetch_ai_button_;
-    ftxui::Component ai_runtime_download_button_;
-    ftxui::Component ai_runtime_delete_button_;
-    ftxui::Component ai_runtime_confirm_delete_button_;
-    ftxui::Component ai_runtime_cancel_delete_button_;
-    ftxui::Component ai_model_download_button_;
-    ftxui::Component ai_delete_model_button_;
-    ftxui::Component ai_model_confirm_delete_button_;
-    ftxui::Component ai_model_cancel_delete_button_;
     ftxui::Component tab_body_container_;
     ftxui::Component container_;
 };

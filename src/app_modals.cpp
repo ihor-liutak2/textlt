@@ -62,10 +62,11 @@ std::vector<std::string> BuiltInHelpLines() {
         "  Ctrl+V        Paste clipboard text",
         "  Ctrl+Shift+V  Paste when terminal reserves Ctrl+V",
         "",
-        "AI",
+        "TTS / AI",
         "  Alt+H         Open Text-to-Speech",
-        "  Alt+J         Open AI Actions",
         "  Alt+S         Open Assistant Settings",
+        "  Alt+J         Open AI Actions",
+        "  Tools > AI Settings opens AI Settings",
         "",
         "Menus",
         "  Tab           Switch focus from File Explorer to Editor",
@@ -609,6 +610,23 @@ void TextltApp::OpenAiActionsModal() {
 
 void TextltApp::CloseAiActionsModal() {
     ai_actions_modal_.Close();
+    FocusEditor();
+}
+
+
+void TextltApp::OpenAiSettingsModal() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+    EnsureAssistantResources();
+    ai_settings_modal_.Open();
+    active_action_ = "Opened AI Settings";
+    SetActiveLayer(UiLayer::AiSettings);
+}
+
+
+void TextltApp::CloseAiSettingsModal() {
+    ai_settings_modal_.Close();
     FocusEditor();
 }
 

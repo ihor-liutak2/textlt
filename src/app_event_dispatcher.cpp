@@ -113,6 +113,7 @@ bool AppEventDispatcher::HandleBodyEvent(ftxui::Event event) {
         !app_.view_layout_modal_.IsOpen() &&
         !app_.distraction_options_modal_.IsOpen() &&
         !app_.ai_actions_modal_.IsOpen() &&
+        !app_.ai_settings_modal_.IsOpen() &&
         !app_.assistant_settings_modal_.IsOpen() &&
         !app_.theme_dialog_.IsOpen() &&
         !app_.sidebar_has_focus_) {

@@ -239,12 +239,12 @@ add_executable(textlt
   src/main.cpp
   src/menu_bar.cpp
   src/modals/assistant_modals.cpp
-  src/modals/assistant_modals_ai.cpp
   src/modals/assistant_download_progress.cpp
   src/modals/assistant_modals_tts.cpp
   src/modals/assistant_modals_server.cpp
   src/modals/help_dialog.cpp
   src/modals/modal_ai.cpp
+  src/modals/modal_ai_settings.cpp
   src/modals/modal_git.cpp
   src/modals/modal_git_settings.cpp
   src/modals/modal_git_status_diff_commit.cpp

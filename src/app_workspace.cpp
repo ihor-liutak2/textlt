@@ -71,6 +71,7 @@ bool TextltApp::MainViewCanActivateEditorPane() const {
         !view_layout_modal_.IsOpen() &&
         !distraction_options_modal_.IsOpen() &&
         !ai_actions_modal_.IsOpen() &&
+        !ai_settings_modal_.IsOpen() &&
         !assistant_settings_modal_.IsOpen() &&
         !theme_dialog_.IsOpen() &&
         !unsaved_changes_dialog_.IsOpen();

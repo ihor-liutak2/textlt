@@ -91,8 +91,10 @@ MenuBarComponent::MenuBarComponent(
           },
           {
               {" TTS                 (Alt+H) ", "tts.open_modal"},
-              {" AI Actions          (Alt+J) ", "ai.open_actions"},
               {" Assistant Settings  (Alt+S) ", "assistant.open_settings"},
+              {" ───────────────────────── ", "", true},
+              {" AI Actions          (Alt+J) ", "ai.open_actions"},
+              {" AI Settings... ", "ai.open_settings"},
               {" ───────────────────────── ", "", true},
               {" Remote Files... ", "remote.files"},
               {" Remote Connections... ", "remote.connections"},

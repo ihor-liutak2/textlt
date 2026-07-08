@@ -89,13 +89,14 @@ void TextltApp::InitializeCommands() {
     add("distraction.previous_page", "Distraction Previous Page", "Options", "", [this] { CommandDistractionPreviousPage(); });
     add("distraction.go_to_page", "Distraction Go To Page", "Options", "", [this] { CommandDistractionGoToPage(); });
 
-    add("tts.open_modal", "TTS", "AI", "Alt+H", [this] { OpenTtsModal(); });
+    add("tts.open_modal", "TTS", "TTS", "Alt+H", [this] { OpenTtsModal(); });
     add("tts.play", "Play TTS", "TTS", "", [this] { CommandTtsPlay(); });
     add("tts.pause", "Pause TTS", "TTS", "", [this] { CommandTtsPause(); });
     add("tts.stop", "Stop TTS", "TTS", "", [this] { CommandTtsStop(); });
     add("tts.next", "Next TTS Chunk", "TTS", "", [this] { CommandTtsNext(); });
     add("ai.open_actions", "AI Actions", "AI", "Alt+J", [this] { OpenAiActionsModal(); });
-    add("assistant.open_settings", "Assistant Settings", "AI", "Alt+S", [this] { OpenAssistantSettingsModal(); });
+    add("ai.open_settings", "AI Settings", "AI", "", [this] { OpenAiSettingsModal(); });
+    add("assistant.open_settings", "Assistant Settings", "TTS", "Alt+S", [this] { OpenAssistantSettingsModal(); });
 
     add("remote.files", "Remote Files", "Remote", "", [this] { OpenRemoteFilesModal(); });
     add("remote.connections", "Remote Connections", "Remote", "", [this] { OpenRemoteConnectionsModal(); });

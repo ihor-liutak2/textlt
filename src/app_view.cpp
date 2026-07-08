@@ -169,6 +169,9 @@ ftxui::Element TextltApp::Render() {
     if (ai_actions_modal_.IsOpen()) {
         layers.push_back(ai_actions_modal_.View()->Render() | clear_under | center);
     }
+    if (ai_settings_modal_.IsOpen()) {
+        layers.push_back(ai_settings_modal_.View()->Render() | clear_under | center);
+    }
     if (assistant_settings_modal_.IsOpen()) {
         layers.push_back(assistant_settings_modal_.View()->Render() | clear_under | center);
     }
@@ -299,6 +302,7 @@ bool TextltApp::ActiveModalIsOpen() const {
         case UiLayer::ViewLayout: return view_layout_modal_.IsOpen();
         case UiLayer::DistractionOptions: return distraction_options_modal_.IsOpen();
         case UiLayer::AiActions: return ai_actions_modal_.IsOpen();
+        case UiLayer::AiSettings: return ai_settings_modal_.IsOpen();
         case UiLayer::AssistantSettings: return assistant_settings_modal_.IsOpen();
     }
     return false;

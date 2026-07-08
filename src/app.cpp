@@ -262,6 +262,9 @@ TextltApp::TextltApp()
           [this](const std::string& command_id) { RunCommand(command_id); },
           [this] { CloseDistractionOptionsModal(); }),
       ai_actions_modal_(&current_theme_),
+      ai_settings_modal_(
+          &current_theme_,
+          [this] { screen_.PostEvent(ftxui::Event::Custom); }),
       assistant_settings_modal_(
           &current_theme_,
           [this] { screen_.PostEvent(ftxui::Event::Custom); }),
@@ -493,6 +496,7 @@ TextltApp::TextltApp()
         view_layout_modal_.View(),
         distraction_options_modal_.View(),
         ai_actions_modal_.View(),
+        ai_settings_modal_.View(),
         assistant_settings_modal_.View(),
     }, &active_layer_index_);
 

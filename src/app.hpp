@@ -27,6 +27,7 @@
 #include "modals/modal_keyboard_shortcuts.hpp"
 #include "modals/modal_custom_processor_builder.hpp"
 #include "modals/modal_ai.hpp"
+#include "modals/modal_ai_settings.hpp"
 #include "modals/modal_git.hpp"
 #include "modals/modal_git_settings.hpp"
 #include "modals/modal_recent_files.hpp"
@@ -96,6 +97,7 @@ private:
         ViewLayout,
         DistractionOptions,
         AiActions,
+        AiSettings,
         AssistantSettings,
     };
 
@@ -169,6 +171,8 @@ private:
     void CloseDistractionOptionsModal();
     void OpenAiActionsModal();
     void CloseAiActionsModal();
+    void OpenAiSettingsModal();
+    void CloseAiSettingsModal();
     void OpenAssistantSettingsModal();
     void CloseAssistantSettingsModal();
     void OpenThemeDialog();
@@ -363,6 +367,7 @@ private:
     ViewLayoutModal view_layout_modal_;
     DistractionOptionsModal distraction_options_modal_;
     AiActionsModal ai_actions_modal_;
+    AiSettingsModal ai_settings_modal_;
     AssistantSettingsModal assistant_settings_modal_;
     ThemeDialog theme_dialog_;
     UnsavedChangesDialog unsaved_changes_dialog_;
