@@ -201,19 +201,21 @@ RegistryDownloadResult DownloadRegistry(const char* url, const char* filename) {
 
 AssistantSettingsModalContent::AssistantSettingsModalContent(
     const Theme* theme,
-    std::function<void()> request_redraw)
+    std::function<void()> request_redraw,
+    std::function<void()> on_close)
     : theme_(theme),
-      request_redraw_(std::move(request_redraw)) {
+      request_redraw_(std::move(request_redraw)),
+      on_close_(std::move(on_close)) {
     auto make_button = [this](std::string label,
                               std::function<void()> on_click,
                               ButtonRole role = ButtonRole::Default) {
-        ButtonSpec spec = ButtonSpecFromLabel(std::move(label), role, ButtonVariant::AccentEdges);
+        ButtonSpec spec = ButtonSpecFromLabel(std::move(label), role, ButtonVariant::Minimal);
         ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
         option.label = ButtonCaptionText(spec);
         option.on_click = std::move(on_click);
         option.transform = [this, spec = std::move(spec)](const ftxui::EntryState& state) {
             const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-            return RenderButton(theme, spec, state.focused || state.active);
+            return RenderModalFlatButton(theme, spec, state.focused || state.active);
         };
         return ftxui::Button(option);
     };
@@ -316,16 +318,14 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
         make_button("Check status", [this] { CheckPiperServerHealth(); }, ButtonRole::Primary);
     piper_server_shutdown_button_ =
         make_button("Stop server", [this] { StopPiperServer(); }, ButtonRole::Danger);
+    footer_close_button_ = make_button("Close", [this] {
+        if (on_close_) {
+            on_close_();
+        }
+    }, ButtonRole::Cancel);
 
     tab_body_container_ = ftxui::Container::Tab({
         ftxui::Container::Vertical({
-            ftxui::Container::Horizontal({
-                fetch_tts_button_,
-                tts_runtime_install_button_,
-                tts_download_button_,
-                tts_delete_button_,
-                tts_test_button_,
-            }),
             tts_language_menu_,
             tts_voice_menu_,
             ftxui::Container::Horizontal({
@@ -334,13 +334,6 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
             }),
         }),
         ftxui::Container::Vertical({
-            ftxui::Container::Horizontal({
-                piper_server_refresh_button_,
-                piper_server_start_button_,
-                piper_server_reload_button_,
-                piper_server_health_button_,
-                piper_server_shutdown_button_,
-            }),
             piper_server_port_input_,
             piper_server_cuda_checkbox_,
             piper_server_noise_scale_input_,
@@ -352,6 +345,17 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
     auto primary_controls = ftxui::Container::Vertical({
         tab_buttons_,
         tab_body_container_,
+        fetch_tts_button_,
+        tts_runtime_install_button_,
+        tts_download_button_,
+        tts_delete_button_,
+        tts_test_button_,
+        piper_server_refresh_button_,
+        piper_server_start_button_,
+        piper_server_reload_button_,
+        piper_server_health_button_,
+        piper_server_shutdown_button_,
+        footer_close_button_,
     });
     auto popup_controls = ftxui::CatchEvent(tts_test_popup_close_button_, [this](ftxui::Event event) {
         if (event == ftxui::Event::Escape) {
@@ -410,19 +414,66 @@ ftxui::Element AssistantSettingsModalContent::RenderHeaderRow(const Theme& theme
 }
 
 std::string AssistantSettingsModalContent::GetFooterText() const {
+    return CurrentFooterMessage();
+}
+
+std::string AssistantSettingsModalContent::CurrentFooterMessage() const {
     auto trim_footer_text = [](const std::string& text) {
-        constexpr size_t kMaxFooterTextLength = 40;
+        constexpr size_t kMaxFooterTextLength = 88;
         if (text.size() <= kMaxFooterTextLength) {
             return text;
         }
-        return text.substr(0, kMaxFooterTextLength);
+        return text.substr(0, kMaxFooterTextLength - 1) + "…";
     };
 
     if (selected_tab_ == 0) {
         std::lock_guard<std::mutex> lock(tts_download_mutex_);
         return trim_footer_text(tts_status_);
     }
-    return {};
+    return trim_footer_text(piper_server_status_);
+}
+
+ftxui::Element AssistantSettingsModalContent::RenderCustomFooter() {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+
+    Elements buttons;
+    auto append_button = [&buttons](const ftxui::Component& button) {
+        if (!button) {
+            return;
+        }
+        if (!buttons.empty()) {
+            buttons.push_back(text(" "));
+        }
+        buttons.push_back(button->Render());
+    };
+
+    if (selected_tab_ == 0) {
+        append_button(fetch_tts_button_);
+        append_button(tts_runtime_install_button_);
+        append_button(tts_download_button_);
+        append_button(tts_delete_button_);
+        append_button(tts_test_button_);
+    } else {
+        append_button(piper_server_refresh_button_);
+        append_button(piper_server_start_button_);
+        append_button(piper_server_reload_button_);
+        append_button(piper_server_health_button_);
+        append_button(piper_server_shutdown_button_);
+    }
+
+    return vbox({
+        hbox({
+            text(" " + CurrentFooterMessage()) | dim | color(theme.modal_text_color),
+            filler(),
+        }),
+        separator() | color(theme.modal_border),
+        hbox({
+            hbox(std::move(buttons)),
+            filler(),
+            footer_close_button_ ? footer_close_button_->Render() : text(""),
+        }),
+    }) | bgcolor(theme.modal_background) | color(theme.modal_text_color);
 }
 
 void AssistantSettingsModalContent::LoadRegistries() {
@@ -495,10 +546,9 @@ AssistantSettingsModal::AssistantSettingsModal(
     : theme_(theme) {
     content_ = std::make_shared<AssistantSettingsModalContent>(
         theme_,
-        std::move(request_redraw));
+        std::move(request_redraw),
+        [this] { Close(); });
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
-    modal_->SetFooterText("Placeholder only. Escape closes.");
-    modal_->SetFooterButtons({{"Close", [this] { Close(); }}});
     modal_->SetBodyFrameScrolling(false);
 }
 

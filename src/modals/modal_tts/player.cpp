@@ -259,7 +259,7 @@ void TtsModalContent::TestSelectedPlayer() {
         return;
     }
     if (!PiperManager::RuntimeInstalled()) {
-        player_status_ = "Piper runtime is not installed. Use Assistant Settings / TTS / Install Piper.";
+        player_status_ = "Piper runtime is not installed. Use TTS Settings / TTS / Install Piper.";
         status_ = player_status_;
         SetPlayerLastError(player_status_);
         return;
@@ -273,7 +273,7 @@ void TtsModalContent::TestSelectedPlayer() {
         return;
     }
     if (!PiperManager::VoiceInstalled(voice)) {
-        player_status_ = "Selected player test voice files are missing. Use Assistant Settings / TTS to download it.";
+        player_status_ = "Selected player test voice files are missing. Use TTS Settings / TTS to download it.";
         status_ = player_status_;
         SetPlayerLastError(player_status_);
         return;

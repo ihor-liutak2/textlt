@@ -137,7 +137,7 @@ ftxui::Element TtsModalContent::RenderVoiceSelector() {
             "Voice",
             piper_voice_installed_[selected_piper_voice_]
                 ? "installed"
-                : "not installed - use Assistant Settings / TTS to download it",
+                : "not installed - use TTS Settings / TTS to download it",
             theme));
     }
 

@@ -64,7 +64,7 @@ std::vector<std::string> BuiltInHelpLines() {
         "",
         "TTS / AI",
         "  Alt+H         Open Text-to-Speech",
-        "  Alt+S         Open Assistant Settings",
+        "  Alt+S         Open TTS Settings",
         "  Alt+J         Open AI Actions",
         "  Tools > AI Settings opens AI Settings",
         "",
@@ -637,7 +637,7 @@ void TextltApp::OpenAssistantSettingsModal() {
     }
     EnsureAssistantResources();
     assistant_settings_modal_.Open();
-    active_action_ = "Opened Assistant Settings";
+    active_action_ = "Opened TTS Settings";
     SetActiveLayer(UiLayer::AssistantSettings);
 }
 

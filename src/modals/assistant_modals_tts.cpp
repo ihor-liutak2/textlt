@@ -854,7 +854,7 @@ ftxui::Element AssistantSettingsModalContent::RenderTtsTestPopup(const Theme& th
         separator() | color(theme.modal_border),
         hbox({filler(), tts_test_popup_close_button_->Render()}),
     }) |
-        border |
+        borderStyled(LIGHT, theme.modal_border) |
         bgcolor(theme.modal_background) |
         color(theme.modal_foreground) |
         size(WIDTH, LESS_THAN, 72) |
@@ -877,27 +877,14 @@ ftxui::Element AssistantSettingsModalContent::RenderTtsTab(const Theme& theme) {
         progress_ratio = tts_progress_ratio_;
     }
 
-    Elements rows = {
-        hbox({
-            fetch_tts_button_->Render(),
-            text(" "),
-            tts_runtime_install_button_->Render(),
-            text(" "),
-            tts_download_button_->Render(),
-            text(" "),
-            tts_delete_button_->Render(),
-            text(" "),
-            tts_test_button_->Render(),
-        }),
-    };
-    rows.push_back(separator() | color(theme.modal_border));
+    Elements rows;
     rows.push_back(StatusLine(
         "Piper runtime",
         PiperManager::RuntimeInstalled() ? "installed" : "missing - use Install Piper",
         theme));
     rows.push_back(separator() | color(theme.modal_border));
     rows.push_back(text(" Language") | bold | color(theme.modal_text_color));
-    rows.push_back(tts_language_menu_->Render() | border);
+    rows.push_back(tts_language_menu_->Render() | borderStyled(LIGHT, theme.modal_border));
     if (show_download_progress) {
         progress_ratio = std::max(0.0f, std::min(1.0f, progress_ratio));
         rows.push_back(separator() | color(theme.modal_border));
@@ -910,7 +897,7 @@ ftxui::Element AssistantSettingsModalContent::RenderTtsTab(const Theme& theme) {
             text(std::to_string(percent) + "% ") |
                 color(theme.modal_text_color),
         }));
-        rows.push_back(gauge(progress_ratio) | border);
+        rows.push_back(gauge(progress_ratio) | borderStyled(LIGHT, theme.modal_border));
     }
     if (show_delete_confirmation) {
         rows.push_back(separator() | color(theme.modal_border));
@@ -928,8 +915,8 @@ ftxui::Element AssistantSettingsModalContent::RenderTtsTab(const Theme& theme) {
         "Selected voice",
         SelectedPiperVoiceLabel(tts_voice_labels_, selected_tts_voice_),
         theme));
-    rows.push_back(tts_voice_menu_->Render() | border);
-    Element body = vbox(std::move(rows)) | border;
+    rows.push_back(tts_voice_menu_->Render() | borderStyled(LIGHT, theme.modal_border));
+    Element body = vbox(std::move(rows)) | borderStyled(LIGHT, theme.modal_border);
     if (!tts_test_popup_visible_) {
         return body;
     }

@@ -60,18 +60,22 @@ class AssistantSettingsModalContent : public IModalContent {
 public:
     explicit AssistantSettingsModalContent(
         const Theme* theme,
-        std::function<void()> request_redraw = {});
+        std::function<void()> request_redraw = {},
+        std::function<void()> on_close = {});
     ~AssistantSettingsModalContent() override;
 
     ftxui::Element Render() override;
     ftxui::Component GetMainComponent() override { return container_; }
-    std::string GetTitle() override { return "Assistant Settings"; }
+    std::string GetTitle() override { return "TTS Settings"; }
     ftxui::Element RenderTitle() override;
-    ModalSizePreference GetModalSizePreference() const override { return {100, 32}; }
+    ModalSizePreference GetModalSizePreference() const override { return {100, 34}; }
     ModalFrameStyle GetModalFrameStyle() const override {
         return ModalFrameStyle::TitleInBorder;
     }
     std::string GetFooterText() const override;
+    bool HasCustomFooter() const override { return true; }
+    int GetCustomFooterHeight() const override { return 3; }
+    ftxui::Element RenderCustomFooter() override;
 
     void SetTheme(const Theme* theme) { theme_ = theme; }
     void CloseTtsTestPopup();
@@ -105,6 +109,7 @@ private:
     void ShowTtsTestPopup(std::string text);
     void ApplyTtsDownloadCompletion();
     void RequestRedraw() const;
+    std::string CurrentFooterMessage() const;
     ftxui::Element RenderHeaderRow(const Theme& theme);
     ftxui::Element RenderTtsTab(const Theme& theme);
     ftxui::Element RenderTtsTestPopup(const Theme& theme) const;
@@ -112,6 +117,7 @@ private:
 
     const Theme* theme_ = nullptr;
     std::function<void()> request_redraw_;
+    std::function<void()> on_close_;
     int selected_tab_ = 0;
 
     std::string tts_status_ = "Registry not loaded";
@@ -173,6 +179,7 @@ private:
     ftxui::Component piper_server_reload_button_;
     ftxui::Component piper_server_health_button_;
     ftxui::Component piper_server_shutdown_button_;
+    ftxui::Component footer_close_button_;
     ftxui::Component tab_body_container_;
     ftxui::Component container_;
 };

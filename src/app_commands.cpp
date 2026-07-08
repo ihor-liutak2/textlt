@@ -96,7 +96,7 @@ void TextltApp::InitializeCommands() {
     add("tts.next", "Next TTS Chunk", "TTS", "", [this] { CommandTtsNext(); });
     add("ai.open_actions", "AI Actions", "AI", "Alt+J", [this] { OpenAiActionsModal(); });
     add("ai.open_settings", "AI Settings", "AI", "", [this] { OpenAiSettingsModal(); });
-    add("assistant.open_settings", "Assistant Settings", "TTS", "Alt+S", [this] { OpenAssistantSettingsModal(); });
+    add("assistant.open_settings", "TTS Settings", "TTS", "Alt+S", [this] { OpenAssistantSettingsModal(); });
 
     add("remote.files", "Remote Files", "Remote", "", [this] { OpenRemoteFilesModal(); });
     add("remote.connections", "Remote Connections", "Remote", "", [this] { OpenRemoteConnectionsModal(); });

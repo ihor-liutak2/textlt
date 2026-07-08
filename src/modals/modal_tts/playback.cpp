@@ -43,13 +43,13 @@ void TtsModalContent::StartPlaybackFrom(size_t chunk_index, bool single_chunk) {
         return;
     }
     if (!pipeline_->PiperRuntimeInstalled()) {
-        status_ = "Piper runtime is not installed. Use Assistant Settings / TTS / Install Piper.";
+        status_ = "Piper runtime is not installed. Use TTS Settings / TTS / Install Piper.";
         return;
     }
     if (selected_piper_voice_ >= 0 &&
         selected_piper_voice_ < static_cast<int>(piper_voice_installed_.size()) &&
         !piper_voice_installed_[selected_piper_voice_]) {
-        status_ = "Selected voice is not installed. Use Assistant Settings / TTS to download it.";
+        status_ = "Selected voice is not installed. Use TTS Settings / TTS to download it.";
         return;
     }
     if (library_books_.empty() ||

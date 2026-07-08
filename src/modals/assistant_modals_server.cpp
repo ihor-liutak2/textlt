@@ -44,7 +44,7 @@ ftxui::Element ServerInputRow(const std::string& label,
     using namespace ftxui;
     return hbox({
         text(label) | bold | color(theme.modal_accent) | size(WIDTH, EQUAL, 18),
-        input->Render() | color(theme.modal_input_fg) | size(WIDTH, EQUAL, 10) | border,
+        input->Render() | color(theme.modal_input_fg) | size(WIDTH, EQUAL, 10) | borderStyled(LIGHT, theme.modal_border),
         text(" " + hint) | color(theme.modal_text_color) | dim | flex,
     });
 }
@@ -60,7 +60,7 @@ ftxui::Element Panel(const std::string& title,
     using namespace ftxui;
     rows.insert(rows.begin(), separator() | color(theme.modal_border));
     rows.insert(rows.begin(), SectionTitle(title, theme));
-    return vbox(std::move(rows)) | border | size(WIDTH, EQUAL, 42);
+    return vbox(std::move(rows)) | size(WIDTH, EQUAL, 42);
 }
 
 ftxui::Element ButtonSlot(const ftxui::Component& button) {
@@ -577,21 +577,6 @@ ftxui::Element AssistantSettingsModalContent::RenderPiperServerTab(const Theme& 
     const std::string address = std::string(kPiperServerHost) + ":" +
         std::to_string(settings_ok ? port : kDefaultPiperServerPort);
 
-    Element button_rows = vbox({
-        hbox({
-            ButtonSlot(piper_server_refresh_button_),
-            text(" "),
-            ButtonSlot(piper_server_start_button_),
-            text(" "),
-            ButtonSlot(piper_server_reload_button_),
-        }),
-        hbox({
-            ButtonSlot(piper_server_health_button_),
-            text(" "),
-            ButtonSlot(piper_server_shutdown_button_),
-        }),
-    });
-
     Element status_panel = Panel("Server state", {
         StatusLine("Server", piper_server_running_, theme),
         StatusLine("Voice state", piper_server_voice_state_, theme),
@@ -610,8 +595,6 @@ ftxui::Element AssistantSettingsModalContent::RenderPiperServerTab(const Theme& 
     }, theme);
 
     return vbox({
-        button_rows,
-        separator() | color(theme.modal_border),
         hbox({
             status_panel,
             separator() | color(theme.modal_border),
@@ -619,9 +602,8 @@ ftxui::Element AssistantSettingsModalContent::RenderPiperServerTab(const Theme& 
         }),
         separator() | color(theme.modal_border),
         validation,
-        paragraph(piper_server_status_) | color(theme.modal_text_color),
         text("TTS Test uses textlt-piper-server only. No direct Piper fallback.") |
             color(theme.modal_text_color) | dim,
-    }) | border;
+    }) | borderStyled(LIGHT, theme.modal_border);
 }
 } // namespace textlt
