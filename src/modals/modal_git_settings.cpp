@@ -16,7 +16,7 @@ namespace {
 ButtonSpec GitSettingsButtonSpec(std::string label) {
     ButtonSpec spec;
     spec.caption = std::move(label);
-    spec.variant = ButtonVariant::AccentEdges;
+    spec.variant = ButtonVariant::Minimal;
 
     const std::string& caption = spec.caption;
     if (caption == "Add" || caption == "Update URL" || caption == "Save local" ||
@@ -25,7 +25,7 @@ ButtonSpec GitSettingsButtonSpec(std::string label) {
         spec.role = ButtonRole::Primary;
         return spec;
     }
-    if (caption == "Cancel") {
+    if (caption == "Cancel" || caption == "Close") {
         spec.role = ButtonRole::Cancel;
         return spec;
     }
@@ -196,6 +196,11 @@ GitSettingsModalContent::GitSettingsModalContent(
 
     refresh_config_button_ = MakeTextButton("Refresh", [this] { RefreshConfig(); });
     copy_config_button_ = MakeTextButton("Copy", [this] { CopyConfig(); });
+    footer_close_button_ = MakeTextButton("Close", [this] {
+        if (on_close_) {
+            on_close_();
+        }
+    });
 
     ftxui::InputOption confirm_input_option;
     confirm_input_option.multiline = false;
@@ -227,35 +232,21 @@ GitSettingsModalContent::GitSettingsModalContent(
         remote_menu_,
         remote_name_input_component_,
         remote_url_input_component_,
-        ftxui::Container::Horizontal({
-            refresh_remotes_button_,
-            add_remote_button_,
-            update_remote_button_,
-            rename_remote_button_,
-            remove_remote_button_,
-            test_remote_button_,
-        }),
     });
 
     identity_tab_container_ = ftxui::Container::Vertical({
         local_name_input_component_,
         local_email_input_component_,
+        save_local_identity_button_,
         global_name_input_component_,
         global_email_input_component_,
-        ftxui::Container::Horizontal({
-            refresh_identity_button_,
-            save_local_identity_button_,
-            save_global_identity_button_,
-            clear_local_identity_button_,
-        }),
+        save_global_identity_button_,
     });
 
     config_tab_container_ = ftxui::Container::Vertical({
         ftxui::Container::Horizontal({
             local_config_button_,
             global_config_button_,
-            refresh_config_button_,
-            copy_config_button_,
         }),
         config_filter_input_component_,
         config_menu_,
@@ -270,6 +261,17 @@ GitSettingsModalContent::GitSettingsModalContent(
     auto primary_container = ftxui::Container::Vertical({
         tab_buttons_,
         tab_body_container_,
+        refresh_remotes_button_,
+        add_remote_button_,
+        update_remote_button_,
+        rename_remote_button_,
+        remove_remote_button_,
+        test_remote_button_,
+        refresh_identity_button_,
+        clear_local_identity_button_,
+        refresh_config_button_,
+        copy_config_button_,
+        footer_close_button_,
     });
     primary_container = ftxui::CatchEvent(
         primary_container,
@@ -282,7 +284,14 @@ ftxui::Component GitSettingsModalContent::MakeTextButton(
     std::string label,
     std::function<void()> on_click) {
     ButtonSpec spec = GitSettingsButtonSpec(std::move(label));
-    return MakeButton(theme_, std::move(spec), std::move(on_click));
+    ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
+    option.label = ButtonCaptionText(spec);
+    option.on_click = std::move(on_click);
+    option.transform = [this, spec = std::move(spec)](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return RenderModalFlatButton(theme, spec, state.focused || state.active);
+    };
+    return ftxui::Button(option);
 }
 
 ftxui::Component GitSettingsModalContent::MakeTabButton(std::string label, int tab_index) {
@@ -705,14 +714,15 @@ ftxui::Element GitSettingsModalContent::RenderConfirmOverlay() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     ftxui::Elements rows = {
         ftxui::text(confirm_title_) | ftxui::bold,
-        ftxui::separator(),
+        ftxui::separator() | ftxui::color(theme.modal_border),
         ftxui::paragraph(confirm_message_),
         ftxui::text("Command:"),
         ftxui::paragraph(confirm_command_preview_) | ftxui::color(theme.modal_accent),
     };
     if (!confirm_required_text_.empty()) {
         rows.push_back(ftxui::text("Type " + confirm_required_text_ + " to confirm:"));
-        rows.push_back(confirm_input_component_->Render() | ftxui::border);
+        rows.push_back(confirm_input_component_->Render() |
+                       ftxui::borderStyled(ftxui::LIGHT, theme.modal_border));
     }
     rows.push_back(ftxui::hbox({
         confirm_confirm_button_->Render(),
@@ -721,7 +731,7 @@ ftxui::Element GitSettingsModalContent::RenderConfirmOverlay() {
     }));
     return ftxui::vbox(std::move(rows)) |
         ftxui::size(ftxui::WIDTH, ftxui::LESS_THAN, 66) |
-        ftxui::border |
+        ftxui::borderStyled(ftxui::LIGHT, theme.modal_border) |
         ftxui::bgcolor(theme.modal_background) |
         ftxui::color(theme.modal_foreground);
 }
@@ -798,30 +808,26 @@ ftxui::Element GitSettingsModalContent::RenderRemotesTab() {
                 remote_menu_->Render() |
                     frame |
                     vscroll_indicator |
-                    size(HEIGHT, LESS_THAN, 9),
+                    size(HEIGHT, LESS_THAN, 9) |
+                    borderStyled(LIGHT, theme.modal_border),
             }) | flex,
-            separator(),
+            separator() | color(theme.modal_border),
             vbox({
                 text("Name:"),
-                remote_name_input_component_->Render() | border,
+                remote_name_input_component_->Render() |
+                    borderStyled(LIGHT, theme.modal_border),
                 text("URL:"),
-                remote_url_input_component_->Render() | border,
-                hbox({
-                    refresh_remotes_button_->Render(), text(" "),
-                    add_remote_button_->Render(), text(" "),
-                    update_remote_button_->Render(), text(" "),
-                    rename_remote_button_->Render(), text(" "),
-                    remove_remote_button_->Render(), text(" "),
-                    test_remote_button_->Render(),
-                }),
+                remote_url_input_component_->Render() |
+                    borderStyled(LIGHT, theme.modal_border),
             }) | size(WIDTH, GREATER_THAN, 45),
         }) | flex,
-        separator(),
+        separator() | color(theme.modal_border),
         text("Output") | bold,
         RenderTextLines(remote_output_lines_, "Run Test or another remote command to see output.", remote_output_scroll_offset_) |
             frame |
             vscroll_indicator |
-            size(HEIGHT, LESS_THAN, 10),
+            size(HEIGHT, LESS_THAN, 10) |
+            borderStyled(LIGHT, theme.modal_border),
     }) | color(theme.modal_foreground);
 }
 
@@ -832,31 +838,34 @@ ftxui::Element GitSettingsModalContent::RenderIdentityTab() {
         text("Effective user") | bold,
         hbox({text("Name: "), text(identity_.effective_name.empty() ? "<not set>" : identity_.effective_name)}),
         hbox({text("Email: "), text(identity_.effective_email.empty() ? "<not set>" : identity_.effective_email)}),
-        separator(),
+        separator() | color(theme.modal_border),
         hbox({
             vbox({
                 text("Local repository config") | bold,
                 text("Name:"),
-                local_name_input_component_->Render() | border,
+                local_name_input_component_->Render() |
+                    borderStyled(LIGHT, theme.modal_border),
                 text("Email:"),
-                local_email_input_component_->Render() | border,
+                local_email_input_component_->Render() |
+                    borderStyled(LIGHT, theme.modal_border),
                 save_local_identity_button_->Render(),
-            }) | flex,
-            separator(),
+            }) |
+                borderStyled(LIGHT, theme.modal_border) |
+                flex,
+            separator() | color(theme.modal_border),
             vbox({
                 text("Global config") | bold,
                 text("Name:"),
-                global_name_input_component_->Render() | border,
+                global_name_input_component_->Render() |
+                    borderStyled(LIGHT, theme.modal_border),
                 text("Email:"),
-                global_email_input_component_->Render() | border,
+                global_email_input_component_->Render() |
+                    borderStyled(LIGHT, theme.modal_border),
                 save_global_identity_button_->Render(),
-            }) | flex,
+            }) |
+                borderStyled(LIGHT, theme.modal_border) |
+                flex,
         }) | flex,
-        separator(),
-        hbox({
-            refresh_identity_button_->Render(), text(" "),
-            clear_local_identity_button_->Render(),
-        }),
     }) | color(theme.modal_foreground);
 }
 
@@ -867,20 +876,68 @@ ftxui::Element GitSettingsModalContent::RenderConfigTab() {
         hbox({
             text("Scope: "),
             local_config_button_->Render(), text(" "),
-            global_config_button_->Render(), text(" "),
-            refresh_config_button_->Render(), text(" "),
-            copy_config_button_->Render(),
+            global_config_button_->Render(),
         }),
         text(config_global_scope_ ? "Current scope: Global" : "Current scope: Local") | dim,
         text("Search:"),
-        config_filter_input_component_->Render() | border,
-        separator(),
+        config_filter_input_component_->Render() |
+            borderStyled(LIGHT, theme.modal_border),
+        separator() | color(theme.modal_border),
         config_menu_->Render() |
             frame |
             vscroll_indicator |
             size(HEIGHT, LESS_THAN, 20) |
+            borderStyled(LIGHT, theme.modal_border) |
             flex,
     }) | color(theme.modal_foreground);
+}
+
+ftxui::Element GitSettingsModalContent::RenderCustomFooter() {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+
+    Elements footer_buttons;
+    auto append_button = [&footer_buttons](const ftxui::Component& button) {
+        if (!button) {
+            return;
+        }
+        if (!footer_buttons.empty()) {
+            footer_buttons.push_back(text(" "));
+        }
+        footer_buttons.push_back(button->Render());
+    };
+
+    if (selected_tab_ == static_cast<int>(Tab::Remotes)) {
+        append_button(refresh_remotes_button_);
+        append_button(add_remote_button_);
+        append_button(update_remote_button_);
+        append_button(rename_remote_button_);
+        append_button(remove_remote_button_);
+        append_button(test_remote_button_);
+    } else if (selected_tab_ == static_cast<int>(Tab::Identity)) {
+        append_button(refresh_identity_button_);
+        append_button(clear_local_identity_button_);
+    } else {
+        append_button(refresh_config_button_);
+        append_button(copy_config_button_);
+    }
+
+    return vbox({
+        hbox({
+            text(" " + status_) |
+                dim |
+                color(theme.modal_text_color),
+            filler(),
+        }),
+        separator() | color(theme.modal_border),
+        hbox({
+            hbox(std::move(footer_buttons)),
+            filler(),
+            footer_close_button_ ? footer_close_button_->Render() : text(""),
+        }),
+    }) |
+        bgcolor(theme.modal_background) |
+        color(theme.modal_text_color);
 }
 
 void GitSettingsModal::Configure(

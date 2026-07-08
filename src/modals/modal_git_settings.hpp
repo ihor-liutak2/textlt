@@ -31,9 +31,12 @@ public:
     ftxui::Component GetMainComponent() override { return container_; }
     std::string GetTitle() override { return "Git Settings"; }
     ftxui::Element RenderTitle() override;
-    ModalSizePreference GetModalSizePreference() const override { return {112, 32}; }
+    ModalSizePreference GetModalSizePreference() const override { return {112, 34}; }
     ModalFrameStyle GetModalFrameStyle() const override { return ModalFrameStyle::TitleInBorder; }
-    std::string GetFooterText() const override { return status_; }
+    std::string GetFooterText() const override { return {}; }
+    bool HasCustomFooter() const override { return true; }
+    int GetCustomFooterHeight() const override { return 3; }
+    ftxui::Element RenderCustomFooter() override;
 
     void SetTheme(const Theme* theme) { theme_ = theme; }
     void Open();
@@ -165,6 +168,7 @@ private:
     ftxui::Component config_menu_;
     ftxui::Component refresh_config_button_;
     ftxui::Component copy_config_button_;
+    ftxui::Component footer_close_button_;
 
     ftxui::Component confirm_input_component_;
     ftxui::Component confirm_confirm_button_;
