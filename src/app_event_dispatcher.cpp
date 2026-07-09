@@ -12,14 +12,6 @@ namespace textlt {
 
 namespace {
 
-bool IsCtrlBShortcut(const ftxui::Event& event) {
-    return MatchesShortcut(event, ShortcutModifier::Ctrl, 'b');
-}
-
-bool IsAltBShortcut(const ftxui::Event& event) {
-    return MatchesShortcut(event, ShortcutModifier::Alt, 'b');
-}
-
 bool IsAltLeftShortcut(const ftxui::Event& event) {
     const std::string& input = event.input();
     return input == "Alt+Left" ||
@@ -38,15 +30,6 @@ bool IsAltRightShortcut(const ftxui::Event& event) {
         input == "\x1B[27;3;67~" ||
         input == "\x1B[67;3u" ||
         event == ftxui::Event::Special("Alt+Right");
-}
-
-bool IsOpenedSidebarChordKey(const ftxui::Event& event) {
-    const std::string& input = event.input();
-    return input == "o" ||
-        input == "O" ||
-        input == "\x0F" ||
-        input == "Ctrl+O" ||
-        event == ftxui::Event::Special("Ctrl+O");
 }
 
 bool IsPrimaryMousePress(ftxui::Event event) {
@@ -253,24 +236,6 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
     // and can consume a menu click before it reaches MenuBarComponent.
     if (event.is_mouse()) {
         return false;
-    }
-
-
-    if (app_.pending_sidebar_chord_) {
-        app_.pending_sidebar_chord_ = false;
-        if (IsOpenedSidebarChordKey(event)) {
-            return app_.RunCommand("sidebar.show_opened_files");
-        }
-    }
-
-    if (IsAltBShortcut(event)) {
-        app_.pending_sidebar_chord_ = false;
-        return app_.RunCommand("sidebar.toggle_opened_project");
-    }
-
-    if (IsCtrlBShortcut(event)) {
-        app_.pending_sidebar_chord_ = true;
-        return app_.RunCommand("sidebar.ctrl_b_file_explorer");
     }
 
     if (IsAltRightShortcut(event)) {

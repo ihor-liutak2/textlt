@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${TEXTLT_VERSION:-${1:-v0.9.1}}"
+VERSION="${1:-${TEXTLT_VERSION:-}}"
+if [[ -z "$VERSION" ]]; then
+  echo "Usage: $0 <version>" >&2
+  echo "Example: $0 vX.Y.Z" >&2
+  exit 1
+fi
+if [[ "$VERSION" != v* ]]; then
+  VERSION="v$VERSION"
+fi
+
 REPO="${TEXTLT_REPO:-ihor-liutak2/textlt}"
 ARCH="$(uname -m)"
 ASSET="${TEXTLT_ASSET:-textlt-macos-$ARCH.tar.gz}"

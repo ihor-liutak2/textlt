@@ -79,7 +79,7 @@ MenuBarComponent::MenuBarComponent(
           },
           {
               {" Toggle Line Numbers ", "view.toggle_line_numbers"},
-              {" Toggle File Explorer (Ctrl+B) ", "sidebar.toggle_file_explorer"},
+              {" Sidebar                 (Ctrl+B) ", "sidebar.ctrl_b_file_explorer"},
               {" Smart Word Wrap [ ] ", "editor.toggle_smart_word_wrap"},
               {" Syntax Highlighting [X] ", "editor.toggle_syntax_highlighting"},
               {" Auto Pairing [X] ", "editor.toggle_auto_pairing"},

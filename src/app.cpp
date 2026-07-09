@@ -117,13 +117,7 @@ TextltApp::TextltApp()
           [this] { CloseAllOpenedFiles(); },
           [this] { OpenFilesModal(FilesModalMode::Manage); },
           [this](const std::string& command_id) {
-              std::string shortcut = shortcut_registry_.EffectiveShortcut(ShortcutContext::Menu, command_id);
-              if (shortcut.empty()) {
-                  if (command_id == "sidebar.show_project") return std::string("Alt+P");
-                  if (command_id == "sidebar.show_favorites") return std::string("Alt+F");
-                  if (command_id == "sidebar.show_opened_files") return std::string("Alt+O");
-              }
-              return shortcut;
+              return shortcut_registry_.EffectiveShortcut(ShortcutContext::Menu, command_id);
           })),
       help_dialog_(&current_theme_),
       keyboard_shortcuts_modal_(
@@ -131,6 +125,10 @@ TextltApp::TextltApp()
           &shortcut_registry_,
           &command_registry_,
           [this](std::string& error) { return SaveShortcutOverrides(error); }),
+      sidebar_shortcuts_modal_(
+          &current_theme_,
+          [this](const std::string& command_id) { RunCommand(command_id); },
+          [this] { CloseSidebarShortcutModal(); }),
       custom_processor_builder_modal_(
           &current_theme_,
           [this] { return clipboard_controller_.ReadText(); },
@@ -507,6 +505,7 @@ TextltApp::TextltApp()
         main_container_,
         help_dialog_.View(),
         keyboard_shortcuts_modal_.View(),
+        sidebar_shortcuts_modal_.View(),
         custom_processor_builder_modal_.View(),
         theme_dialog_.View(),
         find_panel_container_,

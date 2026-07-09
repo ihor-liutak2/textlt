@@ -444,15 +444,15 @@ std::string SidebarPanel::ShortcutLabelForMode(SidebarMode mode) const {
     switch (mode) {
         case SidebarMode::Project:
             command_id = "sidebar.show_project";
-            fallback = "Alt+P";
+            fallback = "P";
             break;
         case SidebarMode::Favorites:
             command_id = "sidebar.show_favorites";
-            fallback = "Alt+F";
+            fallback = "F";
             break;
         case SidebarMode::Opened:
             command_id = "sidebar.show_opened_files";
-            fallback = "Alt+O";
+            fallback = "O";
             break;
     }
 

@@ -9,6 +9,7 @@ namespace textlt {
 enum class ShortcutModifier {
     Ctrl,
     Alt,
+    CtrlAlt,
 };
 
 inline std::string UkrainianKeyForUsKey(char key) {
@@ -75,12 +76,36 @@ inline bool MatchesShortcut(
         if (input == "Ctrl+" + std::string(1, upper)) {
             return true;
         }
-    } else {
+    } else if (modifier == ShortcutModifier::Alt) {
         if (input == "Alt+" + std::string(1, upper) ||
             input == "\x1B" + std::string(1, lower) ||
             input == "\x1B" + std::string(1, upper)) {
             return true;
         }
+    } else if (modifier == ShortcutModifier::CtrlAlt) {
+        const std::string named = "Ctrl+Alt+" + std::string(1, upper);
+        const std::string swapped = "Alt+Ctrl+" + std::string(1, upper);
+        if (input == named || input == swapped ||
+            event == ftxui::Event::Special(named) ||
+            event == ftxui::Event::Special(swapped)) {
+            return true;
+        }
+    }
+
+    const int modifier_code = modifier == ShortcutModifier::Ctrl ? 5 :
+        modifier == ShortcutModifier::Alt ? 3 : 7;
+    const std::string modifiers = std::to_string(modifier_code);
+
+    auto matches_modified_code_point = [&](int code_point) {
+        const std::string code = std::to_string(code_point);
+        return input == "\x1B[" + code + ";" + modifiers + "u" ||
+            input == "\x1B[27;" + modifiers + ";" + code + "~" ||
+            input == "\x1B[" + code + ";" + modifiers + "~";
+    };
+
+    if (matches_modified_code_point(static_cast<unsigned char>(lower)) ||
+        matches_modified_code_point(static_cast<unsigned char>(upper))) {
+        return true;
     }
 
     const std::string ukrainian = UkrainianKeyForUsKey(lower);
@@ -91,12 +116,12 @@ inline bool MatchesShortcut(
         return true;
     }
 
-    const int modifier_code = modifier == ShortcutModifier::Ctrl ? 5 : 3;
-    const std::string code = std::to_string(code_point);
-    const std::string modifiers = std::to_string(modifier_code);
-    return input == "\x1B[" + code + ";" + modifiers + "u" ||
-        input == "\x1B[27;" + modifiers + ";" + code + "~" ||
-        input == "\x1B[" + code + ";" + modifiers + "~";
+    if (modifier == ShortcutModifier::CtrlAlt) {
+        return input == "\x1B" + ukrainian ||
+            matches_modified_code_point(code_point);
+    }
+
+    return matches_modified_code_point(code_point);
 }
 
 } // namespace textlt

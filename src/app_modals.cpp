@@ -98,9 +98,11 @@ std::vector<std::string> BuiltInHelpLines() {
         "  Tab           Switch focus from File Explorer to Editor",
         "  Alt+Left      Switch to the previous editor pane",
         "  Alt+Right     Switch to the next editor pane",
-        "  Ctrl+B        Toggle File Explorer",
-        "  Ctrl+B, O     Open File Explorer on the Opened tab",
-        "  Alt+B         Toggle File Explorer between Opened and Project",
+        "  Ctrl+B        Open Sidebar popup",
+        "  B             Toggle sidebar",
+        "  O             Open the Opened Files sidebar",
+        "  F             Open the Favorites sidebar",
+        "  P             Open the Project sidebar",
         "  F1            Open this help window",
         "  F2            Open the File menu",
         "  F3            Open the Edit menu",
@@ -197,6 +199,23 @@ void TextltApp::OpenKeyboardShortcutsModal() {
 
 void TextltApp::CloseKeyboardShortcutsModal() {
     keyboard_shortcuts_modal_.Close();
+    SetActiveLayer(UiLayer::Main);
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::OpenSidebarShortcutModal() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+    sidebar_shortcuts_modal_.Open();
+    active_action_ = "Opened Sidebar";
+    SetActiveLayer(UiLayer::SidebarShortcuts);
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::CloseSidebarShortcutModal() {
+    sidebar_shortcuts_modal_.Close();
     SetActiveLayer(UiLayer::Main);
     FocusEditor();
     screen_.PostEvent(ftxui::Event::Custom);

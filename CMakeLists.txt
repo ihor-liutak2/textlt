@@ -254,6 +254,7 @@ add_executable(textlt
   src/modals/modal_git_compare.cpp
   src/modals/modal_git_utils.cpp
   src/modals/modal_recent_files.cpp
+  src/modals/modal_sidebar_shortcuts.cpp
   src/modals/modal_tts.cpp
   src/modals/modal_view_layout.cpp
   src/modals/modal_distraction_options.cpp

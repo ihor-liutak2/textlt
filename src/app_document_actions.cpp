@@ -58,34 +58,6 @@ void TextltApp::ToggleFileExplorer() {
 }
 
 
-void TextltApp::HandleCtrlBFileExplorer() {
-    auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
-    if (!editor_config_.show_file_explorer) {
-        editor_config_.show_file_explorer = true;
-        sidebar->ShowProject();
-        active_action_ = "File Explorer enabled";
-        FocusSidebar();
-        SaveConfig();
-        screen_.PostEvent(ftxui::Event::Custom);
-        return;
-    }
-
-    if (!sidebar_has_focus_) {
-        sidebar->ShowProject();
-        active_action_ = "Project files";
-        FocusSidebar();
-        screen_.PostEvent(ftxui::Event::Custom);
-        return;
-    }
-
-    editor_config_.show_file_explorer = false;
-    active_action_ = "File Explorer disabled";
-    FocusEditor();
-    SaveConfig();
-    screen_.PostEvent(ftxui::Event::Custom);
-}
-
-
 void TextltApp::ShowOpenedFilesSidebar() {
     if (!editor_config_.show_file_explorer) {
         editor_config_.show_file_explorer = true;
@@ -103,21 +75,7 @@ void TextltApp::ShowProjectSidebar() {
     auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
     if (!editor_config_.show_file_explorer) {
         editor_config_.show_file_explorer = true;
-        sidebar->ShowProject();
         SaveConfig();
-        active_action_ = "Project files";
-        FocusSidebar();
-        screen_.PostEvent(ftxui::Event::Custom);
-        return;
-    }
-
-    if (sidebar_has_focus_ && sidebar->IsProjectMode()) {
-        editor_config_.show_file_explorer = false;
-        SaveConfig();
-        active_action_ = "File Explorer disabled";
-        FocusEditor();
-        screen_.PostEvent(ftxui::Event::Custom);
-        return;
     }
 
     sidebar->ShowProject();

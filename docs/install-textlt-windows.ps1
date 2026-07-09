@@ -1,8 +1,15 @@
 param(
-    [string]$Version = $(if ($env:TEXTLT_VERSION) { $env:TEXTLT_VERSION } else { "v0.9.1" })
+    [string]$Version = $(if ($env:TEXTLT_VERSION) { $env:TEXTLT_VERSION } else { "" })
 )
 
 $ErrorActionPreference = "Stop"
+
+if (-not $Version) {
+    throw "Missing TextLT version. Usage: .\install-textlt-windows.ps1 -Version vX.Y.Z"
+}
+if (-not $Version.StartsWith("v")) {
+    $Version = "v$Version"
+}
 
 $Repo = if ($env:TEXTLT_REPO) { $env:TEXTLT_REPO } else { "ihor-liutak2/textlt" }
 $Asset = if ($env:TEXTLT_ASSET) { $env:TEXTLT_ASSET } else { "textlt-windows-x64.zip" }

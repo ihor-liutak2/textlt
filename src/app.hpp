@@ -24,6 +24,7 @@
 #include "git_manager.hpp"
 #include "modals/assistant_modals.hpp"
 #include "modals/help_dialog.hpp"
+#include "modals/modal_sidebar_shortcuts.hpp"
 #include "modals/modal_keyboard_shortcuts.hpp"
 #include "modals/modal_custom_processor_builder.hpp"
 #include "modals/modal_ai.hpp"
@@ -85,6 +86,7 @@ private:
         Main,
         Help,
         KeyboardShortcuts,
+        SidebarShortcuts,
         CustomProcessorBuilder,
         Theme,
         Find,
@@ -166,6 +168,8 @@ private:
     void CloseHelpDialog();
     void OpenKeyboardShortcutsModal();
     void CloseKeyboardShortcutsModal();
+    void OpenSidebarShortcutModal();
+    void CloseSidebarShortcutModal();
     void OpenCustomProcessorBuilderModal();
     void CloseCustomProcessorBuilderModal();
     void OpenTtsModal();
@@ -260,7 +264,6 @@ private:
     void CloseGoToLinePanel();
     void SubmitGoToLine();
     void ToggleFileExplorer();
-    void HandleCtrlBFileExplorer();
     void ShowOpenedFilesSidebar();
     void ShowProjectSidebar();
     void ShowFavoritesSidebar();
@@ -355,6 +358,7 @@ private:
     ftxui::Component sidebar_panel_;
     HelpDialog help_dialog_;
     KeyboardShortcutsModal keyboard_shortcuts_modal_;
+    SidebarShortcutModal sidebar_shortcuts_modal_;
     CustomProcessorBuilderModal custom_processor_builder_modal_;
     RecentFilesModal recent_files_modal_;
 
@@ -389,7 +393,6 @@ private:
     int replace_input_cursor_position_ = 0;
     int goto_line_input_cursor_position_ = 0;
     bool sidebar_has_focus_ = false;
-    bool pending_sidebar_chord_ = false;
     bool show_goto_line_bar_ = false;
     NavigationPopupMode navigation_popup_mode_ = NavigationPopupMode::GoToLine;
     bool exit_after_save_as_ = false;

@@ -125,6 +125,9 @@ ftxui::Element TextltApp::Render() {
     if (keyboard_shortcuts_modal_.IsOpen()) {
         layers.push_back(keyboard_shortcuts_modal_.View()->Render() | clear_under | center);
     }
+    if (sidebar_shortcuts_modal_.IsOpen()) {
+        layers.push_back(sidebar_shortcuts_modal_.View()->Render() | clear_under | center);
+    }
     if (custom_processor_builder_modal_.IsOpen()) {
         layers.push_back(custom_processor_builder_modal_.View()->Render() | clear_under | center);
     }
@@ -303,6 +306,7 @@ bool TextltApp::ActiveModalIsOpen() const {
         case UiLayer::Main: return true;
         case UiLayer::Help: return help_dialog_.IsOpen();
         case UiLayer::KeyboardShortcuts: return keyboard_shortcuts_modal_.IsOpen();
+        case UiLayer::SidebarShortcuts: return sidebar_shortcuts_modal_.IsOpen();
         case UiLayer::CustomProcessorBuilder: return custom_processor_builder_modal_.IsOpen();
         case UiLayer::Theme: return theme_dialog_.IsOpen();
         case UiLayer::Find: return current_search_mode_ != SearchMode::None;
