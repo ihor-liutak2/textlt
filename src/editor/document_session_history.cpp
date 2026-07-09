@@ -1,5 +1,7 @@
 #include "editor/document_session.hpp"
 
+#include <algorithm>
+
 namespace textlt {
 
 HistoryManager::State DocumentSession::CurrentState() const {
@@ -7,6 +9,9 @@ HistoryManager::State DocumentSession::CurrentState() const {
         lines.empty() ? std::vector<std::string>{""} : lines,
         static_cast<int>(CursorCol()),
         static_cast<int>(CursorRow()),
+        SelectionState().active,
+        static_cast<int>(SelectionState().anchor_x),
+        static_cast<int>(SelectionState().anchor_y),
     };
 }
 
@@ -15,6 +20,23 @@ void DocumentSession::ApplyState(const HistoryManager::State& state) {
     CursorCol() = state.cursor_x < 0 ? 0 : static_cast<size_t>(state.cursor_x);
     CursorRow() = state.cursor_y < 0 ? 0 : static_cast<size_t>(state.cursor_y);
     EnsureValidBuffer();
+    ClampCursor();
+
+    if (state.selection_active) {
+        SelectionState().active = true;
+        SelectionState().anchor_y = state.selection_anchor_y < 0
+            ? 0
+            : static_cast<size_t>(state.selection_anchor_y);
+        SelectionState().anchor_y = std::min(SelectionState().anchor_y, lines.size() - 1);
+        SelectionState().anchor_x = state.selection_anchor_x < 0
+            ? 0
+            : static_cast<size_t>(state.selection_anchor_x);
+        SelectionState().anchor_x = std::min(
+            SelectionState().anchor_x,
+            lines[SelectionState().anchor_y].size());
+    } else {
+        ClearSelection();
+    }
 }
 
 void DocumentSession::SaveSnapshot() {

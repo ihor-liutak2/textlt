@@ -317,6 +317,9 @@ HistoryManager::State DocumentSession::CurrentTextProcessorState() const {
         buffer.Lines().empty() ? std::vector<std::string>{""} : buffer.Lines(),
         static_cast<int>(CursorCol()),
         static_cast<int>(CursorRow()),
+        SelectionState().active,
+        static_cast<int>(SelectionState().anchor_x),
+        static_cast<int>(SelectionState().anchor_y),
     };
 }
 
@@ -482,17 +485,19 @@ bool DocumentSession::ReplaceTextProcessorTargetText(
     }
 
     history.EndTypingGroup();
-    history.PushSnapshot(CurrentTextProcessorState());
+    const HistoryManager::State before = CurrentTextProcessorState();
 
     bool changed = false;
     if (text.empty()) {
         changed = DeleteTextProcessorSelection();
     } else {
-        DeleteTextProcessorSelection();
-        changed = InsertTextProcessorText(text);
+        const bool deleted = DeleteTextProcessorSelection();
+        const bool inserted = InsertTextProcessorText(text);
+        changed = deleted || inserted;
     }
 
     if (changed) {
+        history.PushSnapshot(before);
         buffer.MarkDirty();
     }
     return changed;

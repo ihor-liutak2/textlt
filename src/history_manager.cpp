@@ -20,7 +20,10 @@ namespace textlt {
             const auto& last = undo_stack_.back();
             if (last.lines == state.lines &&
                 last.cursor_x == state.cursor_x &&
-                last.cursor_y == state.cursor_y) {
+                last.cursor_y == state.cursor_y &&
+                last.selection_active == state.selection_active &&
+                last.selection_anchor_x == state.selection_anchor_x &&
+                last.selection_anchor_y == state.selection_anchor_y) {
                 redo_stack_.clear();
             return;
                 }

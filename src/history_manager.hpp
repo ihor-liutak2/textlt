@@ -11,6 +11,9 @@ public:
         std::vector<std::string> lines;
         int cursor_x = 0;
         int cursor_y = 0;
+        bool selection_active = false;
+        int selection_anchor_x = 0;
+        int selection_anchor_y = 0;
     };
 
     void Clear();

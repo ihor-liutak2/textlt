@@ -58,5 +58,55 @@ int main() {
     assert(vertical.CursorRow() == 2);
     assert(vertical.CursorCol() == 3);
 
+    DocumentSession selected_processor;
+    EditorCursorState selected_processor_cursor;
+    selected_processor.SetActiveCursorState(&selected_processor_cursor);
+    selected_processor.lines = {"alpha beta gamma"};
+    selected_processor.CursorRow() = 0;
+    selected_processor.CursorCol() = 6;
+    selected_processor.BeginSelection();
+    selected_processor.CursorCol() = 10;
+
+    std::string processor_error;
+    assert(selected_processor.ReplaceTextProcessorTargetText(
+        false,
+        "BETA",
+        processor_error));
+    assert(selected_processor.lines.size() == 1);
+    assert(selected_processor.lines[0] == "alpha BETA gamma");
+
+    assert(selected_processor.Undo());
+    assert(selected_processor.lines.size() == 1);
+    assert(selected_processor.lines[0] == "alpha beta gamma");
+    assert(selected_processor.HasSelection());
+    assert(selected_processor.GetSelectedText() == "beta");
+    assert(!selected_processor.Undo());
+
+    assert(selected_processor.Redo());
+    assert(selected_processor.lines.size() == 1);
+    assert(selected_processor.lines[0] == "alpha BETA gamma");
+
+    DocumentSession whole_document_processor;
+    EditorCursorState whole_document_processor_cursor;
+    whole_document_processor.SetActiveCursorState(&whole_document_processor_cursor);
+    whole_document_processor.lines = {"one", "two"};
+    whole_document_processor.CursorRow() = 0;
+    whole_document_processor.CursorCol() = 0;
+
+    assert(whole_document_processor.ReplaceTextProcessorTargetText(
+        true,
+        "ONE\nTWO",
+        processor_error));
+    assert(whole_document_processor.lines.size() == 2);
+    assert(whole_document_processor.lines[0] == "ONE");
+    assert(whole_document_processor.lines[1] == "TWO");
+
+    assert(whole_document_processor.Undo());
+    assert(whole_document_processor.lines.size() == 2);
+    assert(whole_document_processor.lines[0] == "one");
+    assert(whole_document_processor.lines[1] == "two");
+    assert(!whole_document_processor.Undo());
+
+
     return 0;
 }
