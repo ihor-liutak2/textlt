@@ -39,7 +39,7 @@ public:
     bool SaveToken(
         const OAuthFlowConfig& config,
         const std::string& provider_name,
-        const std::string& account_label,
+        const std::string& display_name,
         const OAuthTokenExchangeResult& exchange_result,
         const std::string& token_file_path);
 };

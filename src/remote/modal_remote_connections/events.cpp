@@ -74,37 +74,50 @@ bool RemoteConnectionsModalContent::HandleEvent(ftxui::Event event) {
 
 std::vector<ftxui::Component> RemoteConnectionsModalContent::GetVisibleInputs() {
     std::vector<ftxui::Component> inputs;
+    if (selected_tab_ == MainTab::Connections) {
+        return inputs;
+    }
+    const RemoteConnectionType visible_type = TypeForTab(selected_tab_);
     inputs.push_back(name_input_);
 
-    switch (CurrentType()) {
+    switch (visible_type) {
         case RemoteConnectionType::Sftp:
             inputs.push_back(host_input_);
             inputs.push_back(port_input_);
             inputs.push_back(user_input_);
+            inputs.push_back(password_input_);
             inputs.push_back(remote_root_input_);
+            inputs.push_back(auth_mode_input_);
             inputs.push_back(identity_file_input_);
+            inputs.push_back(key_passphrase_input_);
+            inputs.push_back(known_hosts_file_input_);
             inputs.push_back(ssh_config_host_input_);
             break;
         case RemoteConnectionType::GoogleDrive:
-            inputs.push_back(account_label_input_);
             inputs.push_back(client_id_input_);
             inputs.push_back(client_secret_input_);
             inputs.push_back(root_folder_id_input_);
+            inputs.push_back(scope_input_);
+            inputs.push_back(access_token_input_);
+            inputs.push_back(refresh_token_input_);
             break;
         case RemoteConnectionType::MicrosoftDrive:
-            inputs.push_back(account_label_input_);
             inputs.push_back(tenant_id_input_);
             inputs.push_back(client_id_input_);
             inputs.push_back(client_secret_input_);
             inputs.push_back(site_id_input_);
             inputs.push_back(drive_id_input_);
             inputs.push_back(remote_root_input_);
+            inputs.push_back(scope_input_);
+            inputs.push_back(access_token_input_);
+            inputs.push_back(refresh_token_input_);
             break;
         case RemoteConnectionType::Dropbox:
-            inputs.push_back(account_label_input_);
             inputs.push_back(app_key_input_);
             inputs.push_back(app_secret_input_);
             inputs.push_back(remote_root_input_);
+            inputs.push_back(access_token_input_);
+            inputs.push_back(refresh_token_input_);
             break;
     }
     return inputs;

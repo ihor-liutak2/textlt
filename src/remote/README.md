@@ -9,33 +9,42 @@ The connection modal has real type switching and separate fields for each suppor
 - SFTP / SSH
   - host
   - port
-  - user
+  - username
+  - password
   - remote root
-  - identity file
+  - auth mode
+  - private key file
+  - key passphrase
+  - known hosts file
   - SSH config host alias
 - Google Drive
-  - account label
   - OAuth client id
   - OAuth client secret
   - token file
+  - access token input
+  - refresh token input
+  - scope
   - root folder id
 - Microsoft OneDrive / SharePoint
-  - account label
   - tenant id
   - OAuth client id
   - OAuth client secret
   - token file
+  - access token input
+  - refresh token input
+  - scope
   - SharePoint site id
   - drive id
   - remote root
 - Dropbox
-  - account label
   - app key
   - app secret
   - token file
+  - access token input
+  - refresh token input
   - remote root
 
-All fields are persisted in `remote_connections.json`.
+Connection name/type and provider settings are persisted in `remote_connections.json`; pasted access tokens are stored in separate token files.
 
 ## Active file-manager backends
 
@@ -67,13 +76,7 @@ This avoids accidental writes to servers when the user only wanted to save the l
 
 ## SSH/SFTP assumptions
 
-Passwords are not stored. Use one of these:
-
-- SSH key with `ssh-agent`.
-- Host alias from `~/.ssh/config`.
-- Identity file configured in the connection modal.
-
-The SFTP backend uses batch mode and `BatchMode=yes`, so interactive password prompts are intentionally not supported.
+SFTP can be configured with manual host/user fields, an SSH config host alias, a private key file, ssh-agent, or a password. Password authentication is non-interactive; when a password is configured, TextLT uses `sshpass` if it is installed. If `sshpass` is not available, use an SSH key, ssh-agent, or a host alias from `~/.ssh/config` instead.
 
 ## Patch 8 safety behavior
 
@@ -91,7 +94,7 @@ The SFTP provider also checks for external `ssh` and `sftp` executables during c
 Google Drive, Microsoft OneDrive/SharePoint, and Dropbox share a small token-file layer:
 
 - token files live under `~/.config/textlt/remote_tokens/` by default on Linux;
-- the connection modal can create a placeholder token JSON with the `Token` button;
+- the connection modal can save pasted access/refresh tokens from the provider tab;
 - `Test` for cloud connections validates the configured token file and reports whether it is only a placeholder or already contains an access/refresh token;
 - the connection config keeps the token-file path, but the future access/refresh tokens are stored in the token file itself.
 

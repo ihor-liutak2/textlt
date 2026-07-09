@@ -48,7 +48,10 @@ std::string CurrentConnectionLabel(const std::vector<RemoteConnectionConfig>& co
     if (!config.ssh_config_host.empty()) {
         return config.ssh_config_host;
     }
-    return config.host;
+    if (!config.host.empty()) {
+        return config.host;
+    }
+    return RemoteConnectionTypeToString(config.type);
 }
 
 } // namespace

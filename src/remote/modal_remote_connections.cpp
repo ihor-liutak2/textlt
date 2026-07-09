@@ -80,17 +80,11 @@ std::string ConnectionTargetSummary(const RemoteConnectionConfig& config) {
             return target;
         }
         case RemoteConnectionType::GoogleDrive:
-            if (!config.account_label.empty()) {
-                return config.account_label;
-            }
             if (!config.root_folder_id.empty()) {
                 return "folder " + config.root_folder_id;
             }
             return "Google Drive";
         case RemoteConnectionType::MicrosoftDrive:
-            if (!config.account_label.empty()) {
-                return config.account_label;
-            }
             if (!config.site_id.empty()) {
                 return "site " + config.site_id;
             }
@@ -99,9 +93,6 @@ std::string ConnectionTargetSummary(const RemoteConnectionConfig& config) {
             }
             return "OneDrive / SharePoint";
         case RemoteConnectionType::Dropbox:
-            if (!config.account_label.empty()) {
-                return config.account_label;
-            }
             return config.remote_root.empty() ? "/" : config.remote_root;
     }
     return {};
@@ -111,6 +102,11 @@ std::string ConnectionTargetSummary(const RemoteConnectionConfig& config) {
 
 #include "remote/modal_remote_connections/setup.cpp"
 #include "remote/modal_remote_connections/render.cpp"
+#include "remote/modal_remote_connections/tab_connections.cpp"
+#include "remote/modal_remote_connections/tab_sftp.cpp"
+#include "remote/modal_remote_connections/tab_google_drive.cpp"
+#include "remote/modal_remote_connections/tab_microsoft_drive.cpp"
+#include "remote/modal_remote_connections/tab_dropbox.cpp"
 #include "remote/modal_remote_connections/events.cpp"
 #include "remote/modal_remote_connections/actions.cpp"
 #include "remote/modal_remote_connections/wrapper.cpp"

@@ -81,6 +81,10 @@ bool RemoteSftpProvider::Connect(const RemoteConnectionConfig& config, std::stri
         error = "Cannot find external sftp executable. Install OpenSSH client or add sftp to PATH.";
         return false;
     }
+    if (!config_.password.empty() && !CommandAvailable("sshpass")) {
+        error = "SFTP password authentication needs sshpass. Install sshpass, or use an SSH key / ssh-agent / ~/.ssh/config.";
+        return false;
+    }
     error.clear();
     return true;
 }
@@ -277,11 +281,21 @@ bool RemoteSftpProvider::RemoveDirectory(const std::string& path, std::string& e
 }
 
 std::vector<std::string> RemoteSftpProvider::BuildSshArgs() const {
-    std::vector<std::string> args = {
-        "ssh",
-        "-o", "BatchMode=yes",
-        "-o", "ConnectTimeout=10",
-    };
+    std::vector<std::string> args;
+    if (!config_.password.empty()) {
+        args.push_back("sshpass");
+        args.push_back("-p");
+        args.push_back(config_.password);
+    }
+    args.push_back("ssh");
+    args.push_back("-o");
+    args.push_back(config_.password.empty() ? "BatchMode=yes" : "BatchMode=no");
+    args.push_back("-o");
+    args.push_back("ConnectTimeout=10");
+    if (!config_.known_hosts_file.empty()) {
+        args.push_back("-o");
+        args.push_back("UserKnownHostsFile=" + config_.known_hosts_file);
+    }
     if (!config_.identity_file.empty()) {
         args.push_back("-i");
         args.push_back(config_.identity_file);
@@ -294,12 +308,23 @@ std::vector<std::string> RemoteSftpProvider::BuildSshArgs() const {
 }
 
 std::vector<std::string> RemoteSftpProvider::BuildSftpArgs() const {
-    std::vector<std::string> args = {
-        "sftp",
-        "-o", "BatchMode=yes",
-        "-o", "ConnectTimeout=10",
-        "-b", "-",
-    };
+    std::vector<std::string> args;
+    if (!config_.password.empty()) {
+        args.push_back("sshpass");
+        args.push_back("-p");
+        args.push_back(config_.password);
+    }
+    args.push_back("sftp");
+    args.push_back("-o");
+    args.push_back(config_.password.empty() ? "BatchMode=yes" : "BatchMode=no");
+    args.push_back("-o");
+    args.push_back("ConnectTimeout=10");
+    args.push_back("-b");
+    args.push_back("-");
+    if (!config_.known_hosts_file.empty()) {
+        args.push_back("-o");
+        args.push_back("UserKnownHostsFile=" + config_.known_hosts_file);
+    }
     if (!config_.identity_file.empty()) {
         args.push_back("-i");
         args.push_back(config_.identity_file);

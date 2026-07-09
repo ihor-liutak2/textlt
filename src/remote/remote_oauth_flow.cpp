@@ -125,7 +125,7 @@ OAuthTokenExchangeResult OAuthFlow::ExchangeCodeForToken(
 bool OAuthFlow::SaveToken(
     const OAuthFlowConfig& /*config*/,
     const std::string& provider_name,
-    const std::string& account_label,
+    const std::string& display_name,
     const OAuthTokenExchangeResult& exchange_result,
     const std::string& token_file_path) {
 
@@ -135,7 +135,7 @@ bool OAuthFlow::SaveToken(
 
     RemoteOAuthToken token = exchange_result.token;
     token.provider = provider_name;
-    token.account_label = account_label;
+    token.display_name = display_name;
 
     RemoteOAuthTokenStore store(ExpandRemoteUserPath(token_file_path));
     std::string error;

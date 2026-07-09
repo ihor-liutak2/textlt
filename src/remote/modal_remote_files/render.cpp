@@ -5,11 +5,9 @@ ftxui::Element RemoteFilesModalContent::Render() {
 
     return vbox({
         hbox({
-            text(" Connection: ") | color(theme.modal_accent),
-            text(TrimForDisplay(connection_label, 28)) | bold | color(theme.modal_text_color),
+            text(" Active connection: ") | color(theme.modal_accent),
+            text(TrimForDisplay(connection_label, 36)) | bold | color(theme.modal_text_color),
             filler(),
-            prev_connection_button_->Render(), text(" "),
-            next_connection_button_->Render(), text(" "),
             refresh_button_->Render(), text(" "),
             copy_error_button_->Render(),
         }),
@@ -27,11 +25,11 @@ ftxui::Element RemoteFilesModalContent::Render() {
         separator() | color(theme.modal_border),
         hbox({
             vbox({
-                hbox({text(" Local path ") | color(theme.modal_accent), local_path_input_->Render() | flex}),
+                RenderRemoteDialogInputFrame(theme, "Local path", local_path_input_),
             }) | size(WIDTH, EQUAL, 58),
             separator(),
             vbox({
-                hbox({text(" Remote path ") | color(theme.modal_accent), remote_path_input_->Render() | flex}),
+                RenderRemoteDialogInputFrame(theme, "Remote path", remote_path_input_),
             }) | size(WIDTH, EQUAL, 58),
         }),
         hbox({
@@ -130,8 +128,7 @@ ftxui::Element RemoteFilesModalContent::RenderOperationRow() {
     }
 
     return hbox({
-        text(" " + pending_input_label_ + " ") | color(theme.modal_accent),
-        operation_input_->Render() | size(WIDTH, EQUAL, 42),
+        RenderRemoteDialogInputFrame(theme, pending_input_label_, operation_input_) | size(WIDTH, EQUAL, 44),
         text(" "),
         confirm_button_->Render(),
         text(" "),

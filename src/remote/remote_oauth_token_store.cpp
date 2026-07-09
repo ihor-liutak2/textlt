@@ -71,7 +71,7 @@ std::string ProviderSlug(RemoteConnectionType type) {
 RemoteOAuthToken ParseToken(const Json& object) {
     RemoteOAuthToken token;
     token.provider = JsonString(object, "provider");
-    token.account_label = JsonString(object, "account_label");
+    token.display_name = JsonString(object, "display_name");
     token.access_token = JsonString(object, "access_token");
     token.refresh_token = JsonString(object, "refresh_token");
     token.token_type = JsonString(object, "token_type", "Bearer");
@@ -87,7 +87,7 @@ RemoteOAuthToken ParseToken(const Json& object) {
 Json SerializeToken(const RemoteOAuthToken& token) {
     Json object = Json::object();
     object["provider"] = token.provider;
-    object["account_label"] = token.account_label;
+    object["display_name"] = token.display_name;
     object["access_token"] = token.access_token;
     object["refresh_token"] = token.refresh_token;
     object["token_type"] = token.token_type.empty() ? "Bearer" : token.token_type;
@@ -264,8 +264,8 @@ std::string DescribeRemoteOAuthTokenStatus(const RemoteConnectionConfig& config)
     if (!token.provider.empty()) {
         summary << "\nProvider: " << token.provider;
     }
-    if (!token.account_label.empty()) {
-        summary << "\nAccount: " << token.account_label;
+    if (!token.display_name.empty()) {
+        summary << "\nName: " << token.display_name;
     }
     summary << "\nToken state: " << (token.HasUsableToken() ? "has access/refresh token" : "placeholder only");
     if (token.expires_at_unix > 0) {

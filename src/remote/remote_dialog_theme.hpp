@@ -1,5 +1,8 @@
 #pragma once
 
+#include <string>
+
+#include "ftxui/component/component.hpp"
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/dom/elements.hpp"
 
@@ -29,6 +32,24 @@ inline ftxui::Element RemoteDialogInputTransform(const Theme& theme,
         ? background
         : theme.modal_input_fg);
     return state.element;
+}
+
+inline ftxui::Element RenderRemoteDialogInputFrame(
+    const Theme& theme,
+    const std::string& label,
+    const ftxui::Component& component) {
+    using namespace ftxui;
+    const bool focused = component && component->Focused();
+    Element input = component ? component->Render() : text("");
+    input = input |
+        bgcolor(RemoteDialogInputBackground(theme, focused)) |
+        color(theme.modal_input_fg) |
+        size(WIDTH, GREATER_THAN, 18) |
+        borderStyled(LIGHT, focused ? theme.modal_accent : theme.modal_border);
+    return vbox({
+        text(" " + label) | color(theme.modal_accent),
+        input,
+    });
 }
 
 } // namespace textlt

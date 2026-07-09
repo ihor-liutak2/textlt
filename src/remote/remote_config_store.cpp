@@ -42,10 +42,13 @@ RemoteConnectionConfig ParseConnection(const Json& object) {
         config.port = 22;
     }
     config.user = JsonString(object, "user");
+    config.password = JsonString(object, "password");
     config.remote_root = NormalizeRemoteDirectory(JsonString(object, "remote_root", "/"));
-    config.identity_file = JsonString(object, "identity_file");
+    config.auth_mode = JsonString(object, "auth_mode", "auto");
+    config.identity_file = JsonString(object, "identity_file", JsonString(object, "private_key_file"));
+    config.key_passphrase = JsonString(object, "key_passphrase");
+    config.known_hosts_file = JsonString(object, "known_hosts_file");
     config.ssh_config_host = JsonString(object, "ssh_config_host");
-    config.account_label = JsonString(object, "account_label");
     config.client_id = JsonString(object, "client_id");
     config.client_secret = JsonString(object, "client_secret");
     config.tenant_id = JsonString(object, "tenant_id");
@@ -55,16 +58,13 @@ RemoteConnectionConfig ParseConnection(const Json& object) {
     config.drive_id = JsonString(object, "drive_id");
     config.app_key = JsonString(object, "app_key");
     config.app_secret = JsonString(object, "app_secret");
+    config.scope = JsonString(object, "scope");
 
     if (config.id.empty()) {
         config.id = MakeRemoteConnectionId();
     }
     if (config.name.empty()) {
-        if (!config.account_label.empty()) {
-            config.name = config.account_label;
-        } else {
-            config.name = config.ssh_config_host.empty() ? config.host : config.ssh_config_host;
-        }
+        config.name = config.ssh_config_host.empty() ? config.host : config.ssh_config_host;
     }
     return config;
 }
@@ -77,10 +77,13 @@ Json SerializeConnection(const RemoteConnectionConfig& config) {
     object["host"] = config.host;
     object["port"] = config.port;
     object["user"] = config.user;
+    object["password"] = config.password;
     object["remote_root"] = config.remote_root.empty() ? "/" : config.remote_root;
+    object["auth_mode"] = config.auth_mode.empty() ? "auto" : config.auth_mode;
     object["identity_file"] = config.identity_file;
+    object["key_passphrase"] = config.key_passphrase;
+    object["known_hosts_file"] = config.known_hosts_file;
     object["ssh_config_host"] = config.ssh_config_host;
-    object["account_label"] = config.account_label;
     object["client_id"] = config.client_id;
     object["client_secret"] = config.client_secret;
     object["tenant_id"] = config.tenant_id;
@@ -90,6 +93,7 @@ Json SerializeConnection(const RemoteConnectionConfig& config) {
     object["drive_id"] = config.drive_id;
     object["app_key"] = config.app_key;
     object["app_secret"] = config.app_secret;
+    object["scope"] = config.scope;
     return object;
 }
 
@@ -106,8 +110,11 @@ bool RemoteConfigStore::Load(std::string& error) {
     connections_.clear();
 
     const Json root = LoadJsonObject(path_);
+    active_connection_id_ = JsonString(root, "active_connection_id");
+
     const auto connections_iter = root.find("connections");
     if (connections_iter == root.end()) {
+        NormalizeActiveConnection();
         return true;
     }
     if (!connections_iter->is_array()) {
@@ -121,15 +128,17 @@ bool RemoteConfigStore::Load(std::string& error) {
         }
         RemoteConnectionConfig config = ParseConnection(object);
         if (!config.name.empty() || !config.host.empty() || !config.ssh_config_host.empty() ||
-            !config.account_label.empty() || !config.client_id.empty() || !config.app_key.empty()) {
+            !config.client_id.empty() || !config.app_key.empty()) {
             connections_.push_back(std::move(config));
         }
     }
+    NormalizeActiveConnection();
     return true;
 }
 
 bool RemoteConfigStore::Save(std::string& error) const {
     Json root = Json::object();
+    root["active_connection_id"] = active_connection_id_;
     root["connections"] = Json::array();
     for (const RemoteConnectionConfig& config : connections_) {
         root["connections"].push_back(SerializeConnection(config));
@@ -157,25 +166,57 @@ const RemoteConnectionConfig* RemoteConfigStore::FindById(const std::string& id)
     return iter == connections_.end() ? nullptr : &*iter;
 }
 
+void RemoteConfigStore::SetActiveConnectionId(std::string id) {
+    active_connection_id_ = std::move(id);
+    NormalizeActiveConnection();
+}
+
+RemoteConnectionConfig* RemoteConfigStore::FindActiveConnection() {
+    NormalizeActiveConnection();
+    return active_connection_id_.empty() ? nullptr : FindById(active_connection_id_);
+}
+
+const RemoteConnectionConfig* RemoteConfigStore::FindActiveConnection() const {
+    if (connections_.empty()) {
+        return nullptr;
+    }
+    const RemoteConnectionConfig* active = active_connection_id_.empty()
+        ? nullptr
+        : FindById(active_connection_id_);
+    return active ? active : &connections_.front();
+}
+
+void RemoteConfigStore::NormalizeActiveConnection() {
+    if (connections_.empty()) {
+        active_connection_id_.clear();
+        return;
+    }
+    if (active_connection_id_.empty() || !FindById(active_connection_id_)) {
+        active_connection_id_ = connections_.front().id;
+    }
+}
+
 void RemoteConfigStore::AddOrUpdate(RemoteConnectionConfig config) {
     if (config.id.empty()) {
         config.id = MakeRemoteConnectionId();
     }
     if (config.name.empty()) {
-        if (!config.account_label.empty()) {
-            config.name = config.account_label;
-        } else {
-            config.name = config.ssh_config_host.empty() ? config.host : config.ssh_config_host;
-        }
+        config.name = config.ssh_config_host.empty() ? config.host : config.ssh_config_host;
     }
     config.remote_root = NormalizeRemoteDirectory(config.remote_root);
 
-    RemoteConnectionConfig* existing = FindById(config.id);
+    const std::string saved_id = config.id;
+    RemoteConnectionConfig* existing = FindById(saved_id);
     if (existing) {
         *existing = std::move(config);
+        NormalizeActiveConnection();
         return;
     }
     connections_.push_back(std::move(config));
+    if (active_connection_id_.empty()) {
+        active_connection_id_ = saved_id;
+    }
+    NormalizeActiveConnection();
 }
 
 bool RemoteConfigStore::RemoveById(const std::string& id) {
@@ -185,7 +226,12 @@ bool RemoteConfigStore::RemoveById(const std::string& id) {
             return config.id == id;
         }),
         connections_.end());
-    return connections_.size() != old_size;
+    const bool removed = connections_.size() != old_size;
+    if (removed && active_connection_id_ == id) {
+        active_connection_id_.clear();
+    }
+    NormalizeActiveConnection();
+    return removed;
 }
 
 } // namespace textlt

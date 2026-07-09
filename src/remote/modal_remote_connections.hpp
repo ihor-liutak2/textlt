@@ -3,6 +3,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "ftxui/component/component.hpp"
@@ -35,7 +36,10 @@ public:
     std::string GetTitle() override { return "Remote Connections"; }
     ModalSizePreference GetModalSizePreference() const override { return {112, 31}; }
     ModalFrameStyle GetModalFrameStyle() const override { return ModalFrameStyle::TitleInBorder; }
-    std::string GetFooterText() const override { return status_; }
+    std::string GetFooterText() const override { return {}; }
+    bool HasCustomFooter() const override { return true; }
+    int GetCustomFooterHeight() const override { return 1; }
+    ftxui::Element RenderCustomFooter() override;
 
     void Open();
     void Close();
@@ -43,6 +47,14 @@ public:
     bool HandleEvent(ftxui::Event event);
 
 private:
+    enum class MainTab {
+        Connections,
+        Sftp,
+        GoogleDrive,
+        MicrosoftDrive,
+        Dropbox,
+    };
+
     ftxui::Component MakeTextButton(
         std::string label,
         std::function<void()> on_click,
@@ -50,24 +62,36 @@ private:
         ButtonVariant variant = ButtonVariant::AccentEdges,
         std::string icon = {},
         ButtonSize size = ButtonSize::Normal);
-    ftxui::Component MakeTypeButton(std::string label, RemoteConnectionType type);
+    ftxui::Component MakeTabButton(std::string label, MainTab tab);
+    ftxui::Element RenderCurrentTab();
+    ftxui::Element RenderConnectionsTab();
+    ftxui::Element RenderSftpTab();
+    ftxui::Element RenderGoogleDriveTab();
+    ftxui::Element RenderMicrosoftDriveTab();
+    ftxui::Element RenderDropboxTab();
     ftxui::Element RenderConnectionList();
-    ftxui::Element RenderForm();
+    ftxui::Element RenderConnectionDetails();
     ftxui::Element RenderHelpOverlay();
-    ftxui::Element RenderTypeButtons();
-    ftxui::Element RenderOutput();
+    ftxui::Element RenderTabButtons();
+    ftxui::Element RenderOutput(int max_lines = 4);
+    ftxui::Element RenderFieldGrid(const std::vector<std::pair<std::string, ftxui::Component>>& fields);
     bool HandleListEvent(ftxui::Event event);
     int EntryIndexAtMouse(const ftxui::Mouse& mouse) const;
 
     RemoteConnectionType CurrentType() const;
+    void SelectTab(MainTab tab);
     void SelectType(RemoteConnectionType type);
     void ApplyTypeDefaults(RemoteConnectionType type);
+    void ResetFormForType(RemoteConnectionType type);
+    void AddConnectionOfType(RemoteConnectionType type);
     void LoadSelectedIntoForm();
     void SaveFormToSelected();
-    void AddConnection();
+    void EditSelected();
     void DeleteSelected();
     void TestSelected();
+    void SetSelectedActive();
     void PrepareTokenFile();
+    void SaveCloudAccessToken();
     void OpenHelp();
     void CloseHelp();
     void CopyHelpUrl();
@@ -80,6 +104,12 @@ private:
     RemoteConnectionConfig FormConfig() const;
     void SetStatus(std::string status, bool is_error = false);
     std::string SuggestedTokenFile(RemoteConnectionType type) const;
+    RemoteConnectionType TypeForTab(MainTab tab) const;
+    MainTab TabForType(RemoteConnectionType type) const;
+    std::string ActiveConnectionLabel() const;
+    bool IsCloudEditorActive() const;
+    RemoteConnectionConfig SelectedConnectionConfig() const;
+    RemoteConnectionConfig ActionConfig() const;
 
     const Theme* theme_ = nullptr;
     RemoteConfigStore* config_store_ = nullptr;
@@ -89,6 +119,7 @@ private:
     std::vector<RemoteConnectionConfig> connections_;
     int selected_connection_ = 0;
     std::vector<ftxui::Box> connection_boxes_;
+    MainTab selected_tab_ = MainTab::Connections;
 
     std::string id_value_;
     std::string name_value_;
@@ -96,10 +127,13 @@ private:
     std::string host_value_;
     std::string port_value_ = "22";
     std::string user_value_;
+    std::string password_value_;
     std::string remote_root_value_ = "/";
+    std::string auth_mode_value_ = "auto";
     std::string identity_file_value_;
+    std::string key_passphrase_value_;
+    std::string known_hosts_file_value_;
     std::string ssh_config_host_value_;
-    std::string account_label_value_;
     std::string client_id_value_;
     std::string client_secret_value_;
     std::string tenant_id_value_;
@@ -109,15 +143,21 @@ private:
     std::string drive_id_value_;
     std::string app_key_value_;
     std::string app_secret_value_;
+    std::string access_token_value_;
+    std::string refresh_token_value_;
+    std::string scope_value_;
 
     int name_cursor_ = 0;
     int host_cursor_ = 0;
     int port_cursor_ = 0;
     int user_cursor_ = 0;
+    int password_cursor_ = 0;
     int remote_root_cursor_ = 0;
+    int auth_mode_cursor_ = 0;
     int identity_file_cursor_ = 0;
+    int key_passphrase_cursor_ = 0;
+    int known_hosts_file_cursor_ = 0;
     int ssh_config_host_cursor_ = 0;
-    int account_label_cursor_ = 0;
     int client_id_cursor_ = 0;
     int client_secret_cursor_ = 0;
     int tenant_id_cursor_ = 0;
@@ -126,6 +166,9 @@ private:
     int drive_id_cursor_ = 0;
     int app_key_cursor_ = 0;
     int app_secret_cursor_ = 0;
+    int access_token_cursor_ = 0;
+    int refresh_token_cursor_ = 0;
+    int scope_cursor_ = 0;
 
     std::string status_ = "Ready.";
     bool status_is_error_ = false;
@@ -141,10 +184,13 @@ private:
     ftxui::Component host_input_;
     ftxui::Component port_input_;
     ftxui::Component user_input_;
+    ftxui::Component password_input_;
     ftxui::Component remote_root_input_;
+    ftxui::Component auth_mode_input_;
     ftxui::Component identity_file_input_;
+    ftxui::Component key_passphrase_input_;
+    ftxui::Component known_hosts_file_input_;
     ftxui::Component ssh_config_host_input_;
-    ftxui::Component account_label_input_;
     ftxui::Component client_id_input_;
     ftxui::Component client_secret_input_;
     ftxui::Component tenant_id_input_;
@@ -153,15 +199,20 @@ private:
     ftxui::Component drive_id_input_;
     ftxui::Component app_key_input_;
     ftxui::Component app_secret_input_;
-    ftxui::Component add_button_;
+    ftxui::Component access_token_input_;
+    ftxui::Component refresh_token_input_;
+    ftxui::Component scope_input_;
     ftxui::Component delete_button_;
     ftxui::Component save_button_;
     ftxui::Component test_button_;
-    ftxui::Component token_button_;
-    ftxui::Component sftp_type_button_;
-    ftxui::Component google_type_button_;
-    ftxui::Component microsoft_type_button_;
-    ftxui::Component dropbox_type_button_;
+    ftxui::Component set_active_button_;
+    ftxui::Component save_token_button_;
+    ftxui::Component edit_button_;
+    ftxui::Component connections_tab_button_;
+    ftxui::Component sftp_tab_button_;
+    ftxui::Component google_tab_button_;
+    ftxui::Component microsoft_tab_button_;
+    ftxui::Component dropbox_tab_button_;
     ftxui::Component reload_button_;
     ftxui::Component close_button_;
     ftxui::Component help_button_;
@@ -175,6 +226,7 @@ private:
     int authorize_layer_index_ = 0;
     ftxui::Component help_container_;
     int help_layer_index_ = 0;
+    ftxui::Component footer_actions_container_;
     ftxui::Component container_;
 };
 

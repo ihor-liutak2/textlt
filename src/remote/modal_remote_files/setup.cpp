@@ -83,8 +83,6 @@ RemoteFilesModalContent::RemoteFilesModalContent(
 
     container_inner_ = ftxui::Container::Vertical({
         ftxui::Container::Horizontal({
-            prev_connection_button_,
-            next_connection_button_,
             refresh_button_,
             copy_error_button_,
         }),

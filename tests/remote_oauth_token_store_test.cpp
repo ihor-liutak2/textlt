@@ -47,7 +47,7 @@ int main() {
 
     RemoteOAuthToken token;
     token.provider = RemoteTokenProviderName(RemoteConnectionType::GoogleDrive);
-    token.account_label = "user@example.com";
+    token.display_name = "user@example.com";
     token.access_token = "access";
     token.refresh_token = "refresh";
     token.scope = "drive.file";
@@ -59,7 +59,7 @@ int main() {
     RemoteOAuthToken loaded;
     Expect(store.Load(loaded, error), "Loading token failed: " + error);
     ExpectEqual(loaded.provider, "Google Drive", "Provider mismatch.");
-    ExpectEqual(loaded.account_label, "user@example.com", "Account label mismatch.");
+    ExpectEqual(loaded.display_name, "user@example.com", "Display name mismatch.");
     ExpectEqual(loaded.access_token, "access", "Access token mismatch.");
     ExpectEqual(loaded.refresh_token, "refresh", "Refresh token mismatch.");
     Expect(loaded.HasUsableToken(), "Loaded token should be usable.");

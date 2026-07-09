@@ -406,6 +406,12 @@ add_executable(textlt_remote_oauth_token_store_test
   src/remote/remote_oauth_token_store.cpp
 )
 
+add_executable(textlt_remote_config_store_test
+  tests/remote_config_store_test.cpp
+  src/remote/remote_connection_config.cpp
+  src/remote/remote_config_store.cpp
+)
+
 target_include_directories(textlt_keyboard_shortcuts_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -436,6 +442,11 @@ target_include_directories(textlt_remote_path_test PRIVATE
 )
 
 target_include_directories(textlt_remote_oauth_token_store_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+)
+
+target_include_directories(textlt_remote_config_store_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
@@ -585,6 +596,7 @@ add_test(NAME textlt_tts_audio_player_test COMMAND textlt_tts_audio_player_test)
 add_test(NAME textlt_ui_button_test COMMAND textlt_ui_button_test)
 add_test(NAME textlt_remote_path_test COMMAND textlt_remote_path_test)
 add_test(NAME textlt_remote_oauth_token_store_test COMMAND textlt_remote_oauth_token_store_test)
+add_test(NAME textlt_remote_config_store_test COMMAND textlt_remote_config_store_test)
 add_test(NAME textlt_remote_http_client_test COMMAND textlt_remote_http_client_test)
 add_test(NAME textlt_no_embedded_curl_test COMMAND textlt_no_embedded_curl_test)
 add_test(NAME textlt_remote_dropbox_provider_test COMMAND textlt_remote_dropbox_provider_test)

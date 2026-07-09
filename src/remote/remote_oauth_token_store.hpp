@@ -10,7 +10,7 @@ namespace textlt {
 
 struct RemoteOAuthToken {
     std::string provider;
-    std::string account_label;
+    std::string display_name;
     std::string access_token;
     std::string refresh_token;
     std::string token_type = "Bearer";

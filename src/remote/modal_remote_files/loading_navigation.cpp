@@ -3,17 +3,24 @@ void RemoteFilesModalContent::ReloadConnections() {
     if (config_store_ && !config_store_->Load(error)) {
         SetStatus(error, true);
     }
-    connections_ = config_store_ ? config_store_->Connections() : std::vector<RemoteConnectionConfig>{};
+
+    connections_.clear();
+    const RemoteConnectionConfig* active = config_store_ ? config_store_->FindActiveConnection() : nullptr;
+    if (active) {
+        connections_.push_back(*active);
+    }
+
     if (connections_.empty()) {
         selected_connection_ = 0;
         remote_provider_.reset();
         remote_panel_.entries.clear();
         remote_panel_.path = "/";
         remote_panel_.path_input = "/";
-        SetPanelStatus(PanelSide::Remote, "Create a connection first.", true);
+        SetPanelStatus(PanelSide::Remote,
+            "No active remote connection. Open Remote Connections and set one active.", true);
         return;
     }
-    selected_connection_ = std::clamp(selected_connection_, 0, static_cast<int>(connections_.size()) - 1);
+    selected_connection_ = 0;
 }
 
 bool RemoteFilesModalContent::EnsureRemoteProvider() {
@@ -47,7 +54,7 @@ bool RemoteFilesModalContent::EnsureRemoteProvider() {
         return false;
     }
     remote_provider_ = std::move(provider);
-    SetPanelStatus(PanelSide::Remote, "Connected: " + CurrentConnectionLabel(connections_, selected_connection_));
+    SetPanelStatus(PanelSide::Remote, "Connected active: " + CurrentConnectionLabel(connections_, selected_connection_));
     return true;
 }
 
@@ -166,29 +173,9 @@ void RemoteFilesModalContent::GoParent(PanelSide side) {
 }
 
 void RemoteFilesModalContent::NextConnection() {
-    if (connections_.empty()) {
-        SetStatus("No remote connections.", true);
-        return;
-    }
-    selected_connection_ = (selected_connection_ + 1) % static_cast<int>(connections_.size());
-    if (EnsureRemoteProvider()) {
-        const RemoteConnectionConfig& config = connections_[static_cast<size_t>(selected_connection_)];
-        LoadPanel(PanelSide::Remote, config.remote_root.empty() ? "/" : config.remote_root);
-        SetStatus("Selected connection: " + CurrentConnectionLabel(connections_, selected_connection_));
-    }
+    SetStatus("Remote Files uses only the active connection. Change it in Remote Connections.");
 }
 
 void RemoteFilesModalContent::PreviousConnection() {
-    if (connections_.empty()) {
-        SetStatus("No remote connections.", true);
-        return;
-    }
-    selected_connection_ =
-        (selected_connection_ + static_cast<int>(connections_.size()) - 1) %
-        static_cast<int>(connections_.size());
-    if (EnsureRemoteProvider()) {
-        const RemoteConnectionConfig& config = connections_[static_cast<size_t>(selected_connection_)];
-        LoadPanel(PanelSide::Remote, config.remote_root.empty() ? "/" : config.remote_root);
-        SetStatus("Selected connection: " + CurrentConnectionLabel(connections_, selected_connection_));
-    }
+    SetStatus("Remote Files uses only the active connection. Change it in Remote Connections.");
 }
