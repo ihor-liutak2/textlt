@@ -30,10 +30,15 @@ int main() {
     const auto modifier_choices = ShortcutModifierChoices();
     assert(std::find(modifier_choices.begin(), modifier_choices.end(), ShortcutKeyModifier::Shift) ==
            modifier_choices.end());
+    assert(std::find(modifier_choices.begin(), modifier_choices.end(), ShortcutKeyModifier::CtrlAlt) ==
+           modifier_choices.end());
     // Existing Shift-only bindings remain readable even though the picker no
     // longer proposes creating new ones.
     const auto legacy_shift = ParseShortcutKey("Shift+Left");
     assert(legacy_shift && legacy_shift->modifier == ShortcutKeyModifier::Shift);
+
+    assert(!registry.SetOverride(ShortcutContext::Text, "editor.move_line_up", "Ctrl+Alt+P", error));
+    assert(error.find("Ctrl+Alt") != std::string::npos);
 
     return 0;
 }

@@ -85,6 +85,10 @@ bool ShortcutRegistry::SetOverride(ShortcutContext context, const std::string& a
         error = "Invalid shortcut: " + shortcut;
         return false;
     }
+    if (parsed->modifier == ShortcutKeyModifier::CtrlAlt) {
+        error = "Ctrl+Alt shortcuts are not supported because many terminals reserve or drop them.";
+        return false;
+    }
     if (IsTerminalReservedShortcut(*parsed)) {
         error = shortcut + " is reserved by terminals and cannot be assigned.";
         return false;

@@ -45,6 +45,65 @@ inline std::string UkrainianKeyForUsKey(char key) {
     }
 }
 
+inline std::string UkrainianUpperKeyForUsKey(char key) {
+    switch (key) {
+        case 'q': return "Й";
+        case 'w': return "Ц";
+        case 'e': return "У";
+        case 'r': return "К";
+        case 't': return "Е";
+        case 'y': return "Н";
+        case 'u': return "Г";
+        case 'i': return "Ш";
+        case 'o': return "Щ";
+        case 'p': return "З";
+        case 'a': return "Ф";
+        case 's': return "І";
+        case 'd': return "В";
+        case 'f': return "А";
+        case 'g': return "П";
+        case 'h': return "Р";
+        case 'j': return "О";
+        case 'k': return "Л";
+        case 'l': return "Д";
+        case 'z': return "Я";
+        case 'x': return "Ч";
+        case 'c': return "С";
+        case 'v': return "М";
+        case 'b': return "И";
+        case 'n': return "Т";
+        case 'm': return "Ь";
+        case '/': return ",";
+        default: return {};
+    }
+}
+
+inline bool MatchesPlainShortcutKey(const ftxui::Event& event, char us_key) {
+    if (event.is_mouse() || event.is_cursor_reporting()) {
+        return false;
+    }
+
+    const std::string& input = event.input();
+    const char lower = us_key >= 'A' && us_key <= 'Z'
+        ? static_cast<char>(us_key - 'A' + 'a')
+        : us_key;
+    const char upper = lower >= 'a' && lower <= 'z'
+        ? static_cast<char>(lower - 'a' + 'A')
+        : lower;
+
+    if (input == std::string(1, lower) || input == std::string(1, upper)) {
+        return true;
+    }
+
+    const std::string ukrainian = UkrainianKeyForUsKey(lower);
+    if (!ukrainian.empty() && input == ukrainian) {
+        return true;
+    }
+
+    const std::string ukrainian_upper = UkrainianUpperKeyForUsKey(lower);
+    return !ukrainian_upper.empty() && input == ukrainian_upper;
+}
+
 inline int Utf8CodePoint(const std::string& value) {
     if (value.empty()) return -1;
     const auto first = static_cast<unsigned char>(value[0]);

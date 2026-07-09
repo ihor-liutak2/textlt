@@ -3,6 +3,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "ftxui/component/component.hpp"
@@ -58,6 +59,8 @@ private:
     void SetTab(int tab_index);
     void MoveSelection(int delta);
     void EnsureSelectionVisible();
+    bool RecordCapturedShortcutEvent(const ftxui::Event& event);
+    std::string BindingStateLabel(const ShortcutBindingView& binding) const;
     ftxui::Element RenderTabs() const;
     ftxui::Element RenderActionList() const;
     ftxui::Element RenderPicker() const;
@@ -78,6 +81,7 @@ private:
     std::vector<std::string> action_labels_;
     std::vector<std::string> modifier_labels_;
     std::vector<std::string> key_labels_;
+    std::unordered_set<std::string> captured_shortcuts_;
     std::string status_ = "Choose a command, modifier and key. Terminal-reserved shortcuts are hidden.";
     bool status_is_error_ = false;
 

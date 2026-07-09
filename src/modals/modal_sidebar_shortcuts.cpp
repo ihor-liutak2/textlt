@@ -6,6 +6,8 @@
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/dom/elements.hpp"
 
+#include "keyboard_shortcuts.hpp"
+
 namespace textlt {
 
 namespace {
@@ -66,13 +68,12 @@ void SidebarShortcutModalContent::Open() {
 void SidebarShortcutModalContent::Close() {}
 
 bool SidebarShortcutModalContent::IsEntryKey(ftxui::Event event, char key) const {
-    const std::string& input = event.input();
     const char lower = static_cast<char>(std::tolower(static_cast<unsigned char>(key)));
     const char upper = static_cast<char>(std::toupper(static_cast<unsigned char>(key)));
-    return input == std::string(1, lower) ||
-        input == std::string(1, upper) ||
-        input == std::string(1, static_cast<char>(lower - 'a' + 1)) ||
-        input == "Ctrl+" + std::string(1, upper) ||
+
+    return MatchesPlainShortcutKey(event, lower) ||
+        MatchesShortcut(event, ShortcutModifier::Ctrl, lower) ||
+        event.input() == "Ctrl+" + std::string(1, upper) ||
         event == ftxui::Event::Special("Ctrl+" + std::string(1, upper));
 }
 

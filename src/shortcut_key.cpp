@@ -202,7 +202,6 @@ std::vector<ShortcutKeyModifier> ShortcutModifierChoices() {
         ShortcutKeyModifier::Alt,
         ShortcutKeyModifier::CtrlShift,
         ShortcutKeyModifier::AltShift,
-        ShortcutKeyModifier::CtrlAlt,
     };
 }
 

@@ -99,7 +99,8 @@ ftxui::Component KeyboardShortcutsModalContent::MakeTextButton(
 }
 
 void KeyboardShortcutsModalContent::Open() {
-    status_ = "Choose a command, modifier and key. Terminal-reserved shortcuts are hidden.";
+    captured_shortcuts_.clear();
+    status_ = "Press shortcuts while this modal is open: editor means this terminal delivers the key to TextLT.";
     status_is_error_ = false;
     RebuildActionList();
     SyncSelectionFromBinding();
@@ -310,6 +311,9 @@ bool KeyboardShortcutsModalContent::HandleEvent(ftxui::Event event) {
         }
         return true;
     }
+    if (RecordCapturedShortcutEvent(event)) {
+        return true;
+    }
     if (event == ftxui::Event::ArrowDown && action_menu_->Focused()) {
         MoveSelection(1);
         return false;
@@ -350,6 +354,55 @@ bool KeyboardShortcutsModalContent::HandleEvent(ftxui::Event event) {
     return false;
 }
 
+bool KeyboardShortcutsModalContent::RecordCapturedShortcutEvent(const ftxui::Event& event) {
+    if (event.is_mouse() || event.is_cursor_reporting()) {
+        return false;
+    }
+
+    if (!shortcut_registry_) {
+        return false;
+    }
+
+    const ShortcutContext contexts[] = {ShortcutContext::Menu, ShortcutContext::Text};
+    for (ShortcutContext context : contexts) {
+        for (const ShortcutBindingView& binding : shortcut_registry_->Bindings(context)) {
+            const auto parsed = ParseShortcutKey(binding.effective_shortcut);
+            if (!parsed || parsed->modifier == ShortcutKeyModifier::CtrlAlt) {
+                continue;
+            }
+            if (!ShortcutKeyMatchesEvent(*parsed, event)) {
+                continue;
+            }
+
+            const std::string normalized = ShortcutKeyToString(*parsed);
+            captured_shortcuts_.insert(normalized);
+            status_ = "Captured " + normalized + " -> " + ShortcutContextName(context) +
+                " / " + binding.definition.title + ".";
+            status_is_error_ = false;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+std::string KeyboardShortcutsModalContent::BindingStateLabel(const ShortcutBindingView& binding) const {
+    const std::string source = binding.custom ? "custom" : "def";
+    if (binding.effective_shortcut.empty()) {
+        return source + " -";
+    }
+
+    const auto parsed = ParseShortcutKey(binding.effective_shortcut);
+    if (!parsed) {
+        return "invalid";
+    }
+    if (parsed->modifier == ShortcutKeyModifier::CtrlAlt) {
+        return "unsupported";
+    }
+
+    return source + (captured_shortcuts_.count(ShortcutKeyToString(*parsed)) > 0 ? " editor" : " test");
+}
+
 ftxui::Element KeyboardShortcutsModalContent::RenderTitle() {
     return ftxui::text(GetTitle());
 }
@@ -379,9 +432,9 @@ ftxui::Element KeyboardShortcutsModalContent::RenderActionList() const {
         const ShortcutBindingView& binding = bindings_[index];
         Element row = hbox({
             text(binding.definition.category) | size(WIDTH, EQUAL, 14),
-            text(binding.definition.title) | size(WIDTH, EQUAL, 34),
+            text(binding.definition.title) | size(WIDTH, EQUAL, 30),
             text(DisplayShortcut(binding.effective_shortcut)) | size(WIDTH, EQUAL, 18),
-            text(binding.custom ? "custom" : "default") | size(WIDTH, EQUAL, 9),
+            text(BindingStateLabel(binding)) | size(WIDTH, EQUAL, 13),
         }) | reflect(action_row_boxes_[index]);
         if (selected) {
             row = row | bgcolor(theme.menu_foreground) | color(theme.menu_background);
@@ -396,9 +449,9 @@ ftxui::Element KeyboardShortcutsModalContent::RenderActionList() const {
     return vbox({
         hbox({
             text("Category") | bold | size(WIDTH, EQUAL, 14),
-            text("Command / action") | bold | size(WIDTH, EQUAL, 34),
+            text("Command / action") | bold | size(WIDTH, EQUAL, 30),
             text("Shortcut") | bold | size(WIDTH, EQUAL, 18),
-            text("State") | bold | size(WIDTH, EQUAL, 9),
+            text("State") | bold | size(WIDTH, EQUAL, 13),
         }) | color(theme.modal_accent),
         separator(),
         vbox(std::move(rows)) | size(HEIGHT, EQUAL, kVisibleActionRows),
@@ -427,7 +480,7 @@ ftxui::Element KeyboardShortcutsModalContent::RenderPicker() const {
         paragraph("New: " + DisplayShortcut(selected_shortcut)) |
             color(theme.modal_accent) |
             flex,
-        paragraph("Only unassigned keys are shown for the selected modifier. Reserved terminal shortcuts are not listed.") |
+        paragraph("Only unassigned keys are shown. Ctrl+Alt and reserved terminal shortcuts are not listed.") |
             color(theme.modal_text_color) |
             flex,
     }) | border | size(WIDTH, EQUAL, 42);

@@ -3,8 +3,16 @@
 #include <cassert>
 
 int main() {
+    using textlt::MatchesPlainShortcutKey;
     using textlt::MatchesShortcut;
     using textlt::ShortcutModifier;
+
+    assert(MatchesPlainShortcutKey(ftxui::Event::Character("w"), 'w'));
+    assert(MatchesPlainShortcutKey(ftxui::Event::Character("W"), 'w'));
+    assert(MatchesPlainShortcutKey(ftxui::Event::Character("ц"), 'w'));
+    assert(MatchesPlainShortcutKey(ftxui::Event::Character("Ц"), 'w'));
+    assert(MatchesPlainShortcutKey(ftxui::Event::Character("і"), 's'));
+    assert(!MatchesPlainShortcutKey(ftxui::Event::Character("ц"), 'q'));
 
     assert(MatchesShortcut(ftxui::Event::Special("\x17"), ShortcutModifier::Ctrl, 'w'));
     assert(MatchesShortcut(ftxui::Event::Special("\x1B[1094;5u"), ShortcutModifier::Ctrl, 'w'));
