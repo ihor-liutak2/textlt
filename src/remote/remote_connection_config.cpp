@@ -1,5 +1,6 @@
 #include "remote/remote_connection_config.hpp"
 
+#include <atomic>
 #include <algorithm>
 #include <chrono>
 #include <cctype>
@@ -10,6 +11,8 @@ namespace textlt {
 
 std::string RemoteConnectionTypeToString(RemoteConnectionType type) {
     switch (type) {
+        case RemoteConnectionType::Ssh:
+            return "ssh";
         case RemoteConnectionType::Sftp:
             return "sftp";
         case RemoteConnectionType::GoogleDrive:
@@ -38,13 +41,17 @@ RemoteConnectionType RemoteConnectionTypeFromString(const std::string& value) {
     if (normalized == "dropbox") {
         return RemoteConnectionType::Dropbox;
     }
+    if (normalized == "ssh") {
+        return RemoteConnectionType::Ssh;
+    }
     return RemoteConnectionType::Sftp;
 }
 
 std::string MakeRemoteConnectionId() {
+    static std::atomic<std::uint64_t> sequence{0};
     const auto now = std::chrono::system_clock::now().time_since_epoch();
     const auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
-    return "remote-" + std::to_string(millis);
+    return "remote-" + std::to_string(millis) + "-" + std::to_string(sequence.fetch_add(1, std::memory_order_relaxed));
 }
 
 std::string NormalizeRemoteDirectory(std::string path) {

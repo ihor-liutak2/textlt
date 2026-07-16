@@ -60,30 +60,6 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     ssh_alias_option.cursor_position = &ssh_config_host_cursor_;
     ssh_config_host_input_ = ftxui::Input(&ssh_config_host_value_, "Host alias from ~/.ssh/config", ssh_alias_option);
 
-    ftxui::InputOption client_id_option = base_option;
-    client_id_option.cursor_position = &client_id_cursor_;
-    client_id_input_ = ftxui::Input(&client_id_value_, "OAuth client id", client_id_option);
-
-    ftxui::InputOption client_secret_option = base_option;
-    client_secret_option.cursor_position = &client_secret_cursor_;
-    client_secret_input_ = ftxui::Input(&client_secret_value_, "OAuth client secret", client_secret_option);
-
-    ftxui::InputOption tenant_option = base_option;
-    tenant_option.cursor_position = &tenant_id_cursor_;
-    tenant_id_input_ = ftxui::Input(&tenant_id_value_, "common / organizations / tenant id", tenant_option);
-
-    ftxui::InputOption root_folder_option = base_option;
-    root_folder_option.cursor_position = &root_folder_id_cursor_;
-    root_folder_id_input_ = ftxui::Input(&root_folder_id_value_, "root folder id", root_folder_option);
-
-    ftxui::InputOption site_option = base_option;
-    site_option.cursor_position = &site_id_cursor_;
-    site_id_input_ = ftxui::Input(&site_id_value_, "SharePoint site id", site_option);
-
-    ftxui::InputOption drive_option = base_option;
-    drive_option.cursor_position = &drive_id_cursor_;
-    drive_id_input_ = ftxui::Input(&drive_id_value_, "OneDrive / SharePoint drive id", drive_option);
-
     ftxui::InputOption app_key_option = base_option;
     app_key_option.cursor_position = &app_key_cursor_;
     app_key_input_ = ftxui::Input(&app_key_value_, "Dropbox app key", app_key_option);
@@ -100,10 +76,6 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     refresh_token_option.cursor_position = &refresh_token_cursor_;
     refresh_token_input_ = ftxui::Input(&refresh_token_value_, "paste refresh token", refresh_token_option);
 
-    ftxui::InputOption scope_option = base_option;
-    scope_option.cursor_position = &scope_cursor_;
-    scope_input_ = ftxui::Input(&scope_value_, "OAuth scope", scope_option);
-
     delete_button_ = MakeTextButton("Delete", [this] { DeleteSelected(); },
         ButtonRole::Danger, ButtonVariant::AccentEdges, "!");
     save_button_ = MakeTextButton("Save", [this] { SaveFormToSelected(); },
@@ -117,27 +89,13 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     edit_button_ = MakeTextButton("Edit", [this] { EditSelected(); },
         ButtonRole::Primary, ButtonVariant::AccentEdges);
     connections_tab_button_ = MakeTabButton("Connections", MainTab::Connections);
+    ssh_tab_button_ = MakeTabButton("SSH", MainTab::Ssh);
     sftp_tab_button_ = MakeTabButton("SFTP", MainTab::Sftp);
-    google_tab_button_ = MakeTabButton("Google Drive", MainTab::GoogleDrive);
-    microsoft_tab_button_ = MakeTabButton("Microsoft", MainTab::MicrosoftDrive);
     dropbox_tab_button_ = MakeTabButton("Dropbox", MainTab::Dropbox);
     reload_button_ = MakeTextButton("Reload", [this] { Reload(); },
         ButtonRole::Cancel, ButtonVariant::AccentEdges, "⟳");
     help_button_ = MakeTextButton("Info", [this] { OpenHelp(); },
         ButtonRole::Utility, ButtonVariant::AccentEdges, "i");
-    authorize_button_ = MakeTextButton("Authorize", [this] { AuthorizeConnection(); },
-        ButtonRole::Primary, ButtonVariant::AccentEdges);
-
-    auto redirect_option = base_option;
-    redirect_option.cursor_position = &redirect_url_cursor_;
-    redirect_url_input_ = ftxui::Input(&redirect_url_value_, "paste redirect URL here", redirect_option);
-    submit_redirect_button_ = MakeTextButton("Submit", [this] { SubmitRedirectUrl(); },
-        ButtonRole::Primary, ButtonVariant::AccentEdges);
-    cancel_authorize_button_ = MakeTextButton("Cancel", [this] {
-        authorize_pending_ = false;
-        authorize_layer_index_ = 0;
-        SetStatus("Authorization cancelled.");
-    }, ButtonRole::Cancel, ButtonVariant::AccentEdges);
     close_button_ = MakeTextButton("Close", [this] {
         if (on_close_) {
             on_close_();
@@ -150,9 +108,8 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
 
     ftxui::Components tab_buttons;
     tab_buttons.push_back(connections_tab_button_);
+    tab_buttons.push_back(ssh_tab_button_);
     tab_buttons.push_back(sftp_tab_button_);
-    tab_buttons.push_back(google_tab_button_);
-    tab_buttons.push_back(microsoft_tab_button_);
     tab_buttons.push_back(dropbox_tab_button_);
 
     ftxui::Components editor_fields;
@@ -167,17 +124,10 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     editor_fields.push_back(key_passphrase_input_);
     editor_fields.push_back(known_hosts_file_input_);
     editor_fields.push_back(ssh_config_host_input_);
-    editor_fields.push_back(client_id_input_);
-    editor_fields.push_back(client_secret_input_);
-    editor_fields.push_back(tenant_id_input_);
-    editor_fields.push_back(root_folder_id_input_);
-    editor_fields.push_back(site_id_input_);
-    editor_fields.push_back(drive_id_input_);
     editor_fields.push_back(app_key_input_);
     editor_fields.push_back(app_secret_input_);
     editor_fields.push_back(access_token_input_);
     editor_fields.push_back(refresh_token_input_);
-    editor_fields.push_back(scope_input_);
 
     footer_actions_container_ = ftxui::Container::Horizontal({
         edit_button_,
@@ -188,7 +138,6 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
         save_button_,
         save_token_button_,
         help_button_,
-        authorize_button_,
         close_button_,
     });
 
@@ -199,13 +148,17 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     main_children.push_back(footer_actions_container_);
     auto main_container = ftxui::Container::Vertical(main_children);
     main_container = ftxui::CatchEvent(main_container, [this](ftxui::Event event) {
-        if (event == ftxui::Event::ArrowDown || event == ftxui::Event::ArrowUp) {
+        if (event == ftxui::Event::ArrowDown || event == ftxui::Event::ArrowUp ||
+            event == ftxui::Event::Tab || event == ftxui::Event::TabReverse) {
             auto inputs = GetVisibleInputs();
             if (inputs.empty()) {
                 return false;
             }
             int focused = FindFocusedInputIndex(inputs);
-            if (event == ftxui::Event::ArrowDown) {
+            if (focused < 0 && event != ftxui::Event::Tab && event != ftxui::Event::TabReverse) {
+                return false;
+            }
+            if (event == ftxui::Event::ArrowDown || event == ftxui::Event::Tab) {
                 int next = (focused + 1) % static_cast<int>(inputs.size());
                 inputs[next]->TakeFocus();
             } else {
@@ -227,18 +180,9 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     help_children.push_back(help_close_button_);
     help_container_ = ftxui::Container::Horizontal(help_children);
 
-    ftxui::Components authorize_children;
-    authorize_children.push_back(redirect_url_input_);
-    authorize_children.push_back(submit_redirect_button_);
-    authorize_children.push_back(cancel_authorize_button_);
-    authorize_container_ = ftxui::Container::Vertical({
-        ftxui::Container::Horizontal(authorize_children),
-    });
-
     ftxui::Components tab_children;
     tab_children.push_back(main_container);
     tab_children.push_back(help_container_);
-    tab_children.push_back(authorize_container_);
     container_ = ftxui::Container::Tab(
         tab_children, &help_layer_index_);
     Reload();
@@ -288,9 +232,7 @@ void RemoteConnectionsModalContent::Open() {
     selected_tab_ = MainTab::Connections;
     Reload();
     help_active_ = false;
-    authorize_pending_ = false;
     help_layer_index_ = 0;
-    authorize_layer_index_ = 0;
     if (list_component_) {
         list_component_->TakeFocus();
     }
@@ -301,9 +243,7 @@ void RemoteConnectionsModalContent::Close() {
     status_ = "Ready.";
     status_is_error_ = false;
     help_active_ = false;
-    authorize_pending_ = false;
     help_layer_index_ = 0;
-    authorize_layer_index_ = 0;
 }
 
 void RemoteConnectionsModalContent::Reload() {

@@ -6,7 +6,7 @@ bool RemoteConnectionsModalContent::IsCloudEditorActive() const {
     if (selected_tab_ == MainTab::Connections) {
         return false;
     }
-    return IsCloudRemoteConnectionType(TypeForTab(selected_tab_));
+    return TypeForTab(selected_tab_) == RemoteConnectionType::Dropbox;
 }
 
 RemoteConnectionConfig RemoteConnectionsModalContent::SelectedConnectionConfig() const {
@@ -27,9 +27,7 @@ RemoteConnectionConfig RemoteConnectionsModalContent::ActionConfig() const {
 void RemoteConnectionsModalContent::SelectTab(MainTab tab) {
     selected_tab_ = tab;
     help_active_ = false;
-    authorize_pending_ = false;
     help_layer_index_ = 0;
-    authorize_layer_index_ = 0;
     output_.clear();
 
     if (tab == MainTab::Connections) {
@@ -40,12 +38,11 @@ void RemoteConnectionsModalContent::SelectTab(MainTab tab) {
         return;
     }
 
-    const RemoteConnectionType type = TypeForTab(tab);
-    ResetFormForType(type);
+    ResetFormForType(TypeForTab(tab));
     if (name_input_) {
         name_input_->TakeFocus();
     }
-    SetStatus("Editing " + TypeDisplayName(type) + ".");
+    SetStatus(tab == MainTab::Ssh ? "Editing SSH connection." : "Editing SFTP connection.");
 }
 
 void RemoteConnectionsModalContent::SelectType(RemoteConnectionType type) {
@@ -54,9 +51,7 @@ void RemoteConnectionsModalContent::SelectType(RemoteConnectionType type) {
     output_.clear();
     SetStatus("Selected " + TypeDisplayName(type) + " connection type.");
     help_active_ = false;
-    authorize_pending_ = false;
     help_layer_index_ = 0;
-    authorize_layer_index_ = 0;
 }
 
 void RemoteConnectionsModalContent::ApplyTypeDefaults(RemoteConnectionType type) {
@@ -64,31 +59,26 @@ void RemoteConnectionsModalContent::ApplyTypeDefaults(RemoteConnectionType type)
         remote_root_value_ = "/";
     }
     switch (type) {
+        case RemoteConnectionType::Ssh:
+            if (port_value_.empty() || port_value_ == "0") {
+                port_value_ = "22";
+            }
+            if (auth_mode_value_.empty()) {
+                auth_mode_value_ = "password";
+            }
+            break;
         case RemoteConnectionType::Sftp:
             if (port_value_.empty() || port_value_ == "0") {
                 port_value_ = "22";
             }
             if (auth_mode_value_.empty()) {
-                auth_mode_value_ = "auto";
+                auth_mode_value_ = "private_key";
             }
-            break;
-        case RemoteConnectionType::GoogleDrive:
-            if (scope_value_.empty()) {
-                scope_value_ = "https://www.googleapis.com/auth/drive.file";
+            if (identity_file_value_.empty()) {
+                identity_file_value_ = "~/.ssh/id_ed25519";
             }
-            if (token_file_value_.empty()) {
-                token_file_value_ = SuggestedTokenFile(type);
-            }
-            break;
-        case RemoteConnectionType::MicrosoftDrive:
-            if (tenant_id_value_.empty()) {
-                tenant_id_value_ = "common";
-            }
-            if (scope_value_.empty()) {
-                scope_value_ = "offline_access Files.ReadWrite";
-            }
-            if (token_file_value_.empty()) {
-                token_file_value_ = SuggestedTokenFile(type);
+            if (known_hosts_file_value_.empty()) {
+                known_hosts_file_value_ = "~/.ssh/known_hosts";
             }
             break;
         case RemoteConnectionType::Dropbox:
@@ -108,23 +98,16 @@ void RemoteConnectionsModalContent::ResetFormForType(RemoteConnectionType type) 
     user_value_.clear();
     password_value_.clear();
     remote_root_value_ = "/";
-    auth_mode_value_ = "auto";
+    auth_mode_value_.clear();
     identity_file_value_.clear();
     key_passphrase_value_.clear();
     known_hosts_file_value_.clear();
     ssh_config_host_value_.clear();
-    client_id_value_.clear();
-    client_secret_value_.clear();
-    tenant_id_value_.clear();
     token_file_value_.clear();
-    root_folder_id_value_.clear();
-    site_id_value_.clear();
-    drive_id_value_.clear();
     app_key_value_.clear();
     app_secret_value_.clear();
     access_token_value_.clear();
     refresh_token_value_.clear();
-    scope_value_.clear();
     ApplyTypeDefaults(type);
 
     name_cursor_ = static_cast<int>(name_value_.size());
@@ -138,17 +121,10 @@ void RemoteConnectionsModalContent::ResetFormForType(RemoteConnectionType type) 
     key_passphrase_cursor_ = 0;
     known_hosts_file_cursor_ = 0;
     ssh_config_host_cursor_ = 0;
-    client_id_cursor_ = 0;
-    client_secret_cursor_ = 0;
-    tenant_id_cursor_ = static_cast<int>(tenant_id_value_.size());
-    root_folder_id_cursor_ = 0;
-    site_id_cursor_ = 0;
-    drive_id_cursor_ = 0;
     app_key_cursor_ = 0;
     app_secret_cursor_ = 0;
     access_token_cursor_ = 0;
     refresh_token_cursor_ = 0;
-    scope_cursor_ = static_cast<int>(scope_value_.size());
 }
 
 void RemoteConnectionsModalContent::LoadSelectedIntoForm() {
@@ -170,16 +146,9 @@ void RemoteConnectionsModalContent::LoadSelectedIntoForm() {
     key_passphrase_value_ = config.key_passphrase;
     known_hosts_file_value_ = config.known_hosts_file;
     ssh_config_host_value_ = config.ssh_config_host;
-    client_id_value_ = config.client_id;
-    client_secret_value_ = config.client_secret;
-    tenant_id_value_ = config.tenant_id;
     token_file_value_ = config.token_file;
-    root_folder_id_value_ = config.root_folder_id;
-    site_id_value_ = config.site_id;
-    drive_id_value_ = config.drive_id;
     app_key_value_ = config.app_key;
     app_secret_value_ = config.app_secret;
-    scope_value_ = config.scope;
     access_token_value_.clear();
     refresh_token_value_.clear();
     ApplyTypeDefaults(config.type);
@@ -195,17 +164,10 @@ void RemoteConnectionsModalContent::LoadSelectedIntoForm() {
     key_passphrase_cursor_ = static_cast<int>(key_passphrase_value_.size());
     known_hosts_file_cursor_ = static_cast<int>(known_hosts_file_value_.size());
     ssh_config_host_cursor_ = static_cast<int>(ssh_config_host_value_.size());
-    client_id_cursor_ = static_cast<int>(client_id_value_.size());
-    client_secret_cursor_ = static_cast<int>(client_secret_value_.size());
-    tenant_id_cursor_ = static_cast<int>(tenant_id_value_.size());
-    root_folder_id_cursor_ = static_cast<int>(root_folder_id_value_.size());
-    site_id_cursor_ = static_cast<int>(site_id_value_.size());
-    drive_id_cursor_ = static_cast<int>(drive_id_value_.size());
     app_key_cursor_ = static_cast<int>(app_key_value_.size());
     app_secret_cursor_ = static_cast<int>(app_secret_value_.size());
     access_token_cursor_ = 0;
     refresh_token_cursor_ = 0;
-    scope_cursor_ = static_cast<int>(scope_value_.size());
 }
 
 void RemoteConnectionsModalContent::SaveFormToSelected() {
@@ -222,18 +184,19 @@ void RemoteConnectionsModalContent::SaveFormToSelected() {
         SetStatus("Connection name is required.", true);
         return;
     }
-    if (config.type == RemoteConnectionType::Sftp &&
+    if ((config.type == RemoteConnectionType::Ssh ||
+         config.type == RemoteConnectionType::Sftp) &&
         config.ssh_config_host.empty() && config.host.empty()) {
-        SetStatus("SFTP connection needs Host or SSH config alias.", true);
+        SetStatus("Connection needs Host or SSH config alias.", true);
         return;
     }
-    if (IsCloudRemoteConnectionType(config.type) && config.token_file.empty()) {
+    if (config.type == RemoteConnectionType::Dropbox && config.token_file.empty()) {
         config.token_file = SuggestedTokenFile(config.type);
         token_file_value_ = config.token_file;
     }
 
     config_store_->AddOrUpdate(config);
-    if (IsCloudRemoteConnectionType(config.type) && !access_token_value_.empty()) {
+    if (config.type == RemoteConnectionType::Dropbox && !access_token_value_.empty()) {
         SaveCloudAccessToken();
         if (status_is_error_) {
             return;
@@ -255,12 +218,9 @@ void RemoteConnectionsModalContent::SaveFormToSelected() {
     }
     LoadSelectedIntoForm();
     selected_tab_ = TabForType(config.type);
-
-    if (config.type == RemoteConnectionType::Sftp) {
-        SetStatus("Saved connection: " + config.name);
-    } else {
-        SetStatus("Saved " + TypeDisplayName(config.type) + " configuration: " + config.name);
-    }
+    SetStatus(selected_tab_ == MainTab::Ssh
+        ? "Saved SSH connection: " + config.name
+        : "Saved SFTP connection: " + config.name);
 }
 
 void RemoteConnectionsModalContent::AddConnectionOfType(RemoteConnectionType type) {
@@ -271,7 +231,9 @@ void RemoteConnectionsModalContent::AddConnectionOfType(RemoteConnectionType typ
     if (name_input_) {
         name_input_->TakeFocus();
     }
-    SetStatus("Create " + TypeDisplayName(type) + " connection. Fill fields and press Save.");
+    SetStatus(type == RemoteConnectionType::Ssh
+        ? "Create SSH connection. Fill fields and press Save."
+        : "Create SFTP connection. Fill fields and press Save.");
 }
 
 void RemoteConnectionsModalContent::EditSelected() {
@@ -287,7 +249,9 @@ void RemoteConnectionsModalContent::EditSelected() {
     if (name_input_) {
         name_input_->TakeFocus();
     }
-    SetStatus("Editing " + TypeDisplayName(selected.type) + ": " + selected.name);
+    SetStatus(selected_tab_ == MainTab::Ssh
+        ? "Editing SSH connection: " + selected.name
+        : "Editing SFTP connection: " + selected.name);
 }
 
 void RemoteConnectionsModalContent::SetSelectedActive() {
@@ -338,7 +302,7 @@ void RemoteConnectionsModalContent::TestSelected() {
         SetStatus("No connection selected for testing.", true);
         return;
     }
-    if (config.type != RemoteConnectionType::Sftp && config.token_file.empty()) {
+    if (config.type != RemoteConnectionType::Dropbox && config.token_file.empty()) {
         config.token_file = SuggestedTokenFile(config.type);
         token_file_value_ = config.token_file;
     }
@@ -362,44 +326,6 @@ void RemoteConnectionsModalContent::TestSelected() {
         return;
     }
 
-    if (config.type == RemoteConnectionType::GoogleDrive) {
-        RemoteGoogleDriveProvider provider;
-        std::string error;
-        if (!provider.Connect(config, error)) {
-            output_ = DescribeRemoteOAuthTokenStatus(config) + "\n" + error;
-            SetStatus("Google Drive token is not ready.", true);
-            return;
-        }
-        std::string output;
-        if (!provider.TestConnection(output, error)) {
-            output_ = error;
-            SetStatus("Google Drive connection test failed.", true);
-            return;
-        }
-        output_ = output;
-        SetStatus("Google Drive connection test succeeded.");
-        return;
-    }
-
-    if (config.type == RemoteConnectionType::MicrosoftDrive) {
-        RemoteMicrosoftDriveProvider provider;
-        std::string error;
-        if (!provider.Connect(config, error)) {
-            output_ = DescribeRemoteOAuthTokenStatus(config) + "\n" + error;
-            SetStatus("Microsoft token is not ready.", true);
-            return;
-        }
-        std::string output;
-        if (!provider.TestConnection(output, error)) {
-            output_ = error;
-            SetStatus("Microsoft connection test failed.", true);
-            return;
-        }
-        output_ = output;
-        SetStatus("Microsoft connection test succeeded.");
-        return;
-    }
-
     RemoteSftpProvider provider;
     std::string error;
     if (!provider.Connect(config, error)) {
@@ -419,7 +345,7 @@ void RemoteConnectionsModalContent::TestSelected() {
 
 void RemoteConnectionsModalContent::SaveCloudAccessToken() {
     RemoteConnectionConfig config = FormConfig();
-    if (!IsCloudRemoteConnectionType(config.type)) {
+    if (config.type != RemoteConnectionType::Dropbox) {
         SetStatus("SFTP does not use OAuth access tokens.", true);
         return;
     }
@@ -442,7 +368,6 @@ void RemoteConnectionsModalContent::SaveCloudAccessToken() {
     token.access_token = access_token_value_;
     token.refresh_token = refresh_token_value_;
     token.token_type = "Bearer";
-    token.scope = scope_value_;
 
     RemoteOAuthTokenStore store(ExpandRemoteUserPath(config.token_file));
     std::string error;
@@ -461,9 +386,9 @@ void RemoteConnectionsModalContent::SaveCloudAccessToken() {
 
 void RemoteConnectionsModalContent::PrepareTokenFile() {
     RemoteConnectionConfig config = ActionConfig();
-    if (!IsCloudRemoteConnectionType(config.type)) {
-        output_ = "SFTP uses SSH keys / ssh-agent / ~/.ssh/config and does not need an OAuth token file.";
-        SetStatus("Token files are only used by Google, Microsoft, and Dropbox.");
+    if (config.type != RemoteConnectionType::Dropbox) {
+        output_ = "SSH/SFTP uses keys, password, ssh-agent, or ~/.ssh/config and does not need an OAuth token file.";
+        SetStatus("Token files are only used by Dropbox.");
         return;
     }
     if (config.token_file.empty()) {
@@ -498,138 +423,6 @@ void RemoteConnectionsModalContent::PrepareTokenFile() {
     output_ = "Created placeholder token file:\n" + token_path.string() +
         "\nPaste an access token into the provider tab and press Save Token.";
     SetStatus("Token file prepared for " + TypeDisplayName(config.type) + ".");
-}
-
-void RemoteConnectionsModalContent::AuthorizeConnection() {
-    RemoteConnectionConfig config = FormConfig();
-    if (config.type != RemoteConnectionType::GoogleDrive &&
-        config.type != RemoteConnectionType::MicrosoftDrive) {
-        SetStatus("Authorization is only available for Google and Microsoft. Paste a Dropbox token manually.", true);
-        return;
-    }
-
-    OAuthFlowConfig oauth;
-
-    switch (config.type) {
-        case RemoteConnectionType::GoogleDrive:
-            oauth.authorize_url = "https://accounts.google.com/o/oauth2/v2/auth";
-            oauth.token_url = "https://oauth2.googleapis.com/token";
-            oauth.client_id = config.client_id;
-            oauth.client_secret = config.client_secret;
-            oauth.scope = config.scope.empty() ? "https://www.googleapis.com/auth/drive.file" : config.scope;
-            break;
-        case RemoteConnectionType::MicrosoftDrive: {
-            const std::string tenant = config.tenant_id.empty() ? "common" : config.tenant_id;
-            oauth.authorize_url = "https://login.microsoftonline.com/" + tenant + "/oauth2/v2.0/authorize";
-            oauth.token_url = "https://login.microsoftonline.com/" + tenant + "/oauth2/v2.0/token";
-            oauth.client_id = config.client_id;
-            oauth.client_secret = config.client_secret;
-            oauth.scope = config.scope.empty() ? "offline_access Files.ReadWrite" : config.scope;
-            break;
-        }
-        default:
-            return;
-    }
-
-    if (oauth.client_id.empty() || oauth.client_secret.empty()) {
-        SetStatus("Fill in Client ID and Client secret first.", true);
-        return;
-    }
-
-    if (config.token_file.empty()) {
-        config.token_file = SuggestedTokenFile(config.type);
-        token_file_value_ = config.token_file;
-    }
-
-    OAuthFlow flow;
-    std::string auth_url = flow.BuildAuthorizeUrl(oauth);
-
-    if (write_clipboard_) {
-        write_clipboard_(auth_url);
-    }
-
-    pending_oauth_config_ = oauth;
-    authorize_pending_ = true;
-    authorize_layer_index_ = 2;
-    redirect_url_value_.clear();
-    if (redirect_url_input_) {
-        redirect_url_input_->TakeFocus();
-    }
-
-    output_ = "Authorization URL copied to clipboard.\n"
-              "Open it in your browser, authorize access, then paste the redirect URL from the address bar.\n"
-              "Redirect URI: " + oauth.redirect_uri + "\n"
-              "URL: " + auth_url;
-    SetStatus("Paste the redirect URL from your browser and press Submit.");
-}
-
-void RemoteConnectionsModalContent::SubmitRedirectUrl() {
-    if (!authorize_pending_) {
-        return;
-    }
-
-    const std::string& input = redirect_url_value_;
-
-    const bool looks_like_url = input.find("://") != std::string::npos;
-
-    authorize_pending_ = false;
-    authorize_layer_index_ = 0;
-
-    RemoteConnectionConfig config = FormConfig();
-    if (config.token_file.empty()) {
-        config.token_file = SuggestedTokenFile(config.type);
-        token_file_value_ = config.token_file;
-    }
-
-    std::string display_name = config.name;
-    const std::string provider_name = RemoteTokenProviderName(config.type);
-
-    if (looks_like_url) {
-        OAuthFlow flow;
-        std::string code = flow.ExtractCodeFromRedirectUrl(input);
-        if (code.empty()) {
-            SetStatus("Could not extract authorization code from the URL. Paste the full redirect URL.", true);
-            return;
-        }
-
-        SetStatus("Exchanging authorization code for tokens...");
-
-        OAuthTokenExchangeResult exchange = flow.ExchangeCodeForToken(pending_oauth_config_, code);
-        if (!exchange.ok) {
-            output_ = exchange.error;
-            SetStatus("Token exchange failed: " + exchange.error, true);
-            return;
-        }
-
-        if (!flow.SaveToken(pending_oauth_config_, provider_name,
-                            display_name, exchange, config.token_file)) {
-            SetStatus("Failed to save token file.", true);
-            return;
-        }
-    } else {
-        if (input.empty()) {
-            SetStatus("Paste a redirect URL or a raw access token.", true);
-            return;
-        }
-
-        RemoteOAuthToken token;
-        token.provider = provider_name;
-        token.display_name = display_name;
-        token.access_token = input;
-        token.token_type = "Bearer";
-        token.scope = config.scope;
-
-        RemoteOAuthTokenStore store(ExpandRemoteUserPath(config.token_file));
-        std::string error;
-        if (!store.Save(token, error)) {
-            output_ = error;
-            SetStatus("Failed to save token file.", true);
-            return;
-        }
-    }
-
-    output_ = DescribeRemoteOAuthTokenStatus(config);
-    SetStatus("Authorization complete for " + TypeDisplayName(config.type) + ".");
 }
 
 void RemoteConnectionsModalContent::OpenHelp() {

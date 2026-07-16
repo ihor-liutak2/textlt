@@ -50,7 +50,7 @@ ftxui::Element RemoteConnectionsModalContent::RenderConnectionDetails() {
     const std::string active_id = config_store_ ? config_store_->ActiveConnectionId() : std::string{};
     const bool active = !active_id.empty() && config.id == active_id;
     rows.push_back(text(" Name: " + (config.name.empty() ? std::string("Unnamed") : config.name)) | color(theme.modal_text_color));
-    rows.push_back(text(" Type: " + RemoteConnectionTypeToString(config.type)) | color(theme.modal_text_color));
+    rows.push_back(text(" Type: " + ConnectionKindLabel(config)) | color(theme.modal_text_color));
     rows.push_back(text(std::string(" Active: ") + (active ? "yes" : "no")) | color(theme.modal_text_color));
     const std::string target = ConnectionTargetSummary(config);
     if (!target.empty()) {
@@ -96,7 +96,7 @@ ftxui::Element RemoteConnectionsModalContent::RenderConnectionList() {
             text(active ? "* " : "  ") | bold | color(theme.modal_accent),
             text(TrimForDisplay(label, 19)) | bold,
             filler(),
-            text(RemoteConnectionTypeToString(config.type)) | dim,
+            text(ConnectionKindLabel(config)) | dim,
         }) | reflect(connection_boxes_[index]);
         row = vbox({
             row,

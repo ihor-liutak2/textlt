@@ -41,30 +41,38 @@ bool RemoteConnectionsModalContent::HandleEvent(ftxui::Event event) {
         return HandleHelpEvent(std::move(event));
     }
 
-    if (authorize_pending_) {
-        if (event == ftxui::Event::Escape) {
-            authorize_pending_ = false;
-            authorize_layer_index_ = 0;
-            SetStatus("Authorization cancelled.");
-            return true;
-        }
-        return authorize_container_ ? authorize_container_->OnEvent(event) : false;
-    }
-
-    if (event == ftxui::Event::ArrowDown || event == ftxui::Event::ArrowUp) {
+    if (event == ftxui::Event::ArrowDown || event == ftxui::Event::ArrowUp ||
+        event == ftxui::Event::Tab || event == ftxui::Event::TabReverse) {
         auto inputs = GetVisibleInputs();
         if (inputs.empty()) {
             return false;
         }
         int focused = FindFocusedInputIndex(inputs);
+        if (focused < 0) {
+            return false;
+        }
         if (event == ftxui::Event::ArrowDown) {
             int next = (focused + 1) % static_cast<int>(inputs.size());
             inputs[next]->TakeFocus();
-        } else {
+        } else if (event == ftxui::Event::ArrowUp) {
             int prev = (focused <= 0)
                 ? static_cast<int>(inputs.size()) - 1
                 : focused - 1;
             inputs[prev]->TakeFocus();
+        } else if (event == ftxui::Event::Tab) {
+            if (focused == static_cast<int>(inputs.size()) - 1) {
+                if (save_button_) {
+                    save_button_->TakeFocus();
+                }
+            } else {
+                inputs[focused + 1]->TakeFocus();
+            }
+        } else {
+            if (focused == 0) {
+                inputs.back()->TakeFocus();
+            } else {
+                inputs[focused - 1]->TakeFocus();
+            }
         }
         return true;
     }
@@ -77,15 +85,20 @@ std::vector<ftxui::Component> RemoteConnectionsModalContent::GetVisibleInputs() 
     if (selected_tab_ == MainTab::Connections) {
         return inputs;
     }
-    const RemoteConnectionType visible_type = TypeForTab(selected_tab_);
     inputs.push_back(name_input_);
 
-    switch (visible_type) {
-        case RemoteConnectionType::Sftp:
+    switch (selected_tab_) {
+        case MainTab::Ssh:
             inputs.push_back(host_input_);
             inputs.push_back(port_input_);
             inputs.push_back(user_input_);
             inputs.push_back(password_input_);
+            inputs.push_back(remote_root_input_);
+            break;
+        case MainTab::Sftp:
+            inputs.push_back(host_input_);
+            inputs.push_back(port_input_);
+            inputs.push_back(user_input_);
             inputs.push_back(remote_root_input_);
             inputs.push_back(auth_mode_input_);
             inputs.push_back(identity_file_input_);
@@ -93,26 +106,7 @@ std::vector<ftxui::Component> RemoteConnectionsModalContent::GetVisibleInputs() 
             inputs.push_back(known_hosts_file_input_);
             inputs.push_back(ssh_config_host_input_);
             break;
-        case RemoteConnectionType::GoogleDrive:
-            inputs.push_back(client_id_input_);
-            inputs.push_back(client_secret_input_);
-            inputs.push_back(root_folder_id_input_);
-            inputs.push_back(scope_input_);
-            inputs.push_back(access_token_input_);
-            inputs.push_back(refresh_token_input_);
-            break;
-        case RemoteConnectionType::MicrosoftDrive:
-            inputs.push_back(tenant_id_input_);
-            inputs.push_back(client_id_input_);
-            inputs.push_back(client_secret_input_);
-            inputs.push_back(site_id_input_);
-            inputs.push_back(drive_id_input_);
-            inputs.push_back(remote_root_input_);
-            inputs.push_back(scope_input_);
-            inputs.push_back(access_token_input_);
-            inputs.push_back(refresh_token_input_);
-            break;
-        case RemoteConnectionType::Dropbox:
+        case MainTab::Dropbox:
             inputs.push_back(app_key_input_);
             inputs.push_back(app_secret_input_);
             inputs.push_back(remote_root_input_);

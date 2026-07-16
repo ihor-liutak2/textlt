@@ -21,16 +21,9 @@ RemoteConnectionConfig RemoteConnectionsModalContent::FormConfig() const {
     config.key_passphrase = key_passphrase_value_;
     config.known_hosts_file = known_hosts_file_value_;
     config.ssh_config_host = ssh_config_host_value_;
-    config.client_id = client_id_value_;
-    config.client_secret = client_secret_value_;
-    config.tenant_id = tenant_id_value_;
     config.token_file = token_file_value_;
-    config.root_folder_id = root_folder_id_value_;
-    config.site_id = site_id_value_;
-    config.drive_id = drive_id_value_;
     config.app_key = app_key_value_;
     config.app_secret = app_secret_value_;
-    config.scope = scope_value_;
     return config;
 }
 
@@ -44,12 +37,10 @@ std::string RemoteConnectionsModalContent::SuggestedTokenFile(RemoteConnectionTy
 
 RemoteConnectionType RemoteConnectionsModalContent::TypeForTab(MainTab tab) const {
     switch (tab) {
+        case MainTab::Ssh:
+            return RemoteConnectionType::Ssh;
         case MainTab::Sftp:
             return RemoteConnectionType::Sftp;
-        case MainTab::GoogleDrive:
-            return RemoteConnectionType::GoogleDrive;
-        case MainTab::MicrosoftDrive:
-            return RemoteConnectionType::MicrosoftDrive;
         case MainTab::Dropbox:
             return RemoteConnectionType::Dropbox;
         case MainTab::Connections:
@@ -60,16 +51,14 @@ RemoteConnectionType RemoteConnectionsModalContent::TypeForTab(MainTab tab) cons
 
 RemoteConnectionsModalContent::MainTab RemoteConnectionsModalContent::TabForType(RemoteConnectionType type) const {
     switch (type) {
+        case RemoteConnectionType::Ssh:
+            return MainTab::Ssh;
         case RemoteConnectionType::Sftp:
             return MainTab::Sftp;
-        case RemoteConnectionType::GoogleDrive:
-            return MainTab::GoogleDrive;
-        case RemoteConnectionType::MicrosoftDrive:
-            return MainTab::MicrosoftDrive;
         case RemoteConnectionType::Dropbox:
             return MainTab::Dropbox;
     }
-    return MainTab::Sftp;
+    return MainTab::Connections;
 }
 
 std::string RemoteConnectionsModalContent::ActiveConnectionLabel() const {
@@ -100,9 +89,6 @@ void RemoteConnectionsModalContent::SetStatus(std::string status, bool is_error)
 ftxui::Element RemoteConnectionsModalContent::RenderHelpOverlay() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    const RemoteConnectionType type = selected_tab_ == MainTab::Connections
-        ? CurrentType()
-        : TypeForTab(selected_tab_);
 
     auto field_row = [&](const std::string& name, const std::string& description) {
         return hbox({
@@ -112,51 +98,46 @@ ftxui::Element RemoteConnectionsModalContent::RenderHelpOverlay() {
     };
 
     Elements rows;
-    rows.push_back(text(" " + TypeDisplayName(type) + " fields ") | bold | color(theme.modal_accent));
+    const std::string title = selected_tab_ == MainTab::Ssh
+        ? "SSH fields"
+        : selected_tab_ == MainTab::Sftp
+            ? "SFTP fields"
+            : selected_tab_ == MainTab::Dropbox
+                ? "Dropbox fields"
+                : "Remote fields";
+    rows.push_back(text(" " + title + " ") | bold | color(theme.modal_accent));
     rows.push_back(separator() | color(theme.modal_border));
 
-    switch (type) {
-        case RemoteConnectionType::Sftp:
+    switch (selected_tab_) {
+        case MainTab::Ssh:
             rows.push_back(field_row("Name", "Local profile name shown in Connections."));
-            rows.push_back(field_row("Host", "Server DNS name or IP address for manual SFTP."));
+            rows.push_back(field_row("Host", "Server DNS name or IP address for password-based SSH."));
+            rows.push_back(field_row("Port", "SSH port, usually 22."));
+            rows.push_back(field_row("Username", "SSH username for the remote server."));
+            rows.push_back(field_row("Password", "SSH password. TextLT uses sshpass for non-interactive login."));
+            rows.push_back(field_row("Remote root", "Initial remote directory for browsing files."));
+            break;
+        case MainTab::Sftp:
+            rows.push_back(field_row("Name", "Local profile name shown in Connections."));
+            rows.push_back(field_row("Host", "Server DNS name or IP address for key/file-based access."));
             rows.push_back(field_row("Port", "SSH/SFTP port, usually 22."));
             rows.push_back(field_row("Username", "SSH username for the remote server."));
-            rows.push_back(field_row("Password", "SSH password. If used, TextLT needs sshpass for non-interactive sftp."));
             rows.push_back(field_row("Remote root", "Initial remote directory for browsing files."));
-            rows.push_back(field_row("Auth mode", "auto, password, private_key, agent, or ssh_config."));
+            rows.push_back(field_row("Auth mode", "auto, private_key, agent, or ssh_config."));
             rows.push_back(field_row("Private key file", "Private SSH key path, for example ~/.ssh/id_ed25519."));
-            rows.push_back(field_row("Key passphrase", "Passphrase for an encrypted private key when your SSH setup prompts for it."));
+            rows.push_back(field_row("Key passphrase", "Passphrase for an encrypted private key."));
             rows.push_back(field_row("Known hosts file", "Optional known_hosts file path, for example ~/.ssh/known_hosts."));
             rows.push_back(field_row("SSH config host", "Alias from ~/.ssh/config. It can define host, user, port, key, ProxyJump."));
             break;
-        case RemoteConnectionType::GoogleDrive:
-            rows.push_back(field_row("Name", "Local profile name shown in Connections."));
-            rows.push_back(field_row("Root folder ID", "Optional Drive folder id used as the browsing root."));
-            rows.push_back(field_row("Client ID", "OAuth client id from Google Cloud Console, not an email address."));
-            rows.push_back(field_row("Client secret", "OAuth client secret for that Google client."));
-            rows.push_back(field_row("Scope", "OAuth scope. Default is drive.file for narrower Drive access."));
-            rows.push_back(field_row("Access token", "Bearer token pasted manually and saved into the token file."));
-            rows.push_back(field_row("Refresh token", "Optional OAuth refresh token saved into the token file."));
-            break;
-        case RemoteConnectionType::MicrosoftDrive:
-            rows.push_back(field_row("Name", "Local profile name shown in Connections."));
-            rows.push_back(field_row("Tenant ID", "common, consumers, organizations, or a concrete tenant id."));
-            rows.push_back(field_row("Client ID", "Application/client id from Microsoft app registration."));
-            rows.push_back(field_row("Client secret", "Secret created for the Microsoft app registration."));
-            rows.push_back(field_row("Site ID", "Optional SharePoint site id when using SharePoint files."));
-            rows.push_back(field_row("Drive ID", "Optional OneDrive/SharePoint drive id. Empty can mean default drive."));
-            rows.push_back(field_row("Remote root", "Initial folder path inside the selected drive."));
-            rows.push_back(field_row("Scope", "OAuth scope, for example offline_access Files.ReadWrite."));
-            rows.push_back(field_row("Access token", "Bearer token pasted manually and saved into the token file."));
-            rows.push_back(field_row("Refresh token", "Optional OAuth refresh token saved into the token file."));
-            break;
-        case RemoteConnectionType::Dropbox:
+        case MainTab::Dropbox:
             rows.push_back(field_row("Name", "Local profile name shown in Connections."));
             rows.push_back(field_row("Remote root", "Initial Dropbox path, usually / or /FolderName."));
             rows.push_back(field_row("App key", "Dropbox app key from the Dropbox developer app page."));
             rows.push_back(field_row("App secret", "Dropbox app secret from the same app page."));
             rows.push_back(field_row("Access token", "OAuth access token generated for the Dropbox app/account and saved into the token file."));
             rows.push_back(field_row("Refresh token", "Optional Dropbox refresh token saved into the token file."));
+            break;
+        case MainTab::Connections:
             break;
     }
 

@@ -14,7 +14,6 @@
 #include "modals/modal_interface.hpp"
 #include "modals/modal_window.hpp"
 #include "remote/remote_config_store.hpp"
-#include "remote/remote_oauth_flow.hpp"
 #include "theme.hpp"
 #include "ui_button.hpp"
 
@@ -49,9 +48,8 @@ public:
 private:
     enum class MainTab {
         Connections,
+        Ssh,
         Sftp,
-        GoogleDrive,
-        MicrosoftDrive,
         Dropbox,
     };
 
@@ -65,9 +63,8 @@ private:
     ftxui::Component MakeTabButton(std::string label, MainTab tab);
     ftxui::Element RenderCurrentTab();
     ftxui::Element RenderConnectionsTab();
+    ftxui::Element RenderSshTab();
     ftxui::Element RenderSftpTab();
-    ftxui::Element RenderGoogleDriveTab();
-    ftxui::Element RenderMicrosoftDriveTab();
     ftxui::Element RenderDropboxTab();
     ftxui::Element RenderConnectionList();
     ftxui::Element RenderConnectionDetails();
@@ -95,8 +92,6 @@ private:
     void OpenHelp();
     void CloseHelp();
     void CopyHelpUrl();
-    void AuthorizeConnection();
-    void SubmitRedirectUrl();
     bool HandleHelpEvent(ftxui::Event event);
     std::vector<ftxui::Component> GetVisibleInputs();
     int FindFocusedInputIndex(const std::vector<ftxui::Component>& inputs);
@@ -134,18 +129,11 @@ private:
     std::string key_passphrase_value_;
     std::string known_hosts_file_value_;
     std::string ssh_config_host_value_;
-    std::string client_id_value_;
-    std::string client_secret_value_;
-    std::string tenant_id_value_;
     std::string token_file_value_;
-    std::string root_folder_id_value_;
-    std::string site_id_value_;
-    std::string drive_id_value_;
     std::string app_key_value_;
     std::string app_secret_value_;
     std::string access_token_value_;
     std::string refresh_token_value_;
-    std::string scope_value_;
 
     int name_cursor_ = 0;
     int host_cursor_ = 0;
@@ -158,26 +146,15 @@ private:
     int key_passphrase_cursor_ = 0;
     int known_hosts_file_cursor_ = 0;
     int ssh_config_host_cursor_ = 0;
-    int client_id_cursor_ = 0;
-    int client_secret_cursor_ = 0;
-    int tenant_id_cursor_ = 0;
-    int root_folder_id_cursor_ = 0;
-    int site_id_cursor_ = 0;
-    int drive_id_cursor_ = 0;
     int app_key_cursor_ = 0;
     int app_secret_cursor_ = 0;
     int access_token_cursor_ = 0;
     int refresh_token_cursor_ = 0;
-    int scope_cursor_ = 0;
 
     std::string status_ = "Ready.";
     bool status_is_error_ = false;
     std::string output_;
     bool help_active_ = false;
-    bool authorize_pending_ = false;
-    OAuthFlowConfig pending_oauth_config_;
-    std::string redirect_url_value_;
-    int redirect_url_cursor_ = 0;
 
     ftxui::Component list_component_;
     ftxui::Component name_input_;
@@ -191,17 +168,10 @@ private:
     ftxui::Component key_passphrase_input_;
     ftxui::Component known_hosts_file_input_;
     ftxui::Component ssh_config_host_input_;
-    ftxui::Component client_id_input_;
-    ftxui::Component client_secret_input_;
-    ftxui::Component tenant_id_input_;
-    ftxui::Component root_folder_id_input_;
-    ftxui::Component site_id_input_;
-    ftxui::Component drive_id_input_;
     ftxui::Component app_key_input_;
     ftxui::Component app_secret_input_;
     ftxui::Component access_token_input_;
     ftxui::Component refresh_token_input_;
-    ftxui::Component scope_input_;
     ftxui::Component delete_button_;
     ftxui::Component save_button_;
     ftxui::Component test_button_;
@@ -209,21 +179,14 @@ private:
     ftxui::Component save_token_button_;
     ftxui::Component edit_button_;
     ftxui::Component connections_tab_button_;
+    ftxui::Component ssh_tab_button_;
     ftxui::Component sftp_tab_button_;
-    ftxui::Component google_tab_button_;
-    ftxui::Component microsoft_tab_button_;
     ftxui::Component dropbox_tab_button_;
     ftxui::Component reload_button_;
     ftxui::Component close_button_;
     ftxui::Component help_button_;
-    ftxui::Component authorize_button_;
     ftxui::Component help_close_button_;
     ftxui::Component copy_url_button_;
-    ftxui::Component redirect_url_input_;
-    ftxui::Component submit_redirect_button_;
-    ftxui::Component cancel_authorize_button_;
-    ftxui::Component authorize_container_;
-    int authorize_layer_index_ = 0;
     ftxui::Component help_container_;
     int help_layer_index_ = 0;
     ftxui::Component footer_actions_container_;

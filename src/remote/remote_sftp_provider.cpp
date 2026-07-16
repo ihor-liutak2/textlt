@@ -65,8 +65,9 @@ bool ValidateSftpBatchPath(const std::string& path, const std::string& label, st
 bool RemoteSftpProvider::Connect(const RemoteConnectionConfig& config, std::string& error) {
     config_ = config;
     config_.remote_root = NormalizeRemoteDirectory(config_.remote_root);
-    if (config_.type != RemoteConnectionType::Sftp) {
-        error = "Only SFTP connections are implemented in this version.";
+    if (config_.type != RemoteConnectionType::Ssh &&
+        config_.type != RemoteConnectionType::Sftp) {
+        error = "Only SSH/SFTP connections are implemented in this version.";
         return false;
     }
     if (Target().empty()) {

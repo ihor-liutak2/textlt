@@ -14,9 +14,6 @@
 #include "ui_button.hpp"
 #include "remote/remote_dialog_theme.hpp"
 #include "remote/remote_dropbox_provider.hpp"
-#include "remote/remote_google_drive_provider.hpp"
-#include "remote/remote_microsoft_drive_provider.hpp"
-#include "remote/remote_oauth_flow.hpp"
 #include "remote/remote_oauth_token_store.hpp"
 #include "remote/remote_sftp_provider.hpp"
 
@@ -44,26 +41,22 @@ int ParsePort(const std::string& text) {
 
 std::string TypeDisplayName(RemoteConnectionType type) {
     switch (type) {
+        case RemoteConnectionType::Ssh:
+            return "SSH";
         case RemoteConnectionType::Sftp:
-            return "SFTP / SSH";
-        case RemoteConnectionType::GoogleDrive:
-            return "Google Drive";
-        case RemoteConnectionType::MicrosoftDrive:
-            return "Microsoft OneDrive / SharePoint";
+            return "SFTP";
         case RemoteConnectionType::Dropbox:
             return "Dropbox";
     }
-    return "SFTP / SSH";
+    return "Remote";
 }
 
 std::string DefaultNameForType(RemoteConnectionType type) {
     switch (type) {
+        case RemoteConnectionType::Ssh:
+            return "New SSH";
         case RemoteConnectionType::Sftp:
             return "New SFTP";
-        case RemoteConnectionType::GoogleDrive:
-            return "New Google Drive";
-        case RemoteConnectionType::MicrosoftDrive:
-            return "New Microsoft Drive";
         case RemoteConnectionType::Dropbox:
             return "New Dropbox";
     }
@@ -72,30 +65,31 @@ std::string DefaultNameForType(RemoteConnectionType type) {
 
 std::string ConnectionTargetSummary(const RemoteConnectionConfig& config) {
     switch (config.type) {
-        case RemoteConnectionType::Sftp: {
-            std::string target = config.ssh_config_host.empty() ? config.host : config.ssh_config_host;
-            if (!config.user.empty() && config.ssh_config_host.empty()) {
-                target = config.user + "@" + target;
-            }
-            return target;
-        }
-        case RemoteConnectionType::GoogleDrive:
-            if (!config.root_folder_id.empty()) {
-                return "folder " + config.root_folder_id;
-            }
-            return "Google Drive";
-        case RemoteConnectionType::MicrosoftDrive:
-            if (!config.site_id.empty()) {
-                return "site " + config.site_id;
-            }
-            if (!config.drive_id.empty()) {
-                return "drive " + config.drive_id;
-            }
-            return "OneDrive / SharePoint";
+        case RemoteConnectionType::Ssh:
+        case RemoteConnectionType::Sftp:
+            break;
         case RemoteConnectionType::Dropbox:
             return config.remote_root.empty() ? "/" : config.remote_root;
     }
-    return {};
+    {
+        std::string target = config.ssh_config_host.empty() ? config.host : config.ssh_config_host;
+        if (!config.user.empty() && config.ssh_config_host.empty()) {
+            target = config.user + "@" + target;
+        }
+        return target;
+    }
+}
+
+std::string ConnectionKindLabel(const RemoteConnectionConfig& config) {
+    switch (config.type) {
+        case RemoteConnectionType::Ssh:
+            return "SSH";
+        case RemoteConnectionType::Sftp:
+            return "SFTP";
+        case RemoteConnectionType::Dropbox:
+            return "Dropbox";
+    }
+    return "Remote";
 }
 
 } // namespace
@@ -103,9 +97,8 @@ std::string ConnectionTargetSummary(const RemoteConnectionConfig& config) {
 #include "remote/modal_remote_connections/setup.cpp"
 #include "remote/modal_remote_connections/render.cpp"
 #include "remote/modal_remote_connections/tab_connections.cpp"
+#include "remote/modal_remote_connections/tab_ssh.cpp"
 #include "remote/modal_remote_connections/tab_sftp.cpp"
-#include "remote/modal_remote_connections/tab_google_drive.cpp"
-#include "remote/modal_remote_connections/tab_microsoft_drive.cpp"
 #include "remote/modal_remote_connections/tab_dropbox.cpp"
 #include "remote/modal_remote_connections/events.cpp"
 #include "remote/modal_remote_connections/actions.cpp"

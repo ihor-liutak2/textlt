@@ -20,39 +20,6 @@ ftxui::Element RemoteConnectionsModalContent::Render() {
         return dbox(std::move(layers));
     }
 
-    if (authorize_pending_) {
-        ftxui::Element auth_overlay = ftxui::vbox({
-            ftxui::text(" Paste the redirect URL or access token ") |
-                bold | color(theme.modal_accent),
-            ftxui::separator() | color(theme.modal_border),
-            ftxui::text(" The authorization URL was copied to your clipboard.") | color(theme.modal_text_color),
-            ftxui::text(" Open it in your browser, authorize, then paste the") | color(theme.modal_text_color),
-            ftxui::text(" redirect URL from the address bar below.") | color(theme.modal_text_color),
-            ftxui::text(""),
-            RenderRemoteDialogInputFrame(theme, "Redirect URL", redirect_url_input_),
-            ftxui::text(""),
-            ftxui::hbox({
-                ftxui::filler(),
-                submit_redirect_button_->Render(),
-                ftxui::text(" "),
-                cancel_authorize_button_->Render(),
-            }),
-        }) |
-            ftxui::size(WIDTH, LESS_THAN, 70) |
-            ftxui::borderStyled(ftxui::LIGHT, theme.modal_border) |
-            bgcolor(theme.modal_background) |
-            ftxui::clear_under;
-
-        ftxui::Element centered = ftxui::vbox(
-            ftxui::filler(),
-            ftxui::hbox(filler(), auth_overlay, filler()),
-            ftxui::filler());
-        ftxui::Elements layers;
-        layers.push_back(body);
-        layers.push_back(centered);
-        return dbox(std::move(layers));
-    }
-
     return body;
 }
 
@@ -60,12 +27,10 @@ ftxui::Element RemoteConnectionsModalContent::RenderCurrentTab() {
     switch (selected_tab_) {
         case MainTab::Connections:
             return RenderConnectionsTab();
+        case MainTab::Ssh:
+            return RenderSshTab();
         case MainTab::Sftp:
             return RenderSftpTab();
-        case MainTab::GoogleDrive:
-            return RenderGoogleDriveTab();
-        case MainTab::MicrosoftDrive:
-            return RenderMicrosoftDriveTab();
         case MainTab::Dropbox:
             return RenderDropboxTab();
     }
@@ -76,9 +41,8 @@ ftxui::Element RemoteConnectionsModalContent::RenderTabButtons() {
     using namespace ftxui;
     return hbox({
         connections_tab_button_->Render(), text(" "),
+        ssh_tab_button_->Render(), text(" "),
         sftp_tab_button_->Render(), text(" "),
-        google_tab_button_->Render(), text(" "),
-        microsoft_tab_button_->Render(), text(" "),
         dropbox_tab_button_->Render(),
         filler(),
     });
@@ -150,17 +114,12 @@ ftxui::Element RemoteConnectionsModalContent::RenderCustomFooter() {
         buttons.push_back(help_button_->Render());
         buttons.push_back(text(" "));
         buttons.push_back(save_button_->Render());
-        if (IsCloudRemoteConnectionType(type)) {
+        if (type == RemoteConnectionType::Dropbox) {
             buttons.push_back(text(" "));
             buttons.push_back(save_token_button_->Render());
         }
         buttons.push_back(text(" "));
         buttons.push_back(test_button_->Render());
-        if (type == RemoteConnectionType::GoogleDrive ||
-            type == RemoteConnectionType::MicrosoftDrive) {
-            buttons.push_back(text(" "));
-            buttons.push_back(authorize_button_->Render());
-        }
     }
 
     buttons.push_back(filler());

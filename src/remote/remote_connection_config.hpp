@@ -5,6 +5,7 @@
 namespace textlt {
 
 enum class RemoteConnectionType {
+    Ssh,
     Sftp,
     GoogleDrive,
     MicrosoftDrive,
