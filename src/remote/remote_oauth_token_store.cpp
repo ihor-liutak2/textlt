@@ -56,8 +56,6 @@ std::string SlugPart(std::string value) {
 
 std::string ProviderSlug(RemoteConnectionType type) {
     switch (type) {
-        case RemoteConnectionType::Ssh:
-            return "ssh";
         case RemoteConnectionType::GoogleDrive:
             return "google-drive";
         case RemoteConnectionType::MicrosoftDrive:
@@ -66,6 +64,8 @@ std::string ProviderSlug(RemoteConnectionType type) {
             return "dropbox";
         case RemoteConnectionType::Sftp:
             return "sftp";
+        case RemoteConnectionType::Ftps:
+            return "ftps";
     }
     return "remote";
 }
@@ -113,8 +113,6 @@ bool IsCloudRemoteConnectionType(RemoteConnectionType type) {
 
 std::string RemoteTokenProviderName(RemoteConnectionType type) {
     switch (type) {
-        case RemoteConnectionType::Ssh:
-            return "SSH";
         case RemoteConnectionType::GoogleDrive:
             return "Google Drive";
         case RemoteConnectionType::MicrosoftDrive:
@@ -122,7 +120,9 @@ std::string RemoteTokenProviderName(RemoteConnectionType type) {
         case RemoteConnectionType::Dropbox:
             return "Dropbox";
         case RemoteConnectionType::Sftp:
-            return "SFTP / SSH";
+            return "SFTP";
+        case RemoteConnectionType::Ftps:
+            return "FTPS";
     }
     return "Remote";
 }

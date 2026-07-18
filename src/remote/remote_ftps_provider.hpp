@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -8,10 +9,8 @@
 
 namespace textlt {
 
-class RemoteSftpProvider : public IRemoteProvider {
+class RemoteFtpsProvider : public IRemoteProvider {
 public:
-    RemoteSftpProvider() = default;
-
     bool Connect(const RemoteConnectionConfig& config, std::string& error) override;
     bool TestConnection(std::string& output, std::string& error) override;
     bool List(const std::string& path, std::vector<RemoteEntry>& entries, std::string& error) override;
@@ -24,15 +23,24 @@ public:
     bool MakeDirectory(const std::string& path, std::string& error) override;
     bool RemoveDirectory(const std::string& path, std::string& error) override;
 
-    static void ParseSftpListing(
-        const std::string& output,
+    static bool ParseDirectoryListing(
+        const std::string& listing,
         const std::string& directory,
         std::vector<RemoteEntry>& entries);
 
 private:
-    std::vector<std::string> BuildSftpArgs() const;
-    bool RunSftpBatch(const std::string& batch, std::string& output, std::string& error) const;
-    static std::string SftpQuote(const std::string& value);
+    std::string BuildUrl(const std::string& path, bool directory) const;
+    std::string BuildBaseConfig(const std::string& path, bool directory) const;
+    bool RunCurl(const std::string& config_text, std::string& output, std::string& error) const;
+    bool RunQuote(const std::vector<std::string>& commands, const std::string& directory, std::string& error) const;
+    bool DownloadDirectoryRecursive(
+        const std::string& remote_path,
+        const std::filesystem::path& local_path,
+        std::string& error);
+    bool UploadDirectoryRecursive(
+        const std::filesystem::path& local_path,
+        const std::string& remote_path,
+        std::string& error);
 
     RemoteConnectionConfig config_;
     RemoteCommandRunner runner_;

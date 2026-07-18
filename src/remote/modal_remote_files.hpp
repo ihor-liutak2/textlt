@@ -19,6 +19,7 @@
 #include "remote/remote_entry.hpp"
 #include "remote/remote_dropbox_provider.hpp"
 #include "remote/remote_google_drive_provider.hpp"
+#include "remote/remote_ftps_provider.hpp"
 #include "remote/remote_local_provider.hpp"
 #include "remote/remote_microsoft_drive_provider.hpp"
 #include "remote/remote_provider.hpp"
@@ -106,6 +107,8 @@ private:
 
     void ReloadConnections();
     bool EnsureRemoteProvider();
+    void ConnectRemote();
+    void DisconnectRemote();
     void LoadPanel(PanelSide side, const std::string& path);
     void LoadLocalPathFromInput();
     void LoadRemotePathFromInput();
@@ -199,6 +202,8 @@ private:
     ftxui::Component prev_connection_button_;
     ftxui::Component next_connection_button_;
     ftxui::Component refresh_button_;
+    ftxui::Component connect_button_;
+    ftxui::Component disconnect_button_;
     ftxui::Component copy_to_remote_button_;
     ftxui::Component copy_to_local_button_;
     ftxui::Component open_button_;

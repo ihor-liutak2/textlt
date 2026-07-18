@@ -11,8 +11,6 @@ namespace textlt {
 
 std::string RemoteConnectionTypeToString(RemoteConnectionType type) {
     switch (type) {
-        case RemoteConnectionType::Ssh:
-            return "ssh";
         case RemoteConnectionType::Sftp:
             return "sftp";
         case RemoteConnectionType::GoogleDrive:
@@ -21,6 +19,8 @@ std::string RemoteConnectionTypeToString(RemoteConnectionType type) {
             return "microsoft_drive";
         case RemoteConnectionType::Dropbox:
             return "dropbox";
+        case RemoteConnectionType::Ftps:
+            return "ftps";
     }
     return "sftp";
 }
@@ -41,8 +41,11 @@ RemoteConnectionType RemoteConnectionTypeFromString(const std::string& value) {
     if (normalized == "dropbox") {
         return RemoteConnectionType::Dropbox;
     }
+    if (normalized == "ftps") {
+        return RemoteConnectionType::Ftps;
+    }
     if (normalized == "ssh") {
-        return RemoteConnectionType::Ssh;
+        return RemoteConnectionType::Sftp;
     }
     return RemoteConnectionType::Sftp;
 }

@@ -12,6 +12,7 @@ ftxui::Element RemoteConnectionsModalContent::RenderDropboxTab() {
             {"Refresh token", refresh_token_input_},
         }),
         filler(),
+        RenderActionMessage(),
     }) |
         size(HEIGHT, EQUAL, 25) |
         borderStyled(LIGHT, theme.modal_border) |

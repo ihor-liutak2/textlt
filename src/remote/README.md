@@ -6,17 +6,16 @@ The remote module keeps all remote-file code in `src/remote/`.
 
 The connection modal has real type switching and separate fields for each supported remote target:
 
-- SFTP / SSH
-  - host
-  - port
-  - username
-  - password
+- SFTP
+  - local connection name
+  - concrete Host alias discovered from `~/.ssh/config`
   - remote root
-  - auth mode
-  - private key file
-  - key passphrase
-  - known hosts file
-  - SSH config host alias
+- FTPS
+  - host, port, username, and password
+  - remote root
+  - explicit or implicit TLS
+  - passive or active data mode
+  - automatic certificate acceptance
 - Google Drive
   - OAuth client id
   - OAuth client secret
@@ -48,7 +47,7 @@ Connection name/type and provider settings are persisted in `remote_connections.
 
 ## Active file-manager backends
 
-SFTP, Dropbox, Google Drive, and Microsoft OneDrive/SharePoint are active file-manager backends in this version. SFTP uses the external `ssh` and `sftp` programs that are already installed on the system. Cloud backends use the external `curl` program through the shared `RemoteHttpClient` helper and token files.
+SFTP, FTPS, Dropbox, Google Drive, and Microsoft OneDrive/SharePoint are active file-manager backends in this version. SFTP delegates connection resolution to OpenSSH config and uses the external `sftp` program for remote file operations. FTPS and cloud backends use the external `curl` executable; no curl development library is linked.
 
 ## Supported for SFTP
 
@@ -74,9 +73,13 @@ Sync Last
 
 This avoids accidental writes to servers when the user only wanted to save the local cached copy.
 
-## SSH/SFTP assumptions
+## SFTP and OpenSSH config
 
-SFTP can be configured with manual host/user fields, an SSH config host alias, a private key file, ssh-agent, or a password. Password authentication is non-interactive; when a password is configured, TextLT uses `sshpass` if it is installed. If `sshpass` is not available, use an SSH key, ssh-agent, or a host alias from `~/.ssh/config` instead.
+SFTP connections select a concrete `Host` alias discovered from `~/.ssh/config` and recursively included config files. Wildcard and negated Host patterns are not shown as selectable connections. OpenSSH resolves the actual host, user, port, identity files, ProxyJump, and host verification. TextLT runs `sftp` in non-interactive batch mode, so authentication should use an SSH key or ssh-agent rather than a password prompt.
+
+## FTPS
+
+FTPS is a separate external-curl backend. Explicit TLS uses `AUTH TLS` and normally port 21; implicit TLS normally uses port 990. Passive mode is enabled by default. Server certificates are accepted automatically, so FTPS traffic is encrypted but server identity is not verified. Credentials are passed to curl through a temporary owner-only configuration file and are not placed in process arguments. Directory browsing supports common Unix and Windows FTP `LIST` formats.
 
 ## Patch 8 safety behavior
 
@@ -87,7 +90,7 @@ Copy operations are safer now:
 - If a target exists, TextLT does not overwrite immediately. The operation asks the user to type `OVERWRITE` and press Confirm.
 - Delete still requires typing `DELETE` and now shows the exact path being deleted in the status line.
 
-The SFTP provider also checks for external `ssh` and `sftp` executables during connection setup and returns a clear error if they are missing. Paths containing newlines are rejected before building SFTP batch commands, because they cannot be safely represented in the current external `sftp -b -` command mode.
+The SFTP provider checks for external `ssh` and `sftp` executables during connection setup, validates the selected alias through `ssh -G`, and returns a clear error if resolution fails. Paths containing newlines are rejected before building SFTP batch commands, because they cannot be safely represented in the current external `sftp -b -` command mode.
 
 ## OAuth token files
 
@@ -243,4 +246,3 @@ External `curl` uses a 20-second connection/progress window:
 - connection timeout: 20 seconds;
 - stalled-transfer timeout: 20 seconds without at least 1 byte/second;
 - if data keeps moving, transfer continues through the next 20-second window.
-

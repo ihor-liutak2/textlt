@@ -14,8 +14,10 @@
 #include "ui_button.hpp"
 #include "remote/remote_dialog_theme.hpp"
 #include "remote/remote_dropbox_provider.hpp"
+#include "remote/remote_ftps_provider.hpp"
 #include "remote/remote_oauth_token_store.hpp"
 #include "remote/remote_sftp_provider.hpp"
+#include "remote/remote_ssh_config.hpp"
 
 namespace textlt {
 namespace {
@@ -41,35 +43,36 @@ int ParsePort(const std::string& text) {
 
 std::string TypeDisplayName(RemoteConnectionType type) {
     switch (type) {
-        case RemoteConnectionType::Ssh:
-            return "SSH";
         case RemoteConnectionType::Sftp:
             return "SFTP";
         case RemoteConnectionType::Dropbox:
             return "Dropbox";
+        case RemoteConnectionType::Ftps:
+            return "FTPS";
     }
     return "Remote";
 }
 
 std::string DefaultNameForType(RemoteConnectionType type) {
     switch (type) {
-        case RemoteConnectionType::Ssh:
-            return "New SSH";
         case RemoteConnectionType::Sftp:
             return "New SFTP";
         case RemoteConnectionType::Dropbox:
             return "New Dropbox";
+        case RemoteConnectionType::Ftps:
+            return "New FTPS";
     }
     return "New Remote";
 }
 
 std::string ConnectionTargetSummary(const RemoteConnectionConfig& config) {
     switch (config.type) {
-        case RemoteConnectionType::Ssh:
         case RemoteConnectionType::Sftp:
             break;
         case RemoteConnectionType::Dropbox:
             return config.remote_root.empty() ? "/" : config.remote_root;
+        case RemoteConnectionType::Ftps:
+            break;
     }
     {
         std::string target = config.ssh_config_host.empty() ? config.host : config.ssh_config_host;
@@ -82,12 +85,12 @@ std::string ConnectionTargetSummary(const RemoteConnectionConfig& config) {
 
 std::string ConnectionKindLabel(const RemoteConnectionConfig& config) {
     switch (config.type) {
-        case RemoteConnectionType::Ssh:
-            return "SSH";
         case RemoteConnectionType::Sftp:
             return "SFTP";
         case RemoteConnectionType::Dropbox:
             return "Dropbox";
+        case RemoteConnectionType::Ftps:
+            return "FTPS";
     }
     return "Remote";
 }
@@ -97,7 +100,7 @@ std::string ConnectionKindLabel(const RemoteConnectionConfig& config) {
 #include "remote/modal_remote_connections/setup.cpp"
 #include "remote/modal_remote_connections/render.cpp"
 #include "remote/modal_remote_connections/tab_connections.cpp"
-#include "remote/modal_remote_connections/tab_ssh.cpp"
+#include "remote/modal_remote_connections/tab_ftps.cpp"
 #include "remote/modal_remote_connections/tab_sftp.cpp"
 #include "remote/modal_remote_connections/tab_dropbox.cpp"
 #include "remote/modal_remote_connections/events.cpp"

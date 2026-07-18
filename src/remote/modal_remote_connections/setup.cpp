@@ -56,9 +56,21 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     known_hosts_option.cursor_position = &known_hosts_file_cursor_;
     known_hosts_file_input_ = ftxui::Input(&known_hosts_file_value_, "~/.ssh/known_hosts", known_hosts_option);
 
-    ftxui::InputOption ssh_alias_option = base_option;
-    ssh_alias_option.cursor_position = &ssh_config_host_cursor_;
-    ssh_config_host_input_ = ftxui::Input(&ssh_config_host_value_, "Host alias from ~/.ssh/config", ssh_alias_option);
+    ftxui::MenuOption ssh_host_option = ftxui::MenuOption::Vertical();
+    ssh_host_option.on_change = [this] { SyncSshConfigHostSelection(); };
+    ssh_host_option.entries_option.transform = [this](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        ftxui::Element row = ftxui::text(" " + state.label);
+        if (state.focused || state.active) {
+            return row |
+                ftxui::bgcolor(theme.modal_selected_item_bg) |
+                ftxui::color(theme.modal_selected_item_fg) |
+                ftxui::bold;
+        }
+        return row | ftxui::color(theme.modal_text_color);
+    };
+    ssh_config_host_menu_ = ftxui::Menu(
+        &ssh_config_hosts_, &selected_ssh_config_host_, ssh_host_option);
 
     ftxui::InputOption app_key_option = base_option;
     app_key_option.cursor_position = &app_key_cursor_;
@@ -76,8 +88,31 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     refresh_token_option.cursor_position = &refresh_token_cursor_;
     refresh_token_input_ = ftxui::Input(&refresh_token_value_, "paste refresh token", refresh_token_option);
 
+    ftxui::InputOption ftps_tls_mode_option = base_option;
+    ftps_tls_mode_option.cursor_position = &ftps_tls_mode_cursor_;
+    ftps_tls_mode_input_ = ftxui::Input(
+        &ftps_tls_mode_value_, "explicit / implicit", ftps_tls_mode_option);
+
+    ftxui::CheckboxOption checkbox_option = ftxui::CheckboxOption::Simple();
+    checkbox_option.transform = [this](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        ftxui::Element item = ftxui::text(
+            std::string(state.state ? "[X] " : "[ ] ") + state.label);
+        if (state.focused || state.active) {
+            return item |
+                ftxui::bgcolor(theme.modal_selected_item_bg) |
+                ftxui::color(theme.modal_selected_item_fg);
+        }
+        return item | ftxui::color(theme.modal_text_color);
+    };
+    ftps_passive_checkbox_ = ftxui::Checkbox(
+        "Passive mode", &ftps_passive_value_, checkbox_option);
+
     delete_button_ = MakeTextButton("Delete", [this] { DeleteSelected(); },
         ButtonRole::Danger, ButtonVariant::AccentEdges, "!");
+    new_button_ = MakeTextButton("New", [this] {
+        AddConnectionOfType(TypeForTab(selected_tab_));
+    }, ButtonRole::Utility, ButtonVariant::AccentEdges, "+");
     save_button_ = MakeTextButton("Save", [this] { SaveFormToSelected(); },
         ButtonRole::Primary, ButtonVariant::AccentEdges);
     test_button_ = MakeTextButton("Test", [this] { TestSelected(); },
@@ -89,11 +124,13 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     edit_button_ = MakeTextButton("Edit", [this] { EditSelected(); },
         ButtonRole::Primary, ButtonVariant::AccentEdges);
     connections_tab_button_ = MakeTabButton("Connections", MainTab::Connections);
-    ssh_tab_button_ = MakeTabButton("SSH", MainTab::Ssh);
     sftp_tab_button_ = MakeTabButton("SFTP", MainTab::Sftp);
+    ftps_tab_button_ = MakeTabButton("FTPS", MainTab::Ftps);
     dropbox_tab_button_ = MakeTabButton("Dropbox", MainTab::Dropbox);
     reload_button_ = MakeTextButton("Reload", [this] { Reload(); },
         ButtonRole::Cancel, ButtonVariant::AccentEdges, "⟳");
+    copy_message_button_ = MakeTextButton("Copy Message", [this] { CopyActionMessage(); },
+        ButtonRole::Utility, ButtonVariant::AccentEdges, "⧉");
     help_button_ = MakeTextButton("Info", [this] { OpenHelp(); },
         ButtonRole::Utility, ButtonVariant::AccentEdges, "i");
     close_button_ = MakeTextButton("Close", [this] {
@@ -108,8 +145,8 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
 
     ftxui::Components tab_buttons;
     tab_buttons.push_back(connections_tab_button_);
-    tab_buttons.push_back(ssh_tab_button_);
     tab_buttons.push_back(sftp_tab_button_);
+    tab_buttons.push_back(ftps_tab_button_);
     tab_buttons.push_back(dropbox_tab_button_);
 
     ftxui::Components editor_fields;
@@ -123,23 +160,16 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     editor_fields.push_back(identity_file_input_);
     editor_fields.push_back(key_passphrase_input_);
     editor_fields.push_back(known_hosts_file_input_);
-    editor_fields.push_back(ssh_config_host_input_);
+    editor_fields.push_back(ssh_config_host_menu_);
     editor_fields.push_back(app_key_input_);
     editor_fields.push_back(app_secret_input_);
     editor_fields.push_back(access_token_input_);
     editor_fields.push_back(refresh_token_input_);
+    editor_fields.push_back(ftps_tls_mode_input_);
+    editor_fields.push_back(ftps_passive_checkbox_);
 
-    footer_actions_container_ = ftxui::Container::Horizontal({
-        edit_button_,
-        set_active_button_,
-        test_button_,
-        delete_button_,
-        reload_button_,
-        save_button_,
-        save_token_button_,
-        help_button_,
-        close_button_,
-    });
+    footer_actions_container_ = ftxui::Container::Horizontal({});
+    RebuildFooterActions();
 
     ftxui::Components main_children;
     main_children.push_back(ftxui::Container::Horizontal(tab_buttons));
@@ -148,6 +178,11 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     main_children.push_back(footer_actions_container_);
     auto main_container = ftxui::Container::Vertical(main_children);
     main_container = ftxui::CatchEvent(main_container, [this](ftxui::Event event) {
+        if (selected_tab_ == MainTab::Sftp && ssh_config_host_menu_ &&
+            ssh_config_host_menu_->Focused() &&
+            (event == ftxui::Event::ArrowDown || event == ftxui::Event::ArrowUp)) {
+            return false;
+        }
         if (event == ftxui::Event::ArrowDown || event == ftxui::Event::ArrowUp ||
             event == ftxui::Event::Tab || event == ftxui::Event::TabReverse) {
             auto inputs = GetVisibleInputs();
@@ -185,6 +220,7 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     tab_children.push_back(help_container_);
     container_ = ftxui::Container::Tab(
         tab_children, &help_layer_index_);
+    ReloadSshConfigHosts();
     Reload();
 }
 
@@ -230,6 +266,8 @@ ftxui::Component RemoteConnectionsModalContent::MakeTabButton(
 
 void RemoteConnectionsModalContent::Open() {
     selected_tab_ = MainTab::Connections;
+    RebuildFooterActions();
+    ReloadSshConfigHosts();
     Reload();
     help_active_ = false;
     help_layer_index_ = 0;

@@ -23,6 +23,10 @@ RemoteFilesModalContent::RemoteFilesModalContent(
         ButtonRole::Navigation, ButtonVariant::AccentEdges, "›");
     refresh_button_ = MakeTextButton("Refresh", [this] { RefreshAll(); },
         ButtonRole::Cancel, ButtonVariant::AccentEdges, "⟳");
+    connect_button_ = MakeTextButton("Connect", [this] { ConnectRemote(); },
+        ButtonRole::Primary, ButtonVariant::AccentEdges);
+    disconnect_button_ = MakeTextButton("Disconnect", [this] { DisconnectRemote(); },
+        ButtonRole::Cancel, ButtonVariant::AccentEdges);
     copy_to_remote_button_ = MakeTextButton("Copy", [this] { CopyToRemote(); },
         ButtonRole::Cancel, ButtonVariant::AccentEdges, "→");
     copy_to_local_button_ = MakeTextButton("Copy", [this] { CopyToLocal(); },
@@ -85,6 +89,8 @@ RemoteFilesModalContent::RemoteFilesModalContent(
         ftxui::Container::Horizontal({
             refresh_button_,
             copy_error_button_,
+            connect_button_,
+            disconnect_button_,
         }),
         ftxui::Container::Horizontal({
             copy_to_remote_button_,
@@ -178,15 +184,11 @@ void RemoteFilesModalContent::Open() {
     }
     LoadPanel(PanelSide::Local, FileManager::PathToUtf8(start_path));
 
-    if (EnsureRemoteProvider()) {
-        const RemoteConnectionConfig& config = connections_[static_cast<size_t>(selected_connection_)];
-        LoadPanel(PanelSide::Remote, config.remote_root.empty() ? "/" : config.remote_root);
-    }
     active_panel_ = PanelSide::Local;
     if (local_list_component_) {
         local_list_component_->TakeFocus();
     }
-    SetStatus("Use Enter/double-click to open folders. F5 copies active item to the opposite panel.");
+    SetStatus("Remote is disconnected. Press Connect to open the active connection.");
 }
 
 void RemoteFilesModalContent::Close() {

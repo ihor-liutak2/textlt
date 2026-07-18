@@ -5,11 +5,11 @@
 namespace textlt {
 
 enum class RemoteConnectionType {
-    Ssh,
     Sftp,
     GoogleDrive,
     MicrosoftDrive,
     Dropbox,
+    Ftps,
 };
 
 struct RemoteConnectionConfig {
@@ -37,6 +37,9 @@ struct RemoteConnectionConfig {
     std::string app_key;
     std::string app_secret;
     std::string scope;
+
+    std::string ftps_tls_mode = "explicit";
+    bool ftps_passive = true;
 };
 
 std::string RemoteConnectionTypeToString(RemoteConnectionType type);

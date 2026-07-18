@@ -60,6 +60,16 @@ int main() {
         second.scope = "files.content.write";
         store.AddOrUpdate(second);
 
+        RemoteConnectionConfig third;
+        third.id = "third";
+        third.name = "Third";
+        third.type = RemoteConnectionType::Ftps;
+        third.host = "ftps.example.com";
+        third.port = 990;
+        third.ftps_tls_mode = "implicit";
+        third.ftps_passive = true;
+        store.AddOrUpdate(third);
+
         ExpectEqual(store.ActiveConnectionId(), "first", "First added connection should become active.");
         store.SetActiveConnectionId("second");
         Expect(store.FindActiveConnection() != nullptr, "Active connection must be found.");
@@ -75,6 +85,11 @@ int main() {
         Expect(store.FindActiveConnection() != nullptr, "Persisted active connection must be found.");
         ExpectEqual(store.FindActiveConnection()->name, "Second", "Persisted active connection mismatch.");
         ExpectEqual(store.FindActiveConnection()->scope, "files.content.write", "Persisted cloud scope mismatch.");
+        const RemoteConnectionConfig* ftps = store.FindById("third");
+        Expect(ftps != nullptr, "Persisted FTPS connection must be found.");
+        Expect(ftps->type == RemoteConnectionType::Ftps, "Persisted FTPS type mismatch.");
+        ExpectEqual(ftps->ftps_tls_mode, "implicit", "Persisted FTPS TLS mode mismatch.");
+        Expect(ftps->ftps_passive, "Persisted FTPS passive mode mismatch.");
 
         Expect(store.RemoveById("second"), "Removing active connection failed.");
         ExpectEqual(store.ActiveConnectionId(), "first", "Removing active connection should fall back to the next saved connection.");

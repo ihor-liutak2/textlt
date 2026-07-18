@@ -24,6 +24,17 @@ RemoteConnectionConfig RemoteConnectionsModalContent::FormConfig() const {
     config.token_file = token_file_value_;
     config.app_key = app_key_value_;
     config.app_secret = app_secret_value_;
+    config.ftps_tls_mode = ftps_tls_mode_value_.empty() ? "explicit" : ftps_tls_mode_value_;
+    config.ftps_passive = ftps_passive_value_;
+    if (config.type == RemoteConnectionType::Sftp) {
+        config.host.clear();
+        config.user.clear();
+        config.password.clear();
+        config.auth_mode = "ssh_config";
+        config.identity_file.clear();
+        config.key_passphrase.clear();
+        config.known_hosts_file.clear();
+    }
     return config;
 }
 
@@ -37,10 +48,10 @@ std::string RemoteConnectionsModalContent::SuggestedTokenFile(RemoteConnectionTy
 
 RemoteConnectionType RemoteConnectionsModalContent::TypeForTab(MainTab tab) const {
     switch (tab) {
-        case MainTab::Ssh:
-            return RemoteConnectionType::Ssh;
         case MainTab::Sftp:
             return RemoteConnectionType::Sftp;
+        case MainTab::Ftps:
+            return RemoteConnectionType::Ftps;
         case MainTab::Dropbox:
             return RemoteConnectionType::Dropbox;
         case MainTab::Connections:
@@ -51,10 +62,10 @@ RemoteConnectionType RemoteConnectionsModalContent::TypeForTab(MainTab tab) cons
 
 RemoteConnectionsModalContent::MainTab RemoteConnectionsModalContent::TabForType(RemoteConnectionType type) const {
     switch (type) {
-        case RemoteConnectionType::Ssh:
-            return MainTab::Ssh;
         case RemoteConnectionType::Sftp:
             return MainTab::Sftp;
+        case RemoteConnectionType::Ftps:
+            return MainTab::Ftps;
         case RemoteConnectionType::Dropbox:
             return MainTab::Dropbox;
     }
@@ -86,6 +97,49 @@ void RemoteConnectionsModalContent::SetStatus(std::string status, bool is_error)
     status_is_error_ = is_error;
 }
 
+void RemoteConnectionsModalContent::ReloadSshConfigHosts() {
+    std::string error;
+    const std::string current = ssh_config_host_value_;
+    ssh_config_hosts_ = DiscoverSshConfigHosts(DefaultSshConfigPath(), error);
+    SelectSshConfigHostValue(current);
+}
+
+void RemoteConnectionsModalContent::SyncSshConfigHostSelection() {
+    if (ssh_config_hosts_.empty()) {
+        ssh_config_host_value_.clear();
+        selected_ssh_config_host_ = 0;
+        return;
+    }
+    selected_ssh_config_host_ = std::clamp(
+        selected_ssh_config_host_, 0, static_cast<int>(ssh_config_hosts_.size()) - 1);
+    ssh_config_host_value_ = ssh_config_hosts_[static_cast<size_t>(selected_ssh_config_host_)];
+}
+
+void RemoteConnectionsModalContent::SelectSshConfigHostValue(const std::string& host) {
+    if (!host.empty()) {
+        auto iter = std::find(ssh_config_hosts_.begin(), ssh_config_hosts_.end(), host);
+        if (iter != ssh_config_hosts_.end()) {
+            selected_ssh_config_host_ = static_cast<int>(
+                std::distance(ssh_config_hosts_.begin(), iter));
+        } else {
+            selected_ssh_config_host_ = 0;
+        }
+    } else {
+        selected_ssh_config_host_ = 0;
+    }
+    SyncSshConfigHostSelection();
+}
+
+std::string RemoteConnectionsModalContent::ActionMessageText() const {
+    if (output_.empty()) {
+        return status_;
+    }
+    if (status_.empty()) {
+        return output_;
+    }
+    return status_ + "\n" + output_;
+}
+
 ftxui::Element RemoteConnectionsModalContent::RenderHelpOverlay() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
@@ -98,10 +152,10 @@ ftxui::Element RemoteConnectionsModalContent::RenderHelpOverlay() {
     };
 
     Elements rows;
-    const std::string title = selected_tab_ == MainTab::Ssh
-        ? "SSH fields"
-        : selected_tab_ == MainTab::Sftp
+    const std::string title = selected_tab_ == MainTab::Sftp
             ? "SFTP fields"
+            : selected_tab_ == MainTab::Ftps
+                ? "FTPS fields"
             : selected_tab_ == MainTab::Dropbox
                 ? "Dropbox fields"
                 : "Remote fields";
@@ -109,25 +163,24 @@ ftxui::Element RemoteConnectionsModalContent::RenderHelpOverlay() {
     rows.push_back(separator() | color(theme.modal_border));
 
     switch (selected_tab_) {
-        case MainTab::Ssh:
-            rows.push_back(field_row("Name", "Local profile name shown in Connections."));
-            rows.push_back(field_row("Host", "Server DNS name or IP address for password-based SSH."));
-            rows.push_back(field_row("Port", "SSH port, usually 22."));
-            rows.push_back(field_row("Username", "SSH username for the remote server."));
-            rows.push_back(field_row("Password", "SSH password. TextLT uses sshpass for non-interactive login."));
-            rows.push_back(field_row("Remote root", "Initial remote directory for browsing files."));
-            break;
         case MainTab::Sftp:
             rows.push_back(field_row("Name", "Local profile name shown in Connections."));
-            rows.push_back(field_row("Host", "Server DNS name or IP address for key/file-based access."));
-            rows.push_back(field_row("Port", "SSH/SFTP port, usually 22."));
-            rows.push_back(field_row("Username", "SSH username for the remote server."));
             rows.push_back(field_row("Remote root", "Initial remote directory for browsing files."));
-            rows.push_back(field_row("Auth mode", "auto, private_key, agent, or ssh_config."));
-            rows.push_back(field_row("Private key file", "Private SSH key path, for example ~/.ssh/id_ed25519."));
-            rows.push_back(field_row("Key passphrase", "Passphrase for an encrypted private key."));
-            rows.push_back(field_row("Known hosts file", "Optional known_hosts file path, for example ~/.ssh/known_hosts."));
-            rows.push_back(field_row("SSH config host", "Alias from ~/.ssh/config. It can define host, user, port, key, ProxyJump."));
+            rows.push_back(field_row("SSH config hosts", "Concrete Host aliases discovered in ~/.ssh/config and Include files."));
+            rows.push_back(field_row("Selected alias", "OpenSSH supplies host, user, port, keys, ProxyJump, and host verification."));
+            rows.push_back(field_row("Authentication", "Use an SSH key or ssh-agent; TextLT runs sftp in non-interactive batch mode."));
+            rows.push_back(field_row("Missing host", "Add a concrete Host alias to SSH config, then reopen Remote Connections."));
+            break;
+        case MainTab::Ftps:
+            rows.push_back(field_row("Name", "Local profile name shown in Connections."));
+            rows.push_back(field_row("Host", "FTPS server DNS name or IP address."));
+            rows.push_back(field_row("Port", "Usually 21 for explicit TLS or 990 for implicit TLS."));
+            rows.push_back(field_row("Username", "FTP account username."));
+            rows.push_back(field_row("Password", "FTP account password passed through a protected curl config file."));
+            rows.push_back(field_row("Remote root", "Initial remote directory for browsing files."));
+            rows.push_back(field_row("TLS mode", "explicit uses AUTH TLS; implicit starts TLS immediately."));
+            rows.push_back(field_row("Passive", "Client opens both control and data connections."));
+            rows.push_back(field_row("Certificate", "Server certificates are accepted automatically."));
             break;
         case MainTab::Dropbox:
             rows.push_back(field_row("Name", "Local profile name shown in Connections."));

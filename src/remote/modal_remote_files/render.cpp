@@ -9,7 +9,9 @@ ftxui::Element RemoteFilesModalContent::Render() {
             text(TrimForDisplay(connection_label, 36)) | bold | color(theme.modal_text_color),
             filler(),
             refresh_button_->Render(), text(" "),
-            copy_error_button_->Render(),
+            copy_error_button_->Render(), text(" "),
+            connect_button_->Render(), text(" "),
+            disconnect_button_->Render(),
         }),
         hbox({
             copy_to_remote_button_->Render(), text(" "),

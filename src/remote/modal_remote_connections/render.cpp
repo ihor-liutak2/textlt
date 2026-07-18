@@ -27,10 +27,10 @@ ftxui::Element RemoteConnectionsModalContent::RenderCurrentTab() {
     switch (selected_tab_) {
         case MainTab::Connections:
             return RenderConnectionsTab();
-        case MainTab::Ssh:
-            return RenderSshTab();
         case MainTab::Sftp:
             return RenderSftpTab();
+        case MainTab::Ftps:
+            return RenderFtpsTab();
         case MainTab::Dropbox:
             return RenderDropboxTab();
     }
@@ -41,8 +41,8 @@ ftxui::Element RemoteConnectionsModalContent::RenderTabButtons() {
     using namespace ftxui;
     return hbox({
         connections_tab_button_->Render(), text(" "),
-        ssh_tab_button_->Render(), text(" "),
         sftp_tab_button_->Render(), text(" "),
+        ftps_tab_button_->Render(), text(" "),
         dropbox_tab_button_->Render(),
         filler(),
     });
@@ -73,25 +73,38 @@ ftxui::Element RemoteConnectionsModalContent::RenderFieldGrid(
 ftxui::Element RemoteConnectionsModalContent::RenderOutput(int max_lines) {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    Elements rows;
-    rows.push_back(
-        text(" " + status_) |
-        (status_is_error_ ? color(ftxui::Color::Red) : color(theme.modal_text_color)));
+    std::string message = TrimForDisplay(ActionMessageText(), 160);
+    std::replace(message.begin(), message.end(), '\n', ' ');
+    std::replace(message.begin(), message.end(), '\r', ' ');
+    std::replace(message.begin(), message.end(), '\t', ' ');
 
-    if (!output_.empty()) {
-        std::istringstream lines(output_);
-        std::string line;
-        int count = 0;
-        while (count < max_lines && std::getline(lines, line)) {
-            rows.push_back(text(" " + TrimForDisplay(line, 104)) | dim | color(theme.modal_text_color));
-            ++count;
-        }
-    }
-
-    return vbox(std::move(rows)) |
+    return paragraph(message) |
+        (status_is_error_ ? color(ftxui::Color::Red) : color(theme.modal_text_color)) |
         size(HEIGHT, EQUAL, std::max(2, max_lines + 1)) |
         bgcolor(theme.modal_input_bg) |
         borderStyled(LIGHT, theme.modal_border);
+}
+
+ftxui::Element RemoteConnectionsModalContent::RenderActionMessage() {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+
+    std::string message = status_;
+    if (status_is_error_ && !output_.empty()) {
+        const size_t line_end = output_.find('\n');
+        message = output_.substr(0, line_end);
+    }
+    if (status_is_error_) {
+        message = "Error: " + message;
+    }
+
+    return hbox({
+        text(" " + TrimForDisplay(message, 70)),
+        filler(),
+    }) |
+        size(HEIGHT, EQUAL, 1) |
+        (status_is_error_ ? color(Color::Red) : color(theme.modal_text_color)) |
+        bgcolor(theme.modal_input_bg);
 }
 
 ftxui::Element RemoteConnectionsModalContent::RenderCustomFooter() {
@@ -109,9 +122,16 @@ ftxui::Element RemoteConnectionsModalContent::RenderCustomFooter() {
         buttons.push_back(delete_button_->Render());
         buttons.push_back(text(" "));
         buttons.push_back(reload_button_->Render());
+        buttons.push_back(text(" "));
+        buttons.push_back(copy_message_button_->Render());
     } else {
         const RemoteConnectionType type = TypeForTab(selected_tab_);
-        buttons.push_back(help_button_->Render());
+        if (selected_tab_ == MainTab::Sftp || selected_tab_ == MainTab::Ftps ||
+            selected_tab_ == MainTab::Dropbox) {
+            buttons.push_back(help_button_->Render());
+            buttons.push_back(text(" "));
+        }
+        buttons.push_back(new_button_->Render());
         buttons.push_back(text(" "));
         buttons.push_back(save_button_->Render());
         if (type == RemoteConnectionType::Dropbox) {

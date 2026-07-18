@@ -279,6 +279,8 @@ add_executable(textlt
   src/remote/remote_command_runner.cpp
   src/remote/remote_local_provider.cpp
   src/remote/remote_sftp_provider.cpp
+  src/remote/remote_ssh_config.cpp
+  src/remote/remote_ftps_provider.cpp
   src/remote/modal_remote_connections.cpp
   src/remote/modal_remote_files.cpp
   src/sidebar_component.cpp
@@ -458,6 +460,38 @@ add_executable(textlt_remote_http_client_test
   src/remote/remote_command_runner.cpp
 )
 
+add_executable(textlt_remote_ftps_provider_test
+  tests/remote_ftps_provider_test.cpp
+  src/remote/remote_connection_config.cpp
+  src/remote/remote_ftps_provider.cpp
+  src/remote/remote_command_runner.cpp
+)
+
+add_executable(textlt_remote_ssh_config_test
+  tests/remote_ssh_config_test.cpp
+  src/remote/remote_ssh_config.cpp
+)
+
+target_include_directories(textlt_remote_ssh_config_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+add_executable(textlt_remote_sftp_provider_test
+  tests/remote_sftp_provider_test.cpp
+  src/remote/remote_connection_config.cpp
+  src/remote/remote_sftp_provider.cpp
+  src/remote/remote_ssh_config.cpp
+  src/remote/remote_command_runner.cpp
+)
+
+target_include_directories(textlt_remote_sftp_provider_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_include_directories(textlt_remote_ftps_provider_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
 target_include_directories(textlt_remote_http_client_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -598,6 +632,9 @@ add_test(NAME textlt_remote_path_test COMMAND textlt_remote_path_test)
 add_test(NAME textlt_remote_oauth_token_store_test COMMAND textlt_remote_oauth_token_store_test)
 add_test(NAME textlt_remote_config_store_test COMMAND textlt_remote_config_store_test)
 add_test(NAME textlt_remote_http_client_test COMMAND textlt_remote_http_client_test)
+add_test(NAME textlt_remote_ftps_provider_test COMMAND textlt_remote_ftps_provider_test)
+add_test(NAME textlt_remote_ssh_config_test COMMAND textlt_remote_ssh_config_test)
+add_test(NAME textlt_remote_sftp_provider_test COMMAND textlt_remote_sftp_provider_test)
 add_test(NAME textlt_no_embedded_curl_test COMMAND textlt_no_embedded_curl_test)
 add_test(NAME textlt_remote_dropbox_provider_test COMMAND textlt_remote_dropbox_provider_test)
 add_test(NAME textlt_remote_google_drive_provider_test COMMAND textlt_remote_google_drive_provider_test)

@@ -41,6 +41,12 @@ bool RemoteConnectionsModalContent::HandleEvent(ftxui::Event event) {
         return HandleHelpEvent(std::move(event));
     }
 
+    if (selected_tab_ == MainTab::Sftp && ssh_config_host_menu_ &&
+        ssh_config_host_menu_->Focused() &&
+        (event == ftxui::Event::ArrowDown || event == ftxui::Event::ArrowUp)) {
+        return false;
+    }
+
     if (event == ftxui::Event::ArrowDown || event == ftxui::Event::ArrowUp ||
         event == ftxui::Event::Tab || event == ftxui::Event::TabReverse) {
         auto inputs = GetVisibleInputs();
@@ -88,23 +94,20 @@ std::vector<ftxui::Component> RemoteConnectionsModalContent::GetVisibleInputs() 
     inputs.push_back(name_input_);
 
     switch (selected_tab_) {
-        case MainTab::Ssh:
+        case MainTab::Sftp:
+            inputs.push_back(remote_root_input_);
+            if (!ssh_config_hosts_.empty()) {
+                inputs.push_back(ssh_config_host_menu_);
+            }
+            break;
+        case MainTab::Ftps:
             inputs.push_back(host_input_);
             inputs.push_back(port_input_);
             inputs.push_back(user_input_);
             inputs.push_back(password_input_);
             inputs.push_back(remote_root_input_);
-            break;
-        case MainTab::Sftp:
-            inputs.push_back(host_input_);
-            inputs.push_back(port_input_);
-            inputs.push_back(user_input_);
-            inputs.push_back(remote_root_input_);
-            inputs.push_back(auth_mode_input_);
-            inputs.push_back(identity_file_input_);
-            inputs.push_back(key_passphrase_input_);
-            inputs.push_back(known_hosts_file_input_);
-            inputs.push_back(ssh_config_host_input_);
+            inputs.push_back(ftps_tls_mode_input_);
+            inputs.push_back(ftps_passive_checkbox_);
             break;
         case MainTab::Dropbox:
             inputs.push_back(app_key_input_);

@@ -26,6 +26,7 @@ RemoteConnectionConfig RemoteConnectionsModalContent::ActionConfig() const {
 
 void RemoteConnectionsModalContent::SelectTab(MainTab tab) {
     selected_tab_ = tab;
+    RebuildFooterActions();
     help_active_ = false;
     help_layer_index_ = 0;
     output_.clear();
@@ -42,7 +43,7 @@ void RemoteConnectionsModalContent::SelectTab(MainTab tab) {
     if (name_input_) {
         name_input_->TakeFocus();
     }
-    SetStatus(tab == MainTab::Ssh ? "Editing SSH connection." : "Editing SFTP connection.");
+    SetStatus("Editing " + TypeDisplayName(TypeForTab(tab)) + " connection.");
 }
 
 void RemoteConnectionsModalContent::SelectType(RemoteConnectionType type) {
@@ -59,31 +60,25 @@ void RemoteConnectionsModalContent::ApplyTypeDefaults(RemoteConnectionType type)
         remote_root_value_ = "/";
     }
     switch (type) {
-        case RemoteConnectionType::Ssh:
-            if (port_value_.empty() || port_value_ == "0") {
-                port_value_ = "22";
-            }
-            if (auth_mode_value_.empty()) {
-                auth_mode_value_ = "password";
-            }
-            break;
         case RemoteConnectionType::Sftp:
             if (port_value_.empty() || port_value_ == "0") {
                 port_value_ = "22";
             }
-            if (auth_mode_value_.empty()) {
-                auth_mode_value_ = "private_key";
-            }
-            if (identity_file_value_.empty()) {
-                identity_file_value_ = "~/.ssh/id_ed25519";
-            }
-            if (known_hosts_file_value_.empty()) {
-                known_hosts_file_value_ = "~/.ssh/known_hosts";
+            if (ssh_config_host_value_.empty()) {
+                SyncSshConfigHostSelection();
             }
             break;
         case RemoteConnectionType::Dropbox:
             if (token_file_value_.empty()) {
                 token_file_value_ = SuggestedTokenFile(type);
+            }
+            break;
+        case RemoteConnectionType::Ftps:
+            if (port_value_.empty() || port_value_ == "0" || port_value_ == "22") {
+                port_value_ = ftps_tls_mode_value_ == "implicit" ? "990" : "21";
+            }
+            if (ftps_tls_mode_value_.empty()) {
+                ftps_tls_mode_value_ = "explicit";
             }
             break;
     }
@@ -108,6 +103,8 @@ void RemoteConnectionsModalContent::ResetFormForType(RemoteConnectionType type) 
     app_secret_value_.clear();
     access_token_value_.clear();
     refresh_token_value_.clear();
+    ftps_tls_mode_value_ = "explicit";
+    ftps_passive_value_ = true;
     ApplyTypeDefaults(type);
 
     name_cursor_ = static_cast<int>(name_value_.size());
@@ -120,11 +117,11 @@ void RemoteConnectionsModalContent::ResetFormForType(RemoteConnectionType type) 
     identity_file_cursor_ = 0;
     key_passphrase_cursor_ = 0;
     known_hosts_file_cursor_ = 0;
-    ssh_config_host_cursor_ = 0;
     app_key_cursor_ = 0;
     app_secret_cursor_ = 0;
     access_token_cursor_ = 0;
     refresh_token_cursor_ = 0;
+    ftps_tls_mode_cursor_ = static_cast<int>(ftps_tls_mode_value_.size());
 }
 
 void RemoteConnectionsModalContent::LoadSelectedIntoForm() {
@@ -146,11 +143,14 @@ void RemoteConnectionsModalContent::LoadSelectedIntoForm() {
     key_passphrase_value_ = config.key_passphrase;
     known_hosts_file_value_ = config.known_hosts_file;
     ssh_config_host_value_ = config.ssh_config_host;
+    SelectSshConfigHostValue(ssh_config_host_value_);
     token_file_value_ = config.token_file;
     app_key_value_ = config.app_key;
     app_secret_value_ = config.app_secret;
     access_token_value_.clear();
     refresh_token_value_.clear();
+    ftps_tls_mode_value_ = config.ftps_tls_mode.empty() ? "explicit" : config.ftps_tls_mode;
+    ftps_passive_value_ = config.ftps_passive;
     ApplyTypeDefaults(config.type);
 
     name_cursor_ = static_cast<int>(name_value_.size());
@@ -163,11 +163,11 @@ void RemoteConnectionsModalContent::LoadSelectedIntoForm() {
     identity_file_cursor_ = static_cast<int>(identity_file_value_.size());
     key_passphrase_cursor_ = static_cast<int>(key_passphrase_value_.size());
     known_hosts_file_cursor_ = static_cast<int>(known_hosts_file_value_.size());
-    ssh_config_host_cursor_ = static_cast<int>(ssh_config_host_value_.size());
     app_key_cursor_ = static_cast<int>(app_key_value_.size());
     app_secret_cursor_ = static_cast<int>(app_secret_value_.size());
     access_token_cursor_ = 0;
     refresh_token_cursor_ = 0;
+    ftps_tls_mode_cursor_ = static_cast<int>(ftps_tls_mode_value_.size());
 }
 
 void RemoteConnectionsModalContent::SaveFormToSelected() {
@@ -184,10 +184,12 @@ void RemoteConnectionsModalContent::SaveFormToSelected() {
         SetStatus("Connection name is required.", true);
         return;
     }
-    if ((config.type == RemoteConnectionType::Ssh ||
-         config.type == RemoteConnectionType::Sftp) &&
-        config.ssh_config_host.empty() && config.host.empty()) {
-        SetStatus("Connection needs Host or SSH config alias.", true);
+    if (config.type == RemoteConnectionType::Sftp && config.ssh_config_host.empty()) {
+        SetStatus("SFTP connection needs an alias from ~/.ssh/config.", true);
+        return;
+    }
+    if (config.type == RemoteConnectionType::Ftps && config.host.empty()) {
+        SetStatus("FTPS connection needs Host.", true);
         return;
     }
     if (config.type == RemoteConnectionType::Dropbox && config.token_file.empty()) {
@@ -218,22 +220,19 @@ void RemoteConnectionsModalContent::SaveFormToSelected() {
     }
     LoadSelectedIntoForm();
     selected_tab_ = TabForType(config.type);
-    SetStatus(selected_tab_ == MainTab::Ssh
-        ? "Saved SSH connection: " + config.name
-        : "Saved SFTP connection: " + config.name);
+    SetStatus("Saved " + TypeDisplayName(config.type) + " connection: " + config.name);
 }
 
 void RemoteConnectionsModalContent::AddConnectionOfType(RemoteConnectionType type) {
     ResetFormForType(type);
     selected_tab_ = TabForType(type);
+    RebuildFooterActions();
     selected_connection_ = -1;
     output_.clear();
     if (name_input_) {
         name_input_->TakeFocus();
     }
-    SetStatus(type == RemoteConnectionType::Ssh
-        ? "Create SSH connection. Fill fields and press Save."
-        : "Create SFTP connection. Fill fields and press Save.");
+    SetStatus("Create " + TypeDisplayName(type) + " connection. Fill fields and press Save.");
 }
 
 void RemoteConnectionsModalContent::EditSelected() {
@@ -245,13 +244,12 @@ void RemoteConnectionsModalContent::EditSelected() {
     const RemoteConnectionConfig& selected = connections_[static_cast<size_t>(selected_connection_)];
     LoadSelectedIntoForm();
     selected_tab_ = TabForType(selected.type);
+    RebuildFooterActions();
     output_.clear();
     if (name_input_) {
         name_input_->TakeFocus();
     }
-    SetStatus(selected_tab_ == MainTab::Ssh
-        ? "Editing SSH connection: " + selected.name
-        : "Editing SFTP connection: " + selected.name);
+    SetStatus("Editing " + TypeDisplayName(selected.type) + " connection: " + selected.name);
 }
 
 void RemoteConnectionsModalContent::SetSelectedActive() {
@@ -326,6 +324,25 @@ void RemoteConnectionsModalContent::TestSelected() {
         return;
     }
 
+    if (config.type == RemoteConnectionType::Ftps) {
+        RemoteFtpsProvider provider;
+        std::string error;
+        if (!provider.Connect(config, error)) {
+            output_.clear();
+            SetStatus(error, true);
+            return;
+        }
+        std::string output;
+        if (!provider.TestConnection(output, error)) {
+            output_ = error;
+            SetStatus("FTPS connection test failed.", true);
+            return;
+        }
+        output_ = output;
+        SetStatus("FTPS connection test succeeded.");
+        return;
+    }
+
     RemoteSftpProvider provider;
     std::string error;
     if (!provider.Connect(config, error)) {
@@ -387,7 +404,7 @@ void RemoteConnectionsModalContent::SaveCloudAccessToken() {
 void RemoteConnectionsModalContent::PrepareTokenFile() {
     RemoteConnectionConfig config = ActionConfig();
     if (config.type != RemoteConnectionType::Dropbox) {
-        output_ = "SSH/SFTP uses keys, password, ssh-agent, or ~/.ssh/config and does not need an OAuth token file.";
+        output_ = "SFTP uses OpenSSH config, keys, and ssh-agent and does not need an OAuth token file.";
         SetStatus("Token files are only used by Dropbox.");
         return;
     }
@@ -426,11 +443,49 @@ void RemoteConnectionsModalContent::PrepareTokenFile() {
 }
 
 void RemoteConnectionsModalContent::OpenHelp() {
+    if (selected_tab_ != MainTab::Sftp && selected_tab_ != MainTab::Ftps &&
+        selected_tab_ != MainTab::Dropbox) {
+        return;
+    }
     help_active_ = true;
     help_layer_index_ = 1;
     if (help_close_button_) {
         help_close_button_->TakeFocus();
     }
+}
+
+void RemoteConnectionsModalContent::RebuildFooterActions() {
+    if (!footer_actions_container_) {
+        return;
+    }
+
+    footer_actions_container_->DetachAllChildren();
+    const auto add = [this](const ftxui::Component& button) {
+        if (button) {
+            footer_actions_container_->Add(button);
+        }
+    };
+
+    if (selected_tab_ == MainTab::Connections) {
+        add(edit_button_);
+        add(set_active_button_);
+        add(test_button_);
+        add(delete_button_);
+        add(reload_button_);
+        add(copy_message_button_);
+    } else {
+        if (selected_tab_ == MainTab::Sftp || selected_tab_ == MainTab::Ftps ||
+            selected_tab_ == MainTab::Dropbox) {
+            add(help_button_);
+        }
+        add(new_button_);
+        add(save_button_);
+        if (selected_tab_ == MainTab::Dropbox) {
+            add(save_token_button_);
+        }
+        add(test_button_);
+    }
+    add(close_button_);
 }
 
 void RemoteConnectionsModalContent::CloseHelp() {
@@ -445,4 +500,12 @@ void RemoteConnectionsModalContent::CopyHelpUrl() {
     } else {
         SetStatus("Clipboard is not available.", true);
     }
+}
+
+void RemoteConnectionsModalContent::CopyActionMessage() {
+    if (!write_clipboard_) {
+        SetStatus("Clipboard is not available.", true);
+        return;
+    }
+    write_clipboard_(ActionMessageText());
 }

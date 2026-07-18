@@ -59,6 +59,8 @@ RemoteConnectionConfig ParseConnection(const Json& object) {
     config.app_key = JsonString(object, "app_key");
     config.app_secret = JsonString(object, "app_secret");
     config.scope = JsonString(object, "scope");
+    config.ftps_tls_mode = JsonString(object, "ftps_tls_mode", "explicit");
+    config.ftps_passive = JsonBool(object, "ftps_passive", true);
 
     if (config.id.empty()) {
         config.id = MakeRemoteConnectionId();
@@ -94,6 +96,8 @@ Json SerializeConnection(const RemoteConnectionConfig& config) {
     object["app_key"] = config.app_key;
     object["app_secret"] = config.app_secret;
     object["scope"] = config.scope;
+    object["ftps_tls_mode"] = config.ftps_tls_mode.empty() ? "explicit" : config.ftps_tls_mode;
+    object["ftps_passive"] = config.ftps_passive;
     return object;
 }
 
@@ -148,6 +152,18 @@ bool RemoteConfigStore::Save(std::string& error) const {
         error = "Cannot write remote config: " + path_.string();
         return false;
     }
+#ifndef _WIN32
+    std::error_code permission_error;
+    std::filesystem::permissions(
+        path_,
+        std::filesystem::perms::owner_read | std::filesystem::perms::owner_write,
+        std::filesystem::perm_options::replace,
+        permission_error);
+    if (permission_error) {
+        error = "Cannot protect remote config permissions: " + path_.string();
+        return false;
+    }
+#endif
     error.clear();
     return true;
 }

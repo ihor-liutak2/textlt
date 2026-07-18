@@ -202,27 +202,20 @@ bool RemoteFilesModalContent::UploadCachedLocalFile(
         return false;
     }
 
-    std::unique_ptr<IRemoteProvider> provider;
-    if (iter->connection.type == RemoteConnectionType::Sftp) {
-        provider = std::make_unique<RemoteSftpProvider>();
-    } else if (iter->connection.type == RemoteConnectionType::Dropbox) {
-        provider = std::make_unique<RemoteDropboxProvider>();
-    } else if (iter->connection.type == RemoteConnectionType::GoogleDrive) {
-        provider = std::make_unique<RemoteGoogleDriveProvider>();
-    } else if (iter->connection.type == RemoteConnectionType::MicrosoftDrive) {
-        provider = std::make_unique<RemoteMicrosoftDriveProvider>();
-    } else {
-        error = "Manual sync is implemented for SFTP, Dropbox, Google Drive, and Microsoft cached files only.";
+    if (!remote_provider_) {
+        error = "Remote is disconnected. Press Connect before syncing.";
+        SetStatus(error, true);
+        return false;
+    }
+    if (connections_.empty() || selected_connection_ < 0 ||
+        selected_connection_ >= static_cast<int>(connections_.size()) ||
+        connections_[static_cast<size_t>(selected_connection_)].id != iter->connection.id) {
+        error = "Connect the same remote connection that was used to open this cached file.";
         SetStatus(error, true);
         return false;
     }
 
-    if (!provider->Connect(iter->connection, error)) {
-        SetStatus(error.empty() ? "Cannot connect to remote." : error, true);
-        return false;
-    }
-
-    if (!provider->Upload(FileManager::PathToUtf8(iter->local_path), iter->remote_path, error)) {
+    if (!remote_provider_->Upload(FileManager::PathToUtf8(iter->local_path), iter->remote_path, error)) {
         SetStatus(error.empty() ? "Remote upload failed." : error, true);
         return false;
     }
