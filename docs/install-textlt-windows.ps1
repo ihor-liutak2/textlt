@@ -5,7 +5,14 @@ param(
 $ErrorActionPreference = "Stop"
 
 if (-not $Version) {
-    throw "Missing TextLT version. Usage: .\install-textlt-windows.ps1 -Version vX.Y.Z"
+    Write-Host "Detecting latest version from GitHub..."
+    try {
+        $releaseInfo = Invoke-RestMethod -Uri "https://api.github.com/repos/ihor-liutak2/textlt/releases/latest"
+        $Version = $releaseInfo.tag_name
+        Write-Host "Auto-detected latest version: $Version"
+    } catch {
+        throw "Could not detect latest version. Pass it as argument: -Version vX.Y.Z"
+    }
 }
 if (-not $Version.StartsWith("v")) {
     $Version = "v$Version"
@@ -56,7 +63,8 @@ cd /d "%~dp0app"
         [Environment]::SetEnvironmentVariable("Path", $NewPath, "User")
     }
 
-    Write-Host "TextLT installed to: $AppDir"
+    Write-Host ""
+    Write-Host "TextLT $Version installed to: $AppDir"
     Write-Host "Open a new PowerShell window and run: textlt"
 } finally {
     Remove-Item $ExtractDir -Recurse -Force -ErrorAction SilentlyContinue

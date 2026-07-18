@@ -199,12 +199,108 @@ jobs:
           name: textlt-windows-x64
           path: textlt-windows-x64.zip
 
+  build-macos-arm64:
+    name: Build macOS ARM64
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          brew install cmake libarchive
+          echo "LIBARCHIVE_PREFIX=$(brew --prefix libarchive)" >> "$GITHUB_ENV"
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$LIBARCHIVE_PREFIX" \
+            -DLibArchive_INCLUDE_DIR="$LIBARCHIVE_PREFIX/include" \
+            -DLibArchive_LIBRARY="$LIBARCHIVE_PREFIX/lib/libarchive.dylib"
+
+      - name: Build
+        run: |
+          cmake --build build --config Release --parallel
+
+      - name: Package macOS ARM64
+        run: |
+          mkdir -p package/textlt
+          cp build/textlt package/textlt/textlt-bin
+          cp scripts/textlt-launcher.sh package/textlt/textlt
+          cp scripts/textlt-install-runtime-deps.sh package/textlt/textlt-install-runtime-deps.sh
+          chmod +x package/textlt/textlt package/textlt/textlt-bin package/textlt/textlt-install-runtime-deps.sh
+          cp -R themes package/textlt/themes
+          cp -R text_processors package/textlt/text_processors
+          test -f package/textlt/text_processors/default_text_parsers.json
+
+          if [ -d docs/registries ]; then
+            mkdir -p package/textlt/resources
+            cp -R docs/registries package/textlt/resources/
+          fi
+
+          tar -czf textlt-macos-arm64.tar.gz -C package textlt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: textlt-macos-arm64
+          path: textlt-macos-arm64.tar.gz
+
+  build-macos-x64:
+    name: Build macOS x86_64
+    runs-on: macos-13
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          brew install cmake libarchive
+          echo "LIBARCHIVE_PREFIX=$(brew --prefix libarchive)" >> "$GITHUB_ENV"
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$LIBARCHIVE_PREFIX" \
+            -DLibArchive_INCLUDE_DIR="$LIBARCHIVE_PREFIX/include" \
+            -DLibArchive_LIBRARY="$LIBARCHIVE_PREFIX/lib/libarchive.dylib"
+
+      - name: Build
+        run: |
+          cmake --build build --config Release --parallel
+
+      - name: Package macOS x86_64
+        run: |
+          mkdir -p package/textlt
+          cp build/textlt package/textlt/textlt-bin
+          cp scripts/textlt-launcher.sh package/textlt/textlt
+          cp scripts/textlt-install-runtime-deps.sh package/textlt/textlt-install-runtime-deps.sh
+          chmod +x package/textlt/textlt package/textlt/textlt-bin package/textlt/textlt-install-runtime-deps.sh
+          cp -R themes package/textlt/themes
+          cp -R text_processors package/textlt/text_processors
+          test -f package/textlt/text_processors/default_text_parsers.json
+
+          if [ -d docs/registries ]; then
+            mkdir -p package/textlt/resources
+            cp -R docs/registries package/textlt/resources/
+          fi
+
+          tar -czf textlt-macos-x86_64.tar.gz -C package textlt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: textlt-macos-x64
+          path: textlt-macos-x86_64.tar.gz
+
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs:
       - build-linux
       - build-windows
+      - build-macos-arm64
+      - build-macos-x64
 
     steps:
       - uses: actions/download-artifact@v4
@@ -218,3 +314,5 @@ jobs:
             release-assets/textlt-linux-x64.tar.gz
             release-assets/TextLT-x86_64.AppImage
             release-assets/textlt-windows-x64.zip
+            release-assets/textlt-macos-arm64.tar.gz
+            release-assets/textlt-macos-x86_64.tar.gz

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(textlt VERSION 0.1.0 LANGUAGES C CXX)
+project(textlt VERSION 0.9.3 LANGUAGES C CXX)
 
 include(GNUInstallDirs)
 

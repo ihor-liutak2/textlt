@@ -3,9 +3,12 @@ set -euo pipefail
 
 VERSION="${1:-${TEXTLT_VERSION:-}}"
 if [[ -z "$VERSION" ]]; then
-  echo "Usage: $0 <version>" >&2
-  echo "Example: $0 vX.Y.Z" >&2
-  exit 1
+  VERSION="$(curl -fsSL https://api.github.com/repos/ihor-liutak2/textlt/releases/latest | grep '"tag_name"' | head -1 | sed -E 's/.*"tag_name":\s*"([^"]+)".*/\1/')"
+  if [[ -z "$VERSION" ]]; then
+    echo "Could not detect latest version. Pass it as argument: $0 vX.Y.Z" >&2
+    exit 1
+  fi
+  echo "Auto-detected latest version: $VERSION"
 fi
 if [[ "$VERSION" != v* ]]; then
   VERSION="v$VERSION"
@@ -13,7 +16,11 @@ fi
 
 REPO="${TEXTLT_REPO:-ihor-liutak2/textlt}"
 ARCH="$(uname -m)"
-ASSET="${TEXTLT_ASSET:-textlt-macos-$ARCH.tar.gz}"
+case "$ARCH" in
+  arm64|aarch64) ASSET="${TEXTLT_ASSET:-textlt-macos-arm64.tar.gz}" ;;
+  x86_64)        ASSET="${TEXTLT_ASSET:-textlt-macos-x86_64.tar.gz}" ;;
+  *)             ASSET="${TEXTLT_ASSET:-textlt-macos-$ARCH.tar.gz}" ;;
+esac
 INSTALL_ROOT="${TEXTLT_INSTALL_ROOT:-$HOME/.local/share/textlt}"
 APP_DIR="$INSTALL_ROOT/app"
 BIN_DIR="${TEXTLT_BIN_DIR:-$HOME/.local/bin}"
@@ -45,6 +52,9 @@ tar -xzf "$ARCHIVE" -C "$EXTRACT_DIR"
 
 EXE="$(find "$EXTRACT_DIR" -type f -name textlt -perm -111 | head -n 1)"
 if [[ -z "$EXE" ]]; then
+  EXE="$(find "$EXTRACT_DIR" -type f -name textlt | head -n 1)"
+fi
+if [[ -z "$EXE" ]]; then
   echo "textlt executable was not found in the extracted archive." >&2
   echo "If this release has no macOS archive yet, build TextLT from source." >&2
   exit 1
@@ -69,6 +79,7 @@ grep -qxF 'export PATH="$HOME/.local/bin:$PATH"' "$ZSHRC" || echo 'export PATH="
 
 export PATH="$HOME/.local/bin:$PATH"
 
-echo "TextLT installed to: $APP_DIR"
+echo ""
+echo "TextLT $VERSION installed to: $APP_DIR"
 echo "Run: textlt"
 textlt --help || true

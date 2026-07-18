@@ -44,6 +44,8 @@ elif command -v pacman >/dev/null 2>&1; then
   install_with pacman pacman -Sy --needed --noconfirm curl openssh
 elif command -v apk >/dev/null 2>&1; then
   install_with apk apk add --no-cache curl openssh-client
+elif command -v brew >/dev/null 2>&1; then
+  install_with brew brew install curl openssh
 else
   cat >&2 <<'MSG'
 Cannot detect a supported package manager.

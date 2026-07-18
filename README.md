@@ -42,47 +42,45 @@ Optimized to run perfectly in native Linux environments (**MX Linux**, **Ubuntu*
 
 ### Install from Release
 
+#### Linux (Debian, Ubuntu, Fedora, Arch, and others)
+
+One-liner install (downloads the latest release automatically):
+
+```bash
+curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-linux.sh | bash
+```
+
+Or install a specific version:
+
+```bash
+curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-linux.sh | bash -s -- v0.9.3
+```
+
+After installing, start the editor from any terminal with:
+
+```bash
+textlt
+textlt path/to/file.cpp
+```
+
+To uninstall TextLT from Linux:
+
+```bash
+rm -rf "$HOME/.local/share/textlt" "$HOME/.local/bin/textlt"
+```
+
 #### Windows
 
-Copy and paste this into PowerShell. Change `VERSION` to the release tag you want, for example `v0.5.0`.
+Open PowerShell and run:
 
 ```powershell
-$VERSION = "v0.5.0"
-$InstallRoot = "$env:LOCALAPPDATA\Programs\textlt"
-$Archive = "$env:TEMP\textlt-windows-x64.zip"
+irm https://ihor-liutak2.github.io/textlt/install-textlt-windows.ps1 | iex
+```
 
-New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
+Or install a specific version:
 
-Invoke-WebRequest `
-  "https://github.com/ihor-liutak2/textlt/releases/download/$VERSION/textlt-windows-x64.zip" `
-  -OutFile $Archive
-
-Remove-Item "$InstallRoot\*" -Recurse -Force -ErrorAction SilentlyContinue
-Expand-Archive -Force $Archive -DestinationPath $InstallRoot
-
-$Exe = Get-ChildItem $InstallRoot -Recurse -Filter textlt.exe | Select-Object -First 1
-
-if (-not $Exe) {
-    Write-Error "textlt.exe was not found in the extracted archive."
-    exit 1
-}
-
-$ExeDir = Split-Path $Exe.FullName
-
-@"
-@echo off
-cd /d "$ExeDir"
-"$($Exe.FullName)" %*
-"@ | Set-Content -Encoding ASCII "$InstallRoot\textlt.cmd"
-
-$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
-
-if ($UserPath -notlike "*$InstallRoot*") {
-    [Environment]::SetEnvironmentVariable("Path", "$UserPath;$InstallRoot", "User")
-}
-
-Write-Host "TextLT was installed to: $ExeDir"
-Write-Host "Open a new PowerShell window and run: textlt"
+```powershell
+$env:TEXTLT_VERSION = "v0.9.3"; irm https://ihor-liutak2.github.io/textlt/install-textlt-windows.ps1 | iex
 ```
 
 Open a new PowerShell window after installing so Windows reloads `PATH`, then start the editor with:
@@ -92,68 +90,34 @@ textlt
 textlt path\to\file.cpp
 ```
 
-To run it immediately without opening a new PowerShell window:
-
-```powershell
-& "$env:LOCALAPPDATA\Programs\textlt\textlt.cmd"
-```
-
 To uninstall TextLT from Windows:
 
 ```powershell
 Remove-Item "$env:LOCALAPPDATA\Programs\textlt" -Recurse -Force
 ```
 
-#### Linux
+#### macOS (Intel and Apple Silicon)
 
-Copy and paste this into Bash. Change `VERSION` to the release tag you want, for example `v0.5.0`.
+One-liner install (downloads the latest release automatically):
 
 ```bash
-VERSION="v0.5.0"
-INSTALL_ROOT="$HOME/.local/share/textlt"
-BIN_DIR="$HOME/.local/bin"
-ARCHIVE="/tmp/textlt-linux-x64.tar.gz"
-
-mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
-wget -O "$ARCHIVE" "https://github.com/ihor-liutak2/textlt/releases/download/${VERSION}/textlt-linux-x64.tar.gz"
-rm -rf "$INSTALL_ROOT"/*
-tar -xzf "$ARCHIVE" -C "$INSTALL_ROOT"
-
-EXE="$(find "$INSTALL_ROOT" -type f -name textlt -perm -111 | head -n 1)"
-
-if [ -z "$EXE" ]; then
-  echo "textlt executable was not found in the extracted archive." >&2
-  exit 1
-fi
-
-EXE_DIR="$(dirname "$EXE")"
-
-cat > "$BIN_DIR/textlt" <<EOF
-#!/usr/bin/env bash
-cd "$EXE_DIR" || exit 1
-exec "$EXE" "\$@"
-EOF
-
-chmod +x "$BIN_DIR/textlt" "$EXE"
-
-grep -qxF 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
-grep -qxF 'export COLORTERM=truecolor' "$HOME/.bashrc" || echo 'export COLORTERM=truecolor' >> "$HOME/.bashrc"
-grep -qxF 'export TERM=xterm-256color' "$HOME/.bashrc" || echo 'export TERM=xterm-256color' >> "$HOME/.bashrc"
-
-export PATH="$HOME/.local/bin:$PATH"
-export COLORTERM=truecolor
-export TERM=xterm-256color
-
-textlt
+curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-macos.sh | bash
 ```
 
-After this, start the editor from any terminal with:
+Or install a specific version:
 
 ```bash
+curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-macos.sh | bash -s -- v0.9.3
+```
+
+After installing, start the editor from any terminal with:
+
+```bash
+textlt
 textlt path/to/file.cpp
 ```
 
-To uninstall TextLT from Linux:
+To uninstall TextLT from macOS:
 
 ```bash
 rm -rf "$HOME/.local/share/textlt" "$HOME/.local/bin/textlt"

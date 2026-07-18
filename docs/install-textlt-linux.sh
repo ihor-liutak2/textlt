@@ -3,9 +3,16 @@ set -euo pipefail
 
 VERSION="${1:-${TEXTLT_VERSION:-}}"
 if [[ -z "$VERSION" ]]; then
-  echo "Usage: $0 <version>" >&2
-  echo "Example: $0 vX.Y.Z" >&2
-  exit 1
+  if command -v curl >/dev/null 2>&1; then
+    VERSION="$(curl -fsSL https://api.github.com/repos/ihor-liutak2/textlt/releases/latest | grep '"tag_name"' | head -1 | sed -E 's/.*"tag_name":\s*"([^"]+)".*/\1/')"
+  elif command -v wget >/dev/null 2>&1; then
+    VERSION="$(wget -qO- https://api.github.com/repos/ihor-liutak2/textlt/releases/latest | grep '"tag_name"' | head -1 | sed -E 's/.*"tag_name":\s*"([^"]+)".*/\1/')"
+  fi
+  if [[ -z "$VERSION" ]]; then
+    echo "Could not detect latest version. Pass it as argument: $0 vX.Y.Z" >&2
+    exit 1
+  fi
+  echo "Auto-detected latest version: $VERSION"
 fi
 if [[ "$VERSION" != v* ]]; then
   VERSION="v$VERSION"
@@ -50,6 +57,9 @@ tar -xzf "$ARCHIVE" -C "$EXTRACT_DIR"
 
 EXE="$(find "$EXTRACT_DIR" -type f -name textlt -perm -111 | head -n 1)"
 if [[ -z "$EXE" ]]; then
+  EXE="$(find "$EXTRACT_DIR" -type f -name textlt | head -n 1)"
+fi
+if [[ -z "$EXE" ]]; then
   echo "textlt executable was not found in the extracted archive." >&2
   exit 1
 fi
@@ -77,6 +87,7 @@ export PATH="$HOME/.local/bin:$PATH"
 export COLORTERM=truecolor
 export TERM=xterm-256color
 
-echo "TextLT installed to: $APP_DIR"
+echo ""
+echo "TextLT $VERSION installed to: $APP_DIR"
 echo "Run: textlt"
 textlt --help || true
