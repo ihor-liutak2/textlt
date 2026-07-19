@@ -31,5 +31,21 @@ int main() {
     error.clear();
     assert(!session.CaptureAiTransformTarget(false, blank, error));
     assert(error.find("empty paragraph") != std::string::npos);
+
+    textlt::DocumentSession visible_cursor;
+    visible_cursor.LoadContent(
+        "First paragraph\n\nSecond paragraph line one\nSecond paragraph line two\n\nThird paragraph",
+        "cursor-test.txt");
+    // The session fallback cursor intentionally remains in the first paragraph.
+    visible_cursor.SetCursorPosition(0, 0);
+    textlt::DocumentTransformTarget cursor_paragraph;
+    error.clear();
+    assert(visible_cursor.CaptureAiTransformTargetAt(
+        3, 7, false, cursor_paragraph, error));
+    assert(cursor_paragraph.original_text ==
+           "Second paragraph line one\nSecond paragraph line two");
+    assert(cursor_paragraph.start_row == 2);
+    assert(cursor_paragraph.end_row == 3);
+
     return 0;
 }

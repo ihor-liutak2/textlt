@@ -98,20 +98,27 @@ public:
     void JumpToLine(size_t line_number);
     void MoveCursorHome();
     void MoveCursorEnd();
+    void MoveCursorDocumentStart();
+    void MoveCursorDocumentEnd();
     void MoveCursorLeft();
     void MoveCursorRight();
     void MoveCursorUp();
     void MoveCursorDown();
     void MoveCursorToPreviousParagraph();
     void MoveCursorToNextParagraph();
+    void MoveCursorToPreviousParagraphSelectionBoundary();
+    void MoveCursorToNextParagraphSelectionBoundary();
     void MoveCursorToPreviousWord();
     void MoveCursorToNextWord();
     bool HasSelection() const;
+    bool SelectionAnchorModeActive() const;
     void BeginSelection();
     void ClearSelection();
     void SetSelectionAnchor(size_t row, size_t column);
     void SetSelectionActive(bool active);
     void SelectAll();
+    void SelectCurrentLine();
+    void ToggleSelectionAnchor();
     std::string GetSelectedText() const;
     bool IsPositionSelected(size_t x, size_t y) const;
     bool DeleteSelection();
@@ -162,6 +169,12 @@ public:
         const std::string& text,
         std::string& error);
     bool CaptureAiTransformTarget(
+        bool whole_document,
+        DocumentTransformTarget& target,
+        std::string& error) const;
+    bool CaptureAiTransformTargetAt(
+        size_t cursor_row,
+        size_t cursor_column,
         bool whole_document,
         DocumentTransformTarget& target,
         std::string& error) const;

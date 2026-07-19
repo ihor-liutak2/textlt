@@ -245,6 +245,7 @@ bool DocumentSession::MoveLinesUp() {
     SelectionState().anchor_y = std::min(SelectionState().anchor_y, lines.size() - 1);
     SelectionState().anchor_x = std::min(SelectionState().anchor_x, lines[SelectionState().anchor_y].size());
     SelectionState().active = true;
+    CursorState().selection_anchor_mode = false;
     buffer.MarkDirty();
     return true;
 }
@@ -290,6 +291,7 @@ bool DocumentSession::MoveLinesDown() {
     SelectionState().anchor_y = std::min(SelectionState().anchor_y, lines.size() - 1);
     SelectionState().anchor_x = std::min(SelectionState().anchor_x, lines[SelectionState().anchor_y].size());
     SelectionState().active = true;
+    CursorState().selection_anchor_mode = false;
     buffer.MarkDirty();
     return true;
 }
@@ -330,6 +332,7 @@ bool DocumentSession::DuplicateLines() {
     lines.insert(lines.begin() + static_cast<std::ptrdiff_t>(end_row + 1),
                  copied_lines.begin(), copied_lines.end());
     SelectionState().active = true;
+    CursorState().selection_anchor_mode = false;
     buffer.MarkDirty();
     return true;
 }

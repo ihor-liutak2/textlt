@@ -121,13 +121,15 @@ AiActionsModalContent::AiActionsModalContent(
     CaptureAiTargetCallback capture_target,
     ApplyAiTargetCallback apply_target,
     std::function<void()> request_redraw,
-    std::function<void(const std::string&)> notify_status)
+    std::function<void(const std::string&)> notify_status,
+    std::function<void(bool, const std::string&)> quick_completion)
     : theme_(theme),
       config_(config),
       capture_target_(std::move(capture_target)),
       apply_target_(std::move(apply_target)),
       request_redraw_(std::move(request_redraw)),
       notify_status_(std::move(notify_status)),
+      quick_completion_(std::move(quick_completion)),
       languages_(SupportedLanguages()) {
     ftxui::InputOption source_option;
     source_option.multiline = false;
@@ -234,6 +236,7 @@ AiActionsModalContent::AiActionsModalContent(
 }
 
 AiActionsModalContent::~AiActionsModalContent() {
+    StopQuickReadinessCheck();
     Stop();
     PersistOptions();
     if (worker_.joinable()) {
@@ -267,6 +270,114 @@ void AiActionsModalContent::RefreshFromConfig() {
     persisted_whole_document_ = whole_document_;
     FilterLanguages(true);
     FilterLanguages(false);
+}
+
+void AiActionsModalContent::StopQuickReadinessCheck() {
+    quick_readiness_cancel_.store(true);
+    quick_readiness_control_.RequestStop();
+    if (quick_readiness_worker_.joinable()) {
+        quick_readiness_worker_.join();
+    }
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    quick_readiness_checking_ = false;
+}
+
+void AiActionsModalContent::StartQuickReadinessCheck() {
+    StopQuickReadinessCheck();
+    if (!config_) {
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            quick_ready_ = false;
+            quick_readiness_status_ = "Not ready — AI settings are unavailable";
+        }
+        RequestRedraw();
+        return;
+    }
+
+    AiBackendSettings settings;
+    settings.server_url = config_->ai_server_url;
+    settings.provider = AiBackend::ProviderFromConfig(config_->ai_provider);
+    settings.selected_model_key = config_->ai_selected_model_key;
+    settings.timeout_seconds = 8;
+
+    if (settings.selected_model_key.empty()) {
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            quick_ready_ = false;
+            quick_readiness_status_ = "Not ready — select a model in AI Settings";
+        }
+        RequestRedraw();
+        return;
+    }
+
+    quick_readiness_cancel_.store(false);
+    quick_readiness_control_.Reset();
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        quick_readiness_checking_ = true;
+        quick_ready_ = false;
+        quick_readiness_status_ = "Checking AI backend...";
+    }
+    RequestRedraw();
+
+    quick_readiness_worker_ = std::thread([this, settings] {
+        const AiConnectionResult result = AiBackend(settings).CheckSelectedModelReady(
+            &quick_readiness_cancel_, &quick_readiness_control_);
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            quick_readiness_checking_ = false;
+            if (quick_readiness_cancel_.load()) {
+                quick_ready_ = false;
+                quick_readiness_status_ = "Readiness check stopped";
+            } else if (result.success) {
+                quick_ready_ = true;
+                quick_readiness_status_ = "Ready — " + result.provider_label;
+            } else {
+                quick_ready_ = false;
+                quick_readiness_status_ = "Not ready — " +
+                    (result.error.empty() ? std::string("backend check failed") : result.error);
+            }
+        }
+        RequestRedraw();
+    });
+}
+
+void AiActionsModalContent::PrepareQuickActions() {
+    RefreshFromConfig();
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        if (busy_) {
+            return;
+        }
+    }
+    StartQuickReadinessCheck();
+}
+
+AiQuickStatusSnapshot AiActionsModalContent::QuickStatus() const {
+    AiQuickStatusSnapshot snapshot;
+    snapshot.model_label = SelectedModelLabel();
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    snapshot.busy = busy_;
+    snapshot.stopping = operation_state_ == OperationState::Stopping;
+    snapshot.checking = quick_readiness_checking_;
+    snapshot.ready = quick_ready_ && !quick_readiness_checking_;
+    snapshot.active_action = active_action_;
+    if (snapshot.busy) {
+        if (snapshot.stopping) {
+            snapshot.status_label = "Stopping AI operation...";
+        } else {
+            snapshot.status_label = active_action_ == AiActionType::Translate
+                ? "Working — translating current paragraph"
+                : "Working — editing current paragraph";
+        }
+    } else {
+        snapshot.status_label = quick_readiness_status_;
+    }
+    return snapshot;
+}
+
+void AiActionsModalContent::StopQuickAction() {
+    Stop();
 }
 
 void AiActionsModalContent::FilterLanguages(bool source) {
@@ -447,6 +558,7 @@ bool AiActionsModalContent::StartAction(
             return false;
         }
     }
+    StopQuickReadinessCheck();
     if (!PersistOptions()) {
         std::lock_guard<std::mutex> lock(state_mutex_);
         if (error_out) {
@@ -497,6 +609,7 @@ bool AiActionsModalContent::StartAction(
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         busy_ = true;
+        active_action_ = action;
         operation_state_ = OperationState::Starting;
         discard_result_ = false;
         pending_result_ = false;
@@ -512,14 +625,19 @@ bool AiActionsModalContent::StartAction(
             request,
             &cancel_requested_,
             [this](const std::string& generated) {
+                bool changed = false;
                 {
                     std::lock_guard<std::mutex> lock(state_mutex_);
-                    if (operation_state_ != OperationState::Stopping) {
+                    if (operation_state_ != OperationState::Stopping &&
+                        !cancel_requested_.load()) {
                         operation_state_ = OperationState::Generating;
+                        progress_text_ = TailUtf8(generated, 120);
+                        changed = true;
                     }
-                    progress_text_ = TailUtf8(generated, 120);
                 }
-                RequestRedraw();
+                if (changed) {
+                    RequestRedraw();
+                }
             },
             &command_control_);
         {
@@ -533,6 +651,10 @@ bool AiActionsModalContent::StartAction(
             } else if (cancel_requested_.load()) {
                 status_ = "AI operation stopped.";
                 progress_text_ = "The model process was terminated.";
+                if (quick_action) {
+                    quick_ready_ = true;
+                    quick_readiness_status_ = "Stopped — ready to run again";
+                }
             }
             busy_ = false;
             operation_state_ = OperationState::Idle;
@@ -550,6 +672,16 @@ bool AiActionsModalContent::StartQuickAction(
         if (busy_) {
             error = "An AI request is already running.";
             status_ = error;
+            return false;
+        }
+        if (quick_readiness_checking_) {
+            error = "AI readiness is still being checked.";
+            return false;
+        }
+        if (!quick_ready_) {
+            error = quick_readiness_status_.empty()
+                ? "AI is not ready."
+                : quick_readiness_status_;
             return false;
         }
     }
@@ -607,9 +739,16 @@ void AiActionsModalContent::ApplyPendingResult() {
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
             status_ = message;
+            if (quick_action) {
+                quick_readiness_status_ = "Action failed — " + message;
+            }
         }
-        if (quick_action && notify_status_) {
-            notify_status_(message);
+        if (quick_action) {
+            if (quick_completion_) {
+                quick_completion_(false, message);
+            } else if (notify_status_) {
+                notify_status_(message);
+            }
         }
     };
 
@@ -634,8 +773,12 @@ void AiActionsModalContent::ApplyPendingResult() {
             (target.range.whole_document ? "the whole document." : "the current paragraph.");
         completed_status = status_;
     }
-    if (quick_action && notify_status_) {
-        notify_status_(completed_status);
+    if (quick_action) {
+        if (quick_completion_) {
+            quick_completion_(true, completed_status);
+        } else if (notify_status_) {
+            notify_status_(completed_status);
+        }
     }
 }
 
@@ -851,7 +994,8 @@ AiActionsModal::AiActionsModal(
     CaptureAiTargetCallback capture_target,
     ApplyAiTargetCallback apply_target,
     std::function<void()> request_redraw,
-    std::function<void(const std::string&)> notify_status)
+    std::function<void(const std::string&)> notify_status,
+    std::function<void(bool, const std::string&)> quick_completion)
     : theme_(theme) {
     content_ = std::make_shared<AiActionsModalContent>(
         theme_,
@@ -859,7 +1003,8 @@ AiActionsModal::AiActionsModal(
         std::move(capture_target),
         std::move(apply_target),
         std::move(request_redraw),
-        std::move(notify_status));
+        std::move(notify_status),
+        std::move(quick_completion));
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
     modal_->SetFooterButtons({
         {"Info", [this] { content_->ShowInfo(); }, ButtonRole::Default},
@@ -905,6 +1050,22 @@ bool AiActionsModal::OnEvent(ftxui::Event event) {
 
 bool AiActionsModal::StartQuickAction(AiActionType action, std::string& error) {
     return content_ && content_->StartQuickAction(action, error);
+}
+
+void AiActionsModal::PrepareQuickActions() {
+    if (content_) {
+        content_->PrepareQuickActions();
+    }
+}
+
+AiQuickStatusSnapshot AiActionsModal::QuickStatus() const {
+    return content_ ? content_->QuickStatus() : AiQuickStatusSnapshot{};
+}
+
+void AiActionsModal::StopQuickAction() {
+    if (content_) {
+        content_->StopQuickAction();
+    }
 }
 
 void AiActionsModal::Poll() {

@@ -24,8 +24,16 @@ private:
         Down,
         WordLeft,
         WordRight,
+        Home,
+        End,
+        DocumentStart,
+        DocumentEnd,
+        PageUp,
+        PageDown,
         ParagraphUp,
         ParagraphDown,
+        ParagraphSelectionUp,
+        ParagraphSelectionDown,
     };
 
     static std::shared_ptr<EditorComponent> ActiveEditorPtr(TextltApp& app);

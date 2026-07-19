@@ -112,6 +112,17 @@ void TextltApp::ToggleSidebarOpenedProject() {
 }
 
 
+void TextltApp::CopySidebarSelectedPath() {
+    const auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
+    if (!sidebar) {
+        active_action_ = "Project sidebar is unavailable";
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+    sidebar->CopySelectedProjectPath();
+}
+
+
 void TextltApp::RefreshProjectSidebar() {
     auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
     sidebar->ShowProject();

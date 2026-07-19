@@ -18,86 +18,7 @@ enum class NavigationAction {
     End,
     PageUp,
     PageDown,
-    ParagraphUp,
-    ParagraphDown,
-    WordLeft,
-    WordRight,
 };
-
-bool IsShiftNavigationEvent(const ftxui::Event& event, NavigationAction* action) {
-    const std::string& input = event.input();
-
-    if (input == "\x1B[1;2D") {
-        *action = NavigationAction::Left;
-        return true;
-    }
-    if (input == "\x1B[1;2C") {
-        *action = NavigationAction::Right;
-        return true;
-    }
-    if (input == "Shift+Ctrl+Left" ||
-        input == "Ctrl+Shift+Left" ||
-        input == "\x1B[1;6D" ||
-        input == "\x1B[1;10D" ||
-        input == "\x1B[27;6;68~" ||
-        input == "\x1B[68;6u") {
-        *action = NavigationAction::WordLeft;
-        return true;
-    }
-    if (input == "Shift+Ctrl+Right" ||
-        input == "Ctrl+Shift+Right" ||
-        input == "\x1B[1;6C" ||
-        input == "\x1B[1;10C" ||
-        input == "\x1B[27;6;67~" ||
-        input == "\x1B[67;6u") {
-        *action = NavigationAction::WordRight;
-        return true;
-    }
-    if (input == "Shift+Ctrl+Up" ||
-        input == "Ctrl+Shift+Up" ||
-        input == "\x1B[1;6A" ||
-        input == "\x1B[1;10A" ||
-        input == "\x1B[27;6;65~" ||
-        input == "\x1B[65;6u") {
-        *action = NavigationAction::ParagraphUp;
-        return true;
-    }
-    if (input == "Shift+Ctrl+Down" ||
-        input == "Ctrl+Shift+Down" ||
-        input == "\x1B[1;6B" ||
-        input == "\x1B[1;10B" ||
-        input == "\x1B[27;6;66~" ||
-        input == "\x1B[66;6u") {
-        *action = NavigationAction::ParagraphDown;
-        return true;
-    }
-    if (input == "\x1B[1;2A") {
-        *action = NavigationAction::Up;
-        return true;
-    }
-    if (input == "\x1B[1;2B") {
-        *action = NavigationAction::Down;
-        return true;
-    }
-    if (input == "\x1B[1;2H" || input == "\x1B[7;2~") {
-        *action = NavigationAction::Home;
-        return true;
-    }
-    if (input == "\x1B[1;2~" || input == "\x1B[2H") {
-        *action = NavigationAction::Home;
-        return true;
-    }
-    if (input == "\x1B[1;2F" || input == "\x1B[8;2~") {
-        *action = NavigationAction::End;
-        return true;
-    }
-    if (input == "\x1B[4;2~" || input == "\x1B[2F") {
-        *action = NavigationAction::End;
-        return true;
-    }
-
-    return false;
-}
 
 bool IsNavigationEvent(const ftxui::Event& event, NavigationAction* action) {
     if (event == ftxui::Event::ArrowLeft) {
@@ -140,22 +61,7 @@ bool IsNavigationEvent(const ftxui::Event& event, NavigationAction* action) {
         *action = NavigationAction::PageDown;
         return true;
     }
-    if (event == ftxui::Event::ArrowUpCtrl ||
-        event.input() == "Ctrl+Up" ||
-        event.input() == "\x1B[1;5A" ||
-        event.input() == "\x1B[27;5;65~" ||
-        event.input() == "\x1B[65;5u") {
-        *action = NavigationAction::ParagraphUp;
-        return true;
-    }
-    if (event == ftxui::Event::ArrowDownCtrl ||
-        event.input() == "Ctrl+Down" ||
-        event.input() == "\x1B[1;5B" ||
-        event.input() == "\x1B[27;5;66~" ||
-        event.input() == "\x1B[66;5u") {
-        *action = NavigationAction::ParagraphDown;
-        return true;
-    }
+
 
     return false;
 }
@@ -370,7 +276,7 @@ bool EditorInputController::HandleEvent(EditorComponent& editor, ftxui::Event ev
     }
 
     NavigationAction action = NavigationAction::Left;
-    const bool extend_selection = false;
+    const bool extend_selection = editor.SelectionAnchorModeActive();
     if (IsNavigationEvent(event, &action)) {
         editor.EndTypingGroup();
         if (extend_selection) {
@@ -386,10 +292,6 @@ bool EditorInputController::HandleEvent(EditorComponent& editor, ftxui::Event ev
             case NavigationAction::End: editor.MoveCursorEnd(); break;
             case NavigationAction::PageUp: editor.MoveCursorPageUp(); break;
             case NavigationAction::PageDown: editor.MoveCursorPageDown(); break;
-            case NavigationAction::ParagraphUp: editor.MoveCursorToPreviousParagraph(); break;
-            case NavigationAction::ParagraphDown: editor.MoveCursorToNextParagraph(); break;
-            case NavigationAction::WordLeft: editor.MoveCursorToPreviousWord(); break;
-            case NavigationAction::WordRight: editor.MoveCursorToNextWord(); break;
         }
 
         editor.ClampCursorToBuffer();

@@ -21,6 +21,8 @@ void DocumentSession::LoadContent(const std::string& content, std::filesystem::p
     SetPath(std::move(p));
     CursorRow() = 0;
     CursorCol() = 0;
+    SelectionState() = {};
+    CursorState().selection_anchor_mode = false;
     is_dirty = false;
     history.Clear();
     EnsureValidBuffer();

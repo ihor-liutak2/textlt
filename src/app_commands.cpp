@@ -73,6 +73,7 @@ void TextltApp::InitializeCommands() {
     add("sidebar.show_favorites", "Favorites Sidebar", "Options", "", [this] { ShowFavoritesSidebar(); });
     add("sidebar.show_opened_files", "Opened Files Sidebar", "Options", "", [this] { ShowOpenedFilesSidebar(); });
     add("sidebar.toggle_opened_project", "Toggle File Explorer Tab", "Options", "", [this] { ToggleSidebarOpenedProject(); });
+    add("sidebar.copy_selected_path", "Copy Selected Project Path", "Options", "", [this] { CopySidebarSelectedPath(); });
     add("editor.toggle_smart_word_wrap", "Toggle Smart Word Wrap", "Options", "", [this] { CommandEditorToggleSmartWordWrap(); });
     add("editor.toggle_syntax_highlighting", "Toggle Syntax Highlighting", "Options", "", [this] { CommandEditorToggleSyntaxHighlighting(); });
     add("editor.toggle_auto_pairing", "Toggle Auto Pairing", "Options", "", [this] { CommandEditorToggleAutoPairing(); });

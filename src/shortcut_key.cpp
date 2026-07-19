@@ -21,6 +21,25 @@ bool EqualsIgnoreCase(const std::string& left, const std::string& right) {
     return UppercaseAscii(left) == UppercaseAscii(right);
 }
 
+
+std::string DisplayKeyName(const std::string& key) {
+    const std::string upper = UppercaseAscii(key);
+    if (upper == "/") return "Slash";
+    if (upper == "ESCAPE") return "Escape";
+    if (upper == "LEFT") return "Left";
+    if (upper == "RIGHT") return "Right";
+    if (upper == "UP") return "Up";
+    if (upper == "DOWN") return "Down";
+    if (upper == "HOME") return "Home";
+    if (upper == "END") return "End";
+    if (upper == "PAGEUP") return "PageUp";
+    if (upper == "PAGEDOWN") return "PageDown";
+    if (upper == "DELETE") return "Delete";
+    if (upper == "BACKSPACE") return "Backspace";
+    if (upper == "TAB") return "Tab";
+    return upper;
+}
+
 bool IsLetterKey(const std::string& key) {
     return key.size() == 1 && key[0] >= 'A' && key[0] <= 'Z';
 }
@@ -89,6 +108,10 @@ bool MatchesModifiedSpecialKey(const ShortcutKey& shortcut, const ftxui::Event& 
     const std::string key = UppercaseAscii(shortcut.key);
     const ShortcutKeyModifier modifier = shortcut.modifier;
 
+    if (modifier == ShortcutKeyModifier::None && key == "ESCAPE") {
+        return event == ftxui::Event::Escape || MatchesSpecialInput(event, {"Escape", "Esc"});
+    }
+
     if (modifier == ShortcutKeyModifier::Ctrl && key == "LEFT") {
         return event == ftxui::Event::ArrowLeftCtrl ||
             MatchesSpecialInput(event, {"Ctrl+Left", "\x1B[1;5D", "\x1B[27;5;68~", "\x1B[68;5u"});
@@ -104,6 +127,12 @@ bool MatchesModifiedSpecialKey(const ShortcutKey& shortcut, const ftxui::Event& 
     if (modifier == ShortcutKeyModifier::Ctrl && key == "DOWN") {
         return event == ftxui::Event::ArrowDownCtrl ||
             MatchesSpecialInput(event, {"Ctrl+Down", "\x1B[1;5B", "\x1B[27;5;66~", "\x1B[66;5u"});
+    }
+    if (modifier == ShortcutKeyModifier::Ctrl && key == "HOME") {
+        return MatchesSpecialInput(event, {"Ctrl+Home", "\x1B[1;5H", "\x1B[7;5~", "\x1B[1;5~", "\x1B[5H"});
+    }
+    if (modifier == ShortcutKeyModifier::Ctrl && key == "END") {
+        return MatchesSpecialInput(event, {"Ctrl+End", "\x1B[1;5F", "\x1B[8;5~", "\x1B[4;5~", "\x1B[5F"});
     }
     if (modifier == ShortcutKeyModifier::Ctrl && key == "DELETE") {
         return MatchesSpecialInput(event, {"Ctrl+Delete", "\x1B[3;5~", "\x1B[3;5u", "\x1B[27;5;3~"});
@@ -147,10 +176,22 @@ bool MatchesModifiedSpecialKey(const ShortcutKey& shortcut, const ftxui::Event& 
     if (modifier == ShortcutKeyModifier::Shift && key == "END") {
         return MatchesSpecialInput(event, {"Shift+End", "\x1B[1;2F", "\x1B[8;2~", "\x1B[4;2~", "\x1B[2F"});
     }
+    if (modifier == ShortcutKeyModifier::Shift && key == "PAGEUP") {
+        return MatchesSpecialInput(event, {"Shift+PageUp", "\x1B[5;2~"});
+    }
+    if (modifier == ShortcutKeyModifier::Shift && key == "PAGEDOWN") {
+        return MatchesSpecialInput(event, {"Shift+PageDown", "\x1B[6;2~"});
+    }
     if (modifier == ShortcutKeyModifier::Shift && key == "TAB") {
         return MatchesSpecialInput(event, {"Shift+Tab", "\x1B[Z", "\x1B[1;2Z"});
     }
 
+    if (modifier == ShortcutKeyModifier::CtrlShift && key == "HOME") {
+        return MatchesSpecialInput(event, {"Ctrl+Shift+Home", "Shift+Ctrl+Home", "\x1B[1;6H", "\x1B[7;6~", "\x1B[1;6~", "\x1B[6H"});
+    }
+    if (modifier == ShortcutKeyModifier::CtrlShift && key == "END") {
+        return MatchesSpecialInput(event, {"Ctrl+Shift+End", "Shift+Ctrl+End", "\x1B[1;6F", "\x1B[8;6~", "\x1B[4;6~", "\x1B[6F"});
+    }
     if (modifier == ShortcutKeyModifier::CtrlShift && key == "LEFT") {
         return MatchesSpecialInput(event, {"Ctrl+Shift+Left", "Shift+Ctrl+Left", "\x1B[1;6D", "\x1B[1;10D", "\x1B[27;6;68~", "\x1B[68;6u"});
     }
@@ -186,6 +227,7 @@ std::string ShortcutContextStoragePrefix(ShortcutContext context) {
 
 std::string ShortcutModifierName(ShortcutKeyModifier modifier) {
     switch (modifier) {
+        case ShortcutKeyModifier::None: return "None";
         case ShortcutKeyModifier::Ctrl: return "Ctrl";
         case ShortcutKeyModifier::Alt: return "Alt";
         case ShortcutKeyModifier::Shift: return "Shift";
@@ -198,14 +240,22 @@ std::string ShortcutModifierName(ShortcutKeyModifier modifier) {
 
 std::vector<ShortcutKeyModifier> ShortcutModifierChoices() {
     return {
+        ShortcutKeyModifier::None,
         ShortcutKeyModifier::Ctrl,
         ShortcutKeyModifier::Alt,
+        ShortcutKeyModifier::Shift,
         ShortcutKeyModifier::CtrlShift,
         ShortcutKeyModifier::AltShift,
     };
 }
 
 std::vector<std::string> ShortcutKeyChoices(ShortcutKeyModifier modifier) {
+    if (modifier == ShortcutKeyModifier::None) {
+        return {"Escape"};
+    }
+    if (modifier == ShortcutKeyModifier::Shift) {
+        return {"Left", "Right", "Up", "Down", "Home", "End", "PageUp", "PageDown", "Tab"};
+    }
     std::vector<std::string> keys;
     keys.reserve(48);
     for (char key = 'A'; key <= 'Z'; ++key) {
@@ -247,6 +297,10 @@ std::optional<ShortcutKey> ParseShortcutKey(const std::string& shortcut) {
         return ch == ' ';
     }), normalized.end());
 
+    if (EqualsIgnoreCase(normalized, "Escape") || EqualsIgnoreCase(normalized, "Esc")) {
+        return ShortcutKey{ShortcutKeyModifier::None, "ESCAPE"};
+    }
+
     const std::vector<std::pair<std::string, ShortcutKeyModifier>> prefixes = {
         {"Ctrl+Shift+", ShortcutKeyModifier::CtrlShift},
         {"Shift+Ctrl+", ShortcutKeyModifier::CtrlShift},
@@ -283,8 +337,10 @@ std::string ShortcutKeyToString(const ShortcutKey& shortcut) {
     if (shortcut.empty()) {
         return "";
     }
-    return ShortcutModifierName(shortcut.modifier) + "+" +
-        (shortcut.key == "/" ? std::string("Slash") : shortcut.key);
+    const std::string key = DisplayKeyName(shortcut.key);
+    return shortcut.modifier == ShortcutKeyModifier::None
+        ? key
+        : ShortcutModifierName(shortcut.modifier) + "+" + key;
 }
 
 bool ShortcutKeysEqual(const ShortcutKey& left, const ShortcutKey& right) {
@@ -297,6 +353,9 @@ bool ShortcutKeyMatchesEvent(const ShortcutKey& shortcut, const ftxui::Event& ev
     }
 
     const std::string key = UppercaseAscii(shortcut.key);
+    if (shortcut.modifier == ShortcutKeyModifier::None) {
+        return MatchesModifiedSpecialKey(shortcut, event);
+    }
     if (IsLetterKey(key)) {
         const char letter = static_cast<char>(std::tolower(static_cast<unsigned char>(key[0])));
         if (shortcut.modifier == ShortcutKeyModifier::Ctrl) {

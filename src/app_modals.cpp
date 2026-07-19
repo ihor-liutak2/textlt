@@ -54,6 +54,8 @@ std::vector<std::string> BuiltInHelpLines() {
         "  Arrow Keys    Move the cursor",
         "  Home          Move to the start of the current line",
         "  End           Move to the end of the current line",
+        "  Ctrl+Home     Move to the start of the document",
+        "  Ctrl+End      Move to the end of the document",
         "  Page Up       Move one page up",
         "  Page Down     Move one page down",
         "  Ctrl+Left     Jump to the previous word",
@@ -81,7 +83,15 @@ std::vector<std::string> BuiltInHelpLines() {
         "",
         "Selection & Clipboard",
         "  Shift+Arrows  Extend the active text selection",
+        "  Shift+Home/End Select to the start/end of the line",
+        "  Shift+PageUp/Down Select one page up/down",
+        "  Ctrl+Shift+Home/End Select to document start/end",
+        "  Ctrl+Shift+Up/Down Select by paragraph boundary",
+        "  Shift+Click   Select from the cursor to the clicked position",
         "  Mouse Drag    Select text inside the editor viewport",
+        "  Double Click  Select a word",
+        "  Triple Click  Select a logical line",
+        "  Escape        Clear the active selection",
         "  Ctrl+A        Select all text",
         "  Ctrl+C        Copy selection or current line",
         "  Ctrl+X        Cut selection or current line",
@@ -92,6 +102,7 @@ std::vector<std::string> BuiltInHelpLines() {
         "  Alt+H         Open Text-to-Speech",
         "  Alt+S         Open TTS Settings",
         "  Alt+M         Open Quick AI",
+        "  1 / 2 / 3     Quick AI Translate / Edit / Stop",
         "  Alt+J         Open AI Actions",
         "  Tools > AI Settings opens AI Settings",
         "",
@@ -104,6 +115,7 @@ std::vector<std::string> BuiltInHelpLines() {
         "  O             Open the Opened Files sidebar",
         "  F             Open the Favorites sidebar",
         "  P             Open the Project sidebar",
+        "  Project > Copy Path copies the selected file or directory path",
         "  F1            Open this help window",
         "  F2            Open the File menu",
         "  F3            Open the Edit menu",
@@ -662,6 +674,7 @@ void TextltApp::OpenAiQuickActionsModal() {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
+    ai_actions_modal_.PrepareQuickActions();
     ai_quick_actions_modal_.Open();
     active_action_ = "Opened Quick AI";
     SetActiveLayer(UiLayer::AiQuickActions);

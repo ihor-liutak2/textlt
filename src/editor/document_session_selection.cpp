@@ -11,8 +11,12 @@ bool DocumentSession::HasSelection() const {
         (CursorCol() != SelectionState().anchor_x || CursorRow() != SelectionState().anchor_y);
 }
 
+bool DocumentSession::SelectionAnchorModeActive() const {
+    return CursorState().selection_anchor_mode;
+}
+
 void DocumentSession::BeginSelection() {
-    if (!SelectionState().active) {
+    if (!HasSelection()) {
         SelectionState().anchor_x = CursorCol();
         SelectionState().anchor_y = CursorRow();
     }
@@ -21,6 +25,7 @@ void DocumentSession::BeginSelection() {
 
 void DocumentSession::ClearSelection() {
     ClampCursor();
+    CursorState().selection_anchor_mode = false;
     SelectionState().active = false;
     SelectionState().anchor_x = CursorCol();
     SelectionState().anchor_y = CursorRow();
@@ -33,16 +38,40 @@ void DocumentSession::SetSelectionAnchor(size_t row, size_t column) {
 }
 
 void DocumentSession::SetSelectionActive(bool active) {
+    CursorState().selection_anchor_mode = false;
     SelectionState().active = active;
 }
 
 void DocumentSession::SelectAll() {
     EnsureValidBuffer();
+    CursorState().selection_anchor_mode = false;
     SelectionState().anchor_x = 0;
     SelectionState().anchor_y = 0;
     CursorRow() = lines.size() - 1;
     CursorCol() = lines[CursorRow()].size();
     SelectionState().active = true;
+}
+
+void DocumentSession::SelectCurrentLine() {
+    EnsureValidBuffer();
+    CursorState().selection_anchor_mode = false;
+    ClampCursor();
+    SelectionState().anchor_y = CursorRow();
+    SelectionState().anchor_x = 0;
+    CursorCol() = lines[CursorRow()].size();
+    SelectionState().active = CursorCol() != 0;
+}
+
+void DocumentSession::ToggleSelectionAnchor() {
+    if (CursorState().selection_anchor_mode) {
+        ClearSelection();
+        return;
+    }
+    ClampCursor();
+    SelectionState().anchor_x = CursorCol();
+    SelectionState().anchor_y = CursorRow();
+    SelectionState().active = true;
+    CursorState().selection_anchor_mode = true;
 }
 
 std::string DocumentSession::GetSelectedText() const {

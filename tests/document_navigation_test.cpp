@@ -108,5 +108,109 @@ int main() {
     assert(!whole_document_processor.Undo());
 
 
+    DocumentSession selection_navigation;
+    EditorCursorState selection_cursor;
+    selection_navigation.SetActiveCursorState(&selection_cursor);
+    selection_navigation.lines = {
+        "first line",
+        "",
+        "second paragraph one",
+        "second paragraph two",
+        "",
+        "third paragraph",
+    };
+
+    selection_navigation.CursorRow() = 2;
+    selection_navigation.CursorCol() = 7;
+    selection_navigation.BeginSelection();
+    selection_navigation.MoveCursorHome();
+    assert(selection_navigation.GetSelectedText() == "second ");
+    selection_navigation.MoveCursorToPreviousParagraphSelectionBoundary();
+    assert(selection_navigation.CursorRow() == 0);
+    assert(selection_navigation.CursorCol() == 0);
+    assert(selection_navigation.HasSelection());
+
+    selection_navigation.ClearSelection();
+    selection_navigation.CursorRow() = 2;
+    selection_navigation.CursorCol() = 7;
+    selection_navigation.BeginSelection();
+    selection_navigation.MoveCursorEnd();
+    assert(selection_navigation.GetSelectedText() == "paragraph one");
+
+    selection_navigation.ClearSelection();
+    selection_navigation.CursorRow() = 2;
+    selection_navigation.CursorCol() = 7;
+    selection_navigation.BeginSelection();
+    selection_navigation.MoveCursorToPreviousParagraphSelectionBoundary();
+    assert(selection_navigation.CursorRow() == 2);
+    assert(selection_navigation.CursorCol() == 0);
+    assert(selection_navigation.GetSelectedText() == "second ");
+
+    selection_navigation.ClearSelection();
+    selection_navigation.CursorRow() = 2;
+    selection_navigation.CursorCol() = 7;
+    selection_navigation.BeginSelection();
+    selection_navigation.MoveCursorToNextParagraphSelectionBoundary();
+    assert(selection_navigation.CursorRow() == 3);
+    assert(selection_navigation.CursorCol() == std::string("second paragraph two").size());
+    selection_navigation.MoveCursorToNextParagraphSelectionBoundary();
+    assert(selection_navigation.CursorRow() == 5);
+    assert(selection_navigation.CursorCol() == std::string("third paragraph").size());
+
+    selection_navigation.ClearSelection();
+    selection_navigation.CursorRow() = 3;
+    selection_navigation.CursorCol() = 4;
+    selection_navigation.BeginSelection();
+    selection_navigation.MoveCursorDocumentStart();
+    assert(selection_navigation.CursorRow() == 0);
+    assert(selection_navigation.CursorCol() == 0);
+    assert(selection_navigation.HasSelection());
+
+    selection_navigation.ClearSelection();
+    selection_navigation.CursorRow() = 2;
+    selection_navigation.CursorCol() = 3;
+    selection_navigation.BeginSelection();
+    selection_navigation.MoveCursorDocumentEnd();
+    assert(selection_navigation.CursorRow() == 5);
+    assert(selection_navigation.CursorCol() == std::string("third paragraph").size());
+    assert(selection_navigation.HasSelection());
+
+    selection_navigation.ClearSelection();
+    selection_navigation.CursorRow() = 3;
+    selection_navigation.CursorCol() = 4;
+    selection_navigation.SelectCurrentLine();
+    assert(selection_navigation.GetSelectedText() == "second paragraph two");
+
+    selection_navigation.ClearSelection();
+    selection_navigation.CursorRow() = 5;
+    selection_navigation.CursorCol() = 5;
+    selection_navigation.ToggleSelectionAnchor();
+    assert(selection_navigation.SelectionAnchorModeActive());
+    assert(!selection_navigation.HasSelection());
+    selection_navigation.BeginSelection();
+    selection_navigation.MoveCursorEnd();
+    assert(selection_navigation.GetSelectedText() == " paragraph");
+    selection_navigation.ToggleSelectionAnchor();
+    assert(!selection_navigation.SelectionAnchorModeActive());
+    assert(!selection_navigation.HasSelection());
+
+
+    DocumentSession selection_reset;
+    EditorCursorState selection_reset_cursor;
+    selection_reset.SetActiveCursorState(&selection_reset_cursor);
+    selection_reset.LoadContent("alpha\nbeta", "selection-reset.txt");
+    selection_reset.SetCursorPosition(0, 2);
+    selection_reset.ToggleSelectionAnchor();
+    assert(selection_reset.SelectionAnchorModeActive());
+    selection_reset.Reset();
+    assert(!selection_reset.SelectionAnchorModeActive());
+    assert(!selection_reset.HasSelection());
+
+    selection_reset.ToggleSelectionAnchor();
+    assert(selection_reset.SelectionAnchorModeActive());
+    selection_reset.LoadContent("new content", "selection-load.txt");
+    assert(!selection_reset.SelectionAnchorModeActive());
+    assert(!selection_reset.HasSelection());
+
     return 0;
 }

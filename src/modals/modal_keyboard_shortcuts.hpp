@@ -47,7 +47,9 @@ public:
 private:
     ftxui::Component MakeTextButton(std::string label, std::function<void()> on_click);
     ShortcutContext CurrentContext() const;
+    std::vector<ShortcutKeyModifier> CurrentModifierChoices() const;
     std::vector<ShortcutBindingView> CurrentBindings() const;
+    void RebuildModifierList();
     void RebuildActionList();
     void RebuildKeyList();
     void SyncSelectionFromBinding();

@@ -140,10 +140,16 @@
     }
 
     size_t EditorComponent::GetCursorRow() const {
+        if (viewport_) {
+            return viewport_->CursorState().cursor_row;
+        }
         return session_ ? session_->CursorRow() : 0;
     }
 
     size_t EditorComponent::GetCursorCol() const {
+        if (viewport_) {
+            return viewport_->CursorState().cursor_col;
+        }
         return session_ ? session_->CursorCol() : 0;
     }
 
@@ -183,6 +189,10 @@
 
     bool EditorComponent::HasSelection() const {
         return session_ && session_->HasSelection();
+    }
+
+    bool EditorComponent::SelectionAnchorModeActive() const {
+        return session_ && session_->SelectionAnchorModeActive();
     }
 
     void EditorComponent::SelectAll() {

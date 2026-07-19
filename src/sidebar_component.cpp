@@ -54,6 +54,7 @@ SidebarPanel::SidebarPanel(
     CloseOpenedFileCallback on_close_opened_file,
     CloseAllOpenedFilesCallback on_close_all_opened_files,
     OpenFilesModalCallback on_open_files_modal,
+    CopyPathCallback on_copy_path,
     ShortcutLabelProvider shortcut_label_provider)
     : on_file_open_(std::move(on_file_open)),
       on_opened_file_select_(std::move(on_opened_file_select)),
@@ -65,6 +66,7 @@ SidebarPanel::SidebarPanel(
       on_close_opened_file_(std::move(on_close_opened_file)),
       on_close_all_opened_files_(std::move(on_close_all_opened_files)),
       on_open_files_modal_(std::move(on_open_files_modal)),
+      on_copy_path_(std::move(on_copy_path)),
       shortcut_label_provider_(std::move(shortcut_label_provider)),
       current_path_(std::filesystem::current_path()) {
     ftxui::MenuOption option = ftxui::MenuOption::Vertical();
@@ -511,6 +513,8 @@ ftxui::Element SidebarPanel::RenderActionRow() {
 
     return hbox({
         RenderFlatActionButton("Files..", ButtonRole::Primary, action_primary_box_),
+        text(" "),
+        RenderFlatActionButton("Copy Path", ButtonRole::Utility, action_secondary_box_),
     });
 }
 
@@ -538,7 +542,8 @@ bool SidebarPanel::HandleActionButtonMouse(const ftxui::Mouse& mouse) {
                 CloseAllOpenedFiles();
                 return true;
             case SidebarMode::Project:
-                return false;
+                CopySelectedProjectPath();
+                return true;
         }
     }
 
@@ -590,6 +595,36 @@ void SidebarPanel::OpenFilesModal() {
     if (on_open_files_modal_) {
         on_open_files_modal_();
     }
+}
+
+std::filesystem::path SidebarPanel::SelectedProjectPath() const {
+    if (mode_ != SidebarMode::Project || selected_entry_ < 0 ||
+        selected_entry_ >= static_cast<int>(entry_paths_.size()) ||
+        selected_entry_ >= static_cast<int>(entry_kinds_.size())) {
+        return {};
+    }
+    const EntryKind kind = entry_kinds_[static_cast<size_t>(selected_entry_)];
+    if (kind != EntryKind::File && kind != EntryKind::Directory) {
+        return {};
+    }
+    std::error_code error;
+    std::filesystem::path selected = entry_paths_[static_cast<size_t>(selected_entry_)];
+    std::filesystem::path absolute = std::filesystem::absolute(selected, error);
+    if (error) {
+        error.clear();
+        absolute = selected;
+    }
+    const std::filesystem::path normalized = std::filesystem::weakly_canonical(absolute, error);
+    return error ? absolute.lexically_normal() : normalized;
+}
+
+bool SidebarPanel::CopySelectedProjectPath() {
+    const std::filesystem::path selected = SelectedProjectPath();
+    if (!on_copy_path_) {
+        return false;
+    }
+    on_copy_path_(selected);
+    return !selected.empty();
 }
 
 char SidebarPanel::GitStatusForPath(const std::filesystem::path& path) const {

@@ -11,6 +11,14 @@
         if (session_) session_->MoveCursorEnd();
     }
 
+    void EditorComponent::MoveCursorDocumentStart() {
+        if (session_) session_->MoveCursorDocumentStart();
+    }
+
+    void EditorComponent::MoveCursorDocumentEnd() {
+        if (session_) session_->MoveCursorDocumentEnd();
+    }
+
     void EditorComponent::MoveCursorLeft() {
         if (session_) session_->MoveCursorLeft();
     }
@@ -123,6 +131,30 @@
 
     void EditorComponent::MoveCursorToNextParagraph() {
         if (session_) session_->MoveCursorToNextParagraph();
+    }
+
+    void EditorComponent::MoveCursorToPreviousParagraphSelectionBoundary() {
+        if (session_) session_->MoveCursorToPreviousParagraphSelectionBoundary();
+    }
+
+    void EditorComponent::MoveCursorToNextParagraphSelectionBoundary() {
+        if (session_) session_->MoveCursorToNextParagraphSelectionBoundary();
+    }
+
+    void EditorComponent::SelectCurrentLine() {
+        EndTypingGroup();
+        if (session_) {
+            session_->SelectCurrentLine();
+            UpdateScroll();
+        }
+    }
+
+    void EditorComponent::ToggleSelectionAnchor() {
+        EndTypingGroup();
+        if (session_) {
+            session_->ToggleSelectionAnchor();
+            UpdateScroll();
+        }
     }
 
     void EditorComponent::MoveCursorToPreviousWord() {

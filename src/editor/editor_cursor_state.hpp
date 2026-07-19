@@ -14,6 +14,7 @@ struct EditorCursorState {
     size_t cursor_row = 0;
     size_t cursor_col = 0;
     Selection selection;
+    bool selection_anchor_mode = false;
 };
 
 } // namespace textlt

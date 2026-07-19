@@ -55,6 +55,18 @@ void DocumentSession::MoveCursorEnd() {
     CursorCol() = lines[CursorRow()].size();
 }
 
+void DocumentSession::MoveCursorDocumentStart() {
+    EnsureValidBuffer();
+    CursorRow() = 0;
+    CursorCol() = 0;
+}
+
+void DocumentSession::MoveCursorDocumentEnd() {
+    EnsureValidBuffer();
+    CursorRow() = lines.size() - 1;
+    CursorCol() = lines.back().size();
+}
+
 void DocumentSession::MoveCursorLeft() {
     ClampCursor();
     if (CursorCol() > 0) {
@@ -148,6 +160,44 @@ void DocumentSession::MoveCursorToNextParagraph() {
 
     CursorRow() = lines.size() - 1;
     CursorCol() = lines[CursorRow()].size();
+}
+
+void DocumentSession::MoveCursorToPreviousParagraphSelectionBoundary() {
+    MoveCursorToPreviousParagraph();
+}
+
+void DocumentSession::MoveCursorToNextParagraphSelectionBoundary() {
+    ClampCursor();
+    if (lines.empty()) {
+        return;
+    }
+
+    size_t paragraph_end = CursorRow();
+    if (!IsBlankLine(lines[paragraph_end])) {
+        while (paragraph_end + 1 < lines.size() && !IsBlankLine(lines[paragraph_end + 1])) {
+            ++paragraph_end;
+        }
+        const size_t end_column = lines[paragraph_end].size();
+        if (CursorRow() != paragraph_end || CursorCol() != end_column) {
+            CursorRow() = paragraph_end;
+            CursorCol() = end_column;
+            return;
+        }
+    }
+
+    size_t next = paragraph_end + 1;
+    while (next < lines.size() && IsBlankLine(lines[next])) {
+        ++next;
+    }
+    if (next >= lines.size()) {
+        MoveCursorDocumentEnd();
+        return;
+    }
+    while (next + 1 < lines.size() && !IsBlankLine(lines[next + 1])) {
+        ++next;
+    }
+    CursorRow() = next;
+    CursorCol() = lines[next].size();
 }
 
 void DocumentSession::MoveCursorToPreviousWord() {

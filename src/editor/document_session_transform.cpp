@@ -60,6 +60,7 @@ bool DocumentSession::Convert4To2Spaces() {
     SelectionState().anchor_x = result.selection.anchor_x;
     SelectionState().anchor_y = result.selection.anchor_y;
     SelectionState().active = result.selection.active;
+    CursorState().selection_anchor_mode = false;
     buffer.MarkDirty();
     ClampCursor();
     return true;
@@ -80,6 +81,7 @@ bool DocumentSession::Convert2To4Spaces() {
     SelectionState().anchor_x = result.selection.anchor_x;
     SelectionState().anchor_y = result.selection.anchor_y;
     SelectionState().active = result.selection.active;
+    CursorState().selection_anchor_mode = false;
     buffer.MarkDirty();
     ClampCursor();
     return true;
@@ -101,6 +103,7 @@ bool DocumentSession::IndentLines(size_t tab_size) {
     SelectionState().anchor_x = result.selection.anchor_x;
     SelectionState().anchor_y = result.selection.anchor_y;
     SelectionState().active = result.selection.active;
+    CursorState().selection_anchor_mode = false;
     buffer.MarkDirty();
     ClampCursor();
     return true;
@@ -122,6 +125,7 @@ bool DocumentSession::OutdentLines(size_t tab_size) {
     SelectionState().anchor_x = result.selection.anchor_x;
     SelectionState().anchor_y = result.selection.anchor_y;
     SelectionState().active = result.selection.active;
+    CursorState().selection_anchor_mode = false;
     buffer.MarkDirty();
     ClampCursor();
     return true;
@@ -142,6 +146,7 @@ bool DocumentSession::ToggleCase() {
     SelectionState().anchor_x = result.selection.anchor_x;
     SelectionState().anchor_y = result.selection.anchor_y;
     SelectionState().active = result.selection.active;
+    CursorState().selection_anchor_mode = false;
     buffer.MarkDirty();
     ClampCursor();
     return true;

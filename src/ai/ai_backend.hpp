@@ -67,6 +67,9 @@ public:
     AiConnectionResult CheckConnectionAndListModels(
         const std::atomic<bool>* cancel_requested = nullptr,
         RemoteCommandControl* command_control = nullptr) const;
+    AiConnectionResult CheckSelectedModelReady(
+        const std::atomic<bool>* cancel_requested = nullptr,
+        RemoteCommandControl* command_control = nullptr) const;
     AiBackendResult Run(
         const AiPromptRequest& request,
         const std::atomic<bool>* cancel_requested = nullptr,
@@ -79,6 +82,7 @@ public:
     static std::string NormalizeServerUrl(std::string url);
     static bool IsSupportedServerUrl(const std::string& url);
     static std::string ModelIdFromKey(const std::string& key);
+    static std::string NormalizeGeneratedText(std::string text);
 
 private:
     AiConnectionResult TryOllama(

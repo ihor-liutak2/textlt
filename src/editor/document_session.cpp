@@ -187,6 +187,7 @@ void DocumentSession::Reset() {
     CursorRow() = 0;
     CursorCol() = 0;
     SelectionState() = {};
+    CursorState().selection_anchor_mode = false;
     path = "Untitled";
     type = DocumentType::PlainText;
     line_ending = LineEnding::LF;
@@ -342,9 +343,11 @@ void DocumentSession::SelectWholeTextProcessorBuffer() {
     CursorRow() = lines.size() - 1;
     CursorCol() = lines[CursorRow()].size();
     SelectionState().active = true;
+    CursorState().selection_anchor_mode = false;
 }
 
 void DocumentSession::ClearTextProcessorSelection() {
+    CursorState().selection_anchor_mode = false;
     SelectionState().active = false;
     SelectionState().anchor_x = CursorCol();
     SelectionState().anchor_y = CursorRow();

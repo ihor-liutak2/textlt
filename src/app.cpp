@@ -116,6 +116,17 @@ TextltApp::TextltApp()
           [this](size_t index) { CloseSidebarOpenedFile(index); },
           [this] { CloseAllOpenedFiles(); },
           [this] { OpenFilesModal(FilesModalMode::Manage); },
+          [this](const std::filesystem::path& path) {
+              if (path.empty()) {
+                  active_action_ = "No Project item selected to copy";
+              } else {
+                  const std::string path_text = FileManager::PathToUtf8(path);
+                  active_action_ = clipboard_controller_.WriteText(path_text)
+                      ? "Copied path: " + path_text
+                      : "Could not copy path to the system clipboard";
+              }
+              screen_.PostEvent(ftxui::Event::Custom);
+          },
           [this](const std::string& command_id) {
               return shortcut_registry_.EffectiveShortcut(ShortcutContext::Menu, command_id);
           })),
@@ -278,18 +289,25 @@ TextltApp::TextltApp()
           &current_theme_,
           &editor_config_,
           [this](bool whole_document, AiDocumentTarget& target, std::string& error) {
-              target.session = ActiveSessionPtr();
-              if (!target.session) {
+              const auto editor = ActiveEditor();
+              target.session = editor ? editor->GetSession() : nullptr;
+              if (!target.session || !editor) {
                   error = "No active document.";
                   return false;
               }
-              return target.session->CaptureAiTransformTarget(
-                  whole_document, target.range, error);
+              return target.session->CaptureAiTransformTargetAt(
+                  editor->GetCursorRow(),
+                  editor->GetCursorCol(),
+                  whole_document,
+                  target.range,
+                  error);
           },
           [this](const AiDocumentTarget& target,
                  const std::string& text,
                  std::string& error) {
-              const std::shared_ptr<DocumentSession> active_session = ActiveSessionPtr();
+              const auto active_editor = ActiveEditor();
+              const std::shared_ptr<DocumentSession> active_session =
+                  active_editor ? active_editor->GetSession() : nullptr;
               if (!target.session || active_session != target.session) {
                   error = "The active document changed while the AI request was running.";
                   return false;
@@ -311,6 +329,14 @@ TextltApp::TextltApp()
           [this](const std::string& message) {
               active_action_ = message;
               screen_.PostEvent(ftxui::Event::Custom);
+          },
+          [this](bool success, const std::string& message) {
+              active_action_ = message;
+              if (success && ai_quick_actions_modal_.IsOpen()) {
+                  CloseAiQuickActionsModal();
+              } else {
+                  screen_.PostEvent(ftxui::Event::Custom);
+              }
           }),
       ai_quick_actions_modal_(
           &current_theme_,
@@ -324,6 +350,8 @@ TextltApp::TextltApp()
               }
               return started;
           },
+          [this] { return ai_actions_modal_.QuickStatus(); },
+          [this] { ai_actions_modal_.StopQuickAction(); },
           [this] { CloseAiQuickActionsModal(); }),
       ai_settings_modal_(
           &current_theme_,

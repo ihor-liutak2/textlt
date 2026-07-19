@@ -31,6 +31,18 @@ int main() {
     assert(AiBackend::ProviderFromConfig("unknown") == AiProvider::Auto);
     assert(AiBackend::ModelIdFromKey("ollama:gemma3:4b") == "gemma3:4b");
     assert(AiBackend::ModelIdFromKey("local:model.gguf") == "model.gguf");
+    assert(AiBackend::NormalizeGeneratedText(
+               "Corrected text. [end of text] [end of text]") ==
+           "Corrected text.");
+    assert(AiBackend::NormalizeGeneratedText("Corrected text.<|eot_id|></s>") ==
+           "Corrected text.");
+    assert(AiBackend::NormalizeGeneratedText("Corrected text. <end_of_turn>") ==
+           "Corrected text.");
+    assert(AiBackend::NormalizeGeneratedText("Corrected text. [END OF TEXT]") ==
+           "Corrected text.");
+    assert(AiBackend::NormalizeGeneratedText(
+               "The literal [end of text] label remains inside the sentence.") ==
+           "The literal [end of text] label remains inside the sentence.");
 
     textlt::AiPromptRequest request;
     request.text = "text";
@@ -81,7 +93,7 @@ done
 if [ "$has_jinja" -eq 1 ] && [ "$has_single_turn" -eq 1 ] &&
    [ "$has_raw_completion" -eq 0 ] &&
    [ "$has_unsupported_timing_flag" -eq 0 ]; then
-  printf 'Corrected text.'
+  printf 'Corrected text. [end of text] [end of text]'
 fi
 )SCRIPT";
     }
@@ -102,6 +114,24 @@ fi
     local_settings.timeout_seconds = 5;
     local_settings.max_output_tokens = 128;
     local_settings.local_threads = 3;
+
+    textlt::AiBackendSettings readiness_settings = local_settings;
+    readiness_settings.provider = AiProvider::Ollama;
+    const textlt::AiConnectionResult ready_local =
+        textlt::AiBackend(readiness_settings).CheckSelectedModelReady();
+    assert(ready_local.success);
+    assert(ready_local.provider == AiProvider::LocalLlamaCpp);
+    assert(ready_local.provider_label == "llama.cpp");
+    assert(ready_local.models.size() == 1);
+    assert(ready_local.models[0].key == "local:test.gguf");
+
+    std::filesystem::remove(model);
+    const textlt::AiConnectionResult missing_local =
+        textlt::AiBackend(readiness_settings).CheckSelectedModelReady();
+    assert(!missing_local.success);
+    assert(missing_local.error.find("not downloaded") != std::string::npos);
+    std::ofstream(model).put('\n');
+
     const textlt::AiBackendResult local_result =
         textlt::AiBackend(local_settings).Run(request);
     assert(local_result.success);

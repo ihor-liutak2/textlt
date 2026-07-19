@@ -50,10 +50,7 @@ KeyboardShortcutsModalContent::KeyboardShortcutsModalContent(
     menu_tab_button_ = MakeTextButton("Menu shortcuts", [this] { SetTab(0); });
     text_tab_button_ = MakeTextButton("Text shortcuts", [this] { SetTab(1); });
 
-    modifier_labels_.clear();
-    for (ShortcutKeyModifier modifier : ShortcutModifierChoices()) {
-        modifier_labels_.push_back(ShortcutModifierName(modifier));
-    }
+    RebuildModifierList();
     modifier_menu_ = ftxui::Menu(&modifier_labels_, &selected_modifier_);
     key_menu_ = ftxui::Menu(&key_labels_, &selected_key_);
     action_menu_ = ftxui::Menu(&action_labels_, &selected_action_);
@@ -112,11 +109,35 @@ ShortcutContext KeyboardShortcutsModalContent::CurrentContext() const {
     return tab_index_ == 0 ? ShortcutContext::Menu : ShortcutContext::Text;
 }
 
+std::vector<ShortcutKeyModifier> KeyboardShortcutsModalContent::CurrentModifierChoices() const {
+    std::vector<ShortcutKeyModifier> choices = ShortcutModifierChoices();
+    if (CurrentContext() == ShortcutContext::Menu) {
+        choices.erase(
+            std::remove_if(choices.begin(), choices.end(), [](ShortcutKeyModifier modifier) {
+                return modifier == ShortcutKeyModifier::None ||
+                    modifier == ShortcutKeyModifier::Shift;
+            }),
+            choices.end());
+    }
+    return choices;
+}
+
 std::vector<ShortcutBindingView> KeyboardShortcutsModalContent::CurrentBindings() const {
     if (!shortcut_registry_) {
         return {};
     }
     return shortcut_registry_->Bindings(CurrentContext());
+}
+
+void KeyboardShortcutsModalContent::RebuildModifierList() {
+    modifier_labels_.clear();
+    for (ShortcutKeyModifier modifier : CurrentModifierChoices()) {
+        modifier_labels_.push_back(ShortcutModifierName(modifier));
+    }
+    if (selected_modifier_ < 0 ||
+        selected_modifier_ >= static_cast<int>(modifier_labels_.size())) {
+        selected_modifier_ = 0;
+    }
 }
 
 void KeyboardShortcutsModalContent::RebuildActionList() {
@@ -141,7 +162,7 @@ void KeyboardShortcutsModalContent::RebuildActionList() {
 }
 
 void KeyboardShortcutsModalContent::RebuildKeyList() {
-    const auto modifiers = ShortcutModifierChoices();
+    const auto modifiers = CurrentModifierChoices();
     if (selected_modifier_ < 0 || selected_modifier_ >= static_cast<int>(modifiers.size())) {
         selected_modifier_ = 0;
     }
@@ -157,8 +178,10 @@ void KeyboardShortcutsModalContent::RebuildKeyList() {
             key = "Slash";
         }
         if (shortcut_registry_ && !selected_action_id.empty()) {
-            const std::string shortcut = ShortcutModifierName(modifier) + "+" +
-                (key == "Slash" ? std::string("/") : key);
+            const std::string normalized_key = key == "Slash" ? std::string("/") : key;
+            const std::string shortcut = modifier == ShortcutKeyModifier::None
+                ? normalized_key
+                : ShortcutModifierName(modifier) + "+" + normalized_key;
             const ShortcutConflict conflict =
                 shortcut_registry_->FindConflict(CurrentContext(), selected_action_id, shortcut);
             if (conflict.exists) {
@@ -182,7 +205,7 @@ void KeyboardShortcutsModalContent::SyncSelectionFromBinding() {
         return;
     }
 
-    const auto modifiers = ShortcutModifierChoices();
+    const auto modifiers = CurrentModifierChoices();
     const auto modifier_it = std::find(modifiers.begin(), modifiers.end(), parsed->modifier);
     if (modifier_it != modifiers.end()) {
         selected_modifier_ = static_cast<int>(std::distance(modifiers.begin(), modifier_it));
@@ -204,7 +227,7 @@ std::optional<ShortcutBindingView> KeyboardShortcutsModalContent::SelectedBindin
 }
 
 std::string KeyboardShortcutsModalContent::SelectedShortcutString() const {
-    const auto modifiers = ShortcutModifierChoices();
+    const auto modifiers = CurrentModifierChoices();
     if (selected_modifier_ < 0 || selected_modifier_ >= static_cast<int>(modifiers.size()) ||
         selected_key_ < 0 || selected_key_ >= static_cast<int>(key_labels_.size())) {
         return "";
@@ -213,7 +236,9 @@ std::string KeyboardShortcutsModalContent::SelectedShortcutString() const {
     if (key == "Slash") {
         key = "/";
     }
-    return ShortcutModifierName(modifiers[selected_modifier_]) + "+" + key;
+    return modifiers[selected_modifier_] == ShortcutKeyModifier::None
+        ? key
+        : ShortcutModifierName(modifiers[selected_modifier_]) + "+" + key;
 }
 
 bool KeyboardShortcutsModalContent::ApplySelectedShortcut() {
@@ -280,7 +305,9 @@ void KeyboardShortcutsModalContent::ResetAllShortcuts() {
 void KeyboardShortcutsModalContent::SetTab(int tab_index) {
     tab_index_ = std::clamp(tab_index, 0, 1);
     selected_action_ = 0;
+    selected_modifier_ = 0;
     action_top_row_ = 0;
+    RebuildModifierList();
     RebuildActionList();
     SyncSelectionFromBinding();
 }

@@ -89,6 +89,25 @@ bool ShortcutRegistry::SetOverride(ShortcutContext context, const std::string& a
         error = "Ctrl+Alt shortcuts are not supported because many terminals reserve or drop them.";
         return false;
     }
+    if (parsed->modifier == ShortcutKeyModifier::None &&
+        (context != ShortcutContext::Text || parsed->key != "ESCAPE")) {
+        error = "Only Escape can be used without a modifier, and only for text actions.";
+        return false;
+    }
+    if (parsed->modifier == ShortcutKeyModifier::Shift) {
+        if (context != ShortcutContext::Text) {
+            error = "Shift-only shortcuts are available only for text-selection actions.";
+            return false;
+        }
+        const std::vector<std::string> safe_shift_keys =
+            {"LEFT", "RIGHT", "UP", "DOWN", "HOME", "END", "PAGEUP", "PAGEDOWN", "TAB"};
+        if (std::find(safe_shift_keys.begin(), safe_shift_keys.end(), parsed->key) ==
+            safe_shift_keys.end()) {
+            error = "Shift-only shortcuts are limited to navigation keys and Tab because terminals "
+                "cannot reliably distinguish Shift+letter from normal uppercase text.";
+            return false;
+        }
+    }
     if (IsTerminalReservedShortcut(*parsed)) {
         error = shortcut + " is reserved by terminals and cannot be assigned.";
         return false;

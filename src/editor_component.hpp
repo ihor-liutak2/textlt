@@ -108,9 +108,12 @@ namespace textlt {
         const SearchMatch* SearchMatchAt(size_t x, size_t y) const;
         bool IsActiveSearchMatch(const SearchMatch& match) const;
         void BeginSelection();
+        bool SelectionAnchorModeActive() const;
         void ClampCursorToBuffer();
         void MoveCursorHome();
         void MoveCursorEnd();
+        void MoveCursorDocumentStart();
+        void MoveCursorDocumentEnd();
         void MoveCursorLeft();
         void MoveCursorRight();
         void MoveCursorUp();
@@ -119,6 +122,10 @@ namespace textlt {
         void MoveCursorPageDown();
         void MoveCursorToPreviousParagraph();
         void MoveCursorToNextParagraph();
+        void MoveCursorToPreviousParagraphSelectionBoundary();
+        void MoveCursorToNextParagraphSelectionBoundary();
+        void SelectCurrentLine();
+        void ToggleSelectionAnchor();
         void MoveCursorToPreviousWord();
         void MoveCursorToNextWord();
         bool MoveLinesUp();

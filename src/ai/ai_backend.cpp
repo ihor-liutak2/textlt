@@ -161,8 +161,45 @@ std::string LocalChatPrompt(const AiPromptRequest& request) {
         "\n\nText to process:\n" + BuildAiUserPrompt(request);
 }
 
-std::string CleanLocalOutput(std::string output) {
-    return Trim(std::move(output));
+bool EndsWithAsciiInsensitive(const std::string& value, const std::string& suffix) {
+    if (value.size() < suffix.size()) {
+        return false;
+    }
+    const size_t offset = value.size() - suffix.size();
+    for (size_t index = 0; index < suffix.size(); ++index) {
+        const unsigned char left = static_cast<unsigned char>(value[offset + index]);
+        const unsigned char right = static_cast<unsigned char>(suffix[index]);
+        if (std::tolower(left) != std::tolower(right)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string NormalizeGeneratedTextImpl(std::string output) {
+    output = Trim(std::move(output));
+    static const std::vector<std::string> trailing_markers = {
+        "[end of text]",
+        "<|end_of_text|>",
+        "<|eot_id|>",
+        "<end_of_turn>",
+        "</s>",
+    };
+
+    bool removed = true;
+    while (removed && !output.empty()) {
+        removed = false;
+        for (const std::string& marker : trailing_markers) {
+            if (!EndsWithAsciiInsensitive(output, marker)) {
+                continue;
+            }
+            output.erase(output.size() - marker.size());
+            output = Trim(std::move(output));
+            removed = true;
+            break;
+        }
+    }
+    return output;
 }
 
 bool IsCancelled(const std::atomic<bool>* cancel_requested) {
@@ -325,6 +362,10 @@ bool AiBackend::IsSupportedServerUrl(const std::string& url) {
 std::string AiBackend::ModelIdFromKey(const std::string& key) {
     const std::size_t separator = key.find(':');
     return separator == std::string::npos ? key : key.substr(separator + 1);
+}
+
+std::string AiBackend::NormalizeGeneratedText(std::string text) {
+    return NormalizeGeneratedTextImpl(std::move(text));
 }
 
 AiConnectionResult AiBackend::TryOllama(
@@ -491,6 +532,81 @@ AiConnectionResult AiBackend::CheckConnectionAndListModels(
     return openai;
 }
 
+AiConnectionResult AiBackend::CheckSelectedModelReady(
+    const std::atomic<bool>* cancel_requested,
+    RemoteCommandControl* command_control) const {
+    AiConnectionResult result;
+    if (settings_.selected_model_key.empty()) {
+        result.provider = settings_.provider;
+        result.provider_label = ProviderLabel(result.provider);
+        result.error = "No AI model is selected.";
+        return result;
+    }
+    if (IsCancelled(cancel_requested)) {
+        result.provider = settings_.provider;
+        result.provider_label = ProviderLabel(result.provider);
+        result.error = "Operation stopped.";
+        return result;
+    }
+
+    const std::string& selected_key = settings_.selected_model_key;
+    const std::string model_id = ModelIdFromKey(selected_key);
+    if (selected_key.rfind("local:", 0) == 0 ||
+        (selected_key.find(':') == std::string::npos &&
+         settings_.provider == AiProvider::LocalLlamaCpp)) {
+        result.provider = AiProvider::LocalLlamaCpp;
+        result.provider_label = ProviderLabel(result.provider);
+        if (!FindLocalLlamaExecutable()) {
+            result.error = "llama.cpp runtime is not installed.";
+            return result;
+        }
+        if (!IsSafeLocalModelFilename(model_id)) {
+            result.error = "Selected local model filename is invalid.";
+            return result;
+        }
+        std::error_code error;
+        const std::filesystem::path model_path =
+            AiUserDataDirectory() / "ai" / "models" / model_id;
+        if (!std::filesystem::is_regular_file(model_path, error)) {
+            result.error = "Selected local model is not downloaded: " + model_id;
+            return result;
+        }
+        result.success = true;
+        result.models = {{
+            "local:" + model_id,
+            model_id,
+            model_id,
+            "llama.cpp",
+            model_id,
+            AiModelSource::ManagedLocal,
+            true,
+            true,
+        }};
+        return result;
+    }
+
+    if (selected_key.rfind("ollama:", 0) == 0) {
+        result = TryOllama(cancel_requested, command_control);
+    } else if (selected_key.rfind("openai:", 0) == 0) {
+        result = TryOpenAiCompatible(cancel_requested, command_control);
+    } else {
+        result = CheckConnectionAndListModels(cancel_requested, command_control);
+    }
+    if (!result.success || IsCancelled(cancel_requested)) {
+        return result;
+    }
+
+    const auto selected = std::find_if(
+        result.models.begin(), result.models.end(), [&](const AiModelInfo& model) {
+            return model.key == selected_key || model.id == model_id;
+        });
+    if (selected == result.models.end()) {
+        result.success = false;
+        result.error = "The selected model is not available from the configured AI backend.";
+    }
+    return result;
+}
+
 AiBackendResult AiBackend::RunOllama(
     const AiPromptRequest& request,
     const std::string& model,
@@ -524,7 +640,7 @@ AiBackendResult AiBackend::RunOllama(
         const auto now = std::chrono::steady_clock::now();
         if (progress && now - last_progress_at >= std::chrono::milliseconds(125)) {
             last_progress_at = now;
-            progress(generated);
+            progress(NormalizeGeneratedTextImpl(generated));
         }
     };
 
@@ -561,7 +677,7 @@ AiBackendResult AiBackend::RunOllama(
                 : std::string{};
         }
     }
-    generated = Trim(std::move(generated));
+    generated = NormalizeGeneratedTextImpl(std::move(generated));
     if (generated.empty()) {
         return ErrorResult(AiProvider::Ollama, "Ollama returned an empty response.");
     }
@@ -603,7 +719,7 @@ AiBackendResult AiBackend::RunOpenAiCompatible(
         const auto now = std::chrono::steady_clock::now();
         if (progress && now - last_progress_at >= std::chrono::milliseconds(125)) {
             last_progress_at = now;
-            progress(generated);
+            progress(NormalizeGeneratedTextImpl(generated));
         }
     };
 
@@ -646,7 +762,7 @@ AiBackendResult AiBackend::RunOpenAiCompatible(
             }
         }
     }
-    generated = Trim(std::move(generated));
+    generated = NormalizeGeneratedTextImpl(std::move(generated));
     if (generated.empty()) {
         return ErrorResult(
             AiProvider::OpenAiCompatible,
@@ -725,7 +841,7 @@ AiBackendResult AiBackend::RunLocalLlamaCpp(
             return;
         }
         last_progress_at = now;
-        const std::string cleaned = CleanLocalOutput(streamed_output);
+        const std::string cleaned = NormalizeGeneratedTextImpl(streamed_output);
         if (!cleaned.empty()) {
             progress(cleaned);
         }
@@ -754,7 +870,7 @@ AiBackendResult AiBackend::RunLocalLlamaCpp(
                       std::to_string(command.exit_code) + "."
                 : command.error);
     }
-    const std::string output = CleanLocalOutput(command.output);
+    const std::string output = NormalizeGeneratedTextImpl(command.output);
     if (output.empty()) {
         return ErrorResult(
             AiProvider::LocalLlamaCpp,

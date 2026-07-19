@@ -21,6 +21,7 @@ void DocumentSession::ApplyState(const HistoryManager::State& state) {
     CursorRow() = state.cursor_y < 0 ? 0 : static_cast<size_t>(state.cursor_y);
     EnsureValidBuffer();
     ClampCursor();
+    CursorState().selection_anchor_mode = false;
 
     if (state.selection_active) {
         SelectionState().active = true;

@@ -272,6 +272,7 @@ private:
     void ShowProjectSidebar();
     void ShowFavoritesSidebar();
     void ToggleSidebarOpenedProject();
+    void CopySidebarSelectedPath();
     void RefreshFindMatches();
     void FindNext();
     void FindPrevious();

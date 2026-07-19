@@ -33,6 +33,10 @@ void EditorViewport::Reset() {
     is_dragging_scrollbar = false;
     drag_start_scroll_y = 0;
     drag_start_y = 0;
+    last_text_click_time_ = {};
+    last_text_click_row_ = 0;
+    last_text_click_col_ = 0;
+    text_click_count_ = 0;
     cursor_state = {};
 }
 
@@ -555,17 +559,70 @@ bool EditorViewport::HandleMouseEvent(
         }
 
         const auto [clicked_row, clicked_col] = PositionAtMouse(session, config, mouse);
-        const bool extend_existing_selection = mouse.shift && session.HasSelection();
-        const size_t anchor_row = session.SelectionState().anchor_y;
-        const size_t anchor_col = session.SelectionState().anchor_x;
-        session.SetCursorPosition(clicked_row, clicked_col);
-        if (extend_existing_selection) {
-            session.SelectionState().anchor_y = anchor_row;
-            session.SelectionState().anchor_x = anchor_col;
-            session.SetSelectionActive(true);
+        const size_t old_cursor_row = session.CursorRow();
+        const size_t old_cursor_col = session.CursorCol();
+        const bool extend_selection = mouse.shift;
+        const size_t anchor_row = session.HasSelection()
+            ? session.SelectionState().anchor_y
+            : old_cursor_row;
+        const size_t anchor_col = session.HasSelection()
+            ? session.SelectionState().anchor_x
+            : old_cursor_col;
+
+        if (extend_selection) {
+            text_click_count_ = 0;
+            last_text_click_time_ = {};
+            session.SetCursorPosition(clicked_row, clicked_col);
+            session.SetSelectionAnchor(anchor_row, anchor_col);
+            session.SetSelectionActive(
+                clicked_row != anchor_row || clicked_col != anchor_col);
         } else {
-            session.SetSelectionAnchor(clicked_row, clicked_col);
-            session.SetSelectionActive(false);
+            const auto now = std::chrono::steady_clock::now();
+            const bool repeated_click = last_text_click_time_ !=
+                    std::chrono::steady_clock::time_point{} &&
+                now - last_text_click_time_ < std::chrono::milliseconds(350) &&
+                clicked_row == last_text_click_row_ && clicked_col == last_text_click_col_;
+            text_click_count_ = repeated_click ? std::min(3, text_click_count_ + 1) : 1;
+            last_text_click_time_ = now;
+            last_text_click_row_ = clicked_row;
+            last_text_click_col_ = clicked_col;
+
+            session.SetCursorPosition(clicked_row, clicked_col);
+            if (text_click_count_ == 2 && !session.lines[clicked_row].empty()) {
+                const std::string& line = session.lines[clicked_row];
+                size_t position = std::min(clicked_col, line.size());
+                if (position == line.size() && position > 0) {
+                    position = utils::PreviousUtf8CodepointStart(line, position);
+                }
+                const bool word = position < line.size() &&
+                    utils::IsWordCharacter(line[position]);
+                size_t start = position;
+                size_t end = position < line.size()
+                    ? utils::NextUtf8CodepointStart(line, position)
+                    : position;
+                if (word) {
+                    while (start > 0) {
+                        const size_t previous = utils::PreviousUtf8CodepointStart(line, start);
+                        if (!utils::IsWordCharacter(line[previous])) {
+                            break;
+                        }
+                        start = previous;
+                    }
+                    while (end < line.size() && utils::IsWordCharacter(line[end])) {
+                        end = utils::NextUtf8CodepointStart(line, end);
+                    }
+                }
+                session.SetSelectionAnchor(clicked_row, start);
+                session.SetCursorPosition(clicked_row, end);
+                session.SetSelectionActive(end != start);
+            } else if (text_click_count_ >= 3) {
+                session.SetSelectionAnchor(clicked_row, 0);
+                session.SetCursorPosition(clicked_row, session.lines[clicked_row].size());
+                session.SetSelectionActive(!session.lines[clicked_row].empty());
+            } else {
+                session.SetSelectionAnchor(clicked_row, clicked_col);
+                session.SetSelectionActive(false);
+            }
         }
         mouse_selecting = true;
         ScrollToCursor(session, config);

@@ -15,18 +15,21 @@ std::string BuildAiSystemPrompt(const AiPromptRequest& request) {
             ". Do not translate it into any other language. Preserve paragraph breaks, lists, "
             "punctuation, names, numbers, and meaning. "
             "Do not add explanations, commentary, headings, quotation marks, or markdown fences. "
+            "Do not output special end-of-sequence or tokenizer control markers. "
             "Return only the translated text.";
     }
 
     if (request.edit_style == AiEditStyle::Business) {
         return "Edit the supplied text into a clear, formal, precise, professional business style. "
             "Preserve the original language, meaning, facts, names, numbers, paragraph breaks, and lists. "
-            "Do not invent information or add explanations. Return only the edited text.";
+            "Do not invent information or add explanations. Do not output special end-of-sequence "
+            "or tokenizer control markers. Return only the edited text.";
     }
 
     return "Edit the supplied text into a natural, clear, conversational style that is easy to read. "
         "Preserve the original language, meaning, facts, names, numbers, paragraph breaks, and lists. "
-        "Do not invent information or add explanations. Return only the edited text.";
+        "Do not invent information or add explanations. Do not output special end-of-sequence "
+        "or tokenizer control markers. Return only the edited text.";
 }
 
 std::string BuildAiUserPrompt(const AiPromptRequest& request) {

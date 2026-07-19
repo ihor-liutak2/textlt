@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "ai/ai_backend.hpp"
+#include "ai/ai_quick_status.hpp"
 #include "editor/document_session.hpp"
 #include "editor_config.hpp"
 #include "ftxui/component/component.hpp"
@@ -39,7 +40,8 @@ public:
         CaptureAiTargetCallback capture_target,
         ApplyAiTargetCallback apply_target,
         std::function<void()> request_redraw = {},
-        std::function<void(const std::string&)> notify_status = {});
+        std::function<void(const std::string&)> notify_status = {},
+        std::function<void(bool, const std::string&)> quick_completion = {});
     ~AiActionsModalContent() override;
 
     ftxui::Element Render() override;
@@ -53,6 +55,9 @@ public:
     void RefreshFromConfig();
     bool HandleShortcut(ftxui::Event event);
     bool StartQuickAction(AiActionType action, std::string& error);
+    void PrepareQuickActions();
+    AiQuickStatusSnapshot QuickStatus() const;
+    void StopQuickAction();
     void Poll();
     void PrepareClose();
     void ShowInfo();
@@ -66,6 +71,8 @@ private:
         bool force_current_paragraph,
         std::string* error_out = nullptr);
     void ApplyPendingResult();
+    void StartQuickReadinessCheck();
+    void StopQuickReadinessCheck();
     bool PersistOptions();
     bool ValidateLanguages(std::string& error, bool require_distinct);
     void FilterLanguages(bool source);
@@ -86,6 +93,7 @@ private:
     ApplyAiTargetCallback apply_target_;
     std::function<void()> request_redraw_;
     std::function<void(const std::string&)> notify_status_;
+    std::function<void(bool, const std::string&)> quick_completion_;
 
     std::vector<std::string> languages_;
     std::vector<std::string> filtered_source_languages_;
@@ -126,6 +134,14 @@ private:
     AiDocumentTarget pending_target_;
     AiActionType pending_action_ = AiActionType::Translate;
     bool pending_quick_action_ = false;
+    AiActionType active_action_ = AiActionType::Translate;
+
+    std::thread quick_readiness_worker_;
+    std::atomic<bool> quick_readiness_cancel_{false};
+    RemoteCommandControl quick_readiness_control_;
+    bool quick_readiness_checking_ = false;
+    bool quick_ready_ = false;
+    std::string quick_readiness_status_ = "Not checked";
 
     ftxui::Component source_language_input_;
     ftxui::Component target_language_input_;
@@ -148,7 +164,8 @@ public:
         CaptureAiTargetCallback capture_target,
         ApplyAiTargetCallback apply_target,
         std::function<void()> request_redraw = {},
-        std::function<void(const std::string&)> notify_status = {});
+        std::function<void(const std::string&)> notify_status = {},
+        std::function<void(bool, const std::string&)> quick_completion = {});
 
     ftxui::Component View() const;
     void Open();
@@ -156,6 +173,9 @@ public:
     bool IsOpen() const;
     bool OnEvent(ftxui::Event event);
     bool StartQuickAction(AiActionType action, std::string& error);
+    void PrepareQuickActions();
+    AiQuickStatusSnapshot QuickStatus() const;
+    void StopQuickAction();
     void Poll();
 
 private:

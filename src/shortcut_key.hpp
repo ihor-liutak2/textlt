@@ -14,6 +14,7 @@ enum class ShortcutContext {
 };
 
 enum class ShortcutKeyModifier {
+    None,
     Ctrl,
     Alt,
     Shift,

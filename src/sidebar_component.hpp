@@ -47,6 +47,7 @@ public:
     using CloseOpenedFileCallback = std::function<void(size_t index)>;
     using CloseAllOpenedFilesCallback = std::function<void()>;
     using OpenFilesModalCallback = std::function<void()>;
+    using CopyPathCallback = std::function<void(const std::filesystem::path&)>;
     using ShortcutLabelProvider = std::function<std::string(const std::string& command_id)>;
 
     SidebarPanel(
@@ -60,6 +61,7 @@ public:
         CloseOpenedFileCallback on_close_opened_file,
         CloseAllOpenedFilesCallback on_close_all_opened_files,
         OpenFilesModalCallback on_open_files_modal,
+        CopyPathCallback on_copy_path,
         ShortcutLabelProvider shortcut_label_provider);
 
     ftxui::Element Render() override;
@@ -77,6 +79,8 @@ public:
     bool IsFavoritesMode() const { return mode_ == SidebarMode::Favorites; }
 
     std::filesystem::path CurrentPath() const { return current_path_; }
+    std::filesystem::path SelectedProjectPath() const;
+    bool CopySelectedProjectPath();
 
     bool ContainsPoint(int x, int y) const {
         return panel_box_.x_min >= 0 && panel_box_.Contain(x, y);
@@ -170,6 +174,7 @@ private:
     CloseOpenedFileCallback on_close_opened_file_;
     CloseAllOpenedFilesCallback on_close_all_opened_files_;
     OpenFilesModalCallback on_open_files_modal_;
+    CopyPathCallback on_copy_path_;
     ShortcutLabelProvider shortcut_label_provider_;
     std::filesystem::path current_path_;
     std::vector<OpenedFileEntry> opened_files_;

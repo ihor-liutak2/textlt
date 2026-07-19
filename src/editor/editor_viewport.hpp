@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -87,6 +88,10 @@ public:
     bool is_dragging_scrollbar = false;
     size_t drag_start_scroll_y = 0;
     int drag_start_y = 0;
+    std::chrono::steady_clock::time_point last_text_click_time_{};
+    size_t last_text_click_row_ = 0;
+    size_t last_text_click_col_ = 0;
+    int text_click_count_ = 0;
     ftxui::Box box;
     EditorCursorState cursor_state;
 

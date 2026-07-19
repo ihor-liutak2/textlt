@@ -47,6 +47,16 @@ bool DocumentSession::CaptureAiTransformTarget(
     bool whole_document,
     DocumentTransformTarget& target,
     std::string& error) const {
+    return CaptureAiTransformTargetAt(
+        CursorRow(), CursorCol(), whole_document, target, error);
+}
+
+bool DocumentSession::CaptureAiTransformTargetAt(
+    size_t cursor_row,
+    size_t cursor_column,
+    bool whole_document,
+    DocumentTransformTarget& target,
+    std::string& error) const {
     if (buffer.LineCount() == 0) {
         error = "The active document is empty.";
         return false;
@@ -68,7 +78,9 @@ bool DocumentSession::CaptureAiTransformTarget(
         return true;
     }
 
-    const size_t cursor_row = std::min(CursorRow(), buffer.LineCount() - 1);
+    cursor_row = std::min(cursor_row, buffer.LineCount() - 1);
+    cursor_column = std::min(cursor_column, buffer.Line(cursor_row).size());
+    (void)cursor_column;
     if (IsBlankLine(buffer.Line(cursor_row))) {
         error = "The cursor is on an empty paragraph.";
         return false;
@@ -144,6 +156,7 @@ bool DocumentSession::ReplaceAiTransformTarget(
     SelectionState().anchor_x = target.start_column;
     SelectionState().anchor_y = target.start_row;
     SelectionState().active = true;
+    CursorState().selection_anchor_mode = false;
     CursorRow() = target.end_row;
     CursorCol() = target.end_column;
 
