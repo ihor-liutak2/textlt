@@ -138,12 +138,12 @@ bool IsSafeLocalModelFilename(const std::string& filename) {
         path.filename() == path && filename != "." && filename != "..";
 }
 
-std::filesystem::path MakePromptFilePath() {
+std::filesystem::path MakeTemporaryAiFilePath(const std::string& label) {
     const auto ticks = std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
     const auto thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
     return std::filesystem::temp_directory_path() /
-        ("textlt-ai-prompt-" + std::to_string(ticks) + "-" +
+        ("textlt-ai-" + label + "-" + std::to_string(ticks) + "-" +
          std::to_string(thread_id) + ".txt");
 }
 
@@ -156,26 +156,13 @@ bool WritePromptFile(const std::filesystem::path& path, const std::string& promp
     return static_cast<bool>(file);
 }
 
-std::string LocalPrompt(const AiPromptRequest& request) {
-    return "System:\n" + BuildAiSystemPrompt(request) +
-        "\n\nUser:\n" + BuildAiUserPrompt(request) +
-        "\n\nAssistant:\n";
+std::string LocalChatPrompt(const AiPromptRequest& request) {
+    return BuildAiSystemPrompt(request) +
+        "\n\nText to process:\n" + BuildAiUserPrompt(request);
 }
 
-std::string CleanLocalOutput(std::string output, const std::string& prompt) {
-    output = Trim(std::move(output));
-    const std::size_t prompt_position = output.find(prompt);
-    if (prompt_position != std::string::npos) {
-        output.erase(prompt_position, prompt.size());
-        output = Trim(std::move(output));
-    }
-    const std::string assistant_marker = "Assistant:";
-    const std::size_t marker_position = output.rfind(assistant_marker);
-    if (marker_position != std::string::npos) {
-        output.erase(0, marker_position + assistant_marker.size());
-        output = Trim(std::move(output));
-    }
-    return output;
+std::string CleanLocalOutput(std::string output) {
+    return Trim(std::move(output));
 }
 
 bool IsCancelled(const std::atomic<bool>* cancel_requested) {
@@ -693,12 +680,12 @@ AiBackendResult AiBackend::RunLocalLlamaCpp(
             "Selected local model is not downloaded: " + filename);
     }
 
-    const std::string prompt = LocalPrompt(request);
-    const std::filesystem::path prompt_path = MakePromptFilePath();
+    const std::string prompt = LocalChatPrompt(request);
+    const std::filesystem::path prompt_path = MakeTemporaryAiFilePath("prompt");
     if (!WritePromptFile(prompt_path, prompt)) {
         return ErrorResult(
             AiProvider::LocalLlamaCpp,
-            "Could not create a temporary prompt file.");
+            "Could not create the temporary prompt file.");
     }
     const int max_output_tokens = settings_.max_output_tokens > 0
         ? settings_.max_output_tokens
@@ -710,6 +697,8 @@ AiBackendResult AiBackend::RunLocalLlamaCpp(
     std::vector<std::string> arguments = {
         executable.path.string(),
         "--model", model_path.string(),
+        "--jinja",
+        "--single-turn",
         "--file", prompt_path.string(),
         "--n-predict", std::to_string(max_output_tokens),
         "--threads", std::to_string(local_threads),
@@ -717,17 +706,10 @@ AiBackendResult AiBackend::RunLocalLlamaCpp(
         "--prio", "-1",
         "--poll", "0",
         "--temp", "0.2",
+        "--color", "off",
         "--no-display-prompt",
         "--simple-io",
-        "--log-disable",
     };
-    if (executable.kind == LocalLlamaExecutableKind::Completion) {
-        arguments.push_back("-no-cnv");
-    } else {
-        // Modern llama-cli is chat-oriented. --single-turn makes the fallback
-        // terminate after the predefined prompt instead of waiting for input.
-        arguments.push_back("--single-turn");
-    }
 
     std::string streamed_output;
     auto last_progress_at = std::chrono::steady_clock::now() - std::chrono::seconds(1);
@@ -743,7 +725,7 @@ AiBackendResult AiBackend::RunLocalLlamaCpp(
             return;
         }
         last_progress_at = now;
-        const std::string cleaned = CleanLocalOutput(streamed_output, prompt);
+        const std::string cleaned = CleanLocalOutput(streamed_output);
         if (!cleaned.empty()) {
             progress(cleaned);
         }
@@ -772,11 +754,13 @@ AiBackendResult AiBackend::RunLocalLlamaCpp(
                       std::to_string(command.exit_code) + "."
                 : command.error);
     }
-    const std::string output = CleanLocalOutput(command.output, prompt);
+    const std::string output = CleanLocalOutput(command.output);
     if (output.empty()) {
         return ErrorResult(
             AiProvider::LocalLlamaCpp,
-            executable_name + " returned an empty response.");
+            executable_name +
+                " returned an empty response. The model chat template may be "
+                "missing or incompatible.");
     }
     AiBackendResult result;
     result.success = true;

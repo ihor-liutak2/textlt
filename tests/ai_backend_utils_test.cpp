@@ -55,12 +55,35 @@ int main() {
     const std::filesystem::path cli_runtime = runtime_dir / "llama-cli";
     const std::filesystem::path model = models_dir / "test.gguf";
     const std::filesystem::path args_file = test_root / "args.txt";
+    const std::filesystem::path prompt_copy = test_root / "prompt.txt";
     std::ofstream(model).put('\n');
     {
         std::ofstream script(completion_runtime);
-        script << "#!/bin/sh\n"
-               << "printf '%s\\n' \"$@\" > \"$TEXTLT_TEST_ARGS\"\n"
-               << "printf 'Corrected text.'\n";
+        script << R"SCRIPT(#!/bin/sh
+printf '%s\n' "$@" > "$TEXTLT_TEST_ARGS"
+previous=''
+has_jinja=0
+has_single_turn=0
+has_raw_completion=0
+has_unsupported_timing_flag=0
+for argument in "$@"; do
+  if [ "$previous" = '--file' ]; then
+    cp "$argument" "$TEXTLT_TEST_PROMPT"
+  fi
+  case "$argument" in
+    --jinja) has_jinja=1 ;;
+    --single-turn) has_single_turn=1 ;;
+    -no-cnv|--no-conversation) has_raw_completion=1 ;;
+    --no-show-timings) has_unsupported_timing_flag=1 ;;
+  esac
+  previous="$argument"
+done
+if [ "$has_jinja" -eq 1 ] && [ "$has_single_turn" -eq 1 ] &&
+   [ "$has_raw_completion" -eq 0 ] &&
+   [ "$has_unsupported_timing_flag" -eq 0 ]; then
+  printf 'Corrected text.'
+fi
+)SCRIPT";
     }
     chmod(completion_runtime.c_str(), 0755);
     {
@@ -71,6 +94,7 @@ int main() {
     chmod(cli_runtime.c_str(), 0755);
     setenv("XDG_DATA_HOME", test_root.c_str(), 1);
     setenv("TEXTLT_TEST_ARGS", args_file.c_str(), 1);
+    setenv("TEXTLT_TEST_PROMPT", prompt_copy.c_str(), 1);
 
     textlt::AiBackendSettings local_settings;
     local_settings.provider = AiProvider::LocalLlamaCpp;
@@ -86,15 +110,27 @@ int main() {
     const std::string args_text(
         (std::istreambuf_iterator<char>(args_input)),
         std::istreambuf_iterator<char>());
-    assert(args_text.find("-no-cnv") != std::string::npos);
-    assert(args_text.find("--single-turn") == std::string::npos);
+    assert(args_text.find("--jinja") != std::string::npos);
+    assert(args_text.find("--single-turn") != std::string::npos);
+    assert(args_text.find("-no-cnv") == std::string::npos);
     assert(args_text.find("--no-conversation") == std::string::npos);
-    assert(args_text.find("--log-disable") != std::string::npos);
+    assert(args_text.find("--log-disable") == std::string::npos);
+    assert(args_text.find("--no-show-timings") == std::string::npos);
+    assert(args_text.find("--color\noff") != std::string::npos);
     assert(args_text.find("--n-predict\n128") != std::string::npos);
     assert(args_text.find("--threads\n3") != std::string::npos);
     assert(args_text.find("--threads-batch\n3") != std::string::npos);
     assert(args_text.find("--prio\n-1") != std::string::npos);
     assert(args_text.find("--poll\n0") != std::string::npos);
+
+    std::ifstream prompt_input(prompt_copy);
+    const std::string prompt_text(
+        (std::istreambuf_iterator<char>(prompt_input)),
+        std::istreambuf_iterator<char>());
+    assert(prompt_text.find(
+               "Translate the supplied text explicitly from English into Ukrainian.") !=
+           std::string::npos);
+    assert(prompt_text.find("Text to process:\ntext") != std::string::npos);
 
     std::filesystem::remove(completion_runtime);
     {
@@ -112,6 +148,7 @@ int main() {
     const std::string fallback_args_text(
         (std::istreambuf_iterator<char>(fallback_args_input)),
         std::istreambuf_iterator<char>());
+    assert(fallback_args_text.find("--jinja") != std::string::npos);
     assert(fallback_args_text.find("--single-turn") != std::string::npos);
     assert(fallback_args_text.find("-no-cnv") == std::string::npos);
     assert(fallback_args_text.find("--no-conversation") == std::string::npos);

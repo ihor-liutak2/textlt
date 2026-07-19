@@ -388,7 +388,7 @@ AiSettingsModalContent::AiSettingsModalContent(
     test_button_ = MakeButton(
         &theme_, "Test model", [this] { StartTest(); }, ButtonRole::Primary);
     close_test_button_ = MakeButton(
-        &theme_, "Stop and close", [this] { CloseTestPopup(); }, ButtonRole::Warning);
+        &theme_, "Close", [this] { CloseTestPopup(); }, ButtonRole::Secondary);
 
     ftxui::MenuOption menu_option = ftxui::MenuOption::Vertical();
     menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
