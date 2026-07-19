@@ -51,17 +51,24 @@ int main() {
     const std::filesystem::path models_dir = test_root / "textlt" / "ai" / "models";
     std::filesystem::create_directories(runtime_dir);
     std::filesystem::create_directories(models_dir);
-    const std::filesystem::path runtime = runtime_dir / "llama-cli";
+    const std::filesystem::path completion_runtime = runtime_dir / "llama-completion";
+    const std::filesystem::path cli_runtime = runtime_dir / "llama-cli";
     const std::filesystem::path model = models_dir / "test.gguf";
     const std::filesystem::path args_file = test_root / "args.txt";
     std::ofstream(model).put('\n');
     {
-        std::ofstream script(runtime);
+        std::ofstream script(completion_runtime);
         script << "#!/bin/sh\n"
                << "printf '%s\\n' \"$@\" > \"$TEXTLT_TEST_ARGS\"\n"
                << "printf 'Corrected text.'\n";
     }
-    chmod(runtime.c_str(), 0755);
+    chmod(completion_runtime.c_str(), 0755);
+    {
+        std::ofstream script(cli_runtime);
+        script << "#!/bin/sh\n"
+               << "printf 'llama-cli should not be selected when llama-completion exists.'\n";
+    }
+    chmod(cli_runtime.c_str(), 0755);
     setenv("XDG_DATA_HOME", test_root.c_str(), 1);
     setenv("TEXTLT_TEST_ARGS", args_file.c_str(), 1);
 
@@ -79,20 +86,55 @@ int main() {
     const std::string args_text(
         (std::istreambuf_iterator<char>(args_input)),
         std::istreambuf_iterator<char>());
-    assert(args_text.find("--no-conversation") != std::string::npos);
+    assert(args_text.find("-no-cnv") != std::string::npos);
+    assert(args_text.find("--single-turn") == std::string::npos);
+    assert(args_text.find("--no-conversation") == std::string::npos);
+    assert(args_text.find("--log-disable") != std::string::npos);
     assert(args_text.find("--n-predict\n128") != std::string::npos);
     assert(args_text.find("--threads\n3") != std::string::npos);
     assert(args_text.find("--threads-batch\n3") != std::string::npos);
     assert(args_text.find("--prio\n-1") != std::string::npos);
     assert(args_text.find("--poll\n0") != std::string::npos);
 
+    std::filesystem::remove(completion_runtime);
     {
-        std::ofstream script(runtime, std::ios::trunc);
+        std::ofstream script(cli_runtime, std::ios::trunc);
+        script << "#!/bin/sh\n"
+               << "printf '%s\\n' \"$@\" > \"$TEXTLT_TEST_ARGS\"\n"
+               << "printf 'Fallback corrected text.'\n";
+    }
+    chmod(cli_runtime.c_str(), 0755);
+    const textlt::AiBackendResult cli_fallback_result =
+        textlt::AiBackend(local_settings).Run(request);
+    assert(cli_fallback_result.success);
+    assert(cli_fallback_result.text == "Fallback corrected text.");
+    std::ifstream fallback_args_input(args_file);
+    const std::string fallback_args_text(
+        (std::istreambuf_iterator<char>(fallback_args_input)),
+        std::istreambuf_iterator<char>());
+    assert(fallback_args_text.find("--single-turn") != std::string::npos);
+    assert(fallback_args_text.find("-no-cnv") == std::string::npos);
+    assert(fallback_args_text.find("--no-conversation") == std::string::npos);
+
+    {
+        std::ofstream script(cli_runtime, std::ios::trunc);
+        script << "#!/bin/sh\n"
+               << "printf '%s\n' '--no-conversation is not supported by llama-cli'\n"
+               << "printf '%s\n' 'please use llama-completion instead'\n";
+    }
+    chmod(cli_runtime.c_str(), 0755);
+    const textlt::AiBackendResult incompatible_runtime_result =
+        textlt::AiBackend(local_settings).Run(request);
+    assert(!incompatible_runtime_result.success);
+    assert(incompatible_runtime_result.error.find("llama-completion") != std::string::npos);
+
+    {
+        std::ofstream script(cli_runtime, std::ios::trunc);
         script << "#!/bin/sh\n"
                << "printf 'First response.'\n"
                << "sleep 10\n";
     }
-    chmod(runtime.c_str(), 0755);
+    chmod(cli_runtime.c_str(), 0755);
     local_settings.timeout_seconds = 30;
     textlt::RemoteCommandControl command_control;
     std::atomic<bool> first_output_seen{false};
@@ -123,11 +165,11 @@ int main() {
     assert(std::chrono::steady_clock::now() - stop_started < std::chrono::seconds(3));
 
     {
-        std::ofstream script(runtime, std::ios::trunc);
+        std::ofstream script(cli_runtime, std::ios::trunc);
         script << "#!/bin/sh\n"
                << "sleep 10\n";
     }
-    chmod(runtime.c_str(), 0755);
+    chmod(cli_runtime.c_str(), 0755);
     local_settings.timeout_seconds = 1;
     const auto timeout_started = std::chrono::steady_clock::now();
     const textlt::AiBackendResult local_timeout =

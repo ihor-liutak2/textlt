@@ -70,23 +70,63 @@ Json ParseJsonBody(const RemoteHttpResponse& response, std::string& error) {
     return root;
 }
 
-std::filesystem::path FindLlamaCli() {
+enum class LocalLlamaExecutableKind {
+    Completion,
+    Cli,
+};
+
+struct LocalLlamaExecutable {
+    std::filesystem::path path;
+    LocalLlamaExecutableKind kind = LocalLlamaExecutableKind::Completion;
+
+    explicit operator bool() const { return !path.empty(); }
+};
+
+std::filesystem::path FindLlamaRuntimeBinary(
+    const std::vector<std::string>& filenames) {
     const std::filesystem::path directory =
         AiUserDataDirectory() / "ai" / "runtimes" / "llama_cpp";
     std::error_code error;
     if (!std::filesystem::exists(directory, error)) {
         return {};
     }
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(directory, error)) {
-        if (error) {
-            return {};
-        }
-        const std::string filename = entry.path().filename().string();
-        if (entry.is_regular_file() && (filename == "llama-cli" || filename == "llama-cli.exe")) {
-            return entry.path();
+    for (const std::string& wanted : filenames) {
+        error.clear();
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(directory, error)) {
+            if (error) {
+                return {};
+            }
+            if (entry.is_regular_file() && entry.path().filename() == wanted) {
+                return entry.path();
+            }
         }
     }
     return {};
+}
+
+LocalLlamaExecutable FindLocalLlamaExecutable() {
+#ifdef _WIN32
+    const std::filesystem::path completion =
+        FindLlamaRuntimeBinary({"llama-completion.exe"});
+#else
+    const std::filesystem::path completion =
+        FindLlamaRuntimeBinary({"llama-completion"});
+#endif
+    if (!completion.empty()) {
+        return {completion, LocalLlamaExecutableKind::Completion};
+    }
+#ifdef _WIN32
+    const std::filesystem::path cli = FindLlamaRuntimeBinary({"llama-cli.exe"});
+#else
+    const std::filesystem::path cli = FindLlamaRuntimeBinary({"llama-cli"});
+#endif
+    return {cli, LocalLlamaExecutableKind::Cli};
+}
+
+std::string LocalLlamaExecutableName(LocalLlamaExecutableKind kind) {
+    return kind == LocalLlamaExecutableKind::Completion
+        ? "llama-completion"
+        : "llama-cli";
 }
 
 bool IsSafeLocalModelFilename(const std::string& filename) {
@@ -444,7 +484,7 @@ AiConnectionResult AiBackend::CheckConnectionAndListModels(
         AiConnectionResult result;
         result.provider = AiProvider::LocalLlamaCpp;
         result.provider_label = ProviderLabel(result.provider);
-        result.success = !FindLlamaCli().empty();
+        result.success = static_cast<bool>(FindLocalLlamaExecutable());
         if (!result.success) {
             result.error = "llama.cpp runtime is not installed.";
         }
@@ -641,8 +681,8 @@ AiBackendResult AiBackend::RunLocalLlamaCpp(
     if (!IsSafeLocalModelFilename(filename)) {
         return ErrorResult(AiProvider::LocalLlamaCpp, "Selected local model filename is invalid.");
     }
-    const std::filesystem::path runtime = FindLlamaCli();
-    if (runtime.empty()) {
+    const LocalLlamaExecutable executable = FindLocalLlamaExecutable();
+    if (!executable) {
         return ErrorResult(AiProvider::LocalLlamaCpp, "llama.cpp runtime is not installed.");
     }
     const std::filesystem::path model_path = AiUserDataDirectory() / "ai" / "models" / filename;
@@ -667,11 +707,8 @@ AiBackendResult AiBackend::RunLocalLlamaCpp(
         ? settings_.local_threads
         : DefaultLocalThreadCount();
 
-    std::string streamed_output;
-    auto last_progress_at = std::chrono::steady_clock::now() - std::chrono::seconds(1);
-    RemoteCommandRunner runner;
-    const RemoteCommandResult command = runner.RunStreaming({
-        runtime.string(),
+    std::vector<std::string> arguments = {
+        executable.path.string(),
         "--model", model_path.string(),
         "--file", prompt_path.string(),
         "--n-predict", std::to_string(max_output_tokens),
@@ -680,10 +717,23 @@ AiBackendResult AiBackend::RunLocalLlamaCpp(
         "--prio", "-1",
         "--poll", "0",
         "--temp", "0.2",
-        "--no-conversation",
         "--no-display-prompt",
         "--simple-io",
-    }, {}, cancel_requested, [&](const std::string& chunk) {
+        "--log-disable",
+    };
+    if (executable.kind == LocalLlamaExecutableKind::Completion) {
+        arguments.push_back("-no-cnv");
+    } else {
+        // Modern llama-cli is chat-oriented. --single-turn makes the fallback
+        // terminate after the predefined prompt instead of waiting for input.
+        arguments.push_back("--single-turn");
+    }
+
+    std::string streamed_output;
+    auto last_progress_at = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+    RemoteCommandRunner runner;
+    const RemoteCommandResult command = runner.RunStreaming(
+        arguments, {}, cancel_requested, [&](const std::string& chunk) {
         streamed_output += chunk;
         if (!progress) {
             return;
@@ -705,16 +755,28 @@ AiBackendResult AiBackend::RunLocalLlamaCpp(
     if (command.cancelled || IsCancelled(cancel_requested)) {
         return StoppedResult(AiProvider::LocalLlamaCpp);
     }
+    const std::string executable_name = LocalLlamaExecutableName(executable.kind);
+    const std::string diagnostics = command.output + "\n" + command.error;
+    if (diagnostics.find("is not supported by llama-cli") != std::string::npos ||
+        diagnostics.find("please use llama-completion") != std::string::npos) {
+        return ErrorResult(
+            AiProvider::LocalLlamaCpp,
+            "The installed llama.cpp runtime is incompatible with one-shot execution. "
+            "Install a runtime that includes llama-completion.");
+    }
     if (command.exit_code != 0) {
         return ErrorResult(
             AiProvider::LocalLlamaCpp,
             command.error.empty()
-                ? "llama-cli exited with code " + std::to_string(command.exit_code) + "."
+                ? executable_name + " exited with code " +
+                      std::to_string(command.exit_code) + "."
                 : command.error);
     }
     const std::string output = CleanLocalOutput(command.output, prompt);
     if (output.empty()) {
-        return ErrorResult(AiProvider::LocalLlamaCpp, "llama-cli returned an empty response.");
+        return ErrorResult(
+            AiProvider::LocalLlamaCpp,
+            executable_name + " returned an empty response.");
     }
     AiBackendResult result;
     result.success = true;

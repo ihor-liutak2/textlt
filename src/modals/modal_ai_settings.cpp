@@ -67,29 +67,46 @@ std::filesystem::path ModelsDirectory() {
     return UserDataDirectory() / "ai" / "models";
 }
 
-bool RuntimeBinaryExists() {
+std::filesystem::path FindInstalledRuntimeBinary() {
     std::error_code error;
     const std::filesystem::path directory = RuntimeDirectory();
     if (!std::filesystem::exists(directory, error)) {
-        return false;
+        return {};
     }
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(directory, error)) {
-        if (error) {
-            return false;
-        }
-        const std::string filename = entry.path().filename().string();
-        if (entry.is_regular_file() && (filename == "llama-cli" || filename == "llama-cli.exe")) {
-            return true;
+#ifdef _WIN32
+    const std::vector<std::string> preferred_names = {
+        "llama-completion.exe", "llama-cli.exe"};
+#else
+    const std::vector<std::string> preferred_names = {
+        "llama-completion", "llama-cli"};
+#endif
+    for (const std::string& wanted : preferred_names) {
+        error.clear();
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(directory, error)) {
+            if (error) {
+                return {};
+            }
+            if (entry.is_regular_file() && entry.path().filename() == wanted) {
+                return entry.path();
+            }
         }
     }
-    return false;
+    return {};
+}
+
+bool RuntimeBinaryExists() {
+    return !FindInstalledRuntimeBinary().empty();
 }
 
 std::string RuntimeDisplayPath() {
+    const std::filesystem::path installed = FindInstalledRuntimeBinary();
+    if (!installed.empty()) {
+        return installed.string();
+    }
 #ifdef _WIN32
-    return "%LOCALAPPDATA%\\textlt\\ai\\runtimes\\llama_cpp\\llama-cli.exe";
+    return "%LOCALAPPDATA%\\textlt\\ai\\runtimes\\llama_cpp\\llama-completion.exe";
 #else
-    return "~/.local/share/textlt/ai/runtimes/llama_cpp/llama-cli";
+    return "~/.local/share/textlt/ai/runtimes/llama_cpp/llama-completion";
 #endif
 }
 
@@ -371,7 +388,7 @@ AiSettingsModalContent::AiSettingsModalContent(
     test_button_ = MakeButton(
         &theme_, "Test model", [this] { StartTest(); }, ButtonRole::Primary);
     close_test_button_ = MakeButton(
-        &theme_, "Stop / Close", [this] { CloseTestPopup(); }, ButtonRole::Warning);
+        &theme_, "Stop and close", [this] { CloseTestPopup(); }, ButtonRole::Warning);
 
     ftxui::MenuOption menu_option = ftxui::MenuOption::Vertical();
     menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
@@ -865,9 +882,11 @@ void AiSettingsModalContent::StartTest() {
             [this](const std::string& generated) {
                 {
                     std::lock_guard<std::mutex> lock(state_mutex_);
-                    if (operation_state_ != OperationState::Stopping) {
-                        operation_state_ = OperationState::Running;
+                    if (operation_state_ == OperationState::Stopping ||
+                        cancel_requested_.load() || !test_popup_visible_) {
+                        return;
                     }
+                    operation_state_ = OperationState::Running;
                     test_result_ = generated;
                 }
                 RequestRedraw();
@@ -910,24 +929,36 @@ void AiSettingsModalContent::CloseTestPopup() {
 
 void AiSettingsModalContent::StopCurrentOperation() {
     bool should_stop = false;
+    bool close_test_popup = false;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         should_stop = busy_;
         if (should_stop) {
             cancel_requested_.store(true);
             operation_state_ = OperationState::Stopping;
-            status_ = command_control_.IsRunning()
-                ? (test_running_ ? "Stopping model test..." : "Stopping current command...")
-                : "Cancelling AI settings operation...";
-            if (test_running_) {
-                test_result_ = "Stopping model process...";
+            close_test_popup = test_running_;
+            if (close_test_popup) {
+                test_popup_visible_ = false;
+                test_result_ = "Test stopped.";
+                status_ = command_control_.IsRunning()
+                    ? "Stopping model test..."
+                    : "Cancelling model test...";
+            } else {
+                status_ = command_control_.IsRunning()
+                    ? "Stopping current command..."
+                    : "Cancelling AI settings operation...";
             }
         }
     }
-    if (should_stop) {
-        command_control_.RequestStop();
-        RequestRedraw();
+    if (!should_stop) {
+        return;
     }
+    command_control_.RequestStop();
+    if (close_test_popup) {
+        active_panel_ = 0;
+        model_menu_->TakeFocus();
+    }
+    RequestRedraw();
 }
 
 void AiSettingsModalContent::PrepareClose() {
