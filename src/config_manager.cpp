@@ -81,12 +81,20 @@ EditorConfig ConfigManager::Load() const {
         config.ai_server_url = "http://127.0.0.1:11434";
     }
     config.ai_provider = JsonString(root, "ai_provider", config.ai_provider);
-    if (config.ai_provider != "auto" && config.ai_provider != "ollama" &&
-        config.ai_provider != "openai" && config.ai_provider != "llama_cpp") {
-        config.ai_provider = "auto";
+    if (config.ai_provider == "auto") {
+        config.ai_provider = "ollama";
+    }
+    if (config.ai_provider != "ollama" && config.ai_provider != "openai" &&
+        config.ai_provider != "llama_cpp") {
+        config.ai_provider = "ollama";
     }
     config.ai_selected_model_key = JsonString(
         root, "ai_selected_model_key", config.ai_selected_model_key);
+    config.ai_translation_source_language = JsonString(
+        root, "ai_translation_source_language", config.ai_translation_source_language);
+    if (config.ai_translation_source_language.empty()) {
+        config.ai_translation_source_language = "English";
+    }
     config.ai_translation_language = JsonString(
         root, "ai_translation_language", config.ai_translation_language);
     if (config.ai_translation_language.empty()) {

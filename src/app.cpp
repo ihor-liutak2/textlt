@@ -307,7 +307,24 @@ TextltApp::TextltApp()
               screen_.PostEvent(ftxui::Event::Custom);
               return true;
           },
-          [this] { screen_.PostEvent(ftxui::Event::Custom); }),
+          [this] { screen_.PostEvent(ftxui::Event::Custom); },
+          [this](const std::string& message) {
+              active_action_ = message;
+              screen_.PostEvent(ftxui::Event::Custom);
+          }),
+      ai_quick_actions_modal_(
+          &current_theme_,
+          [this](AiActionType action, std::string& error) {
+              const bool started = ai_actions_modal_.StartQuickAction(action, error);
+              if (started) {
+                  active_action_ = action == AiActionType::Translate
+                      ? "AI quick translation started for current paragraph"
+                      : "AI quick editing started for current paragraph";
+                  screen_.PostEvent(ftxui::Event::Custom);
+              }
+              return started;
+          },
+          [this] { CloseAiQuickActionsModal(); }),
       ai_settings_modal_(
           &current_theme_,
           &editor_config_,
@@ -557,6 +574,7 @@ TextltApp::TextltApp()
         view_layout_modal_.View(),
         distraction_options_modal_.View(),
         ai_actions_modal_.View(),
+        ai_quick_actions_modal_.View(),
         ai_settings_modal_.View(),
         assistant_settings_modal_.View(),
     }, &active_layer_index_);

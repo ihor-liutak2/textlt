@@ -247,6 +247,7 @@ add_executable(textlt
   src/modals/assistant_modals_server.cpp
   src/modals/help_dialog.cpp
   src/modals/modal_ai.cpp
+  src/modals/modal_ai_quick_actions.cpp
   src/modals/modal_ai_settings.cpp
   src/modals/modal_git.cpp
   src/modals/modal_git_settings.cpp
@@ -372,6 +373,18 @@ add_executable(textlt_ai_backend_utils_test
   src/ai/ai_prompts.cpp
   src/remote/remote_http_client.cpp
   src/remote/remote_command_runner.cpp
+)
+
+add_executable(textlt_remote_command_runner_streaming_test
+  tests/remote_command_runner_streaming_test.cpp
+  src/remote/remote_command_runner.cpp
+)
+
+add_executable(textlt_ai_quick_actions_test
+  tests/ai_quick_actions_test.cpp
+  src/modals/modal_ai_quick_actions.cpp
+  src/modals/modal_window.cpp
+  src/theme.cpp
 )
 
 add_executable(textlt_document_ai_transform_test
@@ -653,6 +666,15 @@ target_include_directories(textlt_ai_backend_utils_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
 
+target_include_directories(textlt_remote_command_runner_streaming_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_include_directories(textlt_ai_quick_actions_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+)
+
 target_include_directories(textlt_document_ai_transform_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -660,11 +682,20 @@ target_include_directories(textlt_document_ai_transform_test PRIVATE
 target_link_libraries(textlt_document_navigation_test PRIVATE ftxui::screen)
 
 target_link_libraries(textlt_ai_backend_utils_test PRIVATE Threads::Threads)
+target_link_libraries(textlt_remote_command_runner_streaming_test PRIVATE Threads::Threads)
+target_link_libraries(textlt_ai_quick_actions_test PRIVATE
+  ftxui::screen
+  ftxui::dom
+  ftxui::component
+)
 target_link_libraries(textlt_document_ai_transform_test PRIVATE ftxui::screen)
 
 add_test(NAME textlt_document_navigation_test COMMAND textlt_document_navigation_test)
 add_test(NAME textlt_ai_prompts_test COMMAND textlt_ai_prompts_test)
 add_test(NAME textlt_ai_backend_utils_test COMMAND textlt_ai_backend_utils_test)
+add_test(NAME textlt_remote_command_runner_streaming_test
+  COMMAND textlt_remote_command_runner_streaming_test)
+add_test(NAME textlt_ai_quick_actions_test COMMAND textlt_ai_quick_actions_test)
 add_test(NAME textlt_document_ai_transform_test COMMAND textlt_document_ai_transform_test)
 add_test(NAME textlt_text_importer_test COMMAND textlt_text_importer_test)
 add_test(NAME textlt_keyboard_shortcuts_test COMMAND textlt_keyboard_shortcuts_test)

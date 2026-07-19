@@ -4,11 +4,16 @@ namespace textlt {
 
 std::string BuildAiSystemPrompt(const AiPromptRequest& request) {
     if (request.action == AiActionType::Translate) {
-        const std::string language = request.target_language.empty()
+        const std::string source_language = request.source_language.empty()
+            ? std::string("English")
+            : request.source_language;
+        const std::string target_language = request.target_language.empty()
             ? std::string("Ukrainian")
             : request.target_language;
-        return "Translate the supplied text into " + language +
-            ". Preserve paragraph breaks, lists, punctuation, names, numbers, and meaning. "
+        return "Translate the supplied text explicitly from " + source_language +
+            " into " + target_language +
+            ". Do not translate it into any other language. Preserve paragraph breaks, lists, "
+            "punctuation, names, numbers, and meaning. "
             "Do not add explanations, commentary, headings, quotation marks, or markdown fences. "
             "Return only the translated text.";
     }

@@ -12,10 +12,14 @@ int main() {
     ShortcutRegistry registry;
     registry.RegisterDefault({ShortcutContext::Menu, "file.save", "Save", "File", "Ctrl+S"});
     registry.RegisterDefault({ShortcutContext::Text, "editor.move_line_up", "Move line up", "Lines", "Alt+Up"});
+    registry.RegisterDefault({ShortcutContext::Menu, "ai.quick_actions", "Quick AI", "AI", "Alt+M"});
 
     assert(registry.EffectiveShortcut(ShortcutContext::Menu, "file.save") == "Ctrl+S");
     assert(registry.MatchAction(ShortcutContext::Menu, ftxui::Event::Special("Ctrl+S")) == "file.save");
     assert(registry.MatchAction(ShortcutContext::Text, ftxui::Event::Special("Alt+Up")) == "editor.move_line_up");
+    assert(registry.MatchAction(ShortcutContext::Menu, ftxui::Event::Special("Alt+M")) == "ai.quick_actions");
+    assert(registry.MatchAction(ShortcutContext::Menu, ftxui::Event::Special("\x1Bm")) == "ai.quick_actions");
+    assert(registry.MatchAction(ShortcutContext::Menu, ftxui::Event::Special("\x1Bь")) == "ai.quick_actions");
 
     std::string error;
     assert(!registry.SetOverride(ShortcutContext::Text, "editor.move_line_up", "Ctrl+S", error));

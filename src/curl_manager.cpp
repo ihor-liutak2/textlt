@@ -18,6 +18,13 @@ CurlManager::Response CurlManager::Get(const std::string& url) {
 
 CurlManager::Response CurlManager::Get(const std::string& url,
                                        const RequestOptions& options) {
+    return Get(url, options, nullptr);
+}
+
+CurlManager::Response CurlManager::Get(
+    const std::string& url,
+    const RequestOptions& options,
+    const std::atomic<bool>* cancel_requested) {
     std::vector<std::string> headers = options.headers;
     if (options.no_cache) {
         headers.push_back("Cache-Control: no-cache");
@@ -28,7 +35,9 @@ CurlManager::Response CurlManager::Get(const std::string& url,
     }
 
     RemoteHttpClient client;
-    const RemoteHttpResponse response = client.Request("GET", url, headers, {}, 0);
+    const RemoteHttpResponse response = cancel_requested
+        ? client.RequestStreaming("GET", url, headers, {}, 0, cancel_requested, {})
+        : client.Request("GET", url, headers, {}, 0);
     return {
         response.ok,
         response.status_code,
@@ -38,13 +47,16 @@ CurlManager::Response CurlManager::Get(const std::string& url,
 
 bool CurlManager::DownloadToFile(const std::string& url,
                                  const std::filesystem::path& path,
-                                 ProgressCallback progress) {
+                                 ProgressCallback progress,
+                                 const std::atomic<bool>* cancel_requested) {
     if (progress && !progress(0, 0)) {
         return false;
     }
 
     RemoteHttpClient client;
-    const RemoteHttpResponse response = client.Download("GET", url, {}, path, {}, 0);
+    const RemoteHttpResponse response = cancel_requested
+        ? client.DownloadCancelable("GET", url, {}, path, {}, 0, cancel_requested)
+        : client.Download("GET", url, {}, path, {}, 0);
     if (!response.ok) {
         return false;
     }

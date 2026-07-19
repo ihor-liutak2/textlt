@@ -94,6 +94,7 @@ MenuBarComponent::MenuBarComponent(
               {" TTS                 (Alt+H) ", "tts.open_modal"},
               {" TTS Settings  (Alt+S) ", "assistant.open_settings"},
               {" ───────────────────────── ", "", true},
+              {" Quick AI            (Alt+M) ", "ai.quick_actions"},
               {" AI Actions          (Alt+J) ", "ai.open_actions"},
               {" AI Settings... ", "ai.open_settings"},
               {" ───────────────────────── ", "", true},

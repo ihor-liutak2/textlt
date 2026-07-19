@@ -139,11 +139,77 @@ std::string CleanLocalOutput(std::string output, const std::string& prompt) {
     return output;
 }
 
+
+bool IsCancelled(const std::atomic<bool>* cancel_requested) {
+    return cancel_requested && cancel_requested->load();
+}
+
+void ConsumeCompleteLines(
+    std::string& buffer,
+    const std::string& chunk,
+    const std::function<void(std::string)>& consume) {
+    buffer += chunk;
+    while (true) {
+        const std::size_t newline = buffer.find('\n');
+        if (newline == std::string::npos) {
+            return;
+        }
+        std::string line = buffer.substr(0, newline);
+        buffer.erase(0, newline + 1);
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        consume(std::move(line));
+    }
+}
+
+std::string OllamaStreamContent(const std::string& line) {
+    if (line.empty()) {
+        return {};
+    }
+    const Json root = Json::parse(line, nullptr, false);
+    if (root.is_discarded() || !root.is_object()) {
+        return {};
+    }
+    const auto message = root.find("message");
+    return message != root.end() && message->is_object()
+        ? JsonString(*message, "content")
+        : std::string{};
+}
+
+std::string OpenAiStreamContent(std::string line) {
+    const std::string prefix = "data:";
+    if (line.rfind(prefix, 0) != 0) {
+        return {};
+    }
+    line = Trim(line.substr(prefix.size()));
+    if (line.empty() || line == "[DONE]") {
+        return {};
+    }
+    const Json root = Json::parse(line, nullptr, false);
+    if (root.is_discarded() || !root.is_object()) {
+        return {};
+    }
+    const auto choices = root.find("choices");
+    if (choices == root.end() || !choices->is_array() || choices->empty() ||
+        !(*choices)[0].is_object()) {
+        return {};
+    }
+    const auto delta = (*choices)[0].find("delta");
+    return delta != (*choices)[0].end() && delta->is_object()
+        ? JsonString(*delta, "content")
+        : std::string{};
+}
+
 AiBackendResult ErrorResult(AiProvider provider, std::string error) {
     AiBackendResult result;
     result.provider = provider;
     result.error = std::move(error);
     return result;
+}
+
+AiBackendResult StoppedResult(AiProvider provider) {
+    return ErrorResult(provider, "Operation stopped.");
 }
 
 } // namespace
@@ -220,7 +286,7 @@ std::string AiBackend::ModelIdFromKey(const std::string& key) {
     return separator == std::string::npos ? key : key.substr(separator + 1);
 }
 
-AiConnectionResult AiBackend::TryOllama() const {
+AiConnectionResult AiBackend::TryOllama(const std::atomic<bool>* cancel_requested) const {
     AiConnectionResult result;
     result.provider = AiProvider::Ollama;
     result.provider_label = ProviderLabel(result.provider);
@@ -234,12 +300,18 @@ AiConnectionResult AiBackend::TryOllama() const {
     }
 
     RemoteHttpClient client;
-    const RemoteHttpResponse response = client.Request(
+    const RemoteHttpResponse response = client.RequestStreaming(
         "GET",
         JoinUrl(settings_.server_url, "/api/tags"),
         {"Accept: application/json"},
         {},
-        std::min(settings_.timeout_seconds, 20));
+        std::min(settings_.timeout_seconds, 20),
+        cancel_requested,
+        {});
+    if (IsCancelled(cancel_requested)) {
+        result.error = "Operation stopped.";
+        return result;
+    }
     std::string error;
     const Json root = ParseJsonBody(response, error);
     if (!error.empty()) {
@@ -278,7 +350,7 @@ AiConnectionResult AiBackend::TryOllama() const {
     return result;
 }
 
-AiConnectionResult AiBackend::TryOpenAiCompatible() const {
+AiConnectionResult AiBackend::TryOpenAiCompatible(const std::atomic<bool>* cancel_requested) const {
     AiConnectionResult result;
     result.provider = AiProvider::OpenAiCompatible;
     result.provider_label = ProviderLabel(result.provider);
@@ -292,12 +364,18 @@ AiConnectionResult AiBackend::TryOpenAiCompatible() const {
     }
 
     RemoteHttpClient client;
-    const RemoteHttpResponse response = client.Request(
+    const RemoteHttpResponse response = client.RequestStreaming(
         "GET",
         JoinUrl(settings_.server_url, "/v1/models"),
         {"Accept: application/json"},
         {},
-        std::min(settings_.timeout_seconds, 20));
+        std::min(settings_.timeout_seconds, 20),
+        cancel_requested,
+        {});
+    if (IsCancelled(cancel_requested)) {
+        result.error = "Operation stopped.";
+        return result;
+    }
     std::string error;
     const Json root = ParseJsonBody(response, error);
     if (!error.empty()) {
@@ -333,12 +411,13 @@ AiConnectionResult AiBackend::TryOpenAiCompatible() const {
     return result;
 }
 
-AiConnectionResult AiBackend::CheckConnectionAndListModels() const {
+AiConnectionResult AiBackend::CheckConnectionAndListModels(
+    const std::atomic<bool>* cancel_requested) const {
     if (settings_.provider == AiProvider::Ollama) {
-        return TryOllama();
+        return TryOllama(cancel_requested);
     }
     if (settings_.provider == AiProvider::OpenAiCompatible) {
-        return TryOpenAiCompatible();
+        return TryOpenAiCompatible(cancel_requested);
     }
     if (settings_.provider == AiProvider::LocalLlamaCpp) {
         AiConnectionResult result;
@@ -351,11 +430,11 @@ AiConnectionResult AiBackend::CheckConnectionAndListModels() const {
         return result;
     }
 
-    AiConnectionResult ollama = TryOllama();
+    AiConnectionResult ollama = TryOllama(cancel_requested);
     if (ollama.success) {
         return ollama;
     }
-    AiConnectionResult openai = TryOpenAiCompatible();
+    AiConnectionResult openai = TryOpenAiCompatible(cancel_requested);
     if (openai.success) {
         return openai;
     }
@@ -366,10 +445,12 @@ AiConnectionResult AiBackend::CheckConnectionAndListModels() const {
 
 AiBackendResult AiBackend::RunOllama(
     const AiPromptRequest& request,
-    const std::string& model) const {
+    const std::string& model,
+    const std::atomic<bool>* cancel_requested,
+    ProgressCallback progress) const {
     Json body = {
         {"model", model},
-        {"stream", false},
+        {"stream", true},
         {"messages", Json::array({
             Json{{"role", "system"}, {"content", BuildAiSystemPrompt(request)}},
             Json{{"role", "user"}, {"content", BuildAiUserPrompt(request)}},
@@ -377,68 +458,130 @@ AiBackendResult AiBackend::RunOllama(
         {"options", Json{{"temperature", 0.2}}},
     };
 
+    std::string line_buffer;
+    std::string generated;
+    auto consume_line = [&](std::string line) {
+        const std::string content = OllamaStreamContent(line);
+        if (content.empty()) {
+            return;
+        }
+        generated += content;
+        if (progress) {
+            progress(generated);
+        }
+    };
+
     RemoteHttpClient client;
-    const RemoteHttpResponse response = client.Request(
+    const RemoteHttpResponse response = client.RequestStreaming(
         "POST",
         JoinUrl(settings_.server_url, "/api/chat"),
-        {"Accept: application/json", "Content-Type: application/json"},
+        {"Accept: application/x-ndjson", "Content-Type: application/json"},
         body.dump(),
-        settings_.timeout_seconds);
-    std::string error;
-    const Json root = ParseJsonBody(response, error);
-    if (!error.empty()) {
-        return ErrorResult(AiProvider::Ollama, std::move(error));
+        settings_.timeout_seconds,
+        cancel_requested,
+        [&](const std::string& chunk) {
+            ConsumeCompleteLines(line_buffer, chunk, consume_line);
+        });
+    if (!line_buffer.empty()) {
+        consume_line(std::move(line_buffer));
     }
-    const auto message = root.find("message");
-    const std::string content = message != root.end() && message->is_object()
-        ? JsonString(*message, "content")
-        : std::string{};
-    if (content.empty()) {
+    if (IsCancelled(cancel_requested)) {
+        return StoppedResult(AiProvider::Ollama);
+    }
+    if (!response.ok) {
+        return ErrorResult(
+            AiProvider::Ollama,
+            response.error.empty() ? "Ollama request failed." : response.error);
+    }
+    if (generated.empty()) {
+        std::string error;
+        const Json root = ParseJsonBody(response, error);
+        if (error.empty()) {
+            const auto message = root.find("message");
+            generated = message != root.end() && message->is_object()
+                ? JsonString(*message, "content")
+                : std::string{};
+        }
+    }
+    generated = Trim(std::move(generated));
+    if (generated.empty()) {
         return ErrorResult(AiProvider::Ollama, "Ollama returned an empty response.");
     }
     AiBackendResult result;
     result.success = true;
     result.provider = AiProvider::Ollama;
-    result.text = content;
+    result.text = std::move(generated);
     return result;
 }
 
 AiBackendResult AiBackend::RunOpenAiCompatible(
     const AiPromptRequest& request,
-    const std::string& model) const {
+    const std::string& model,
+    const std::atomic<bool>* cancel_requested,
+    ProgressCallback progress) const {
     Json body = {
         {"model", model},
         {"temperature", 0.2},
+        {"stream", true},
         {"messages", Json::array({
             Json{{"role", "system"}, {"content", BuildAiSystemPrompt(request)}},
             Json{{"role", "user"}, {"content", BuildAiUserPrompt(request)}},
         })},
     };
 
+    std::string line_buffer;
+    std::string generated;
+    auto consume_line = [&](std::string line) {
+        const std::string content = OpenAiStreamContent(std::move(line));
+        if (content.empty()) {
+            return;
+        }
+        generated += content;
+        if (progress) {
+            progress(generated);
+        }
+    };
+
     RemoteHttpClient client;
-    const RemoteHttpResponse response = client.Request(
+    const RemoteHttpResponse response = client.RequestStreaming(
         "POST",
         JoinUrl(settings_.server_url, "/v1/chat/completions"),
-        {"Accept: application/json", "Content-Type: application/json"},
+        {"Accept: text/event-stream", "Content-Type: application/json"},
         body.dump(),
-        settings_.timeout_seconds);
-    std::string error;
-    const Json root = ParseJsonBody(response, error);
-    if (!error.empty()) {
-        return ErrorResult(AiProvider::OpenAiCompatible, std::move(error));
+        settings_.timeout_seconds,
+        cancel_requested,
+        [&](const std::string& chunk) {
+            ConsumeCompleteLines(line_buffer, chunk, consume_line);
+        });
+    if (!line_buffer.empty()) {
+        consume_line(std::move(line_buffer));
     }
-    const auto choices = root.find("choices");
-    if (choices == root.end() || !choices->is_array() || choices->empty() ||
-        !(*choices)[0].is_object()) {
+    if (IsCancelled(cancel_requested)) {
+        return StoppedResult(AiProvider::OpenAiCompatible);
+    }
+    if (!response.ok) {
         return ErrorResult(
             AiProvider::OpenAiCompatible,
-            "OpenAI-compatible server returned no choices.");
+            response.error.empty()
+                ? "OpenAI-compatible request failed."
+                : response.error);
     }
-    const auto message = (*choices)[0].find("message");
-    const std::string content = message != (*choices)[0].end() && message->is_object()
-        ? JsonString(*message, "content")
-        : std::string{};
-    if (content.empty()) {
+    if (generated.empty()) {
+        std::string error;
+        const Json root = ParseJsonBody(response, error);
+        if (error.empty()) {
+            const auto choices = root.find("choices");
+            if (choices != root.end() && choices->is_array() && !choices->empty() &&
+                (*choices)[0].is_object()) {
+                const auto message = (*choices)[0].find("message");
+                generated = message != (*choices)[0].end() && message->is_object()
+                    ? JsonString(*message, "content")
+                    : std::string{};
+            }
+        }
+    }
+    generated = Trim(std::move(generated));
+    if (generated.empty()) {
         return ErrorResult(
             AiProvider::OpenAiCompatible,
             "OpenAI-compatible server returned an empty response.");
@@ -446,13 +589,15 @@ AiBackendResult AiBackend::RunOpenAiCompatible(
     AiBackendResult result;
     result.success = true;
     result.provider = AiProvider::OpenAiCompatible;
-    result.text = content;
+    result.text = std::move(generated);
     return result;
 }
 
 AiBackendResult AiBackend::RunLocalLlamaCpp(
     const AiPromptRequest& request,
-    const std::string& filename) const {
+    const std::string& filename,
+    const std::atomic<bool>* cancel_requested,
+    ProgressCallback progress) const {
     if (!IsSafeLocalModelFilename(filename)) {
         return ErrorResult(AiProvider::LocalLlamaCpp, "Selected local model filename is invalid.");
     }
@@ -475,8 +620,9 @@ AiBackendResult AiBackend::RunLocalLlamaCpp(
             AiProvider::LocalLlamaCpp,
             "Could not create a temporary prompt file.");
     }
+    std::string streamed_output;
     RemoteCommandRunner runner;
-    const RemoteCommandResult command = runner.Run({
+    const RemoteCommandResult command = runner.RunStreaming({
         runtime.string(),
         "--model", model_path.string(),
         "--file", prompt_path.string(),
@@ -484,8 +630,19 @@ AiBackendResult AiBackend::RunLocalLlamaCpp(
         "--temp", "0.2",
         "--no-display-prompt",
         "--simple-io",
+    }, {}, cancel_requested, [&](const std::string& chunk) {
+        streamed_output += chunk;
+        if (progress) {
+            const std::string cleaned = CleanLocalOutput(streamed_output, prompt);
+            if (!cleaned.empty()) {
+                progress(cleaned);
+            }
+        }
     });
     std::filesystem::remove(prompt_path, error);
+    if (IsCancelled(cancel_requested)) {
+        return StoppedResult(AiProvider::LocalLlamaCpp);
+    }
     if (command.exit_code != 0) {
         return ErrorResult(
             AiProvider::LocalLlamaCpp,
@@ -504,7 +661,10 @@ AiBackendResult AiBackend::RunLocalLlamaCpp(
     return result;
 }
 
-AiBackendResult AiBackend::Run(const AiPromptRequest& request) const {
+AiBackendResult AiBackend::Run(
+    const AiPromptRequest& request,
+    const std::atomic<bool>* cancel_requested,
+    ProgressCallback progress) const {
     if (request.text.empty()) {
         return ErrorResult(settings_.provider, "There is no text to process.");
     }
@@ -514,33 +674,33 @@ AiBackendResult AiBackend::Run(const AiPromptRequest& request) const {
 
     const std::string model = ModelIdFromKey(settings_.selected_model_key);
     if (settings_.selected_model_key.rfind("local:", 0) == 0) {
-        return RunLocalLlamaCpp(request, model);
+        return RunLocalLlamaCpp(request, model, cancel_requested, progress);
     }
     if (settings_.selected_model_key.rfind("ollama:", 0) == 0) {
-        return RunOllama(request, model);
+        return RunOllama(request, model, cancel_requested, progress);
     }
     if (settings_.selected_model_key.rfind("openai:", 0) == 0) {
-        return RunOpenAiCompatible(request, model);
+        return RunOpenAiCompatible(request, model, cancel_requested, progress);
     }
 
     if (settings_.provider == AiProvider::LocalLlamaCpp) {
-        return RunLocalLlamaCpp(request, model);
+        return RunLocalLlamaCpp(request, model, cancel_requested, progress);
     }
     if (settings_.provider == AiProvider::Ollama) {
-        return RunOllama(request, model);
+        return RunOllama(request, model, cancel_requested, progress);
     }
     if (settings_.provider == AiProvider::OpenAiCompatible) {
-        return RunOpenAiCompatible(request, model);
+        return RunOpenAiCompatible(request, model, cancel_requested, progress);
     }
 
-    const AiConnectionResult connection = CheckConnectionAndListModels();
+    const AiConnectionResult connection = CheckConnectionAndListModels(cancel_requested);
     if (!connection.success) {
         return ErrorResult(AiProvider::Auto, connection.error);
     }
     if (connection.provider == AiProvider::Ollama) {
-        return RunOllama(request, model);
+        return RunOllama(request, model, cancel_requested, progress);
     }
-    return RunOpenAiCompatible(request, model);
+    return RunOpenAiCompatible(request, model, cancel_requested, progress);
 }
 
 } // namespace textlt

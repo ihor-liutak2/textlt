@@ -39,8 +39,8 @@ public:
     // Set the theme for rendering
     void SetTheme(const Theme* new_theme) { theme_ = new_theme; }
     void SetHeaderVisible(bool visible) { show_header_ = visible; }
-    void SetFooterVisible(bool visible) { show_footer_ = visible; }
-    void SetHeaderCloseVisible(bool visible) { show_header_close_ = visible; }
+    void SetFooterVisible(bool visible);
+    void SetHeaderCloseVisible(bool visible);
     void SetFooterText(std::string text);
     void SetFooterButtons(std::vector<FooterButton> buttons);
     void SetBodyHeightLimit(int rows) { max_body_height_ = rows; }

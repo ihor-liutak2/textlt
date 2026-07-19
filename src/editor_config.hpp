@@ -24,8 +24,9 @@ struct EditorConfig {
     std::string tts_audio_player_command;
     std::string tts_player_voice_id;
     std::string ai_server_url = "http://127.0.0.1:11434";
-    std::string ai_provider = "auto";
+    std::string ai_provider = "ollama";
     std::string ai_selected_model_key;
+    std::string ai_translation_source_language = "English";
     std::string ai_translation_language = "Ukrainian";
     std::string ai_edit_style = "conversational";
     bool ai_whole_document = false;

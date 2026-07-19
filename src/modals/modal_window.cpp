@@ -56,6 +56,22 @@ void ModalWindow::SetFooterText(std::string text) {
     footer_text_ = std::move(text);
 }
 
+void ModalWindow::SetFooterVisible(bool visible) {
+    if (show_footer_ == visible) {
+        return;
+    }
+    show_footer_ = visible;
+    RebuildChildren();
+}
+
+void ModalWindow::SetHeaderCloseVisible(bool visible) {
+    if (show_header_close_ == visible) {
+        return;
+    }
+    show_header_close_ = visible;
+    RebuildChildren();
+}
+
 void ModalWindow::SetBodyWidth(int columns) {
     modal_width_ = std::max(20, columns + 2);
     modal_size_overridden_ = true;
@@ -70,9 +86,13 @@ void ModalWindow::SetModalSize(int columns, int rows) {
 void ModalWindow::RebuildChildren() {
     DetachAllChildren();
     Add(content_->GetMainComponent());
-    Add(header_close_button_);
-    for (const auto& button : footer_buttons_) {
-        Add(button);
+    if (show_header_close_) {
+        Add(header_close_button_);
+    }
+    if (show_footer_) {
+        for (const auto& button : footer_buttons_) {
+            Add(button);
+        }
     }
     if (active_child_index_ >= ChildCount()) {
         active_child_index_ = 0;

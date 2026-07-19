@@ -94,6 +94,7 @@ void TextltApp::InitializeCommands() {
     add("tts.pause", "Pause TTS", "TTS", "", [this] { CommandTtsPause(); });
     add("tts.stop", "Stop TTS", "TTS", "", [this] { CommandTtsStop(); });
     add("tts.next", "Next TTS Chunk", "TTS", "", [this] { CommandTtsNext(); });
+    add("ai.quick_actions", "Quick AI", "AI", "Alt+M", [this] { OpenAiQuickActionsModal(); });
     add("ai.open_actions", "AI Actions", "AI", "Alt+J", [this] { OpenAiActionsModal(); });
     add("ai.open_settings", "AI Settings", "AI", "", [this] { OpenAiSettingsModal(); });
     add("assistant.open_settings", "TTS Settings", "TTS", "Alt+S", [this] { OpenAssistantSettingsModal(); });

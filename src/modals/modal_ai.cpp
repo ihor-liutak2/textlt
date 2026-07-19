@@ -1,5 +1,7 @@
 #include "modals/modal_ai.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <functional>
 #include <string>
 #include <utility>
@@ -9,17 +11,6 @@
 
 namespace textlt {
 namespace {
-
-ftxui::Element StatusLine(
-    const std::string& label,
-    const std::string& value,
-    const Theme& theme) {
-    using namespace ftxui;
-    return hbox({
-        text(" " + label + ": ") | bold | color(theme.modal_accent),
-        paragraph(value.empty() ? "-" : value) | color(theme.modal_text_color) | flex,
-    });
-}
 
 ftxui::Component MakeButton(
     const Theme** theme,
@@ -45,6 +36,83 @@ std::string ActionLabel(AiActionType action) {
     return action == AiActionType::Translate ? "Translation" : "Editing";
 }
 
+std::string LowerAscii(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return value;
+}
+
+std::vector<std::string> SupportedLanguages() {
+    return {
+        "Afrikaans", "Albanian", "Amharic", "Arabic", "Armenian", "Azerbaijani",
+        "Basque", "Belarusian", "Bengali", "Bosnian", "Bulgarian", "Burmese",
+        "Catalan", "Chinese", "Croatian", "Czech", "Danish", "Dutch", "English",
+        "Estonian", "Finnish", "French", "Galician", "Georgian", "German", "Greek",
+        "Gujarati", "Hebrew", "Hindi", "Hungarian", "Icelandic", "Indonesian",
+        "Irish", "Italian", "Japanese", "Kannada", "Kazakh", "Korean", "Latvian",
+        "Lithuanian", "Macedonian", "Malay", "Malayalam", "Marathi", "Mongolian",
+        "Nepali", "Norwegian", "Persian", "Polish", "Portuguese", "Punjabi",
+        "Romanian", "Russian", "Serbian", "Slovak", "Slovenian", "Spanish",
+        "Swahili", "Swedish", "Tamil", "Telugu", "Thai", "Turkish", "Ukrainian",
+        "Urdu", "Uzbek", "Vietnamese", "Welsh"
+    };
+}
+
+std::string CanonicalLanguage(
+    const std::vector<std::string>& languages,
+    const std::string& value) {
+    const std::string key = LowerAscii(value);
+    const auto found = std::find_if(languages.begin(), languages.end(), [&](const std::string& language) {
+        return LowerAscii(language) == key;
+    });
+    return found == languages.end() ? std::string{} : *found;
+}
+
+std::string TailUtf8(const std::string& value, size_t character_count) {
+    if (value.empty()) {
+        return {};
+    }
+
+    size_t end = value.size();
+    size_t sequence_start = end - 1;
+    while (sequence_start > 0 &&
+           (static_cast<unsigned char>(value[sequence_start]) & 0xC0U) == 0x80U) {
+        --sequence_start;
+    }
+    const unsigned char first = static_cast<unsigned char>(value[sequence_start]);
+    const size_t expected = (first & 0xE0U) == 0xC0U ? 2
+        : (first & 0xF0U) == 0xE0U ? 3
+        : (first & 0xF8U) == 0xF0U ? 4
+        : 1;
+    if (sequence_start + expected > end) {
+        end = sequence_start;
+    }
+
+    size_t position = end;
+    size_t count = 0;
+    while (position > 0 && count < character_count) {
+        --position;
+        while (position > 0 &&
+               (static_cast<unsigned char>(value[position]) & 0xC0U) == 0x80U) {
+            --position;
+        }
+        ++count;
+    }
+    return value.substr(position, end - position);
+}
+
+ftxui::Element LabelValue(
+    const std::string& label,
+    const std::string& value,
+    const Theme& theme) {
+    using namespace ftxui;
+    return hbox({
+        text(" " + label + ": ") | bold | color(theme.modal_accent),
+        paragraph(value.empty() ? "-" : value) | color(theme.modal_text_color) | flex,
+    });
+}
+
 } // namespace
 
 AiActionsModalContent::AiActionsModalContent(
@@ -52,21 +120,52 @@ AiActionsModalContent::AiActionsModalContent(
     EditorConfig* config,
     CaptureAiTargetCallback capture_target,
     ApplyAiTargetCallback apply_target,
-    std::function<void()> request_redraw)
+    std::function<void()> request_redraw,
+    std::function<void(const std::string&)> notify_status)
     : theme_(theme),
       config_(config),
       capture_target_(std::move(capture_target)),
       apply_target_(std::move(apply_target)),
-      request_redraw_(std::move(request_redraw)) {
-    ftxui::InputOption language_option;
-    language_option.multiline = false;
-    language_option.cursor_position = &language_cursor_;
-    language_option.on_enter = [this] { StartAction(AiActionType::Translate); };
-    language_option.transform = [this](ftxui::InputState state) {
+      request_redraw_(std::move(request_redraw)),
+      notify_status_(std::move(notify_status)),
+      languages_(SupportedLanguages()) {
+    ftxui::InputOption source_option;
+    source_option.multiline = false;
+    source_option.cursor_position = &source_language_cursor_;
+    source_option.on_change = [this] { FilterLanguages(true); };
+    source_option.on_enter = [this] { CommitLanguageSelection(true); };
+    source_option.transform = [this](ftxui::InputState state) {
         const Theme& resolved = theme_ ? *theme_ : FallbackTheme();
         return resolved.InputTransform(std::move(state));
     };
-    language_input_ = ftxui::Input(&language_, "Ukrainian", language_option);
+    source_language_input_ = ftxui::Input(&source_language_, "English", source_option);
+
+    ftxui::InputOption target_option = source_option;
+    target_option.cursor_position = &target_language_cursor_;
+    target_option.on_change = [this] { FilterLanguages(false); };
+    target_option.on_enter = [this] { CommitLanguageSelection(false); };
+    target_language_input_ = ftxui::Input(&target_language_, "Ukrainian", target_option);
+
+    ftxui::MenuOption source_menu_option = ftxui::MenuOption::Vertical();
+    source_menu_option.on_change = [this] { CommitLanguageSelection(true); };
+    source_menu_option.on_enter = [this] { CommitLanguageSelection(true); };
+    source_menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
+        const Theme& resolved = theme_ ? *theme_ : FallbackTheme();
+        ftxui::Element row = ftxui::text(" " + state.label + " ");
+        if (state.focused || state.active) {
+            return row | ftxui::bgcolor(resolved.modal_selected_item_bg) |
+                ftxui::color(resolved.modal_selected_item_fg);
+        }
+        return row | ftxui::color(resolved.modal_text_color);
+    };
+    source_language_menu_ = ftxui::Menu(
+        &filtered_source_languages_, &selected_source_language_, source_menu_option);
+
+    ftxui::MenuOption target_menu_option = source_menu_option;
+    target_menu_option.on_change = [this] { CommitLanguageSelection(false); };
+    target_menu_option.on_enter = [this] { CommitLanguageSelection(false); };
+    target_language_menu_ = ftxui::Menu(
+        &filtered_target_languages_, &selected_target_language_, target_menu_option);
 
     conversational_button_ = MakeButton(
         &theme_,
@@ -87,36 +186,55 @@ AiActionsModalContent::AiActionsModalContent(
         ftxui::Element item = ftxui::text(
             std::string(state.state ? "[X] " : "[ ] ") + state.label);
         if (state.focused || state.active) {
-            return item |
-                ftxui::bgcolor(resolved.modal_selected_item_bg) |
+            return item | ftxui::bgcolor(resolved.modal_selected_item_bg) |
                 ftxui::color(resolved.modal_selected_item_fg);
         }
         return item | ftxui::color(resolved.modal_text_color);
     };
     whole_document_checkbox_ = ftxui::Checkbox(
-        "Whole document (otherwise current paragraph)",
+        "Whole document",
         &whole_document_,
         checkbox_option);
 
     translate_button_ = MakeButton(
-        &theme_, "1 Translate", [this] { StartAction(AiActionType::Translate); },
+        &theme_, "1 Translate", [this] {
+            StartAction(AiActionType::Translate, false);
+        },
         ButtonRole::Primary);
     edit_button_ = MakeButton(
-        &theme_, "2 Edit", [this] { StartAction(AiActionType::Edit); },
+        &theme_, "2 Edit", [this] {
+            StartAction(AiActionType::Edit, false);
+        },
         ButtonRole::Primary);
+    close_info_button_ = MakeButton(
+        &theme_, "Close", [this] { CloseInfo(); }, ButtonRole::Cancel);
 
-    container_ = ftxui::CatchEvent(
-        ftxui::Container::Vertical({
-            language_input_,
-            ftxui::Container::Horizontal({conversational_button_, business_button_}),
-            whole_document_checkbox_,
-            ftxui::Container::Horizontal({translate_button_, edit_button_}),
-        }),
-        [this](ftxui::Event event) { return HandleShortcut(std::move(event)); });
+    auto source_language_group = ftxui::Container::Vertical({
+        source_language_input_, source_language_menu_,
+    });
+    auto target_language_group = ftxui::Container::Vertical({
+        target_language_input_, target_language_menu_,
+    });
+    auto main_content = ftxui::Container::Vertical({
+        ftxui::Container::Horizontal({source_language_group, target_language_group}),
+        ftxui::Container::Horizontal({conversational_button_, business_button_}),
+        whole_document_checkbox_,
+        ftxui::Container::Horizontal({translate_button_, edit_button_}),
+    });
+    auto info_content = ftxui::Container::Vertical({close_info_button_});
+    auto panels = ftxui::Container::Tab({main_content, info_content}, &active_panel_);
+    container_ = ftxui::CatchEvent(panels, [this](ftxui::Event event) {
+        if (info_visible_ && event == ftxui::Event::Escape) {
+            CloseInfo();
+            return true;
+        }
+        return HandleShortcut(std::move(event));
+    });
     RefreshFromConfig();
 }
 
 AiActionsModalContent::~AiActionsModalContent() {
+    Stop();
     PersistOptions();
     if (worker_.joinable()) {
         worker_.join();
@@ -127,17 +245,139 @@ void AiActionsModalContent::RefreshFromConfig() {
     if (!config_) {
         return;
     }
-    language_ = config_->ai_translation_language.empty()
-        ? std::string("Ukrainian")
-        : config_->ai_translation_language;
-    language_cursor_ = static_cast<int>(language_.size());
+    source_language_ = CanonicalLanguage(languages_, config_->ai_translation_source_language);
+    if (source_language_.empty()) {
+        source_language_ = "English";
+    }
+    target_language_ = CanonicalLanguage(languages_, config_->ai_translation_language);
+    if (target_language_.empty()) {
+        target_language_ = "Ukrainian";
+    }
+    source_language_cursor_ = static_cast<int>(source_language_.size());
+    target_language_cursor_ = static_cast<int>(target_language_.size());
     edit_style_ = config_->ai_edit_style == "business"
         ? AiEditStyle::Business
         : AiEditStyle::Conversational;
     whole_document_ = config_->ai_whole_document;
-    persisted_language_ = language_;
+    persisted_source_language_ = source_language_;
+    persisted_target_language_ = target_language_;
+    committed_source_language_ = source_language_;
+    committed_target_language_ = target_language_;
     persisted_edit_style_ = edit_style_;
     persisted_whole_document_ = whole_document_;
+    FilterLanguages(true);
+    FilterLanguages(false);
+}
+
+void AiActionsModalContent::FilterLanguages(bool source) {
+    std::string& text = source ? source_language_ : target_language_;
+    std::vector<std::string>& filtered = source
+        ? filtered_source_languages_
+        : filtered_target_languages_;
+    int& selected = source ? selected_source_language_ : selected_target_language_;
+    const std::string filter = LowerAscii(text);
+    filtered.clear();
+    for (const std::string& language : languages_) {
+        if (filter.empty() || LowerAscii(language).find(filter) != std::string::npos) {
+            filtered.push_back(language);
+            if (filtered.size() == 8) {
+                break;
+            }
+        }
+    }
+    if (filtered.empty()) {
+        filtered.push_back("No matching language");
+    }
+    selected = 0;
+}
+
+void AiActionsModalContent::CommitLanguageSelection(bool source) {
+    std::vector<std::string>& filtered = source
+        ? filtered_source_languages_
+        : filtered_target_languages_;
+    int& selected = source ? selected_source_language_ : selected_target_language_;
+    if (filtered.empty() || selected < 0 || static_cast<size_t>(selected) >= filtered.size() ||
+        filtered[static_cast<size_t>(selected)] == "No matching language") {
+        return;
+    }
+    std::string& value = source ? source_language_ : target_language_;
+    int& cursor = source ? source_language_cursor_ : target_language_cursor_;
+    value = filtered[static_cast<size_t>(selected)];
+    cursor = static_cast<int>(value.size());
+    if (source) {
+        committed_source_language_ = value;
+    } else {
+        committed_target_language_ = value;
+    }
+}
+
+void AiActionsModalContent::FinalizeLanguageInput(bool source) {
+    std::string& value = source ? source_language_ : target_language_;
+    int& cursor = source ? source_language_cursor_ : target_language_cursor_;
+    std::string& committed = source
+        ? committed_source_language_
+        : committed_target_language_;
+    std::vector<std::string>& filtered = source
+        ? filtered_source_languages_
+        : filtered_target_languages_;
+    int& selected = source ? selected_source_language_ : selected_target_language_;
+
+    const std::string canonical = CanonicalLanguage(languages_, value);
+    if (!canonical.empty()) {
+        value = canonical;
+        committed = canonical;
+    } else if (!filtered.empty() && selected >= 0 &&
+               static_cast<size_t>(selected) < filtered.size() &&
+               filtered[static_cast<size_t>(selected)] != "No matching language") {
+        value = filtered[static_cast<size_t>(selected)];
+        committed = value;
+    } else {
+        value = committed;
+    }
+    cursor = static_cast<int>(value.size());
+    FilterLanguages(source);
+}
+
+void AiActionsModalContent::FinalizeUnfocusedLanguageInputs() {
+    const bool source_focused =
+        source_language_input_->Focused() || source_language_menu_->Focused();
+    const bool target_focused =
+        target_language_input_->Focused() || target_language_menu_->Focused();
+
+    if (source_language_was_focused_ && !source_focused) {
+        FinalizeLanguageInput(true);
+    }
+    if (target_language_was_focused_ && !target_focused) {
+        FinalizeLanguageInput(false);
+    }
+    source_language_was_focused_ = source_focused;
+    target_language_was_focused_ = target_focused;
+}
+
+bool AiActionsModalContent::ValidateLanguages(
+    std::string& error,
+    bool require_distinct) {
+    FinalizeLanguageInput(true);
+    FinalizeLanguageInput(false);
+    const std::string source = CanonicalLanguage(languages_, source_language_);
+    const std::string target = CanonicalLanguage(languages_, target_language_);
+    if (source.empty()) {
+        error = "Select the source language from the supported language list.";
+        return false;
+    }
+    if (target.empty()) {
+        error = "Select the target language from the supported language list.";
+        return false;
+    }
+    if (require_distinct && source == target) {
+        error = "Source and target languages must be different for translation.";
+        return false;
+    }
+    source_language_ = source;
+    target_language_ = target;
+    source_language_cursor_ = static_cast<int>(source_language_.size());
+    target_language_cursor_ = static_cast<int>(target_language_.size());
+    return true;
 }
 
 void AiActionsModalContent::SetEditStyle(AiEditStyle style) {
@@ -145,65 +385,102 @@ void AiActionsModalContent::SetEditStyle(AiEditStyle style) {
     PersistOptions();
 }
 
-void AiActionsModalContent::PersistOptions() {
+bool AiActionsModalContent::PersistOptions() {
     if (!config_) {
-        return;
+        return false;
     }
-    if (language_.empty()) {
-        language_ = "Ukrainian";
-        language_cursor_ = static_cast<int>(language_.size());
+    std::string language_error;
+    if (!ValidateLanguages(language_error, false)) {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        status_ = language_error;
+        return false;
     }
-    if (persisted_language_ == language_ && persisted_edit_style_ == edit_style_ &&
+    if (persisted_source_language_ == source_language_ &&
+        persisted_target_language_ == target_language_ &&
+        persisted_edit_style_ == edit_style_ &&
         persisted_whole_document_ == whole_document_) {
-        return;
+        return true;
     }
-    config_->ai_translation_language = language_;
+    config_->ai_translation_source_language = source_language_;
+    config_->ai_translation_language = target_language_;
     config_->ai_edit_style = edit_style_ == AiEditStyle::Business
         ? "business"
         : "conversational";
     config_->ai_whole_document = whole_document_;
     const bool saved = config_->Persist();
-    persisted_language_ = language_;
-    persisted_edit_style_ = edit_style_;
-    persisted_whole_document_ = whole_document_;
-    if (!saved) {
+    if (saved) {
+        persisted_source_language_ = source_language_;
+        persisted_target_language_ = target_language_;
+        persisted_edit_style_ = edit_style_;
+        persisted_whole_document_ = whole_document_;
+    } else {
         std::lock_guard<std::mutex> lock(state_mutex_);
         status_ = "Could not save AI action settings.";
     }
+    return saved;
 }
 
-void AiActionsModalContent::StartAction(AiActionType action) {
+bool AiActionsModalContent::StartAction(
+    AiActionType action,
+    bool force_current_paragraph,
+    std::string* error_out) {
+    auto reject = [&](std::string message) {
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            status_ = message;
+        }
+        if (error_out) {
+            *error_out = std::move(message);
+        }
+        RequestRedraw();
+        return false;
+    };
+
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         if (busy_) {
-            status_ = "An AI request is already running.";
-            return;
+            const std::string message = "An AI request is already running.";
+            status_ = message;
+            if (error_out) {
+                *error_out = message;
+            }
+            return false;
         }
     }
-    PersistOptions();
-    if (!config_ || config_->ai_selected_model_key.empty()) {
+    if (!PersistOptions()) {
         std::lock_guard<std::mutex> lock(state_mutex_);
-        status_ = "Select an AI model in AI Settings first.";
-        return;
+        if (error_out) {
+            *error_out = status_.empty()
+                ? "Could not save AI action settings."
+                : status_;
+        }
+        return false;
+    }
+    if (action == AiActionType::Translate) {
+        std::string language_error;
+        if (!ValidateLanguages(language_error, true)) {
+            return reject(std::move(language_error));
+        }
+    }
+    if (!config_ || config_->ai_selected_model_key.empty()) {
+        return reject("Select an AI model in AI Settings first.");
     }
     if (!capture_target_) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        status_ = "AI text capture is unavailable.";
-        return;
+        return reject("AI text capture is unavailable.");
     }
 
     AiDocumentTarget target;
     std::string error;
-    if (!capture_target_(whole_document_, target, error)) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        status_ = error.empty() ? "Could not read the target text." : error;
-        return;
+    const bool whole_document = force_current_paragraph ? false : whole_document_;
+    if (!capture_target_(whole_document, target, error)) {
+        return reject(error.empty() ? "Could not read the target text." : error);
     }
 
     AiPromptRequest request;
     request.action = action;
     request.text = target.range.original_text;
-    request.target_language = language_;
+    request.source_language = source_language_;
+    request.target_language = target_language_;
     request.edit_style = edit_style_;
     const AiBackendSettings settings{
         config_->ai_server_url,
@@ -215,35 +492,86 @@ void AiActionsModalContent::StartAction(AiActionType action) {
     if (worker_.joinable()) {
         worker_.join();
     }
+    cancel_requested_.store(false);
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         busy_ = true;
         discard_result_ = false;
-        status_ = ActionLabel(action) + " is running...";
+        pending_result_ = false;
+        progress_text_ = "Waiting for model output...";
+        status_ = action == AiActionType::Translate
+            ? "Translating from " + source_language_ + " to " + target_language_ + "..."
+            : "Editing text...";
     }
     RequestRedraw();
-    worker_ = std::thread([this, settings, request, target = std::move(target), action] {
-        AiBackendResult result = AiBackend(settings).Run(request);
+    const bool quick_action = force_current_paragraph;
+    worker_ = std::thread([this, settings, request, target = std::move(target), action, quick_action] {
+        AiBackendResult result = AiBackend(settings).Run(
+            request,
+            &cancel_requested_,
+            [this](const std::string& generated) {
+                {
+                    std::lock_guard<std::mutex> lock(state_mutex_);
+                    progress_text_ = TailUtf8(generated, 120);
+                }
+                RequestRedraw();
+            });
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
-            if (!discard_result_) {
+            if (!discard_result_ && !cancel_requested_.load()) {
                 pending_backend_result_ = std::move(result);
                 pending_target_ = target;
                 pending_action_ = action;
+                pending_quick_action_ = quick_action;
                 pending_result_ = true;
-            } else {
-                status_ = "AI result discarded because the modal was closed.";
+            } else if (cancel_requested_.load()) {
+                status_ = "AI operation stopped.";
+                progress_text_ = "The model process was terminated.";
             }
             busy_ = false;
         }
         RequestRedraw();
     });
+    return true;
+}
+
+bool AiActionsModalContent::StartQuickAction(
+    AiActionType action,
+    std::string& error) {
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        if (busy_) {
+            error = "An AI request is already running.";
+            status_ = error;
+            return false;
+        }
+    }
+    RefreshFromConfig();
+    return StartAction(action, true, &error);
+}
+
+void AiActionsModalContent::Poll() {
+    ApplyPendingResult();
+}
+
+void AiActionsModalContent::Stop() {
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        if (!busy_) {
+            status_ = "No AI operation is running.";
+        } else {
+            cancel_requested_.store(true);
+            status_ = "Stopping AI operation...";
+        }
+    }
+    RequestRedraw();
 }
 
 void AiActionsModalContent::ApplyPendingResult() {
     AiBackendResult result;
     AiDocumentTarget target;
     AiActionType action = AiActionType::Translate;
+    bool quick_action = false;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         if (!pending_result_) {
@@ -253,50 +581,86 @@ void AiActionsModalContent::ApplyPendingResult() {
         result = std::move(pending_backend_result_);
         target = std::move(pending_target_);
         action = pending_action_;
+        quick_action = pending_quick_action_;
+        pending_quick_action_ = false;
     }
 
+    auto report_failure = [&](std::string message) {
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            status_ = message;
+        }
+        if (quick_action && notify_status_) {
+            notify_status_(message);
+        }
+    };
+
     if (!result.success) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        status_ = result.error.empty() ? "AI request failed." : result.error;
+        report_failure(result.error.empty() ? "AI request failed." : result.error);
         return;
     }
     if (!apply_target_) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        status_ = "AI result cannot be applied to the document.";
+        report_failure("AI result cannot be applied to the document.");
         return;
     }
     std::string error;
     if (!apply_target_(target, result.text, error)) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        status_ = error.empty() ? "AI result was not applied." : error;
+        report_failure(error.empty() ? "AI result was not applied." : error);
         return;
     }
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    status_ = ActionLabel(action) + " applied to " +
-        (target.range.whole_document ? "the whole document." : "the current paragraph.");
+    std::string completed_status;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        progress_text_ = TailUtf8(result.text, 120);
+        status_ = ActionLabel(action) + " applied to " +
+            (target.range.whole_document ? "the whole document." : "the current paragraph.");
+        completed_status = status_;
+    }
+    if (quick_action && notify_status_) {
+        notify_status_(completed_status);
+    }
 }
-
 
 void AiActionsModalContent::PrepareClose() {
     PersistOptions();
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    discard_result_ = true;
-    pending_result_ = false;
-    if (busy_) {
-        status_ = "AI request continues in the background; its result will be discarded.";
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        discard_result_ = true;
+        pending_result_ = false;
+        pending_quick_action_ = false;
     }
+    info_visible_ = false;
+    active_panel_ = 0;
+    cancel_requested_.store(true);
 }
 
 bool AiActionsModalContent::HandleShortcut(ftxui::Event event) {
+    if (info_visible_) {
+        return false;
+    }
     if (event == ftxui::Event::Character("1")) {
-        StartAction(AiActionType::Translate);
+        StartAction(AiActionType::Translate, false);
         return true;
     }
     if (event == ftxui::Event::Character("2")) {
-        StartAction(AiActionType::Edit);
+        StartAction(AiActionType::Edit, false);
         return true;
     }
     return false;
+}
+
+void AiActionsModalContent::ShowInfo() {
+    info_visible_ = true;
+    active_panel_ = 1;
+    close_info_button_->TakeFocus();
+    RequestRedraw();
+}
+
+void AiActionsModalContent::CloseInfo() {
+    info_visible_ = false;
+    active_panel_ = 0;
+    source_language_input_->TakeFocus();
+    RequestRedraw();
 }
 
 void AiActionsModalContent::RequestRedraw() const {
@@ -329,45 +693,128 @@ std::string AiActionsModalContent::SelectedBackendLabel() const {
     return AiBackend::ProviderLabel(AiBackend::ProviderFromConfig(config_->ai_provider));
 }
 
-std::string AiActionsModalContent::GetFooterText() const {
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    return status_.size() <= 68 ? status_ : status_.substr(0, 68);
+ftxui::Element AiActionsModalContent::RenderLanguageSuggestions(const Theme& theme) {
+    using namespace ftxui;
+    const bool source_active = source_language_input_->Focused() || source_language_menu_->Focused();
+    const bool target_active = target_language_input_->Focused() || target_language_menu_->Focused();
+    if (!source_active && !target_active) {
+        return vbox({
+            paragraph("Type to filter, then choose a language from the list. Custom values are not accepted.") |
+                dim | color(theme.modal_text_color),
+            filler(),
+        }) | size(HEIGHT, EQUAL, 5);
+    }
+    Element source = source_active
+        ? source_language_menu_->Render() |
+              borderStyled(LIGHT, theme.modal_border) |
+              size(HEIGHT, EQUAL, 5)
+        : text("") | size(HEIGHT, EQUAL, 5);
+    Element target = target_active
+        ? target_language_menu_->Render() |
+              borderStyled(LIGHT, theme.modal_border) |
+              size(HEIGHT, EQUAL, 5)
+        : text("") | size(HEIGHT, EQUAL, 5);
+    return hbox({source | flex, text("  "), target | flex}) | size(HEIGHT, EQUAL, 5);
+}
+
+ftxui::Element AiActionsModalContent::RenderInfoPopup(const Theme& theme) {
+    using namespace ftxui;
+    return vbox({
+        text(" AI Actions help") | bold | color(theme.modal_accent),
+        separator() | color(theme.modal_border),
+        paragraph(
+            "Click 1 Translate or press 1 to translate. Click 2 Edit or press 2 to edit. "
+            "The default scope is the paragraph containing the cursor. Enable Whole document "
+            "to process the entire file. Translation languages must be selected from the filtered lists.") |
+            color(theme.modal_text_color),
+        separator() | color(theme.modal_border),
+        hbox({filler(), close_info_button_->Render()}),
+    }) | borderStyled(LIGHT, theme.modal_border) |
+        size(WIDTH, LESS_THAN, 68) |
+        clear_under;
 }
 
 ftxui::Element AiActionsModalContent::Render() {
     ApplyPendingResult();
+    FinalizeUnfocusedLanguageInputs();
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    return RenderContent(theme) |
+    ftxui::Element body = RenderContent(theme) |
         ftxui::bgcolor(theme.modal_input_bg) |
         ftxui::color(theme.modal_input_fg);
+    if (!info_visible_) {
+        return body;
+    }
+    return ftxui::dbox({
+        body,
+        ftxui::vbox({
+            ftxui::filler(),
+            ftxui::hbox({ftxui::filler(), RenderInfoPopup(theme), ftxui::filler()}),
+            ftxui::filler(),
+        }),
+    });
 }
 
 ftxui::Element AiActionsModalContent::RenderContent(const Theme& theme) {
     using namespace ftxui;
     bool busy = false;
     std::string status;
+    std::string progress;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         busy = busy_;
         status = status_;
+        progress = progress_text_;
+    }
+    if (busy) {
+        ++progress_frame_;
     }
 
+    Element status_panel = vbox({
+        hbox({
+            busy ? spinner(0, progress_frame_) | bold : text(" "),
+            text(" Status: ") | bold | color(theme.modal_accent),
+            paragraph(status) | color(theme.modal_text_color) | flex,
+        }),
+        separator() | color(theme.modal_border),
+        text(" Progress — latest 120 characters") | bold | color(theme.modal_accent),
+        paragraph(progress.empty() ? "No AI output yet." : progress) |
+            color(theme.modal_text_color) |
+            size(HEIGHT, LESS_THAN, 5),
+    }) | borderStyled(LIGHT, theme.modal_border) | size(HEIGHT, EQUAL, 10);
+
     return vbox({
-        StatusLine("Model", SelectedModelLabel(), theme),
-        StatusLine("Backend", SelectedBackendLabel(), theme),
+        hbox({
+            LabelValue("Model", SelectedModelLabel(), theme) | flex,
+            text("   "),
+            LabelValue("Backend", SelectedBackendLabel(), theme),
+        }),
         separator() | color(theme.modal_border),
         hbox({
-            text(" Translation language: ") | bold | color(theme.modal_accent),
-            language_input_->Render() | flex,
+            text(" Translation: ") | bold | color(theme.modal_text_color),
+            text(committed_source_language_) | bold | color(theme.modal_accent),
+            text("  ->  ") | color(theme.modal_text_color),
+            text(committed_target_language_) | bold | color(theme.modal_accent),
         }),
+        hbox({
+            text(" From: ") | bold | color(theme.modal_accent),
+            source_language_input_->Render() |
+                borderStyled(LIGHT, theme.modal_border) | flex,
+            text("   To: ") | bold | color(theme.modal_accent),
+            target_language_input_->Render() |
+                borderStyled(LIGHT, theme.modal_border) | flex,
+        }),
+        RenderLanguageSuggestions(theme),
+        separator() | color(theme.modal_border),
         hbox({
             text(" Editing style: ") | bold | color(theme.modal_accent),
             conversational_button_->Render(),
             text(" "),
             business_button_->Render(),
         }),
-        whole_document_checkbox_->Render(),
-        separator() | color(theme.modal_border),
+        hbox({
+            text(" Scope: ") | bold | color(theme.modal_accent),
+            whole_document_checkbox_->Render(),
+        }),
         hbox({
             filler(),
             translate_button_->Render(),
@@ -375,12 +822,7 @@ ftxui::Element AiActionsModalContent::RenderContent(const Theme& theme) {
             edit_button_->Render(),
             filler(),
         }),
-        text(" Mouse: click an action. Keyboard: 1 = Translate, 2 = Edit.") |
-            dim | color(theme.modal_text_color),
-        text(" Default scope is the paragraph containing the cursor.") |
-            dim | color(theme.modal_text_color),
-        separator() | color(theme.modal_border),
-        StatusLine("Status", busy ? status + " Please wait..." : status, theme),
+        status_panel,
     }) | borderStyled(LIGHT, theme.modal_border);
 }
 
@@ -389,16 +831,22 @@ AiActionsModal::AiActionsModal(
     EditorConfig* config,
     CaptureAiTargetCallback capture_target,
     ApplyAiTargetCallback apply_target,
-    std::function<void()> request_redraw)
+    std::function<void()> request_redraw,
+    std::function<void(const std::string&)> notify_status)
     : theme_(theme) {
     content_ = std::make_shared<AiActionsModalContent>(
         theme_,
         config,
         std::move(capture_target),
         std::move(apply_target),
-        std::move(request_redraw));
+        std::move(request_redraw),
+        std::move(notify_status));
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
-    modal_->SetFooterButtons({{"Close", [this] { Close(); }}});
+    modal_->SetFooterButtons({
+        {"Info", [this] { content_->ShowInfo(); }, ButtonRole::Default},
+        {"Stop", [this] { content_->Stop(); }, ButtonRole::Warning},
+        {"Close", [this] { Close(); }, ButtonRole::Cancel},
+    });
     modal_->SetBodyFrameScrolling(false);
 }
 
@@ -433,6 +881,16 @@ bool AiActionsModal::OnEvent(ftxui::Event event) {
         return true;
     }
     return modal_->OnEvent(std::move(event));
+}
+
+bool AiActionsModal::StartQuickAction(AiActionType action, std::string& error) {
+    return content_ && content_->StartQuickAction(action, error);
+}
+
+void AiActionsModal::Poll() {
+    if (content_) {
+        content_->Poll();
+    }
 }
 
 } // namespace textlt

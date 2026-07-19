@@ -1,6 +1,8 @@
 #pragma once
 
+#include <atomic>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -14,9 +16,17 @@ struct RemoteCommandResult {
 
 class RemoteCommandRunner {
 public:
+    using OutputCallback = std::function<void(const std::string& chunk)>;
+
     RemoteCommandResult Run(
         const std::vector<std::string>& args,
         const std::string& stdin_text = {}) const;
+
+    RemoteCommandResult RunStreaming(
+        const std::vector<std::string>& args,
+        const std::string& stdin_text,
+        const std::atomic<bool>* cancel_requested,
+        OutputCallback on_stdout) const;
 
     static std::string ShellQuote(const std::string& value);
 

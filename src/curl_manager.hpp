@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <filesystem>
 #include <functional>
 #include <string>
@@ -32,9 +33,13 @@ public:
 
     static Response Get(const std::string& url);
     static Response Get(const std::string& url, const RequestOptions& options);
+    static Response Get(const std::string& url,
+                        const RequestOptions& options,
+                        const std::atomic<bool>* cancel_requested);
     static bool DownloadToFile(const std::string& url,
                                const std::filesystem::path& path,
-                               ProgressCallback progress = {});
+                               ProgressCallback progress = {},
+                               const std::atomic<bool>* cancel_requested = nullptr);
     static std::string WithCacheBust(const std::string& url);
 
 private:

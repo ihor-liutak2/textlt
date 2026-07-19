@@ -17,6 +17,7 @@ enum class AiEditStyle {
 struct AiPromptRequest {
     AiActionType action = AiActionType::Translate;
     std::string text;
+    std::string source_language;
     std::string target_language;
     AiEditStyle edit_style = AiEditStyle::Conversational;
 };

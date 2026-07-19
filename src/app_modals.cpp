@@ -91,6 +91,7 @@ std::vector<std::string> BuiltInHelpLines() {
         "TTS / AI",
         "  Alt+H         Open Text-to-Speech",
         "  Alt+S         Open TTS Settings",
+        "  Alt+M         Open Quick AI",
         "  Alt+J         Open AI Actions",
         "  Tools > AI Settings opens AI Settings",
         "",
@@ -654,6 +655,24 @@ void TextltApp::OpenAiActionsModal() {
 void TextltApp::CloseAiActionsModal() {
     ai_actions_modal_.Close();
     FocusEditor();
+}
+
+
+void TextltApp::OpenAiQuickActionsModal() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+    ai_quick_actions_modal_.Open();
+    active_action_ = "Opened Quick AI";
+    SetActiveLayer(UiLayer::AiQuickActions);
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CloseAiQuickActionsModal() {
+    ai_quick_actions_modal_.Close();
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
 }
 
 

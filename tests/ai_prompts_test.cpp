@@ -6,10 +6,11 @@
 int main() {
     textlt::AiPromptRequest translate;
     translate.action = textlt::AiActionType::Translate;
+    translate.source_language = "English";
     translate.target_language = "Polish";
     translate.text = "Hello";
     const std::string translation_prompt = textlt::BuildAiSystemPrompt(translate);
-    assert(translation_prompt.find("Polish") != std::string::npos);
+    assert(translation_prompt.find("from English into Polish") != std::string::npos);
     assert(translation_prompt.find("Return only") != std::string::npos);
     assert(textlt::BuildAiUserPrompt(translate) == "Hello");
 

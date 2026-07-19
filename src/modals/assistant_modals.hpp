@@ -50,7 +50,10 @@ void EnsureDirectory(const std::filesystem::path& path);
 const char* RegistryFilename(RegistryKind kind);
 RegistryLoadResult LoadUserRegistryJson(const char* filename, Json* root);
 RegistryLoadResult LoadUserRegistryJson(RegistryKind kind, Json* root);
-RegistryDownloadResult DownloadRegistry(const char* url, const char* filename);
+RegistryDownloadResult DownloadRegistry(
+    const char* url,
+    const char* filename,
+    const std::atomic<bool>* cancel_requested = nullptr);
 std::string JsonLabel(const Json& object, const char* primary, const char* fallback);
 std::string BracketLabel(const std::string& label);
 

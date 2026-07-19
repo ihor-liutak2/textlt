@@ -43,12 +43,10 @@ ftxui::Component MakeButton(
     const Theme** theme,
     std::string label,
     std::function<void()> on_click,
+    ButtonRole role = ButtonRole::Default,
     std::function<bool()> selected = {}) {
     ButtonSpec base = ButtonSpecFromLabel(
-        std::move(label),
-        ButtonRole::Default,
-        ButtonVariant::AccentEdges,
-        ButtonSize::Compact);
+        std::move(label), role, ButtonVariant::AccentEdges, ButtonSize::Compact);
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
     option.label = ButtonCaptionText(base);
     option.on_click = std::move(on_click);
@@ -220,12 +218,15 @@ bool ExtractArchive(
     return ok;
 }
 
-bool DownloadFile(const std::string& url, const std::filesystem::path& final_path) {
+bool DownloadFile(
+    const std::string& url,
+    const std::filesystem::path& final_path,
+    const std::atomic<bool>* cancel_requested) {
     EnsureDirectory(final_path.parent_path());
     const std::filesystem::path part_path = final_path.string() + ".part";
     std::error_code error;
     std::filesystem::remove(part_path, error);
-    if (!CurlManager::DownloadToFile(url, part_path)) {
+    if (!CurlManager::DownloadToFile(url, part_path, {}, cancel_requested)) {
         std::filesystem::remove(part_path, error);
         return false;
     }
@@ -336,22 +337,18 @@ AiSettingsModalContent::AiSettingsModalContent(
     };
     server_url_input_ = ftxui::Input(&server_url_, "http://127.0.0.1:11434", input_option);
 
-    provider_auto_button_ = MakeButton(
-        &theme_, "Auto", [this] { SelectProvider(AiProvider::Auto); },
-        [this] { return provider_ == AiProvider::Auto; });
     provider_ollama_button_ = MakeButton(
         &theme_, "Ollama", [this] { SelectProvider(AiProvider::Ollama); },
+        ButtonRole::Toggle,
         [this] { return provider_ == AiProvider::Ollama; });
     provider_openai_button_ = MakeButton(
         &theme_, "OpenAI-compatible", [this] { SelectProvider(AiProvider::OpenAiCompatible); },
+        ButtonRole::Toggle,
         [this] { return provider_ == AiProvider::OpenAiCompatible; });
     provider_local_button_ = MakeButton(
         &theme_, "Local llama.cpp", [this] { SelectProvider(AiProvider::LocalLlamaCpp); },
+        ButtonRole::Toggle,
         [this] { return provider_ == AiProvider::LocalLlamaCpp; });
-    save_connection_button_ = MakeButton(
-        &theme_, "Save", [this] { SaveConnectionSettings(); });
-    connect_button_ = MakeButton(
-        &theme_, "Connect / refresh", [this] { ConnectAndRefreshServerModels(); });
     fetch_registry_button_ = MakeButton(
         &theme_, "Fetch registry", [this] { FetchAiRegistry(); });
     runtime_download_button_ = MakeButton(
@@ -370,6 +367,10 @@ AiSettingsModalContent::AiSettingsModalContent(
         &theme_, "Confirm delete", [this] { ConfirmSelectedModelDelete(); });
     model_cancel_delete_button_ = MakeButton(
         &theme_, "Cancel", [this] { CancelSelectedModelDelete(); });
+    test_button_ = MakeButton(
+        &theme_, "Test model", [this] { StartTest(); }, ButtonRole::Primary);
+    close_test_button_ = MakeButton(
+        &theme_, "Close", [this] { CloseTestPopup(); }, ButtonRole::Cancel);
 
     ftxui::MenuOption menu_option = ftxui::MenuOption::Vertical();
     menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
@@ -385,16 +386,14 @@ AiSettingsModalContent::AiSettingsModalContent(
     };
     model_menu_ = ftxui::Menu(&model_labels_, &selected_model_, menu_option);
 
-    container_ = ftxui::Container::Vertical({
+    auto main_content = ftxui::Container::Vertical({
         server_url_input_,
         ftxui::Container::Horizontal({
-            provider_auto_button_, provider_ollama_button_,
-            provider_openai_button_, provider_local_button_,
+            provider_ollama_button_, provider_openai_button_, provider_local_button_,
         }),
-        ftxui::Container::Horizontal({save_connection_button_, connect_button_}),
         ftxui::Container::Horizontal({
             runtime_download_button_, runtime_delete_button_, fetch_registry_button_,
-            model_download_button_, model_delete_button_,
+            model_download_button_, model_delete_button_, test_button_,
         }),
         ftxui::Container::Horizontal({
             runtime_confirm_delete_button_, runtime_cancel_delete_button_,
@@ -402,10 +401,27 @@ AiSettingsModalContent::AiSettingsModalContent(
         }),
         model_menu_,
     });
+    auto test_content = ftxui::Container::Vertical({close_test_button_});
+    auto panels = ftxui::Container::Tab({main_content, test_content}, &active_panel_);
+    container_ = ftxui::CatchEvent(panels, [this](ftxui::Event event) {
+        if (event == ftxui::Event::Escape) {
+            bool test_popup_visible = false;
+            {
+                std::lock_guard<std::mutex> lock(state_mutex_);
+                test_popup_visible = test_popup_visible_;
+            }
+            if (test_popup_visible) {
+                CloseTestPopup();
+                return true;
+            }
+        }
+        return false;
+    });
     RefreshFromConfig();
 }
 
 AiSettingsModalContent::~AiSettingsModalContent() {
+    cancel_requested_.store(true);
     if (worker_.joinable()) {
         worker_.join();
     }
@@ -415,6 +431,9 @@ void AiSettingsModalContent::RefreshFromConfig() {
     if (config_) {
         server_url_ = config_->ai_server_url;
         provider_ = AiBackend::ProviderFromConfig(config_->ai_provider);
+        if (provider_ == AiProvider::Auto) {
+            provider_ = AiProvider::Ollama;
+        }
     }
     server_url_cursor_ = static_cast<int>(server_url_.size());
     LoadModels();
@@ -509,6 +528,7 @@ void AiSettingsModalContent::StartWorker(std::function<void()> operation) {
             return;
         }
         busy_ = true;
+        cancel_requested_.store(false);
     }
     if (worker_.joinable()) {
         worker_.join();
@@ -537,9 +557,13 @@ bool AiSettingsModalContent::SaveConnectionSettings() {
         status_ = "AI server URL must start with http:// or https://.";
         return false;
     }
+    bool connection_changed = false;
     if (config_) {
+        const std::string provider_value = AiBackend::ProviderToConfig(provider_);
+        connection_changed =
+            config_->ai_server_url != server_url_ || config_->ai_provider != provider_value;
         config_->ai_server_url = server_url_;
-        config_->ai_provider = AiBackend::ProviderToConfig(provider_);
+        config_->ai_provider = provider_value;
         if (!config_->Persist()) {
             std::lock_guard<std::mutex> lock(state_mutex_);
             status_ = "Could not save AI settings.";
@@ -548,12 +572,17 @@ bool AiSettingsModalContent::SaveConnectionSettings() {
     }
     std::lock_guard<std::mutex> lock(state_mutex_);
     status_ = "AI connection settings saved.";
+    if (config_ && connection_changed) {
+        connection_status_ = "Not checked after settings change";
+    }
     return true;
 }
 
 void AiSettingsModalContent::SelectProvider(AiProvider provider) {
     provider_ = provider;
-    SaveConnectionSettings();
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    connection_status_ = "Not checked after provider change";
+    status_ = "Provider selected. Use Save or Connect / Refresh to apply it.";
 }
 
 void AiSettingsModalContent::ConnectAndRefreshServerModels() {
@@ -567,14 +596,20 @@ void AiSettingsModalContent::ConnectAndRefreshServerModels() {
         status_ = provider_ == AiProvider::LocalLlamaCpp
             ? "Checking local llama.cpp runtime..."
             : "Connecting to AI server...";
+        connection_status_ = provider_ == AiProvider::LocalLlamaCpp
+            ? "Checking local llama.cpp"
+            : "Connecting to " + AiBackend::ProviderLabel(provider_);
     }
     StartWorker([this, settings] {
-        const AiConnectionResult result = AiBackend(settings).CheckConnectionAndListModels();
+        const AiConnectionResult result =
+            AiBackend(settings).CheckConnectionAndListModels(&cancel_requested_);
         std::lock_guard<std::mutex> lock(state_mutex_);
         pending_server_models_ = true;
         pending_connection_success_ = result.success;
         pending_detected_provider_ = result.provider;
-        if (!result.success) {
+        if (cancel_requested_.load()) {
+            pending_status_ = "Connection check stopped.";
+        } else if (!result.success) {
             pending_status_ = result.error;
         } else if (result.provider == AiProvider::LocalLlamaCpp) {
             pending_status_ = "llama.cpp runtime is ready. Managed local models are shown below.";
@@ -594,12 +629,13 @@ void AiSettingsModalContent::FetchAiRegistry() {
     StartWorker([this] {
         const auto result = DownloadRegistry(
             CurlManager::kAiRegistryUrl,
-            RegistryFilename(RegistryKind::Ai));
+            RegistryFilename(RegistryKind::Ai),
+            &cancel_requested_);
         std::lock_guard<std::mutex> lock(state_mutex_);
         pending_reload_ = result == assistant_modal_detail::RegistryDownloadResult::Saved;
-        pending_status_ = pending_reload_
-            ? "AI registry loaded."
-            : "AI registry download failed.";
+        pending_status_ = cancel_requested_.load()
+            ? "AI registry download stopped."
+            : (pending_reload_ ? "AI registry loaded." : "AI registry download failed.");
     });
 }
 
@@ -619,7 +655,7 @@ void AiSettingsModalContent::DownloadRuntime() {
     StartWorker([this, url] {
         const std::filesystem::path archive_path =
             DownloadCacheDirectory() / std::filesystem::path(url).filename();
-        const bool downloaded = DownloadFile(url, archive_path);
+        const bool downloaded = DownloadFile(url, archive_path, &cancel_requested_);
         bool installed = false;
         if (downloaded) {
             std::error_code error;
@@ -629,7 +665,9 @@ void AiSettingsModalContent::DownloadRuntime() {
         }
         std::lock_guard<std::mutex> lock(state_mutex_);
         pending_reload_ = true;
-        pending_status_ = installed ? "llama.cpp runtime installed." : "Runtime installation failed.";
+        pending_status_ = cancel_requested_.load()
+            ? "Runtime download stopped."
+            : (installed ? "llama.cpp runtime installed." : "Runtime installation failed.");
     });
 }
 
@@ -696,10 +734,12 @@ void AiSettingsModalContent::DownloadSelectedModel() {
         model_delete_confirmation_ = false;
     }
     StartWorker([this, url, selected] {
-        const bool downloaded = DownloadFile(url, ModelsDirectory() / selected.filename);
+        const bool downloaded = DownloadFile(url, ModelsDirectory() / selected.filename, &cancel_requested_);
         std::lock_guard<std::mutex> lock(state_mutex_);
         pending_reload_ = true;
-        pending_status_ = downloaded ? "Model downloaded." : "Model download failed.";
+        pending_status_ = cancel_requested_.load()
+            ? "Model download stopped."
+            : (downloaded ? "Model downloaded." : "Model download failed.");
     });
 }
 
@@ -769,6 +809,108 @@ void AiSettingsModalContent::PersistSelectedModel() {
         : "Model selected, but settings could not be saved.";
 }
 
+void AiSettingsModalContent::StartTest() {
+    PersistSelectedModel();
+    if (!config_ || config_->ai_selected_model_key.empty()) {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        test_popup_visible_ = true;
+        test_result_ = "Select a model before running the test.";
+        status_ = "AI test cannot start without a selected model.";
+        active_panel_ = 1;
+        close_test_button_->TakeFocus();
+        return;
+    }
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        if (busy_) {
+            test_popup_visible_ = true;
+            test_result_ = "Another AI settings operation is already running.";
+            status_ = test_result_;
+            active_panel_ = 1;
+            close_test_button_->TakeFocus();
+            return;
+        }
+        test_popup_visible_ = true;
+        test_running_ = true;
+        test_result_ = "Waiting for model output...";
+        status_ = "Running editing test with the selected model...";
+    }
+    active_panel_ = 1;
+    close_test_button_->TakeFocus();
+
+    AiPromptRequest request;
+    request.action = AiActionType::Edit;
+    request.text = test_source_;
+    request.edit_style = AiEditStyle::Conversational;
+    const AiBackendSettings settings{
+        config_->ai_server_url,
+        AiBackend::ProviderFromConfig(config_->ai_provider),
+        config_->ai_selected_model_key,
+        180,
+    };
+    StartWorker([this, settings, request] {
+        AiBackendResult result = AiBackend(settings).Run(
+            request,
+            &cancel_requested_,
+            [this](const std::string& generated) {
+                {
+                    std::lock_guard<std::mutex> lock(state_mutex_);
+                    test_result_ = generated;
+                }
+                RequestRedraw();
+            });
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        test_running_ = false;
+        if (cancel_requested_.load()) {
+            test_result_ = "Test stopped.";
+            pending_status_ = "AI test stopped.";
+        } else if (!result.success) {
+            test_result_ = result.error.empty() ? "AI test failed." : result.error;
+            pending_status_ = "AI editing test failed.";
+        } else {
+            test_result_ = result.text;
+            pending_status_ = "AI editing test completed.";
+        }
+    });
+}
+
+void AiSettingsModalContent::CloseTestPopup() {
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        test_popup_visible_ = false;
+    }
+    active_panel_ = 0;
+    model_menu_->TakeFocus();
+    RequestRedraw();
+}
+
+void AiSettingsModalContent::StopCurrentOperation() {
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        if (!busy_) {
+            status_ = "No AI settings operation is running.";
+        } else {
+            cancel_requested_.store(true);
+            status_ = test_running_
+                ? "Stopping model test..."
+                : "Stopping AI settings operation...";
+            if (test_running_) {
+                test_result_ = "Stopping model process...";
+            }
+        }
+    }
+    RequestRedraw();
+}
+
+void AiSettingsModalContent::PrepareClose() {
+    cancel_requested_.store(true);
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        test_popup_visible_ = false;
+    }
+    active_panel_ = 0;
+}
+
 void AiSettingsModalContent::ApplyPendingWorkerResult() {
     bool reload = false;
     bool apply_server_models = false;
@@ -796,9 +938,11 @@ void AiSettingsModalContent::ApplyPendingWorkerResult() {
     }
     if (apply_server_models) {
         server_models_ = connection_success ? std::move(pending_models) : std::vector<AiModelInfo>{};
-        detected_provider_ = connection_success
-            ? AiBackend::ProviderLabel(detected)
-            : "Not connected";
+        connection_status_ = connection_success
+            ? "Connected — " + AiBackend::ProviderLabel(detected) + " detected"
+            : (cancel_requested_.load()
+                   ? "Connection check stopped"
+                   : AiBackend::ProviderLabel(provider_) + " connection failed");
         reload = true;
     }
     if (reload) {
@@ -816,18 +960,64 @@ ftxui::Element AiSettingsModalContent::RenderTitle() {
     return ftxui::text(GetTitle());
 }
 
-std::string AiSettingsModalContent::GetFooterText() const {
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    return status_.size() <= 92 ? status_ : status_.substr(0, 92);
-}
 
 ftxui::Element AiSettingsModalContent::Render() {
     ApplyPendingWorkerResult();
     PersistSelectedModel();
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    return RenderContent(theme) |
+    ftxui::Element body = RenderContent(theme) |
         ftxui::bgcolor(theme.modal_input_bg) |
         ftxui::color(theme.modal_input_fg);
+    bool show_test = false;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        show_test = test_popup_visible_;
+    }
+    if (!show_test) {
+        return body;
+    }
+    return ftxui::dbox({
+        body,
+        ftxui::vbox({
+            ftxui::filler(),
+            ftxui::hbox({ftxui::filler(), RenderTestPopup(theme), ftxui::filler()}),
+            ftxui::filler(),
+        }),
+    });
+}
+
+ftxui::Element AiSettingsModalContent::RenderTestPopup(const Theme& theme) {
+    using namespace ftxui;
+    bool running = false;
+    std::string result;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        running = test_running_;
+        result = test_result_;
+    }
+    if (running) {
+        ++test_progress_frame_;
+    }
+    return vbox({
+        hbox({
+            text(" Editing test") | bold | color(theme.modal_accent),
+            filler(),
+            running ? spinner(0, test_progress_frame_) | bold : text(""),
+        }),
+        separator() | color(theme.modal_border),
+        paragraph(test_source_) | color(theme.modal_text_color),
+        separator() | color(theme.modal_border),
+        text(" Result") | bold | color(theme.modal_accent),
+        paragraph(result.empty() ? "Waiting for model output..." : result) |
+            color(theme.modal_text_color) |
+            size(HEIGHT, EQUAL, 9) |
+            yframe |
+            vscroll_indicator,
+        separator() | color(theme.modal_border),
+        hbox({filler(), close_test_button_->Render()}),
+    }) | borderStyled(LIGHT, theme.modal_border) |
+        size(WIDTH, EQUAL, 82) |
+        clear_under;
 }
 
 ftxui::Element AiSettingsModalContent::RenderContent(const Theme& theme) {
@@ -843,30 +1033,60 @@ ftxui::Element AiSettingsModalContent::RenderContent(const Theme& theme) {
         model_confirmation = model_delete_confirmation_;
         status = status_;
     }
+    if (busy) {
+        ++operation_progress_frame_;
+    }
 
     Elements rows;
     rows.push_back(text(" Connection") | bold | color(theme.modal_text_color));
     rows.push_back(hbox({
         text(" URL: ") | bold | color(theme.modal_accent),
-        server_url_input_->Render() | flex,
+        server_url_input_->Render() |
+            borderStyled(LIGHT, theme.modal_border) | flex,
     }));
     rows.push_back(hbox({
         text(" Provider: ") | bold | color(theme.modal_accent),
-        provider_auto_button_->Render(), text(" "),
         provider_ollama_button_->Render(), text(" "),
         provider_openai_button_->Render(), text(" "),
         provider_local_button_->Render(),
     }));
-    rows.push_back(hbox({
-        save_connection_button_->Render(), text(" "), connect_button_->Render(),
-    }));
-    rows.push_back(StatusLine("detected", detected_provider_, theme));
     rows.push_back(separator() | color(theme.modal_border));
 
-    rows.push_back(text(" Managed local runtime") | bold | color(theme.modal_text_color));
-    rows.push_back(StatusLine(
-        "llama.cpp", RuntimeBinaryExists() ? "installed" : "not installed", theme));
-    rows.push_back(StatusLine("path", RuntimeDisplayPath(), theme));
+    rows.push_back(hbox({
+        text(" Models") | bold | color(theme.modal_text_color),
+        filler(),
+        model_download_button_->Render(), text(" "), model_delete_button_->Render(),
+        text(" "), test_button_->Render(),
+    }));
+    if (model_confirmation) {
+        rows.push_back(hbox({
+            text(" Delete the selected local model? ") | bold,
+            model_confirm_delete_button_->Render(), text(" "),
+            model_cancel_delete_button_->Render(),
+        }));
+    }
+    rows.push_back(model_menu_->Render() |
+                   borderStyled(LIGHT, theme.modal_border) |
+                   size(HEIGHT, EQUAL, 7));
+    std::string model_description = "Select a model to view its description.";
+    if (selected_model_ >= 0 && static_cast<size_t>(selected_model_) < model_descriptions_.size() &&
+        !model_descriptions_[static_cast<size_t>(selected_model_)].empty()) {
+        model_description = model_descriptions_[static_cast<size_t>(selected_model_)];
+    }
+    rows.push_back(paragraph(" " + model_description) |
+        dim | color(theme.modal_text_color) | size(HEIGHT, EQUAL, 2));
+    rows.push_back(text(
+        " [x] active model · server models are managed by the configured AI service") |
+        dim | color(theme.modal_text_color));
+    rows.push_back(separator() | color(theme.modal_border));
+
+    rows.push_back(hbox({
+        text(" Local llama.cpp runtime: ") | bold | color(theme.modal_text_color),
+        text(RuntimeBinaryExists() ? "installed" : "not installed") |
+            color(theme.modal_accent),
+        text("   Path: ") | bold | color(theme.modal_text_color),
+        paragraph(RuntimeDisplayPath()) | color(theme.modal_text_color) | flex,
+    }));
     rows.push_back(hbox({
         runtime_download_button_->Render(), text(" "), runtime_delete_button_->Render(),
         text(" "), fetch_registry_button_->Render(),
@@ -880,32 +1100,15 @@ ftxui::Element AiSettingsModalContent::RenderContent(const Theme& theme) {
     }
     rows.push_back(separator() | color(theme.modal_border));
 
-    rows.push_back(hbox({
-        text(" Models") | bold | color(theme.modal_text_color),
-        filler(),
-        model_download_button_->Render(), text(" "), model_delete_button_->Render(),
-    }));
-    if (model_confirmation) {
-        rows.push_back(hbox({
-            text(" Delete the selected local model? ") | bold,
-            model_confirm_delete_button_->Render(), text(" "),
-            model_cancel_delete_button_->Render(),
-        }));
-    }
-    rows.push_back(model_menu_->Render() |
-                   size(HEIGHT, LESS_THAN, 9) |
-                   borderStyled(LIGHT, theme.modal_border));
-    if (selected_model_ >= 0 && static_cast<size_t>(selected_model_) < model_descriptions_.size() &&
-        !model_descriptions_[static_cast<size_t>(selected_model_)].empty()) {
-        rows.push_back(paragraph(
-            " " + model_descriptions_[static_cast<size_t>(selected_model_)]) |
-            dim | color(theme.modal_text_color));
-    }
-    rows.push_back(separator() | color(theme.modal_border));
-    rows.push_back(StatusLine("status", busy ? status + " (working)" : status, theme));
-    rows.push_back(text(
-        " [x] is the active model. Server models are managed by Ollama or the configured API.") |
-        dim | color(theme.modal_text_color));
+    rows.push_back(vbox({
+        StatusLine("Connection", connection_status_, theme),
+        hbox({
+            busy ? spinner(0, operation_progress_frame_) | bold : text(" "),
+            text(" Status: ") | bold | color(theme.modal_accent),
+            paragraph(status.empty() ? "Ready" : status) |
+                color(theme.modal_text_color) | flex,
+        }),
+    }) | borderStyled(LIGHT, theme.modal_border) | size(HEIGHT, EQUAL, 5));
     return vbox(std::move(rows)) | borderStyled(LIGHT, theme.modal_border);
 }
 
@@ -917,7 +1120,12 @@ AiSettingsModal::AiSettingsModal(
     content_ = std::make_shared<AiSettingsModalContent>(
         theme_, config, std::move(request_redraw));
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
-    modal_->SetFooterButtons({{"Close", [this] { Close(); }}});
+    modal_->SetFooterButtons({
+        {"Save", [this] { content_->SaveConnectionSettings(); }, ButtonRole::Default},
+        {"Connect / Refresh", [this] { content_->ConnectAndRefreshServerModels(); }, ButtonRole::Primary},
+        {"Stop", [this] { content_->StopCurrentOperation(); }, ButtonRole::Warning},
+        {"Close", [this] { Close(); }, ButtonRole::Cancel},
+    });
     modal_->SetBodyFrameScrolling(false);
 }
 
@@ -934,6 +1142,9 @@ void AiSettingsModal::Open() {
 }
 
 void AiSettingsModal::Close() {
+    if (content_) {
+        content_->PrepareClose();
+    }
     open_ = false;
 }
 

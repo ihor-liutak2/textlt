@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -54,10 +56,16 @@ struct AiConnectionResult {
 
 class AiBackend {
 public:
+    using ProgressCallback = std::function<void(const std::string& generated_text)>;
+
     explicit AiBackend(AiBackendSettings settings);
 
-    AiConnectionResult CheckConnectionAndListModels() const;
-    AiBackendResult Run(const AiPromptRequest& request) const;
+    AiConnectionResult CheckConnectionAndListModels(
+        const std::atomic<bool>* cancel_requested = nullptr) const;
+    AiBackendResult Run(
+        const AiPromptRequest& request,
+        const std::atomic<bool>* cancel_requested = nullptr,
+        ProgressCallback progress = {}) const;
 
     static AiProvider ProviderFromConfig(const std::string& value);
     static std::string ProviderToConfig(AiProvider provider);
@@ -67,15 +75,21 @@ public:
     static std::string ModelIdFromKey(const std::string& key);
 
 private:
-    AiConnectionResult TryOllama() const;
-    AiConnectionResult TryOpenAiCompatible() const;
-    AiBackendResult RunOllama(const AiPromptRequest& request, const std::string& model) const;
+    AiConnectionResult TryOllama(const std::atomic<bool>* cancel_requested) const;
+    AiConnectionResult TryOpenAiCompatible(const std::atomic<bool>* cancel_requested) const;
+    AiBackendResult RunOllama(
+        const AiPromptRequest& request, const std::string& model,
+        const std::atomic<bool>* cancel_requested, ProgressCallback progress) const;
     AiBackendResult RunOpenAiCompatible(
         const AiPromptRequest& request,
-        const std::string& model) const;
+        const std::string& model,
+        const std::atomic<bool>* cancel_requested,
+        ProgressCallback progress) const;
     AiBackendResult RunLocalLlamaCpp(
         const AiPromptRequest& request,
-        const std::string& filename) const;
+        const std::string& filename,
+        const std::atomic<bool>* cancel_requested,
+        ProgressCallback progress) const;
 
     AiBackendSettings settings_;
 };

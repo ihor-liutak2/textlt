@@ -1,6 +1,8 @@
 #pragma once
 
+#include <atomic>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -15,12 +17,23 @@ struct RemoteHttpResponse {
 
 class RemoteHttpClient {
 public:
+    using OutputCallback = std::function<void(const std::string& chunk)>;
+
     RemoteHttpResponse Request(
         const std::string& method,
         const std::string& url,
         const std::vector<std::string>& headers,
         const std::string& request_body = {},
         int timeout_seconds = 0) const;
+
+    RemoteHttpResponse RequestStreaming(
+        const std::string& method,
+        const std::string& url,
+        const std::vector<std::string>& headers,
+        const std::string& request_body,
+        int timeout_seconds,
+        const std::atomic<bool>* cancel_requested,
+        OutputCallback on_body_chunk) const;
 
     RemoteHttpResponse Download(
         const std::string& method,
@@ -29,6 +42,15 @@ public:
         const std::filesystem::path& output_path,
         const std::string& request_body = {},
         int timeout_seconds = 0) const;
+
+    RemoteHttpResponse DownloadCancelable(
+        const std::string& method,
+        const std::string& url,
+        const std::vector<std::string>& headers,
+        const std::filesystem::path& output_path,
+        const std::string& request_body,
+        int timeout_seconds,
+        const std::atomic<bool>* cancel_requested) const;
 
     RemoteHttpResponse UploadFile(
         const std::string& method,
@@ -48,7 +70,9 @@ private:
         const std::filesystem::path* output_path,
         const std::filesystem::path* upload_file_path,
         const std::string* request_body,
-        int timeout_seconds) const;
+        int timeout_seconds,
+        const std::atomic<bool>* cancel_requested,
+        OutputCallback on_body_chunk) const;
 };
 
 } // namespace textlt

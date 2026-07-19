@@ -85,6 +85,7 @@ bool WriteConfigAtomically(const std::filesystem::path& path, const EditorConfig
         {"ai_server_url", config.ai_server_url},
         {"ai_provider", config.ai_provider},
         {"ai_selected_model_key", config.ai_selected_model_key},
+        {"ai_translation_source_language", config.ai_translation_source_language},
         {"ai_translation_language", config.ai_translation_language},
         {"ai_edit_style", config.ai_edit_style},
         {"ai_whole_document", config.ai_whole_document},
