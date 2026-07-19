@@ -274,9 +274,43 @@ TextltApp::TextltApp()
           [this](DistractionModeSettings settings) { ApplyDistractionSettings(settings); },
           [this](const std::string& command_id) { RunCommand(command_id); },
           [this] { CloseDistractionOptionsModal(); }),
-      ai_actions_modal_(&current_theme_),
+      ai_actions_modal_(
+          &current_theme_,
+          &editor_config_,
+          [this](bool whole_document, AiDocumentTarget& target, std::string& error) {
+              target.session = ActiveSessionPtr();
+              if (!target.session) {
+                  error = "No active document.";
+                  return false;
+              }
+              return target.session->CaptureAiTransformTarget(
+                  whole_document, target.range, error);
+          },
+          [this](const AiDocumentTarget& target,
+                 const std::string& text,
+                 std::string& error) {
+              const std::shared_ptr<DocumentSession> active_session = ActiveSessionPtr();
+              if (!target.session || active_session != target.session) {
+                  error = "The active document changed while the AI request was running.";
+                  return false;
+              }
+              if (!target.session->ReplaceAiTransformTarget(target.range, text, error)) {
+                  return false;
+              }
+              const auto editor = ActiveEditor();
+              if (editor) {
+                  editor->SetSession(target.session);
+              }
+              active_action_ = target.range.whole_document
+                  ? "AI action applied to whole document"
+                  : "AI action applied to current paragraph";
+              screen_.PostEvent(ftxui::Event::Custom);
+              return true;
+          },
+          [this] { screen_.PostEvent(ftxui::Event::Custom); }),
       ai_settings_modal_(
           &current_theme_,
+          &editor_config_,
           [this] { screen_.PostEvent(ftxui::Event::Custom); }),
       assistant_settings_modal_(
           &current_theme_,

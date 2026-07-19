@@ -1,23 +1,18 @@
 #include "modals/modal_ai_settings.hpp"
 
 #include <algorithm>
-#include <chrono>
-#include <cstdlib>
 #include <filesystem>
 #include <functional>
 #include <string>
-#include <thread>
 #include <utility>
 
 #include <archive.h>
 #include <archive_entry.h>
 
-#include "ftxui/component/component_options.hpp"
-#include "ftxui/dom/elements.hpp"
-
-#include "assistant_download_progress.hpp"
-#include "assistant_modals.hpp"
 #include "curl_manager.hpp"
+#include "ftxui/component/component_options.hpp"
+#include "json_utils.hpp"
+#include "modals/assistant_modals.hpp"
 #include "ui_button.hpp"
 
 namespace textlt {
@@ -28,57 +23,55 @@ using assistant_modal_detail::DownloadRegistry;
 using assistant_modal_detail::EnsureDirectory;
 using assistant_modal_detail::JsonLabel;
 using assistant_modal_detail::LoadUserRegistryJson;
-using assistant_modal_detail::RegistryDownloadResult;
 using assistant_modal_detail::RegistryFilename;
 using assistant_modal_detail::RegistryKind;
 using assistant_modal_detail::RegistryLoadResult;
 using assistant_modal_detail::UserDataDirectory;
 
-ftxui::Element StatusLine(const std::string& label,
-                          const std::string& value,
-                          const Theme& theme) {
+ftxui::Element StatusLine(
+    const std::string& label,
+    const std::string& value,
+    const Theme& theme) {
     using namespace ftxui;
     return hbox({
         text(" " + label + ": ") | bold | color(theme.modal_accent),
-        text(value) | color(theme.modal_text_color),
+        paragraph(value.empty() ? "-" : value) | color(theme.modal_text_color) | flex,
     });
 }
 
-ButtonSpec AiSettingsButtonSpec(std::string label) {
-    ButtonSpec spec = ButtonSpecFromLabel(std::move(label));
-    spec.variant = ButtonVariant::AccentEdges;
-    return spec;
-}
-
-ftxui::Component MakeAiSettingsButton(
+ftxui::Component MakeButton(
     const Theme** theme,
     std::string label,
-    std::function<void()> on_click) {
-    ButtonSpec spec = AiSettingsButtonSpec(std::move(label));
+    std::function<void()> on_click,
+    std::function<bool()> selected = {}) {
+    ButtonSpec base = ButtonSpecFromLabel(
+        std::move(label),
+        ButtonRole::Default,
+        ButtonVariant::AccentEdges,
+        ButtonSize::Compact);
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
-    option.label = ButtonCaptionText(spec);
+    option.label = ButtonCaptionText(base);
     option.on_click = std::move(on_click);
-    option.transform = [theme, spec = std::move(spec)](const ftxui::EntryState& state) {
-        const Theme& resolved = (theme && *theme) ? **theme : FallbackTheme();
-        return RenderModalFlatButton(resolved, spec, state.focused || state.active);
+    option.transform = [theme, base, selected = std::move(selected)](
+                           const ftxui::EntryState& state) mutable {
+        const Theme& resolved = theme && *theme ? **theme : FallbackTheme();
+        base.selected = selected && selected();
+        return RenderModalFlatButton(resolved, base, state.focused || state.active);
     };
     return ftxui::Button(option);
 }
 
-std::filesystem::path AiRuntimeDirectory() {
+std::filesystem::path RuntimeDirectory() {
     return UserDataDirectory() / "ai" / "runtimes" / "llama_cpp";
 }
 
-std::string AiRuntimeDisplayPath() {
-#ifdef _WIN32
-    return "%LOCALAPPDATA%\\textlt\\ai\\runtimes\\llama_cpp\\llama-cli.exe";
-#else
-    return "~/.local/share/textlt/ai/runtimes/llama_cpp/llama-cli";
-#endif
+std::filesystem::path ModelsDirectory() {
+    return UserDataDirectory() / "ai" / "models";
 }
 
-bool RuntimeBinaryExists(const std::filesystem::path& directory) {
+bool RuntimeBinaryExists() {
     std::error_code error;
+    const std::filesystem::path directory = RuntimeDirectory();
     if (!std::filesystem::exists(directory, error)) {
         return false;
     }
@@ -87,68 +80,50 @@ bool RuntimeBinaryExists(const std::filesystem::path& directory) {
             return false;
         }
         const std::string filename = entry.path().filename().string();
-        if (filename == "llama-cli" || filename == "llama-cli.exe") {
+        if (entry.is_regular_file() && (filename == "llama-cli" || filename == "llama-cli.exe")) {
             return true;
         }
     }
     return false;
 }
 
-bool AiRuntimeInstalled() {
-    return RuntimeBinaryExists(AiRuntimeDirectory());
+std::string RuntimeDisplayPath() {
+#ifdef _WIN32
+    return "%LOCALAPPDATA%\\textlt\\ai\\runtimes\\llama_cpp\\llama-cli.exe";
+#else
+    return "~/.local/share/textlt/ai/runtimes/llama_cpp/llama-cli";
+#endif
 }
 
-bool AiModelInstalled(const Json& model) {
-    const std::string filename = JsonString(model, "filename");
-    if (filename.empty()) {
-        return false;
-    }
-
-    std::error_code error;
-    return std::filesystem::exists(
-        UserDataDirectory() / "ai" / "models" / filename,
-        error);
-}
-
-std::string CurrentRuntimePlatform() {
+std::string CurrentPlatform() {
 #ifdef _WIN32
     return "windows";
+#elif defined(__APPLE__)
+    return "macos";
 #else
     return "linux";
 #endif
 }
 
-std::string CurrentRuntimeArch() {
-#if defined(__x86_64__) || defined(_M_X64)
+std::string CurrentArchitecture() {
+#if defined(__aarch64__) || defined(_M_ARM64)
+    return "arm64";
+#elif defined(__x86_64__) || defined(_M_X64)
     return "x64";
 #else
     return {};
 #endif
 }
 
-std::string CurrentRuntimeKey() {
-    const std::string platform = CurrentRuntimePlatform();
-    const std::string arch = CurrentRuntimeArch();
-    if (platform.empty() || arch.empty()) {
-        return {};
-    }
-    return platform + "_" + arch;
-}
-
-std::string AiRuntimeDownloadUrl() {
+std::string RuntimeDownloadUrl() {
     Json root;
     if (LoadUserRegistryJson(RegistryKind::Ai, &root) != RegistryLoadResult::Loaded) {
         return {};
     }
-
     const std::string backend_id = JsonString(root, "default_backend", "llama_cpp");
-    const std::string runtime_key = CurrentRuntimeKey();
-    if (runtime_key.empty()) {
-        return {};
-    }
-
+    const std::string runtime_key = CurrentPlatform() + "_" + CurrentArchitecture();
     const auto backends = root.find("backends");
-    if (backends == root.end() || !backends->is_array()) {
+    if (CurrentArchitecture().empty() || backends == root.end() || !backends->is_array()) {
         return {};
     }
     for (const Json& backend : *backends) {
@@ -166,108 +141,6 @@ std::string AiRuntimeDownloadUrl() {
         return JsonString(*urls, runtime_key.c_str());
     }
     return {};
-}
-
-bool FindSelectedAiModel(int selected_model, Json* selected) {
-    Json root;
-    if (LoadUserRegistryJson(RegistryKind::Ai, &root) != RegistryLoadResult::Loaded) {
-        return false;
-    }
-
-    const auto models = root.find("models");
-    if (models == root.end() || !models->is_array()) {
-        return false;
-    }
-
-    int visible_index = 0;
-    for (const Json& model : *models) {
-        if (!model.is_object()) {
-            continue;
-        }
-        if (visible_index == selected_model) {
-            *selected = model;
-            return true;
-        }
-        ++visible_index;
-    }
-    return false;
-}
-
-std::string SelectedAiModelDescription(int selected_model) {
-    Json model;
-    if (!FindSelectedAiModel(selected_model, &model)) {
-        return {};
-    }
-    return JsonString(model, "description");
-}
-
-bool DownloadRuntimeArchive(const std::string& url,
-                            const std::filesystem::path& final_path,
-                            std::mutex& state_mutex) {
-    EnsureDirectory(final_path.parent_path());
-    const std::filesystem::path part_path = final_path.string() + ".part";
-    std::error_code error;
-    std::filesystem::remove(part_path, error);
-
-    const bool download_ok = CurlManager::DownloadToFile(
-        url,
-        part_path,
-        [&state_mutex](unsigned long long, unsigned long long) {
-            std::lock_guard<std::mutex> lock(state_mutex);
-            return true;
-        });
-
-    if (!download_ok) {
-        std::filesystem::remove(part_path, error);
-        return false;
-    }
-
-    std::filesystem::rename(part_path, final_path, error);
-    if (error) {
-        std::filesystem::remove(final_path, error);
-        error.clear();
-        std::filesystem::rename(part_path, final_path, error);
-    }
-    if (error) {
-        std::filesystem::remove(part_path, error);
-        return false;
-    }
-    return true;
-}
-
-bool DownloadAiModelFile(const std::string& url,
-                         const std::filesystem::path& final_path,
-                         const std::filesystem::path& part_path,
-                         std::mutex& state_mutex) {
-    EnsureDirectory(final_path.parent_path());
-    EnsureDirectory(part_path.parent_path());
-    std::error_code error;
-    std::filesystem::remove(part_path, error);
-
-    const bool download_ok = CurlManager::DownloadToFile(
-        url,
-        part_path,
-        [&state_mutex](unsigned long long, unsigned long long) {
-            std::lock_guard<std::mutex> lock(state_mutex);
-            return true;
-        });
-
-    if (!download_ok) {
-        std::filesystem::remove(part_path, error);
-        return false;
-    }
-
-    std::filesystem::rename(part_path, final_path, error);
-    if (error) {
-        std::filesystem::remove(final_path, error);
-        error.clear();
-        std::filesystem::rename(part_path, final_path, error);
-    }
-    if (error) {
-        std::filesystem::remove(part_path, error);
-        return false;
-    }
-    return true;
 }
 
 bool IsSafeArchivePath(const std::filesystem::path& path) {
@@ -291,72 +164,55 @@ bool CopyArchiveData(archive* input, archive* output) {
         if (result == ARCHIVE_EOF) {
             return true;
         }
-        if (result != ARCHIVE_OK) {
-            return false;
-        }
-        if (archive_write_data_block(output, buffer, size, offset) != ARCHIVE_OK) {
+        if (result != ARCHIVE_OK ||
+            archive_write_data_block(output, buffer, size, offset) != ARCHIVE_OK) {
             return false;
         }
     }
 }
 
-bool ExtractRuntimeArchive(const std::filesystem::path& archive_path,
-                           const std::filesystem::path& destination) {
+bool ExtractArchive(
+    const std::filesystem::path& archive_path,
+    const std::filesystem::path& destination) {
     EnsureDirectory(destination);
-
     archive* input = archive_read_new();
     archive* output = archive_write_disk_new();
     if (!input || !output) {
-        if (input) {
-            archive_read_free(input);
-        }
-        if (output) {
-            archive_write_free(output);
-        }
+        if (input) archive_read_free(input);
+        if (output) archive_write_free(output);
         return false;
     }
-
     archive_read_support_filter_all(input);
     archive_read_support_format_all(input);
     archive_write_disk_set_options(
         output,
         ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_PERM | ARCHIVE_EXTRACT_SECURE_SYMLINKS);
-
     if (archive_read_open_filename(input, archive_path.string().c_str(), 10240) != ARCHIVE_OK) {
         archive_read_free(input);
         archive_write_free(output);
         return false;
     }
 
-    archive_entry* entry = nullptr;
     bool ok = true;
+    archive_entry* entry = nullptr;
     while (archive_read_next_header(input, &entry) == ARCHIVE_OK) {
-        const char* pathname = archive_entry_pathname(entry);
-        const std::filesystem::path relative_path = pathname ? pathname : "";
-        if (!IsSafeArchivePath(relative_path)) {
+        const std::filesystem::path relative = archive_entry_pathname(entry)
+            ? archive_entry_pathname(entry)
+            : "";
+        if (!IsSafeArchivePath(relative)) {
             archive_read_data_skip(input);
             continue;
         }
-
-        const std::filesystem::path full_path = destination / relative_path;
-        const std::string full_path_string = full_path.string();
-        archive_entry_set_pathname(entry, full_path_string.c_str());
-
-        const int header_result = archive_write_header(output, entry);
-        if (header_result != ARCHIVE_OK && header_result != ARCHIVE_WARN) {
-            ok = false;
-            break;
-        }
-        if (archive_entry_size(entry) > 0 && !CopyArchiveData(input, output)) {
-            ok = false;
-            break;
-        }
-        if (archive_write_finish_entry(output) != ARCHIVE_OK) {
+        const std::string full = (destination / relative).string();
+        archive_entry_set_pathname(entry, full.c_str());
+        const int header = archive_write_header(output, entry);
+        if ((header != ARCHIVE_OK && header != ARCHIVE_WARN) ||
+            (archive_entry_size(entry) > 0 && !CopyArchiveData(input, output)) ||
+            archive_write_finish_entry(output) != ARCHIVE_OK) {
             ok = false;
             break;
         }
     }
-
     archive_read_close(input);
     archive_read_free(input);
     archive_write_close(output);
@@ -364,612 +220,590 @@ bool ExtractRuntimeArchive(const std::filesystem::path& archive_path,
     return ok;
 }
 
-std::vector<std::string> WrapText(const std::string& text, size_t width) {
-    std::vector<std::string> lines;
-    std::string current;
-    size_t position = 0;
-    while (position < text.size()) {
-        while (position < text.size() && text[position] == ' ') {
-            ++position;
-        }
-        const size_t start = position;
-        while (position < text.size() && text[position] != ' ') {
-            ++position;
-        }
-        std::string word = text.substr(start, position - start);
-        if (word.empty()) {
-            continue;
-        }
-        if (current.empty()) {
-            current = std::move(word);
-        } else if (current.size() + 1 + word.size() <= width) {
-            current += " " + word;
-        } else {
-            lines.push_back(current);
-            current = std::move(word);
-        }
+bool DownloadFile(const std::string& url, const std::filesystem::path& final_path) {
+    EnsureDirectory(final_path.parent_path());
+    const std::filesystem::path part_path = final_path.string() + ".part";
+    std::error_code error;
+    std::filesystem::remove(part_path, error);
+    if (!CurlManager::DownloadToFile(url, part_path)) {
+        std::filesystem::remove(part_path, error);
+        return false;
     }
-    if (!current.empty()) {
-        lines.push_back(current);
+    std::filesystem::rename(part_path, final_path, error);
+    if (error) {
+        std::filesystem::remove(final_path, error);
+        error.clear();
+        std::filesystem::rename(part_path, final_path, error);
     }
-    return lines;
+    if (error) {
+        std::filesystem::remove(part_path, error);
+        return false;
+    }
+    return true;
 }
 
-std::string TrimFooterText(const std::string& text) {
-    constexpr size_t kMaxFooterTextLength = 60;
-    if (text.size() <= kMaxFooterTextLength) {
-        return text;
+
+bool IsSafeModelFilename(const std::string& filename) {
+    if (filename.empty()) {
+        return false;
     }
-    return text.substr(0, kMaxFooterTextLength);
+    const std::filesystem::path path(filename);
+    return !path.is_absolute() && path.parent_path().empty() &&
+        path.filename() == path && filename != "." && filename != "..";
+}
+
+std::vector<AiModelInfo> LoadLocalModels(std::vector<std::string>* descriptions) {
+    std::vector<AiModelInfo> models;
+    Json root;
+    if (LoadUserRegistryJson(RegistryKind::Ai, &root) != RegistryLoadResult::Loaded) {
+        return models;
+    }
+    const auto items = root.find("models");
+    if (items == root.end() || !items->is_array()) {
+        return models;
+    }
+    for (const Json& item : *items) {
+        if (!item.is_object()) {
+            continue;
+        }
+        const std::string filename = JsonString(item, "filename");
+        if (!IsSafeModelFilename(filename)) {
+            continue;
+        }
+        std::error_code error;
+        const bool downloaded = std::filesystem::exists(ModelsDirectory() / filename, error);
+        AiModelInfo model;
+        model.key = "local:" + filename;
+        model.id = filename;
+        model.title = JsonLabel(item, "title", "id");
+        model.provider_label = JsonString(item, "backend", "llama.cpp");
+        model.filename = filename;
+        model.source = AiModelSource::ManagedLocal;
+        model.available = downloaded && RuntimeBinaryExists();
+        model.downloaded = downloaded;
+        models.push_back(std::move(model));
+        if (descriptions) {
+            descriptions->push_back(JsonString(item, "description"));
+        }
+    }
+    return models;
+}
+
+bool FindRegistryModel(const std::string& filename, Json* selected) {
+    Json root;
+    if (LoadUserRegistryJson(RegistryKind::Ai, &root) != RegistryLoadResult::Loaded) {
+        return false;
+    }
+    const auto models = root.find("models");
+    if (models == root.end() || !models->is_array()) {
+        return false;
+    }
+    for (const Json& model : *models) {
+        if (model.is_object() && IsSafeModelFilename(filename) &&
+            JsonString(model, "filename") == filename) {
+            if (selected) {
+                *selected = model;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string ModelStatus(const AiModelInfo& model) {
+    if (model.source == AiModelSource::Server) {
+        return model.available ? "available" : "offline";
+    }
+    return model.downloaded ? "downloaded" : "not downloaded";
 }
 
 } // namespace
 
 AiSettingsModalContent::AiSettingsModalContent(
     const Theme* theme,
+    EditorConfig* config,
     std::function<void()> request_redraw)
     : theme_(theme),
+      config_(config),
       request_redraw_(std::move(request_redraw)) {
-    auto make_button = [this](std::string label, std::function<void()> on_click) {
-        return MakeAiSettingsButton(&theme_, std::move(label), std::move(on_click));
+    ftxui::InputOption input_option;
+    input_option.multiline = false;
+    input_option.cursor_position = &server_url_cursor_;
+    input_option.on_enter = [this] { ConnectAndRefreshServerModels(); };
+    input_option.transform = [this](ftxui::InputState state) {
+        const Theme& resolved = theme_ ? *theme_ : FallbackTheme();
+        return resolved.InputTransform(std::move(state));
     };
+    server_url_input_ = ftxui::Input(&server_url_, "http://127.0.0.1:11434", input_option);
 
-    ftxui::MenuOption checkbox_option = ftxui::MenuOption::Vertical();
-    checkbox_option.entries_option.transform = [this](const ftxui::EntryState& state) {
-        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        ftxui::Element row = ftxui::text(std::string(state.state ? "[x] " : "[ ] ") + state.label);
+    provider_auto_button_ = MakeButton(
+        &theme_, "Auto", [this] { SelectProvider(AiProvider::Auto); },
+        [this] { return provider_ == AiProvider::Auto; });
+    provider_ollama_button_ = MakeButton(
+        &theme_, "Ollama", [this] { SelectProvider(AiProvider::Ollama); },
+        [this] { return provider_ == AiProvider::Ollama; });
+    provider_openai_button_ = MakeButton(
+        &theme_, "OpenAI-compatible", [this] { SelectProvider(AiProvider::OpenAiCompatible); },
+        [this] { return provider_ == AiProvider::OpenAiCompatible; });
+    provider_local_button_ = MakeButton(
+        &theme_, "Local llama.cpp", [this] { SelectProvider(AiProvider::LocalLlamaCpp); },
+        [this] { return provider_ == AiProvider::LocalLlamaCpp; });
+    save_connection_button_ = MakeButton(
+        &theme_, "Save", [this] { SaveConnectionSettings(); });
+    connect_button_ = MakeButton(
+        &theme_, "Connect / refresh", [this] { ConnectAndRefreshServerModels(); });
+    fetch_registry_button_ = MakeButton(
+        &theme_, "Fetch registry", [this] { FetchAiRegistry(); });
+    runtime_download_button_ = MakeButton(
+        &theme_, "Download runtime", [this] { DownloadRuntime(); });
+    runtime_delete_button_ = MakeButton(
+        &theme_, "Delete runtime", [this] { RequestRuntimeDelete(); });
+    runtime_confirm_delete_button_ = MakeButton(
+        &theme_, "Confirm delete", [this] { ConfirmRuntimeDelete(); });
+    runtime_cancel_delete_button_ = MakeButton(
+        &theme_, "Cancel", [this] { CancelRuntimeDelete(); });
+    model_download_button_ = MakeButton(
+        &theme_, "Download model", [this] { DownloadSelectedModel(); });
+    model_delete_button_ = MakeButton(
+        &theme_, "Delete model", [this] { RequestSelectedModelDelete(); });
+    model_confirm_delete_button_ = MakeButton(
+        &theme_, "Confirm delete", [this] { ConfirmSelectedModelDelete(); });
+    model_cancel_delete_button_ = MakeButton(
+        &theme_, "Cancel", [this] { CancelSelectedModelDelete(); });
+
+    ftxui::MenuOption menu_option = ftxui::MenuOption::Vertical();
+    menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
+        const Theme& resolved = theme_ ? *theme_ : FallbackTheme();
+        ftxui::Element row = ftxui::text(
+            std::string(state.active ? "[x] " : "[ ] ") + state.label);
         if (state.focused || state.active) {
             return row |
-                ftxui::bgcolor(theme.modal_selected_item_bg) |
-                ftxui::color(theme.modal_selected_item_fg);
+                ftxui::bgcolor(resolved.modal_selected_item_bg) |
+                ftxui::color(resolved.modal_selected_item_fg);
         }
-        return row | ftxui::color(theme.modal_text_color);
+        return row | ftxui::color(resolved.modal_text_color);
     };
-    ai_model_menu_ = ftxui::Menu(&ai_model_labels_, &selected_ai_model_, checkbox_option);
-
-    fetch_ai_button_ = make_button("Fetch registry", [this] { FetchAiRegistry(); });
-    ai_runtime_download_button_ =
-        make_button("Download AI runtime", [this] { StartAiRuntimeDownload(); });
-    ai_runtime_delete_button_ =
-        make_button("Delete runtime", [this] { StartAiRuntimeDelete(); });
-    ai_runtime_confirm_delete_button_ =
-        make_button("Confirm delete", [this] { ConfirmAiRuntimeDelete(); });
-    ai_runtime_cancel_delete_button_ =
-        make_button("Cancel", [this] { CancelAiRuntimeDelete(); });
-    ai_model_download_button_ =
-        make_button("Download model", [this] { StartAiModelDownload(); });
-    ai_delete_model_button_ =
-        make_button("Delete model", [this] { StartAiModelDelete(); });
-    ai_model_confirm_delete_button_ =
-        make_button("Confirm delete", [this] { ConfirmAiModelDelete(); });
-    ai_model_cancel_delete_button_ =
-        make_button("Cancel", [this] { CancelAiModelDelete(); });
+    model_menu_ = ftxui::Menu(&model_labels_, &selected_model_, menu_option);
 
     container_ = ftxui::Container::Vertical({
+        server_url_input_,
         ftxui::Container::Horizontal({
-            ai_runtime_download_button_,
-            ai_runtime_delete_button_,
-            fetch_ai_button_,
-            ai_model_download_button_,
-            ai_delete_model_button_,
+            provider_auto_button_, provider_ollama_button_,
+            provider_openai_button_, provider_local_button_,
+        }),
+        ftxui::Container::Horizontal({save_connection_button_, connect_button_}),
+        ftxui::Container::Horizontal({
+            runtime_download_button_, runtime_delete_button_, fetch_registry_button_,
+            model_download_button_, model_delete_button_,
         }),
         ftxui::Container::Horizontal({
-            ai_runtime_confirm_delete_button_,
-            ai_runtime_cancel_delete_button_,
-            ai_model_confirm_delete_button_,
-            ai_model_cancel_delete_button_,
+            runtime_confirm_delete_button_, runtime_cancel_delete_button_,
+            model_confirm_delete_button_, model_cancel_delete_button_,
         }),
-        ai_model_menu_,
+        model_menu_,
     });
-
-    LoadAiRegistry();
+    RefreshFromConfig();
 }
 
 AiSettingsModalContent::~AiSettingsModalContent() {
-    if (ai_runtime_thread_.joinable()) {
-        ai_runtime_thread_.join();
-    }
-    if (ai_model_thread_.joinable()) {
-        ai_model_thread_.join();
-    }
-    if (fetch_thread_.joinable()) {
-        fetch_thread_.join();
+    if (worker_.joinable()) {
+        worker_.join();
     }
 }
 
-ftxui::Element AiSettingsModalContent::Render() {
-    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    return RenderAiSettings(theme) |
-        ftxui::bgcolor(theme.modal_input_bg) |
-        ftxui::color(theme.modal_input_fg);
+void AiSettingsModalContent::RefreshFromConfig() {
+    if (config_) {
+        server_url_ = config_->ai_server_url;
+        provider_ = AiBackend::ProviderFromConfig(config_->ai_provider);
+    }
+    server_url_cursor_ = static_cast<int>(server_url_.size());
+    LoadModels();
 }
 
-ftxui::Element AiSettingsModalContent::RenderTitle() {
-    return ftxui::text(GetTitle());
-}
+void AiSettingsModalContent::LoadModels() {
+    const std::string selected_key = config_ ? config_->ai_selected_model_key : std::string{};
+    model_descriptions_.clear();
+    models_ = LoadLocalModels(&model_descriptions_);
+    for (const AiModelInfo& model : server_models_) {
+        models_.push_back(model);
+        model_descriptions_.push_back("Model reported by the configured AI server.");
+    }
 
-std::string AiSettingsModalContent::GetFooterText() const {
-    std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-    return TrimFooterText(ai_status_);
-}
-
-void AiSettingsModalContent::LoadAiRegistry() {
-    Json root;
-    const RegistryLoadResult load_result = LoadUserRegistryJson(RegistryKind::Ai, &root);
-    ai_model_labels_.clear();
-    if (load_result == RegistryLoadResult::Loaded) {
-        const auto models = root.find("models");
-        if (models != root.end() && models->is_array()) {
-            for (const Json& model : *models) {
-                if (!model.is_object()) {
-                    continue;
-                }
-                std::string label = JsonLabel(model, "title", "id");
-                const std::string purpose = JsonString(model, "purpose");
-                const std::string backend = JsonString(model, "backend");
-                label += " | " + (purpose.empty() ? "unknown" : purpose);
-                label += " | " + (backend.empty() ? "unknown" : backend);
-                label += AiModelInstalled(model) ? " | installed" : " | not installed";
-                ai_model_labels_.push_back(label);
-            }
+    const auto selected_iter = std::find_if(
+        models_.begin(), models_.end(), [&](const AiModelInfo& model) {
+            return model.key == selected_key;
+        });
+    if (!selected_key.empty() && selected_iter == models_.end()) {
+        AiModelInfo placeholder;
+        placeholder.key = selected_key;
+        placeholder.id = AiBackend::ModelIdFromKey(selected_key);
+        placeholder.title = placeholder.id;
+        bool recognized_key = false;
+        if (selected_key.rfind("ollama:", 0) == 0) {
+            placeholder.provider_label = "Ollama";
+            placeholder.source = AiModelSource::Server;
+            recognized_key = true;
+        } else if (selected_key.rfind("openai:", 0) == 0) {
+            placeholder.provider_label = "OpenAI-compatible";
+            placeholder.source = AiModelSource::Server;
+            recognized_key = true;
+        } else if (selected_key.rfind("local:", 0) == 0 &&
+                   IsSafeModelFilename(placeholder.id)) {
+            placeholder.provider_label = "llama.cpp";
+            placeholder.filename = placeholder.id;
+            placeholder.source = AiModelSource::ManagedLocal;
+            std::error_code error;
+            placeholder.downloaded = std::filesystem::exists(
+                ModelsDirectory() / placeholder.filename, error);
+            placeholder.available = placeholder.downloaded && RuntimeBinaryExists();
+            recognized_key = true;
+        }
+        if (recognized_key && !placeholder.title.empty()) {
+            models_.push_back(std::move(placeholder));
+            model_descriptions_.push_back(
+                "Previously selected model. Refresh its server or registry to update availability.");
         }
     }
-    if (ai_model_labels_.empty()) {
-        ai_model_labels_.push_back("No models");
-        if (load_result == RegistryLoadResult::Missing) {
-            ai_status_ = "Registry not loaded";
-        } else if (load_result == RegistryLoadResult::ParseFailed) {
-            ai_status_ = "Failed to parse registry";
+
+    model_labels_.clear();
+    for (const AiModelInfo& model : models_) {
+        model_labels_.push_back(
+            model.title + " | " + model.provider_label + " | " + ModelStatus(model));
+    }
+    if (model_labels_.empty()) {
+        model_labels_.push_back("No models. Fetch the registry or connect to a server.");
+        selected_model_ = 0;
+        persisted_model_index_ = -1;
+        return;
+    }
+
+    selected_model_ = 0;
+    bool selection_found = false;
+    for (size_t index = 0; index < models_.size(); ++index) {
+        if (models_[index].key == selected_key) {
+            selected_model_ = static_cast<int>(index);
+            selection_found = true;
+            break;
+        }
+    }
+    if (!selection_found) {
+        const auto preferred = std::find_if(
+            models_.begin(), models_.end(), [](const AiModelInfo& model) {
+                return model.available || model.downloaded;
+            });
+        if (preferred != models_.end()) {
+            selected_model_ = static_cast<int>(
+                std::distance(models_.begin(), preferred));
+        }
+        persisted_model_index_ = -1;
+        return;
+    }
+    persisted_model_index_ = selected_model_;
+}
+
+void AiSettingsModalContent::StartWorker(std::function<void()> operation) {
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        if (busy_) {
+            status_ = "Another AI settings operation is already running.";
+            return;
+        }
+        busy_ = true;
+    }
+    if (worker_.joinable()) {
+        worker_.join();
+    }
+    RequestRedraw();
+    worker_ = std::thread([this, operation = std::move(operation)] {
+        operation();
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            busy_ = false;
+        }
+        RequestRedraw();
+    });
+}
+
+bool AiSettingsModalContent::SaveConnectionSettings() {
+    server_url_ = AiBackend::NormalizeServerUrl(server_url_);
+    if (server_url_.empty() && provider_ != AiProvider::LocalLlamaCpp) {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        status_ = "AI server URL cannot be empty.";
+        return false;
+    }
+    if (provider_ != AiProvider::LocalLlamaCpp &&
+        !AiBackend::IsSupportedServerUrl(server_url_)) {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        status_ = "AI server URL must start with http:// or https://.";
+        return false;
+    }
+    if (config_) {
+        config_->ai_server_url = server_url_;
+        config_->ai_provider = AiBackend::ProviderToConfig(provider_);
+        if (!config_->Persist()) {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            status_ = "Could not save AI settings.";
+            return false;
+        }
+    }
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    status_ = "AI connection settings saved.";
+    return true;
+}
+
+void AiSettingsModalContent::SelectProvider(AiProvider provider) {
+    provider_ = provider;
+    SaveConnectionSettings();
+}
+
+void AiSettingsModalContent::ConnectAndRefreshServerModels() {
+    if (!SaveConnectionSettings()) {
+        return;
+    }
+    const AiBackendSettings settings{
+        server_url_, provider_, config_ ? config_->ai_selected_model_key : std::string{}, 30};
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        status_ = provider_ == AiProvider::LocalLlamaCpp
+            ? "Checking local llama.cpp runtime..."
+            : "Connecting to AI server...";
+    }
+    StartWorker([this, settings] {
+        const AiConnectionResult result = AiBackend(settings).CheckConnectionAndListModels();
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        pending_server_models_ = true;
+        pending_connection_success_ = result.success;
+        pending_detected_provider_ = result.provider;
+        if (!result.success) {
+            pending_status_ = result.error;
+        } else if (result.provider == AiProvider::LocalLlamaCpp) {
+            pending_status_ = "llama.cpp runtime is ready. Managed local models are shown below.";
         } else {
-            ai_status_ = "Registry loaded, no items found";
+            pending_status_ = result.provider_label + " connected. " +
+                std::to_string(result.models.size()) + " model(s) found.";
         }
-    } else if (ai_status_.find("TODO:") != 0) {
-        ai_status_ = "Registry loaded";
-    }
-    selected_ai_model_ = 0;
+        pending_models_ = result.models;
+    });
 }
 
 void AiSettingsModalContent::FetchAiRegistry() {
     {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        if (ai_runtime_downloading_ || ai_model_downloading_ || ai_model_deleting_) {
-            return;
-        }
-        ai_status_ = "Fetching AI registry...";
-        ai_progress_ = 0.0f;
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        status_ = "Fetching AI registry...";
     }
-    if (fetch_thread_.joinable()) {
-        fetch_thread_.join();
-    }
-    RequestRedraw();
-
-    fetch_thread_ = std::thread([this] {
-        const RegistryDownloadResult download_result =
-            DownloadRegistry(CurlManager::kAiRegistryUrl, RegistryFilename(RegistryKind::Ai));
-        LoadAiRegistry();
-
-        Json ai_root;
-        const RegistryLoadResult load_result =
-            LoadUserRegistryJson(RegistryKind::Ai, &ai_root);
-
-        auto registry_status = [](RegistryDownloadResult result, RegistryLoadResult load) {
-            if (result == RegistryDownloadResult::Saved && load == RegistryLoadResult::Loaded) {
-                return std::string("AI registry loaded");
-            }
-            if (result == RegistryDownloadResult::Empty) {
-                return std::string("AI registry file is empty");
-            }
-            if (result == RegistryDownloadResult::InvalidJson) {
-                return std::string("Downloaded AI registry is invalid JSON");
-            }
-            if (load == RegistryLoadResult::Missing) {
-                return std::string("AI registry not loaded");
-            }
-            if (load == RegistryLoadResult::ParseFailed) {
-                return std::string("AI registry parse failed");
-            }
-            return std::string("AI registry download failed");
-        };
-
-        {
-            std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-            ai_status_ = registry_status(download_result, load_result);
-        }
-        RequestRedraw();
+    StartWorker([this] {
+        const auto result = DownloadRegistry(
+            CurlManager::kAiRegistryUrl,
+            RegistryFilename(RegistryKind::Ai));
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        pending_reload_ = result == assistant_modal_detail::RegistryDownloadResult::Saved;
+        pending_status_ = pending_reload_
+            ? "AI registry loaded."
+            : "AI registry download failed.";
     });
 }
 
-bool AiSettingsModalContent::ResolveAiRuntimeDownload() {
-    EnsureDirectory(UserDataDirectory() / "ai" / "runtimes");
-    EnsureDirectory(DownloadCacheDirectory());
-
-    ai_runtime_download_url_.clear();
-    ai_runtime_asset_name_.clear();
-
-    const std::string url = AiRuntimeDownloadUrl();
+void AiSettingsModalContent::DownloadRuntime() {
+    const std::string url = RuntimeDownloadUrl();
     if (url.empty()) {
-        ai_status_ = "Runtime URL not found";
-        return false;
-    }
-    ai_runtime_download_url_ = url;
-    ai_runtime_asset_name_ = std::filesystem::path(url).filename().string();
-    if (ai_runtime_asset_name_.empty()) {
-        ai_runtime_asset_name_ = "llama_cpp_runtime.tar.gz";
-    }
-    return true;
-}
-
-void AiSettingsModalContent::StartAiRuntimeDownload() {
-    {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        if (ai_runtime_downloading_ || ai_model_downloading_ || ai_model_deleting_) {
-            return;
-        }
-        if (ai_runtime_download_url_.empty() && !ResolveAiRuntimeDownload()) {
-            return;
-        }
-    }
-    if (ai_runtime_thread_.joinable()) {
-        ai_runtime_thread_.join();
-    }
-
-    const std::string url = ai_runtime_download_url_;
-    const std::string asset_name = ai_runtime_asset_name_.empty()
-        ? std::string("llama_cpp_runtime.tar.gz")
-        : ai_runtime_asset_name_;
-    const std::filesystem::path archive_path = DownloadCacheDirectory() / asset_name;
-    const std::filesystem::path runtime_directory = AiRuntimeDirectory();
-
-    {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        ai_runtime_downloading_ = true;
-        ai_runtime_progress_visible_ = true;
-        ai_runtime_extracting_ = false;
-        ai_runtime_delete_confirm_visible_ = false;
-        ai_progress_ = 0.0f;
-        ai_status_ = "Runtime downloading...";
-    }
-    RequestRedraw();
-
-    ai_runtime_thread_ = std::thread([this, url, archive_path, runtime_directory] {
-        std::atomic_bool progress_running{true};
-        std::thread progress_thread = assistant_modal_detail::StartAssistantDownloadProgress(
-            progress_running,
-            [this](float progress) { ai_progress_.store(progress); },
-            request_redraw_);
-
-        const bool download_ok = DownloadRuntimeArchive(url, archive_path, ai_runtime_mutex_);
-        progress_running = false;
-        if (progress_thread.joinable()) {
-            progress_thread.join();
-        }
-        if (!download_ok) {
-            std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-            ai_runtime_downloading_ = false;
-            ai_runtime_progress_visible_ = false;
-            ai_progress_ = 0.0f;
-            ai_status_ = "Runtime download failed";
-            RequestRedraw();
-            return;
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-            ai_runtime_extracting_ = true;
-            ai_progress_ = 0.0f;
-            ai_status_ = "Runtime extracting...";
-        }
-        RequestRedraw();
-        for (int step = 1; step <= 50; ++step) {
-            {
-                std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-                ai_progress_ = static_cast<float>(step) / 50.0f;
-            }
-            RequestRedraw();
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-
-        std::error_code remove_error;
-        std::filesystem::remove_all(runtime_directory, remove_error);
-        const bool extract_ok = ExtractRuntimeArchive(archive_path, runtime_directory);
-        std::error_code archive_error;
-        std::filesystem::remove(archive_path, archive_error);
-        const bool binary_ok = extract_ok && RuntimeBinaryExists(runtime_directory);
-        {
-            std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-            ai_runtime_downloading_ = false;
-            ai_runtime_progress_visible_ = false;
-            ai_runtime_extracting_ = false;
-            ai_progress_ = 0.0f;
-            ai_status_ = binary_ok ? "Runtime installed" : "Runtime install failed";
-        }
-        RequestRedraw();
-    });
-}
-
-void AiSettingsModalContent::StartAiRuntimeDelete() {
-    const std::filesystem::path runtime_directory = AiRuntimeDirectory();
-    {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        if (ai_runtime_downloading_ || ai_model_downloading_ || ai_model_deleting_) {
-            return;
-        }
-        if (!RuntimeBinaryExists(runtime_directory)) {
-            ai_runtime_delete_confirm_visible_ = false;
-            ai_status_ = "Runtime not installed";
-            return;
-        }
-        ai_runtime_delete_confirm_visible_ = true;
-        ai_runtime_progress_visible_ = false;
-        ai_status_ = "Confirm runtime delete";
-    }
-    if (ai_runtime_confirm_delete_button_) {
-        ai_runtime_confirm_delete_button_->TakeFocus();
-    }
-}
-
-void AiSettingsModalContent::ConfirmAiRuntimeDelete() {
-    const std::filesystem::path runtime_directory = AiRuntimeDirectory();
-    {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        if (ai_runtime_downloading_ || ai_model_downloading_ || ai_model_deleting_) {
-            return;
-        }
-    }
-    if (ai_runtime_thread_.joinable()) {
-        ai_runtime_thread_.join();
-    }
-    if (!RuntimeBinaryExists(runtime_directory)) {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        ai_runtime_delete_confirm_visible_ = false;
-        ai_status_ = "Runtime not installed";
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        status_ = "No runtime package exists for " + CurrentPlatform() + " " +
+            CurrentArchitecture() + ".";
         return;
     }
-
     {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        ai_runtime_downloading_ = true;
-        ai_runtime_delete_confirm_visible_ = false;
-        ai_runtime_progress_visible_ = true;
-        ai_runtime_extracting_ = true;
-        ai_status_ = "Runtime deleting...";
-        ai_progress_ = 0.0f;
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        status_ = "Downloading llama.cpp runtime...";
+        runtime_delete_confirmation_ = false;
     }
-    RequestRedraw();
-
-    ai_runtime_thread_ = std::thread([this, runtime_directory] {
-        for (int step = 1; step <= 70; ++step) {
-            {
-                std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-                ai_progress_ = static_cast<float>(step) / 70.0f;
-            }
-            RequestRedraw();
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    StartWorker([this, url] {
+        const std::filesystem::path archive_path =
+            DownloadCacheDirectory() / std::filesystem::path(url).filename();
+        const bool downloaded = DownloadFile(url, archive_path);
+        bool installed = false;
+        if (downloaded) {
+            std::error_code error;
+            std::filesystem::remove_all(RuntimeDirectory(), error);
+            installed = ExtractArchive(archive_path, RuntimeDirectory()) && RuntimeBinaryExists();
+            std::filesystem::remove(archive_path, error);
         }
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        pending_reload_ = true;
+        pending_status_ = installed ? "llama.cpp runtime installed." : "Runtime installation failed.";
+    });
+}
 
+void AiSettingsModalContent::RequestRuntimeDelete() {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    if (!RuntimeBinaryExists()) {
+        status_ = "llama.cpp runtime is not installed.";
+        return;
+    }
+    runtime_delete_confirmation_ = true;
+    model_delete_confirmation_ = false;
+    status_ = "Confirm llama.cpp runtime deletion.";
+}
+
+void AiSettingsModalContent::ConfirmRuntimeDelete() {
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        runtime_delete_confirmation_ = false;
+        status_ = "Deleting llama.cpp runtime...";
+    }
+    StartWorker([this] {
         std::error_code error;
-        std::filesystem::remove_all(runtime_directory, error);
-        const bool deleted = !error && !RuntimeBinaryExists(runtime_directory);
-        {
-            std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-            ai_runtime_downloading_ = false;
-            ai_runtime_progress_visible_ = false;
-            ai_runtime_extracting_ = false;
-            ai_runtime_download_url_.clear();
-            ai_runtime_asset_name_.clear();
-            ai_progress_ = 0.0f;
-            ai_status_ = deleted ? "Runtime deleted" : "Delete runtime failed";
-        }
-        RequestRedraw();
+        std::filesystem::remove_all(RuntimeDirectory(), error);
+        const bool deleted = !error && !RuntimeBinaryExists();
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        pending_reload_ = true;
+        pending_status_ = deleted ? "llama.cpp runtime deleted." : "Runtime deletion failed.";
     });
 }
 
-void AiSettingsModalContent::CancelAiRuntimeDelete() {
-    std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-    ai_runtime_delete_confirm_visible_ = false;
+void AiSettingsModalContent::CancelRuntimeDelete() {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    runtime_delete_confirmation_ = false;
+    status_ = "Runtime deletion cancelled.";
 }
 
-void AiSettingsModalContent::StartAiModelDownload() {
-    {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        if (ai_runtime_downloading_ || ai_model_downloading_ || ai_model_deleting_) {
-            return;
-        }
-    }
-    if (ai_model_thread_.joinable()) {
-        ai_model_thread_.join();
-    }
-
-    Json model;
-    if (!FindSelectedAiModel(selected_ai_model_, &model)) {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        ai_status_ = "Model download failed";
+void AiSettingsModalContent::DownloadSelectedModel() {
+    if (selected_model_ < 0 || static_cast<size_t>(selected_model_) >= models_.size()) {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        status_ = "No model selected.";
         return;
     }
-
-    const std::string url = JsonString(model, "model_url");
+    const AiModelInfo selected = models_[static_cast<size_t>(selected_model_)];
+    if (selected.source != AiModelSource::ManagedLocal) {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        status_ = "Server models are managed by the AI server, not downloaded by TextLT.";
+        return;
+    }
+    Json registry_model;
+    if (!FindRegistryModel(selected.filename, &registry_model)) {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        status_ = "Selected model is not present in the registry.";
+        return;
+    }
+    const std::string url = JsonString(registry_model, "model_url");
     if (url.empty()) {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        ai_status_ = "Model URL is missing";
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        status_ = "Selected model has no download URL.";
         return;
     }
-
-    const std::string filename = JsonString(model, "filename");
-    if (filename.empty()) {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        ai_status_ = "Model filename is missing";
-        return;
-    }
-
-    const std::filesystem::path final_path = UserDataDirectory() / "ai" / "models" / filename;
-    const std::filesystem::path part_path = DownloadCacheDirectory() / (filename + ".part");
-
     {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        ai_model_downloading_ = true;
-        ai_model_progress_visible_ = true;
-        ai_progress_ = 0.0f;
-        ai_status_ = "Model downloading...";
-        ai_model_delete_confirm_visible_ = false;
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        status_ = "Downloading " + selected.title + "...";
+        model_delete_confirmation_ = false;
     }
-    RequestRedraw();
-
-    ai_model_thread_ = std::thread([this, url, final_path, part_path] {
-        std::atomic_bool progress_running{true};
-        std::thread progress_thread = assistant_modal_detail::StartAssistantDownloadProgress(
-            progress_running,
-            [this](float progress) { ai_progress_.store(progress); },
-            request_redraw_);
-
-        const bool ok = DownloadAiModelFile(url, final_path, part_path, ai_runtime_mutex_);
-
-        progress_running = false;
-        if (progress_thread.joinable()) {
-            progress_thread.join();
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-            ai_model_downloading_ = false;
-            ai_model_progress_visible_ = false;
-            ai_progress_ = 0.0f;
-            ai_refresh_after_model_download_ = ok;
-            ai_status_ = ok ? "Model downloaded" : "Model download failed";
-        }
-        RequestRedraw();
+    StartWorker([this, url, selected] {
+        const bool downloaded = DownloadFile(url, ModelsDirectory() / selected.filename);
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        pending_reload_ = true;
+        pending_status_ = downloaded ? "Model downloaded." : "Model download failed.";
     });
 }
 
-void AiSettingsModalContent::StartAiModelDelete() {
-    {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        if (ai_runtime_downloading_ || ai_model_downloading_ || ai_model_deleting_) {
-            return;
-        }
-    }
-    if (ai_model_thread_.joinable()) {
-        ai_model_thread_.join();
-    }
-
-    Json model;
-    if (!FindSelectedAiModel(selected_ai_model_, &model)) {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        ai_model_delete_confirm_visible_ = false;
-        ai_model_delete_pending_filename_.clear();
-        ai_status_ = "No model selected";
+void AiSettingsModalContent::RequestSelectedModelDelete() {
+    if (selected_model_ < 0 || static_cast<size_t>(selected_model_) >= models_.size()) {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        status_ = "No model selected.";
         return;
     }
-
-    const std::string filename = JsonString(model, "filename");
-    if (filename.empty()) {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        ai_model_delete_confirm_visible_ = false;
-        ai_model_delete_pending_filename_.clear();
-        ai_status_ = "Model filename is missing";
+    const AiModelInfo& selected = models_[static_cast<size_t>(selected_model_)];
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    if (selected.source != AiModelSource::ManagedLocal) {
+        status_ = "Server models must be removed in the AI server.";
         return;
     }
-
-    const std::filesystem::path model_path = UserDataDirectory() / "ai" / "models" / filename;
-    std::error_code error;
-    if (!std::filesystem::exists(model_path, error)) {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        ai_model_delete_confirm_visible_ = false;
-        ai_model_delete_pending_filename_.clear();
-        ai_status_ = "Model not installed";
+    if (!selected.downloaded) {
+        status_ = "Selected model is not downloaded.";
         return;
     }
-
-    {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        ai_model_delete_pending_filename_ = filename;
-        ai_model_delete_confirm_visible_ = true;
-        ai_model_progress_visible_ = false;
-        ai_status_ = "Confirm model delete";
-    }
-    if (ai_model_confirm_delete_button_) {
-        ai_model_confirm_delete_button_->TakeFocus();
-    }
+    pending_model_delete_filename_ = selected.filename;
+    model_delete_confirmation_ = true;
+    runtime_delete_confirmation_ = false;
+    status_ = "Confirm selected model deletion.";
 }
 
-void AiSettingsModalContent::ConfirmAiModelDelete() {
+void AiSettingsModalContent::ConfirmSelectedModelDelete() {
     std::string filename;
     {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        if (ai_runtime_downloading_ || ai_model_downloading_ || ai_model_deleting_) {
-            return;
-        }
-        filename = ai_model_delete_pending_filename_;
-    }
-    if (ai_model_thread_.joinable()) {
-        ai_model_thread_.join();
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        filename = pending_model_delete_filename_;
+        pending_model_delete_filename_.clear();
+        model_delete_confirmation_ = false;
+        status_ = "Deleting selected model...";
     }
     if (filename.empty()) {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        ai_model_delete_confirm_visible_ = false;
-        ai_status_ = "No model selected";
         return;
     }
-
-    const std::filesystem::path model_path = UserDataDirectory() / "ai" / "models" / filename;
-    const std::filesystem::path cache_directory = DownloadCacheDirectory();
-    const std::filesystem::path part_path =
-        cache_directory.empty() ? std::filesystem::path{} : cache_directory / (filename + ".part");
-    std::error_code exists_error;
-    if (!std::filesystem::exists(model_path, exists_error)) {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        ai_model_delete_confirm_visible_ = false;
-        ai_model_delete_pending_filename_.clear();
-        ai_status_ = "Model not installed";
-        return;
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        ai_model_deleting_ = true;
-        ai_model_progress_visible_ = true;
-        ai_model_delete_confirm_visible_ = false;
-        ai_progress_ = 0.0f;
-        ai_status_ = "Model deleting...";
-    }
-    RequestRedraw();
-
-    ai_model_thread_ = std::thread([this, model_path, part_path] {
-        for (int step = 1; step <= 60; ++step) {
-            {
-                std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-                ai_progress_ = static_cast<float>(step) / 60.0f;
-            }
-            RequestRedraw();
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-
-        std::error_code remove_error;
-        std::filesystem::remove(model_path, remove_error);
-        std::error_code part_error;
-        if (!part_path.empty()) {
-            std::filesystem::remove(part_path, part_error);
-        }
-
-        std::error_code verify_error;
-        const bool still_exists = std::filesystem::exists(model_path, verify_error);
-        const bool deleted = !remove_error && !verify_error && !still_exists;
-        {
-            std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-            ai_model_deleting_ = false;
-            ai_model_progress_visible_ = false;
-            ai_model_delete_pending_filename_.clear();
-            ai_progress_ = 0.0f;
-            ai_refresh_after_model_download_ = true;
-            ai_status_ = deleted ? "Model deleted" : "Delete model failed";
-        }
-        RequestRedraw();
+    StartWorker([this, filename] {
+        std::error_code error;
+        std::filesystem::remove(ModelsDirectory() / filename, error);
+        const bool deleted = !error && !std::filesystem::exists(ModelsDirectory() / filename);
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        pending_reload_ = true;
+        pending_status_ = deleted ? "Model deleted." : "Model deletion failed.";
     });
 }
 
-void AiSettingsModalContent::CancelAiModelDelete() {
-    std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-    ai_model_delete_confirm_visible_ = false;
-    ai_model_delete_pending_filename_.clear();
+void AiSettingsModalContent::CancelSelectedModelDelete() {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    pending_model_delete_filename_.clear();
+    model_delete_confirmation_ = false;
+    status_ = "Model deletion cancelled.";
+}
+
+void AiSettingsModalContent::PersistSelectedModel() {
+    if (selected_model_ == persisted_model_index_ || selected_model_ < 0 ||
+        static_cast<size_t>(selected_model_) >= models_.size() || !config_) {
+        return;
+    }
+    persisted_model_index_ = selected_model_;
+    const AiModelInfo& selected = models_[static_cast<size_t>(selected_model_)];
+    config_->ai_selected_model_key = selected.key;
+    const bool saved = config_->Persist();
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    status_ = saved
+        ? "Selected model: " + selected.title
+        : "Model selected, but settings could not be saved.";
+}
+
+void AiSettingsModalContent::ApplyPendingWorkerResult() {
+    bool reload = false;
+    bool apply_server_models = false;
+    bool connection_success = false;
+    AiProvider detected = AiProvider::Auto;
+    std::string pending_status;
+    std::vector<AiModelInfo> pending_models;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        reload = pending_reload_;
+        pending_reload_ = false;
+        apply_server_models = pending_server_models_;
+        pending_server_models_ = false;
+        connection_success = pending_connection_success_;
+        detected = pending_detected_provider_;
+        pending_status = std::move(pending_status_);
+        pending_status_.clear();
+        if (apply_server_models) {
+            pending_models = std::move(pending_models_);
+            pending_models_.clear();
+        }
+        if (!pending_status.empty()) {
+            status_ = pending_status;
+        }
+    }
+    if (apply_server_models) {
+        server_models_ = connection_success ? std::move(pending_models) : std::vector<AiModelInfo>{};
+        detected_provider_ = connection_success
+            ? AiBackend::ProviderLabel(detected)
+            : "Not connected";
+        reload = true;
+    }
+    if (reload) {
+        LoadModels();
+    }
 }
 
 void AiSettingsModalContent::RequestRedraw() const {
@@ -978,123 +812,110 @@ void AiSettingsModalContent::RequestRedraw() const {
     }
 }
 
-ftxui::Element AiSettingsModalContent::RenderAiSettings(const Theme& theme) {
+ftxui::Element AiSettingsModalContent::RenderTitle() {
+    return ftxui::text(GetTitle());
+}
+
+std::string AiSettingsModalContent::GetFooterText() const {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    return status_.size() <= 92 ? status_ : status_.substr(0, 92);
+}
+
+ftxui::Element AiSettingsModalContent::Render() {
+    ApplyPendingWorkerResult();
+    PersistSelectedModel();
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    return RenderContent(theme) |
+        ftxui::bgcolor(theme.modal_input_bg) |
+        ftxui::color(theme.modal_input_fg);
+}
+
+ftxui::Element AiSettingsModalContent::RenderContent(const Theme& theme) {
     using namespace ftxui;
-    bool refresh_models = false;
-    bool show_runtime_delete_confirmation = false;
-    bool show_runtime_progress = false;
-    bool show_extraction_progress = false;
-    bool show_model_progress = false;
-    bool show_model_delete_confirmation = false;
-    bool show_model_delete_progress = false;
+    bool busy = false;
+    bool runtime_confirmation = false;
+    bool model_confirmation = false;
+    std::string status;
     {
-        std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-        refresh_models = ai_refresh_after_model_download_;
-        ai_refresh_after_model_download_ = false;
-        show_runtime_delete_confirmation = ai_runtime_delete_confirm_visible_;
-        show_runtime_progress = ai_runtime_progress_visible_;
-        show_extraction_progress = ai_runtime_extracting_;
-        show_model_progress = ai_model_progress_visible_;
-        show_model_delete_confirmation = ai_model_delete_confirm_visible_;
-        show_model_delete_progress = ai_model_deleting_;
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        busy = busy_;
+        runtime_confirmation = runtime_delete_confirmation_;
+        model_confirmation = model_delete_confirmation_;
+        status = status_;
     }
-    if (refresh_models) {
-        std::string status;
-        {
-            std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-            status = ai_status_;
-        }
-        LoadAiRegistry();
-        {
-            std::lock_guard<std::mutex> lock(ai_runtime_mutex_);
-            ai_status_ = status;
-        }
-    }
-    const float ai_progress = std::max(0.0f, std::min(1.0f, ai_progress_.load()));
 
     Elements rows;
-    rows.push_back(text(" Runtime") | bold | color(theme.modal_text_color));
+    rows.push_back(text(" Connection") | bold | color(theme.modal_text_color));
+    rows.push_back(hbox({
+        text(" URL: ") | bold | color(theme.modal_accent),
+        server_url_input_->Render() | flex,
+    }));
+    rows.push_back(hbox({
+        text(" Provider: ") | bold | color(theme.modal_accent),
+        provider_auto_button_->Render(), text(" "),
+        provider_ollama_button_->Render(), text(" "),
+        provider_openai_button_->Render(), text(" "),
+        provider_local_button_->Render(),
+    }));
+    rows.push_back(hbox({
+        save_connection_button_->Render(), text(" "), connect_button_->Render(),
+    }));
+    rows.push_back(StatusLine("detected", detected_provider_, theme));
+    rows.push_back(separator() | color(theme.modal_border));
+
+    rows.push_back(text(" Managed local runtime") | bold | color(theme.modal_text_color));
     rows.push_back(StatusLine(
-        "llama.cpp runtime",
-        AiRuntimeInstalled() ? "installed" : "not installed",
-        theme));
-    rows.push_back(StatusLine("runtime path", AiRuntimeDisplayPath(), theme));
-    rows.push_back(separator() | color(theme.modal_border));
+        "llama.cpp", RuntimeBinaryExists() ? "installed" : "not installed", theme));
+    rows.push_back(StatusLine("path", RuntimeDisplayPath(), theme));
     rows.push_back(hbox({
-        ai_runtime_download_button_->Render(),
-        text(" "),
-        ai_runtime_delete_button_->Render(),
+        runtime_download_button_->Render(), text(" "), runtime_delete_button_->Render(),
+        text(" "), fetch_registry_button_->Render(),
     }));
-    if (show_runtime_delete_confirmation) {
-        rows.push_back(text(" Delete llama.cpp runtime?") |
-                       bold |
-                       color(theme.modal_text_color));
+    if (runtime_confirmation) {
         rows.push_back(hbox({
-            ai_runtime_confirm_delete_button_->Render(),
-            text(" "),
-            ai_runtime_cancel_delete_button_->Render(),
+            text(" Delete the llama.cpp runtime? ") | bold,
+            runtime_confirm_delete_button_->Render(), text(" "),
+            runtime_cancel_delete_button_->Render(),
         }));
-    }
-    if (show_runtime_progress) {
-        const int percent = static_cast<int>(ai_progress * 100.0f + 0.5f);
-        rows.push_back(hbox({
-            filler(),
-            text(std::to_string(percent) + "% ") | color(theme.modal_text_color),
-        }));
-        rows.push_back(gauge(ai_progress) | borderStyled(LIGHT, theme.modal_border));
-        if (show_extraction_progress) {
-            rows.push_back(text(" Extracting runtime files...") | dim | color(theme.modal_text_color));
-        }
     }
     rows.push_back(separator() | color(theme.modal_border));
-    rows.push_back(text(" Models") | bold | color(theme.modal_text_color));
+
     rows.push_back(hbox({
-        fetch_ai_button_->Render(),
-        text(" "),
-        ai_model_download_button_->Render(),
-        text(" "),
-        ai_delete_model_button_->Render(),
+        text(" Models") | bold | color(theme.modal_text_color),
+        filler(),
+        model_download_button_->Render(), text(" "), model_delete_button_->Render(),
     }));
-    if (show_model_delete_confirmation) {
-        rows.push_back(text(" Delete selected model?") |
-                       bold |
-                       color(theme.modal_text_color));
+    if (model_confirmation) {
         rows.push_back(hbox({
-            ai_model_confirm_delete_button_->Render(),
-            text(" "),
-            ai_model_cancel_delete_button_->Render(),
+            text(" Delete the selected local model? ") | bold,
+            model_confirm_delete_button_->Render(), text(" "),
+            model_cancel_delete_button_->Render(),
         }));
     }
-    if (show_model_progress) {
-        const int percent = static_cast<int>(ai_progress * 100.0f + 0.5f);
-        rows.push_back(hbox({
-            filler(),
-            text(std::to_string(percent) + "% ") | color(theme.modal_text_color),
-        }));
-        rows.push_back(gauge(ai_progress) | borderStyled(LIGHT, theme.modal_border));
-        if (show_model_delete_progress) {
-            rows.push_back(text(" Deleting selected model...") | dim | color(theme.modal_text_color));
-        }
+    rows.push_back(model_menu_->Render() |
+                   size(HEIGHT, LESS_THAN, 9) |
+                   borderStyled(LIGHT, theme.modal_border));
+    if (selected_model_ >= 0 && static_cast<size_t>(selected_model_) < model_descriptions_.size() &&
+        !model_descriptions_[static_cast<size_t>(selected_model_)].empty()) {
+        rows.push_back(paragraph(
+            " " + model_descriptions_[static_cast<size_t>(selected_model_)]) |
+            dim | color(theme.modal_text_color));
     }
-    rows.push_back(ai_model_menu_->Render() | borderStyled(LIGHT, theme.modal_border));
-    const std::string description = SelectedAiModelDescription(selected_ai_model_);
-    if (!description.empty()) {
-        for (const std::string& line : WrapText(description, 76)) {
-            rows.push_back(text(" " + line) |
-                           color(theme.modal_text_color) |
-                           dim);
-        }
-    }
+    rows.push_back(separator() | color(theme.modal_border));
+    rows.push_back(StatusLine("status", busy ? status + " (working)" : status, theme));
+    rows.push_back(text(
+        " [x] is the active model. Server models are managed by Ollama or the configured API.") |
+        dim | color(theme.modal_text_color));
     return vbox(std::move(rows)) | borderStyled(LIGHT, theme.modal_border);
 }
 
 AiSettingsModal::AiSettingsModal(
     const Theme* theme,
+    EditorConfig* config,
     std::function<void()> request_redraw)
     : theme_(theme) {
     content_ = std::make_shared<AiSettingsModalContent>(
-        theme_,
-        std::move(request_redraw));
+        theme_, config, std::move(request_redraw));
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
     modal_->SetFooterButtons({{"Close", [this] { Close(); }}});
     modal_->SetBodyFrameScrolling(false);
@@ -1107,6 +928,7 @@ ftxui::Component AiSettingsModal::View() const {
 void AiSettingsModal::Open() {
     open_ = true;
     content_->SetTheme(theme_);
+    content_->RefreshFromConfig();
     modal_->SetTheme(theme_);
     content_->GetMainComponent()->TakeFocus();
 }

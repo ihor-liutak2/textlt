@@ -23,6 +23,12 @@ struct EditorConfig {
     std::string tts_audio_player_id = "auto";
     std::string tts_audio_player_command;
     std::string tts_player_voice_id;
+    std::string ai_server_url = "http://127.0.0.1:11434";
+    std::string ai_provider = "auto";
+    std::string ai_selected_model_key;
+    std::string ai_translation_language = "Ukrainian";
+    std::string ai_edit_style = "conversational";
+    bool ai_whole_document = false;
     DistractionModeSettings distraction_mode;
     std::vector<std::string> file_modal_directories_;
 

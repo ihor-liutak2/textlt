@@ -76,6 +76,28 @@ EditorConfig ConfigManager::Load() const {
         root, "tts_audio_player_command", config.tts_audio_player_command);
     config.tts_player_voice_id = JsonString(
         root, "tts_player_voice_id", config.tts_player_voice_id);
+    config.ai_server_url = JsonString(root, "ai_server_url", config.ai_server_url);
+    if (config.ai_server_url.empty()) {
+        config.ai_server_url = "http://127.0.0.1:11434";
+    }
+    config.ai_provider = JsonString(root, "ai_provider", config.ai_provider);
+    if (config.ai_provider != "auto" && config.ai_provider != "ollama" &&
+        config.ai_provider != "openai" && config.ai_provider != "llama_cpp") {
+        config.ai_provider = "auto";
+    }
+    config.ai_selected_model_key = JsonString(
+        root, "ai_selected_model_key", config.ai_selected_model_key);
+    config.ai_translation_language = JsonString(
+        root, "ai_translation_language", config.ai_translation_language);
+    if (config.ai_translation_language.empty()) {
+        config.ai_translation_language = "Ukrainian";
+    }
+    config.ai_edit_style = JsonString(root, "ai_edit_style", config.ai_edit_style);
+    if (config.ai_edit_style != "conversational" && config.ai_edit_style != "business") {
+        config.ai_edit_style = "conversational";
+    }
+    config.ai_whole_document = JsonBool(
+        root, "ai_whole_document", config.ai_whole_document);
 
     config.distraction_mode.enabled = JsonBool(
         root, "distraction_enabled", config.distraction_mode.enabled);

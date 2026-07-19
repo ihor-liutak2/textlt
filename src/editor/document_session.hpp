@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -37,6 +38,16 @@ enum class DocumentType {
 enum class LineEnding {
     LF,
     CRLF,
+};
+
+struct DocumentTransformTarget {
+    size_t start_row = 0;
+    size_t start_column = 0;
+    size_t end_row = 0;
+    size_t end_column = 0;
+    std::uint64_t buffer_version = 0;
+    bool whole_document = false;
+    std::string original_text;
 };
 
 class DocumentSession {
@@ -148,6 +159,14 @@ public:
         std::string& error) const;
     bool ReplaceTextProcessorTargetText(
         bool whole_document,
+        const std::string& text,
+        std::string& error);
+    bool CaptureAiTransformTarget(
+        bool whole_document,
+        DocumentTransformTarget& target,
+        std::string& error) const;
+    bool ReplaceAiTransformTarget(
+        const DocumentTransformTarget& target,
         const std::string& text,
         std::string& error);
 

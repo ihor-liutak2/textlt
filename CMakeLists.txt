@@ -208,6 +208,8 @@ add_executable(textlt
   src/builtin_text_processors.cpp
   src/distraction_mode_controller.cpp
   src/config_manager.cpp
+  src/ai/ai_backend.cpp
+  src/ai/ai_prompts.cpp
   src/curl_manager.cpp
   src/editor_config.cpp
   src/editor_component.cpp
@@ -220,6 +222,7 @@ add_executable(textlt
   src/editor/editor_viewport.cpp
   src/editor/text_buffer.cpp
   src/editor/document_session.cpp
+  src/editor/document_session_ai.cpp
   src/editor/document_session_content.cpp
   src/editor/document_session_cursor.cpp
   src/editor/document_session_editing.cpp
@@ -356,6 +359,33 @@ add_executable(textlt_document_navigation_test
 add_executable(textlt_text_importer_test
   tests/text_importer_test.cpp
   src/text_importer.cpp
+)
+
+add_executable(textlt_ai_prompts_test
+  tests/ai_prompts_test.cpp
+  src/ai/ai_prompts.cpp
+)
+
+add_executable(textlt_ai_backend_utils_test
+  tests/ai_backend_utils_test.cpp
+  src/ai/ai_backend.cpp
+  src/ai/ai_prompts.cpp
+  src/remote/remote_http_client.cpp
+  src/remote/remote_command_runner.cpp
+)
+
+add_executable(textlt_document_ai_transform_test
+  tests/document_ai_transform_test.cpp
+  src/editor/document_session.cpp
+  src/editor/document_session_ai.cpp
+  src/editor/document_session_content.cpp
+  src/editor/document_session_cursor.cpp
+  src/editor/document_session_editing.cpp
+  src/editor/document_session_history.cpp
+  src/editor/document_session_selection.cpp
+  src/editor/text_buffer.cpp
+  src/editor_utils.cpp
+  src/history_manager.cpp
 )
 
 add_executable(textlt_keyboard_shortcuts_test
@@ -614,9 +644,28 @@ target_include_directories(textlt_document_navigation_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+target_include_directories(textlt_ai_prompts_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_include_directories(textlt_ai_backend_utils_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+)
+
+target_include_directories(textlt_document_ai_transform_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
 target_link_libraries(textlt_document_navigation_test PRIVATE ftxui::screen)
 
+target_link_libraries(textlt_ai_backend_utils_test PRIVATE Threads::Threads)
+target_link_libraries(textlt_document_ai_transform_test PRIVATE ftxui::screen)
+
 add_test(NAME textlt_document_navigation_test COMMAND textlt_document_navigation_test)
+add_test(NAME textlt_ai_prompts_test COMMAND textlt_ai_prompts_test)
+add_test(NAME textlt_ai_backend_utils_test COMMAND textlt_ai_backend_utils_test)
+add_test(NAME textlt_document_ai_transform_test COMMAND textlt_document_ai_transform_test)
 add_test(NAME textlt_text_importer_test COMMAND textlt_text_importer_test)
 add_test(NAME textlt_keyboard_shortcuts_test COMMAND textlt_keyboard_shortcuts_test)
 add_test(NAME textlt_syntax_highlighter_test COMMAND textlt_syntax_highlighter_test)

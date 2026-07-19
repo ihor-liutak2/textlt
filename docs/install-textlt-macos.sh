@@ -1,9 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+REPO="${TEXTLT_REPO:-ihor-liutak2/textlt}"
+ARCH="$(uname -m)"
+case "$ARCH" in
+  arm64|aarch64)
+    ASSET="${TEXTLT_ASSET:-textlt-macos-arm64.tar.gz}"
+    ;;
+  x86_64)
+    echo "TextLT macOS releases support Apple Silicon (arm64) only." >&2
+    exit 1
+    ;;
+  *)
+    echo "Unsupported macOS architecture: $ARCH" >&2
+    exit 1
+    ;;
+esac
+
 VERSION="${1:-${TEXTLT_VERSION:-}}"
 if [[ -z "$VERSION" ]]; then
-  VERSION="$(curl -fsSL https://api.github.com/repos/ihor-liutak2/textlt/releases/latest | grep '"tag_name"' | head -1 | sed -E 's/.*"tag_name":\s*"([^"]+)".*/\1/')"
+  VERSION="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name"' | head -1 | sed -E 's/.*"tag_name":\s*"([^"]+)".*/\1/')"
   if [[ -z "$VERSION" ]]; then
     echo "Could not detect latest version. Pass it as argument: $0 vX.Y.Z" >&2
     exit 1
@@ -13,14 +29,6 @@ fi
 if [[ "$VERSION" != v* ]]; then
   VERSION="v$VERSION"
 fi
-
-REPO="${TEXTLT_REPO:-ihor-liutak2/textlt}"
-ARCH="$(uname -m)"
-case "$ARCH" in
-  arm64|aarch64) ASSET="${TEXTLT_ASSET:-textlt-macos-arm64.tar.gz}" ;;
-  x86_64)        ASSET="${TEXTLT_ASSET:-textlt-macos-x86_64.tar.gz}" ;;
-  *)             ASSET="${TEXTLT_ASSET:-textlt-macos-$ARCH.tar.gz}" ;;
-esac
 INSTALL_ROOT="${TEXTLT_INSTALL_ROOT:-$HOME/.local/share/textlt}"
 APP_DIR="$INSTALL_ROOT/app"
 BIN_DIR="${TEXTLT_BIN_DIR:-$HOME/.local/bin}"
