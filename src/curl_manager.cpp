@@ -18,13 +18,14 @@ CurlManager::Response CurlManager::Get(const std::string& url) {
 
 CurlManager::Response CurlManager::Get(const std::string& url,
                                        const RequestOptions& options) {
-    return Get(url, options, nullptr);
+    return Get(url, options, nullptr, nullptr);
 }
 
 CurlManager::Response CurlManager::Get(
     const std::string& url,
     const RequestOptions& options,
-    const std::atomic<bool>* cancel_requested) {
+    const std::atomic<bool>* cancel_requested,
+    RemoteCommandControl* command_control) {
     std::vector<std::string> headers = options.headers;
     if (options.no_cache) {
         headers.push_back("Cache-Control: no-cache");
@@ -36,7 +37,7 @@ CurlManager::Response CurlManager::Get(
 
     RemoteHttpClient client;
     const RemoteHttpResponse response = cancel_requested
-        ? client.RequestStreaming("GET", url, headers, {}, 0, cancel_requested, {})
+        ? client.RequestStreaming("GET", url, headers, {}, 0, cancel_requested, {}, command_control)
         : client.Request("GET", url, headers, {}, 0);
     return {
         response.ok,
@@ -48,14 +49,16 @@ CurlManager::Response CurlManager::Get(
 bool CurlManager::DownloadToFile(const std::string& url,
                                  const std::filesystem::path& path,
                                  ProgressCallback progress,
-                                 const std::atomic<bool>* cancel_requested) {
+                                 const std::atomic<bool>* cancel_requested,
+                                 RemoteCommandControl* command_control) {
     if (progress && !progress(0, 0)) {
         return false;
     }
 
     RemoteHttpClient client;
     const RemoteHttpResponse response = cancel_requested
-        ? client.DownloadCancelable("GET", url, {}, path, {}, 0, cancel_requested)
+        ? client.DownloadCancelable(
+              "GET", url, {}, path, {}, 0, cancel_requested, command_control)
         : client.Download("GET", url, {}, path, {}, 0);
     if (!response.ok) {
         return false;

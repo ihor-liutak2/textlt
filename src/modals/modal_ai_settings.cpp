@@ -221,12 +221,14 @@ bool ExtractArchive(
 bool DownloadFile(
     const std::string& url,
     const std::filesystem::path& final_path,
-    const std::atomic<bool>* cancel_requested) {
+    const std::atomic<bool>* cancel_requested,
+    RemoteCommandControl* command_control) {
     EnsureDirectory(final_path.parent_path());
     const std::filesystem::path part_path = final_path.string() + ".part";
     std::error_code error;
     std::filesystem::remove(part_path, error);
-    if (!CurlManager::DownloadToFile(url, part_path, {}, cancel_requested)) {
+    if (!CurlManager::DownloadToFile(
+            url, part_path, {}, cancel_requested, command_control)) {
         std::filesystem::remove(part_path, error);
         return false;
     }
@@ -242,7 +244,6 @@ bool DownloadFile(
     }
     return true;
 }
-
 
 bool IsSafeModelFilename(const std::string& filename) {
     if (filename.empty()) {
@@ -370,7 +371,7 @@ AiSettingsModalContent::AiSettingsModalContent(
     test_button_ = MakeButton(
         &theme_, "Test model", [this] { StartTest(); }, ButtonRole::Primary);
     close_test_button_ = MakeButton(
-        &theme_, "Close", [this] { CloseTestPopup(); }, ButtonRole::Cancel);
+        &theme_, "Stop / Close", [this] { CloseTestPopup(); }, ButtonRole::Warning);
 
     ftxui::MenuOption menu_option = ftxui::MenuOption::Vertical();
     menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
@@ -422,6 +423,7 @@ AiSettingsModalContent::AiSettingsModalContent(
 
 AiSettingsModalContent::~AiSettingsModalContent() {
     cancel_requested_.store(true);
+    command_control_.RequestStop();
     if (worker_.joinable()) {
         worker_.join();
     }
@@ -528,7 +530,9 @@ void AiSettingsModalContent::StartWorker(std::function<void()> operation) {
             return;
         }
         busy_ = true;
+        operation_state_ = OperationState::Starting;
         cancel_requested_.store(false);
+        command_control_.Reset();
     }
     if (worker_.joinable()) {
         worker_.join();
@@ -539,6 +543,7 @@ void AiSettingsModalContent::StartWorker(std::function<void()> operation) {
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
             busy_ = false;
+            operation_state_ = OperationState::Idle;
         }
         RequestRedraw();
     });
@@ -589,8 +594,11 @@ void AiSettingsModalContent::ConnectAndRefreshServerModels() {
     if (!SaveConnectionSettings()) {
         return;
     }
-    const AiBackendSettings settings{
-        server_url_, provider_, config_ ? config_->ai_selected_model_key : std::string{}, 30};
+    AiBackendSettings settings;
+    settings.server_url = server_url_;
+    settings.provider = provider_;
+    settings.selected_model_key = config_ ? config_->ai_selected_model_key : std::string{};
+    settings.timeout_seconds = 30;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         status_ = provider_ == AiProvider::LocalLlamaCpp
@@ -602,7 +610,7 @@ void AiSettingsModalContent::ConnectAndRefreshServerModels() {
     }
     StartWorker([this, settings] {
         const AiConnectionResult result =
-            AiBackend(settings).CheckConnectionAndListModels(&cancel_requested_);
+            AiBackend(settings).CheckConnectionAndListModels(&cancel_requested_, &command_control_);
         std::lock_guard<std::mutex> lock(state_mutex_);
         pending_server_models_ = true;
         pending_connection_success_ = result.success;
@@ -630,7 +638,8 @@ void AiSettingsModalContent::FetchAiRegistry() {
         const auto result = DownloadRegistry(
             CurlManager::kAiRegistryUrl,
             RegistryFilename(RegistryKind::Ai),
-            &cancel_requested_);
+            &cancel_requested_,
+            &command_control_);
         std::lock_guard<std::mutex> lock(state_mutex_);
         pending_reload_ = result == assistant_modal_detail::RegistryDownloadResult::Saved;
         pending_status_ = cancel_requested_.load()
@@ -655,7 +664,7 @@ void AiSettingsModalContent::DownloadRuntime() {
     StartWorker([this, url] {
         const std::filesystem::path archive_path =
             DownloadCacheDirectory() / std::filesystem::path(url).filename();
-        const bool downloaded = DownloadFile(url, archive_path, &cancel_requested_);
+        const bool downloaded = DownloadFile(url, archive_path, &cancel_requested_, &command_control_);
         bool installed = false;
         if (downloaded) {
             std::error_code error;
@@ -734,7 +743,8 @@ void AiSettingsModalContent::DownloadSelectedModel() {
         model_delete_confirmation_ = false;
     }
     StartWorker([this, url, selected] {
-        const bool downloaded = DownloadFile(url, ModelsDirectory() / selected.filename, &cancel_requested_);
+        const bool downloaded = DownloadFile(
+            url, ModelsDirectory() / selected.filename, &cancel_requested_, &command_control_);
         std::lock_guard<std::mutex> lock(state_mutex_);
         pending_reload_ = true;
         pending_status_ = cancel_requested_.load()
@@ -842,12 +852,12 @@ void AiSettingsModalContent::StartTest() {
     request.action = AiActionType::Edit;
     request.text = test_source_;
     request.edit_style = AiEditStyle::Conversational;
-    const AiBackendSettings settings{
-        config_->ai_server_url,
-        AiBackend::ProviderFromConfig(config_->ai_provider),
-        config_->ai_selected_model_key,
-        180,
-    };
+    AiBackendSettings settings;
+    settings.server_url = config_->ai_server_url;
+    settings.provider = AiBackend::ProviderFromConfig(config_->ai_provider);
+    settings.selected_model_key = config_->ai_selected_model_key;
+    settings.timeout_seconds = 60;
+    settings.max_output_tokens = 128;
     StartWorker([this, settings, request] {
         AiBackendResult result = AiBackend(settings).Run(
             request,
@@ -855,10 +865,14 @@ void AiSettingsModalContent::StartTest() {
             [this](const std::string& generated) {
                 {
                     std::lock_guard<std::mutex> lock(state_mutex_);
+                    if (operation_state_ != OperationState::Stopping) {
+                        operation_state_ = OperationState::Running;
+                    }
                     test_result_ = generated;
                 }
                 RequestRedraw();
-            });
+            },
+            &command_control_);
         std::lock_guard<std::mutex> lock(state_mutex_);
         test_running_ = false;
         if (cancel_requested_.load()) {
@@ -875,9 +889,19 @@ void AiSettingsModalContent::StartTest() {
 }
 
 void AiSettingsModalContent::CloseTestPopup() {
+    bool stop_test = false;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
+        stop_test = test_running_;
         test_popup_visible_ = false;
+        if (stop_test) {
+            cancel_requested_.store(true);
+            operation_state_ = OperationState::Stopping;
+            status_ = "Stopping model test because the test window was closed...";
+        }
+    }
+    if (stop_test) {
+        command_control_.RequestStop();
     }
     active_panel_ = 0;
     model_menu_->TakeFocus();
@@ -885,30 +909,40 @@ void AiSettingsModalContent::CloseTestPopup() {
 }
 
 void AiSettingsModalContent::StopCurrentOperation() {
+    bool should_stop = false;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
-        if (!busy_) {
-            status_ = "No AI settings operation is running.";
-        } else {
+        should_stop = busy_;
+        if (should_stop) {
             cancel_requested_.store(true);
-            status_ = test_running_
-                ? "Stopping model test..."
-                : "Stopping AI settings operation...";
+            operation_state_ = OperationState::Stopping;
+            status_ = command_control_.IsRunning()
+                ? (test_running_ ? "Stopping model test..." : "Stopping current command...")
+                : "Cancelling AI settings operation...";
             if (test_running_) {
                 test_result_ = "Stopping model process...";
             }
         }
     }
-    RequestRedraw();
+    if (should_stop) {
+        command_control_.RequestStop();
+        RequestRedraw();
+    }
 }
 
 void AiSettingsModalContent::PrepareClose() {
     cancel_requested_.store(true);
+    command_control_.RequestStop();
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         test_popup_visible_ = false;
     }
     active_panel_ = 0;
+}
+
+bool AiSettingsModalContent::CanStop() const {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    return busy_ && operation_state_ != OperationState::Stopping;
 }
 
 void AiSettingsModalContent::ApplyPendingWorkerResult() {
@@ -959,7 +993,6 @@ void AiSettingsModalContent::RequestRedraw() const {
 ftxui::Element AiSettingsModalContent::RenderTitle() {
     return ftxui::text(GetTitle());
 }
-
 
 ftxui::Element AiSettingsModalContent::Render() {
     ApplyPendingWorkerResult();
@@ -1123,7 +1156,8 @@ AiSettingsModal::AiSettingsModal(
     modal_->SetFooterButtons({
         {"Save", [this] { content_->SaveConnectionSettings(); }, ButtonRole::Default},
         {"Connect / Refresh", [this] { content_->ConnectAndRefreshServerModels(); }, ButtonRole::Primary},
-        {"Stop", [this] { content_->StopCurrentOperation(); }, ButtonRole::Warning},
+        {"Stop", [this] { content_->StopCurrentOperation(); }, ButtonRole::Warning,
+         [this] { return content_->CanStop(); }},
         {"Close", [this] { Close(); }, ButtonRole::Cancel},
     });
     modal_->SetBodyFrameScrolling(false);

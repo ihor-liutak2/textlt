@@ -21,6 +21,8 @@
 
 namespace textlt {
 
+class RemoteCommandControl;
+
 namespace assistant_modal_detail {
 
 constexpr const char* kPiperRegistryFile = "piper_voices_index.json";
@@ -53,7 +55,8 @@ RegistryLoadResult LoadUserRegistryJson(RegistryKind kind, Json* root);
 RegistryDownloadResult DownloadRegistry(
     const char* url,
     const char* filename,
-    const std::atomic<bool>* cancel_requested = nullptr);
+    const std::atomic<bool>* cancel_requested = nullptr,
+    RemoteCommandControl* command_control = nullptr);
 std::string JsonLabel(const Json& object, const char* primary, const char* fallback);
 std::string BracketLabel(const std::string& label);
 

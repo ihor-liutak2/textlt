@@ -9,6 +9,8 @@
 
 namespace textlt {
 
+class RemoteCommandControl;
+
 enum class AiProvider {
     Auto,
     Ollama,
@@ -26,6 +28,8 @@ struct AiBackendSettings {
     AiProvider provider = AiProvider::Auto;
     std::string selected_model_key;
     int timeout_seconds = 120;
+    int max_output_tokens = 0;
+    int local_threads = 0;
 };
 
 struct AiModelInfo {
@@ -61,11 +65,13 @@ public:
     explicit AiBackend(AiBackendSettings settings);
 
     AiConnectionResult CheckConnectionAndListModels(
-        const std::atomic<bool>* cancel_requested = nullptr) const;
+        const std::atomic<bool>* cancel_requested = nullptr,
+        RemoteCommandControl* command_control = nullptr) const;
     AiBackendResult Run(
         const AiPromptRequest& request,
         const std::atomic<bool>* cancel_requested = nullptr,
-        ProgressCallback progress = {}) const;
+        ProgressCallback progress = {},
+        RemoteCommandControl* command_control = nullptr) const;
 
     static AiProvider ProviderFromConfig(const std::string& value);
     static std::string ProviderToConfig(AiProvider provider);
@@ -75,21 +81,28 @@ public:
     static std::string ModelIdFromKey(const std::string& key);
 
 private:
-    AiConnectionResult TryOllama(const std::atomic<bool>* cancel_requested) const;
-    AiConnectionResult TryOpenAiCompatible(const std::atomic<bool>* cancel_requested) const;
+    AiConnectionResult TryOllama(
+        const std::atomic<bool>* cancel_requested,
+        RemoteCommandControl* command_control) const;
+    AiConnectionResult TryOpenAiCompatible(
+        const std::atomic<bool>* cancel_requested,
+        RemoteCommandControl* command_control) const;
     AiBackendResult RunOllama(
         const AiPromptRequest& request, const std::string& model,
-        const std::atomic<bool>* cancel_requested, ProgressCallback progress) const;
+        const std::atomic<bool>* cancel_requested, ProgressCallback progress,
+        RemoteCommandControl* command_control) const;
     AiBackendResult RunOpenAiCompatible(
         const AiPromptRequest& request,
         const std::string& model,
         const std::atomic<bool>* cancel_requested,
-        ProgressCallback progress) const;
+        ProgressCallback progress,
+        RemoteCommandControl* command_control) const;
     AiBackendResult RunLocalLlamaCpp(
         const AiPromptRequest& request,
         const std::string& filename,
         const std::atomic<bool>* cancel_requested,
-        ProgressCallback progress) const;
+        ProgressCallback progress,
+        RemoteCommandControl* command_control) const;
 
     AiBackendSettings settings_;
 };

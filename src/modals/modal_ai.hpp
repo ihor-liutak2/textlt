@@ -16,6 +16,7 @@
 #include "ftxui/dom/elements.hpp"
 #include "modal_interface.hpp"
 #include "modal_window.hpp"
+#include "remote/remote_command_runner.hpp"
 #include "theme.hpp"
 
 namespace textlt {
@@ -56,6 +57,7 @@ public:
     void PrepareClose();
     void ShowInfo();
     void Stop();
+    bool CanStop() const;
 
 private:
     void SetEditStyle(AiEditStyle style);
@@ -107,9 +109,13 @@ private:
     bool source_language_was_focused_ = false;
     bool target_language_was_focused_ = false;
 
+    enum class OperationState { Idle, Starting, Generating, Stopping };
+
     mutable std::mutex state_mutex_;
     std::thread worker_;
     std::atomic<bool> cancel_requested_{false};
+    RemoteCommandControl command_control_;
+    OperationState operation_state_ = OperationState::Idle;
     bool busy_ = false;
     int progress_frame_ = 0;
     std::string status_ = "Ready";

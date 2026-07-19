@@ -161,7 +161,8 @@ std::string EscapeRawNewlinesInJsonStrings(const std::string& input) {
 RegistryDownloadResult DownloadRegistry(
     const char* url,
     const char* filename,
-    const std::atomic<bool>* cancel_requested) {
+    const std::atomic<bool>* cancel_requested,
+    RemoteCommandControl* command_control) {
     const std::filesystem::path registry_directory = RegistryDirectory();
     if (registry_directory.empty()) {
         return RegistryDownloadResult::Failed;
@@ -174,7 +175,8 @@ RegistryDownloadResult DownloadRegistry(
     options.no_cache = true;
     options.fresh_connect = true;
     const CurlManager::Response response =
-        CurlManager::Get(CurlManager::WithCacheBust(url), options, cancel_requested);
+        CurlManager::Get(
+            CurlManager::WithCacheBust(url), options, cancel_requested, command_control);
     if (!response.ok) {
         return RegistryDownloadResult::Failed;
     }

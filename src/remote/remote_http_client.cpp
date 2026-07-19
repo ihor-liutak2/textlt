@@ -212,7 +212,7 @@ RemoteHttpResponse RemoteHttpClient::Request(
     const std::string& request_body,
     int timeout_seconds) const {
     const std::string* body = request_body.empty() ? nullptr : &request_body;
-    return RunCurl(method, url, headers, nullptr, nullptr, body, timeout_seconds, nullptr, {});
+    return RunCurl(method, url, headers, nullptr, nullptr, body, timeout_seconds, nullptr, {}, nullptr);
 }
 
 RemoteHttpResponse RemoteHttpClient::RequestStreaming(
@@ -222,11 +222,12 @@ RemoteHttpResponse RemoteHttpClient::RequestStreaming(
     const std::string& request_body,
     int timeout_seconds,
     const std::atomic<bool>* cancel_requested,
-    OutputCallback on_body_chunk) const {
+    OutputCallback on_body_chunk,
+    RemoteCommandControl* command_control) const {
     const std::string* body = request_body.empty() ? nullptr : &request_body;
     return RunCurl(
         method, url, headers, nullptr, nullptr, body, timeout_seconds,
-        cancel_requested, std::move(on_body_chunk));
+        cancel_requested, std::move(on_body_chunk), command_control);
 }
 
 RemoteHttpResponse RemoteHttpClient::Download(
@@ -237,7 +238,7 @@ RemoteHttpResponse RemoteHttpClient::Download(
     const std::string& request_body,
     int timeout_seconds) const {
     const std::string* body = request_body.empty() ? nullptr : &request_body;
-    return RunCurl(method, url, headers, &output_path, nullptr, body, timeout_seconds, nullptr, {});
+    return RunCurl(method, url, headers, &output_path, nullptr, body, timeout_seconds, nullptr, {}, nullptr);
 }
 
 RemoteHttpResponse RemoteHttpClient::DownloadCancelable(
@@ -247,11 +248,12 @@ RemoteHttpResponse RemoteHttpClient::DownloadCancelable(
     const std::filesystem::path& output_path,
     const std::string& request_body,
     int timeout_seconds,
-    const std::atomic<bool>* cancel_requested) const {
+    const std::atomic<bool>* cancel_requested,
+    RemoteCommandControl* command_control) const {
     const std::string* body = request_body.empty() ? nullptr : &request_body;
     return RunCurl(
         method, url, headers, &output_path, nullptr, body, timeout_seconds,
-        cancel_requested, {});
+        cancel_requested, {}, command_control);
 }
 
 RemoteHttpResponse RemoteHttpClient::UploadFile(
@@ -260,7 +262,7 @@ RemoteHttpResponse RemoteHttpClient::UploadFile(
     const std::vector<std::string>& headers,
     const std::filesystem::path& input_path,
     int timeout_seconds) const {
-    return RunCurl(method, url, headers, nullptr, &input_path, nullptr, timeout_seconds, nullptr, {});
+    return RunCurl(method, url, headers, nullptr, &input_path, nullptr, timeout_seconds, nullptr, {}, nullptr);
 }
 
 RemoteHttpResponse RemoteHttpClient::RunCurl(
@@ -272,7 +274,8 @@ RemoteHttpResponse RemoteHttpClient::RunCurl(
     const std::string* request_body,
     int timeout_seconds,
     const std::atomic<bool>* cancel_requested,
-    OutputCallback on_body_chunk) const {
+    OutputCallback on_body_chunk,
+    RemoteCommandControl* command_control) const {
     RemoteHttpResponse response;
     std::string executable_error;
     if (!CheckCurlExecutable(executable_error)) {
@@ -327,7 +330,8 @@ RemoteHttpResponse RemoteHttpClient::RunCurl(
     RemoteCommandRunner runner;
     RemoteCommandResult command_result = cancel_requested || on_body_chunk
         ? runner.RunStreaming(
-              {"curl", "--config", "-"}, config, cancel_requested, std::move(on_body_chunk))
+              {"curl", "--config", "-"}, config, cancel_requested, std::move(on_body_chunk),
+              RemoteCommandOptions{timeout_seconds, 300, true}, command_control)
         : runner.Run({"curl", "--config", "-"}, config);
     response.body = command_result.output;
     response.status_code = ExtractHttpStatus(response.body);

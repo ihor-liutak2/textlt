@@ -46,7 +46,68 @@ int main(int argc, char** argv) {
         {});
     cancel_thread.join();
     const auto elapsed = std::chrono::steady_clock::now() - started;
-    assert(stopped_result.exit_code != 0);
+    assert(stopped_result.cancelled);
+    assert(stopped_result.exit_code == 130);
     assert(elapsed < std::chrono::seconds(3));
+
+    textlt::RemoteCommandControl control;
+    std::thread direct_stop_thread([&] {
+        while (!control.IsRunning()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        control.RequestStop();
+    });
+    const auto direct_started = std::chrono::steady_clock::now();
+    const textlt::RemoteCommandResult direct_stopped_result = runner.RunStreaming(
+        {argv[0], "--child-slow"},
+        {},
+        nullptr,
+        {},
+        textlt::RemoteCommandOptions{},
+        &control);
+    direct_stop_thread.join();
+    assert(direct_stopped_result.cancelled);
+    assert(direct_stopped_result.exit_code == 130);
+    assert(std::chrono::steady_clock::now() - direct_started < std::chrono::seconds(3));
+
+    textlt::RemoteCommandControl pre_cancelled_control;
+    pre_cancelled_control.RequestStop();
+    const auto pre_cancelled_started = std::chrono::steady_clock::now();
+    const textlt::RemoteCommandResult pre_cancelled_result = runner.RunStreaming(
+        {argv[0], "--child-slow"},
+        {},
+        nullptr,
+        {},
+        textlt::RemoteCommandOptions{},
+        &pre_cancelled_control);
+    assert(pre_cancelled_result.cancelled);
+    assert(pre_cancelled_result.exit_code == 130);
+    assert(!pre_cancelled_control.IsRunning());
+    assert(std::chrono::steady_clock::now() - pre_cancelled_started <
+           std::chrono::seconds(3));
+
+    pre_cancelled_control.Reset();
+    const textlt::RemoteCommandResult reused_control_result = runner.RunStreaming(
+        {argv[0], "--child-output"},
+        {},
+        nullptr,
+        {},
+        textlt::RemoteCommandOptions{},
+        &pre_cancelled_control);
+    assert(reused_control_result.exit_code == 0);
+    assert(!reused_control_result.cancelled);
+    assert(reused_control_result.output == "first second");
+
+    const auto timeout_started = std::chrono::steady_clock::now();
+    const textlt::RemoteCommandResult timeout_result = runner.RunStreaming(
+        {argv[0], "--child-slow"},
+        {},
+        nullptr,
+        {},
+        textlt::RemoteCommandOptions{1, 100, true});
+    assert(timeout_result.timed_out);
+    assert(timeout_result.exit_code == 124);
+    assert(timeout_result.error.find("timed out") != std::string::npos);
+    assert(std::chrono::steady_clock::now() - timeout_started < std::chrono::seconds(3));
     return 0;
 }

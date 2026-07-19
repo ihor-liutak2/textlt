@@ -22,11 +22,13 @@ public:
     // Callback for when the modal is requested to be closed.
     using OnCloseCallback = std::function<void()>;
     using ButtonCallback = std::function<void()>;
+    using ButtonEnabledCallback = std::function<bool()>;
 
     struct FooterButton {
         std::string label;
         ButtonCallback on_click;
         ButtonRole role = ButtonRole::Default;
+        ButtonEnabledCallback enabled;
     };
 
     ModalWindow(std::shared_ptr<IModalContent> content, const Theme* theme, OnCloseCallback on_close);
@@ -53,11 +55,13 @@ private:
     ftxui::ButtonOption MakeTextButtonOption(
         const std::string& label,
         ButtonCallback callback,
-        ButtonRole role = ButtonRole::Default) const;
+        ButtonRole role = ButtonRole::Default,
+        ButtonEnabledCallback enabled = {}) const;
     void RebuildChildren();
     ftxui::Component ActiveChild() override;
     void SetActiveChild(ftxui::ComponentBase* child) override;
     void MoveActionFocus(int delta);
+    bool IsChildEnabled(size_t child_index) const;
     ftxui::Element RenderHeader(const Theme& theme);
     ftxui::Element RenderFooter(const Theme& theme);
     ftxui::Element RenderBody(const Theme& theme);
@@ -72,6 +76,7 @@ private:
     OnCloseCallback on_close_;
     ftxui::Component header_close_button_;
     std::vector<ftxui::Component> footer_buttons_;
+    std::vector<ButtonEnabledCallback> footer_button_enabled_;
     std::string footer_text_;
     bool show_header_ = true;
     bool show_footer_ = true;

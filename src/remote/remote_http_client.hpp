@@ -8,6 +8,8 @@
 
 namespace textlt {
 
+class RemoteCommandControl;
+
 struct RemoteHttpResponse {
     bool ok = false;
     long status_code = 0;
@@ -33,7 +35,8 @@ public:
         const std::string& request_body,
         int timeout_seconds,
         const std::atomic<bool>* cancel_requested,
-        OutputCallback on_body_chunk) const;
+        OutputCallback on_body_chunk,
+        RemoteCommandControl* command_control = nullptr) const;
 
     RemoteHttpResponse Download(
         const std::string& method,
@@ -50,7 +53,8 @@ public:
         const std::filesystem::path& output_path,
         const std::string& request_body,
         int timeout_seconds,
-        const std::atomic<bool>* cancel_requested) const;
+        const std::atomic<bool>* cancel_requested,
+        RemoteCommandControl* command_control = nullptr) const;
 
     RemoteHttpResponse UploadFile(
         const std::string& method,
@@ -72,7 +76,8 @@ private:
         const std::string* request_body,
         int timeout_seconds,
         const std::atomic<bool>* cancel_requested,
-        OutputCallback on_body_chunk) const;
+        OutputCallback on_body_chunk,
+        RemoteCommandControl* command_control = nullptr) const;
 };
 
 } // namespace textlt

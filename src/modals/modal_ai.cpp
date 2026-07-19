@@ -482,20 +482,22 @@ bool AiActionsModalContent::StartAction(
     request.source_language = source_language_;
     request.target_language = target_language_;
     request.edit_style = edit_style_;
-    const AiBackendSettings settings{
-        config_->ai_server_url,
-        AiBackend::ProviderFromConfig(config_->ai_provider),
-        config_->ai_selected_model_key,
-        180,
-    };
+    AiBackendSettings settings;
+    settings.server_url = config_->ai_server_url;
+    settings.provider = AiBackend::ProviderFromConfig(config_->ai_provider);
+    settings.selected_model_key = config_->ai_selected_model_key;
+    settings.timeout_seconds = whole_document ? 300 : 180;
+    settings.max_output_tokens = whole_document ? 2048 : 512;
 
     if (worker_.joinable()) {
         worker_.join();
     }
     cancel_requested_.store(false);
+    command_control_.Reset();
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         busy_ = true;
+        operation_state_ = OperationState::Starting;
         discard_result_ = false;
         pending_result_ = false;
         progress_text_ = "Waiting for model output...";
@@ -512,10 +514,14 @@ bool AiActionsModalContent::StartAction(
             [this](const std::string& generated) {
                 {
                     std::lock_guard<std::mutex> lock(state_mutex_);
+                    if (operation_state_ != OperationState::Stopping) {
+                        operation_state_ = OperationState::Generating;
+                    }
                     progress_text_ = TailUtf8(generated, 120);
                 }
                 RequestRedraw();
-            });
+            },
+            &command_control_);
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
             if (!discard_result_ && !cancel_requested_.load()) {
@@ -529,6 +535,7 @@ bool AiActionsModalContent::StartAction(
                 progress_text_ = "The model process was terminated.";
             }
             busy_ = false;
+            operation_state_ = OperationState::Idle;
         }
         RequestRedraw();
     });
@@ -555,16 +562,27 @@ void AiActionsModalContent::Poll() {
 }
 
 void AiActionsModalContent::Stop() {
+    bool should_stop = false;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
-        if (!busy_) {
-            status_ = "No AI operation is running.";
-        } else {
+        should_stop = busy_;
+        if (should_stop) {
             cancel_requested_.store(true);
-            status_ = "Stopping AI operation...";
+            operation_state_ = OperationState::Stopping;
+            status_ = command_control_.IsRunning()
+                ? "Stopping model process..."
+                : "Cancelling AI operation...";
         }
     }
-    RequestRedraw();
+    if (should_stop) {
+        command_control_.RequestStop();
+        RequestRedraw();
+    }
+}
+
+bool AiActionsModalContent::CanStop() const {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    return busy_ && operation_state_ != OperationState::Stopping;
 }
 
 void AiActionsModalContent::ApplyPendingResult() {
@@ -632,6 +650,7 @@ void AiActionsModalContent::PrepareClose() {
     info_visible_ = false;
     active_panel_ = 0;
     cancel_requested_.store(true);
+    command_control_.RequestStop();
 }
 
 bool AiActionsModalContent::HandleShortcut(ftxui::Event event) {
@@ -844,7 +863,8 @@ AiActionsModal::AiActionsModal(
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
     modal_->SetFooterButtons({
         {"Info", [this] { content_->ShowInfo(); }, ButtonRole::Default},
-        {"Stop", [this] { content_->Stop(); }, ButtonRole::Warning},
+        {"Stop", [this] { content_->Stop(); }, ButtonRole::Warning,
+         [this] { return content_->CanStop(); }},
         {"Close", [this] { Close(); }, ButtonRole::Cancel},
     });
     modal_->SetBodyFrameScrolling(false);

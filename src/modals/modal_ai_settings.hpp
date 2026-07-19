@@ -15,6 +15,7 @@
 #include "ftxui/dom/elements.hpp"
 #include "modal_interface.hpp"
 #include "modal_window.hpp"
+#include "remote/remote_command_runner.hpp"
 #include "theme.hpp"
 
 namespace textlt {
@@ -41,6 +42,7 @@ public:
     void ConnectAndRefreshServerModels();
     void StopCurrentOperation();
     void PrepareClose();
+    bool CanStop() const;
 
 private:
     void LoadModels();
@@ -95,9 +97,13 @@ private:
     int selected_model_ = 0;
     int persisted_model_index_ = -1;
 
+    enum class OperationState { Idle, Starting, Running, Stopping };
+
     mutable std::mutex state_mutex_;
     std::thread worker_;
     std::atomic<bool> cancel_requested_{false};
+    RemoteCommandControl command_control_;
+    OperationState operation_state_ = OperationState::Idle;
     bool pending_reload_ = false;
     bool pending_server_models_ = false;
     bool pending_connection_success_ = false;

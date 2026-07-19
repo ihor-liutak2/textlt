@@ -30,7 +30,8 @@ ModalWindow::ModalWindow(std::shared_ptr<IModalContent> content,
 
 ftxui::ButtonOption ModalWindow::MakeTextButtonOption(const std::string& label,
                                                       ButtonCallback callback,
-                                                      ButtonRole role) const {
+                                                      ButtonRole role,
+                                                      ButtonEnabledCallback enabled) const {
     ButtonSpec spec = ButtonSpecFromLabel(label, role);
     if (label == "■") {
         spec.caption = "■";
@@ -41,9 +42,14 @@ ftxui::ButtonOption ModalWindow::MakeTextButtonOption(const std::string& label,
 
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
     option.label = ButtonCaptionText(spec);
-    option.on_click = std::move(callback);
-    option.transform = [this, spec = std::move(spec)](const ftxui::EntryState& state) {
+    option.on_click = [callback = std::move(callback), enabled] {
+        if ((!enabled || enabled()) && callback) {
+            callback();
+        }
+    };
+    option.transform = [this, spec = std::move(spec), enabled](const ftxui::EntryState& state) mutable {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        spec.enabled = !enabled || enabled();
         if (spec.caption == "■") {
             return RenderButton(theme, spec, state.focused || state.active);
         }
@@ -101,11 +107,14 @@ void ModalWindow::RebuildChildren() {
 
 void ModalWindow::SetFooterButtons(std::vector<FooterButton> buttons) {
     footer_buttons_.clear();
+    footer_button_enabled_.clear();
     const size_t count = std::min(buttons.size(), kMaximumFooterButtons);
     footer_buttons_.reserve(count);
 
     for (size_t index = 0; index < count; ++index) {
         auto callback = std::move(buttons[index].on_click);
+        auto enabled = std::move(buttons[index].enabled);
+        footer_button_enabled_.push_back(enabled);
         footer_buttons_.push_back(ftxui::Button(MakeTextButtonOption(
             buttons[index].label,
             [callback = std::move(callback)] {
@@ -113,7 +122,8 @@ void ModalWindow::SetFooterButtons(std::vector<FooterButton> buttons) {
                     callback();
                 }
             },
-            buttons[index].role)));
+            buttons[index].role,
+            std::move(enabled))));
     }
     RebuildChildren();
 }
@@ -123,6 +133,9 @@ ftxui::Component ModalWindow::ActiveChild() {
         return nullptr;
     }
     active_child_index_ = std::min(active_child_index_, children_.size() - 1);
+    if (!IsChildEnabled(active_child_index_)) {
+        active_child_index_ = 0;
+    }
     return children_[active_child_index_];
 }
 
@@ -135,27 +148,41 @@ void ModalWindow::SetActiveChild(ftxui::ComponentBase* child) {
     }
 }
 
+bool ModalWindow::IsChildEnabled(size_t child_index) const {
+    const size_t footer_start = 1 + (show_header_close_ ? 1 : 0);
+    if (child_index < footer_start) {
+        return true;
+    }
+    const size_t footer_index = child_index - footer_start;
+    if (footer_index >= footer_button_enabled_.size()) {
+        return true;
+    }
+    const auto& enabled = footer_button_enabled_[footer_index];
+    return !enabled || enabled();
+}
+
 void ModalWindow::MoveActionFocus(int delta) {
     if (children_.size() <= 1) {
         return;
     }
 
-    const size_t first_action = 1;
-    const size_t action_count = children_.size() - first_action;
-    if (action_count == 0) {
-        return;
-    }
-
-    const long long current_action = active_child_index_ < first_action
-        ? -1
-        : static_cast<long long>(active_child_index_ - first_action);
-    const long long next =
-        current_action + static_cast<long long>(delta);
-    active_child_index_ =
-        first_action + static_cast<size_t>(
-            (next % static_cast<long long>(action_count) +
+    const size_t action_count = children_.size() - 1;
+    long long current = active_child_index_ == 0
+        ? (delta > 0 ? -1 : 0)
+        : static_cast<long long>(active_child_index_ - 1);
+    for (size_t attempt = 0; attempt < action_count; ++attempt) {
+        current += delta;
+        const long long wrapped =
+            (current % static_cast<long long>(action_count) +
              static_cast<long long>(action_count)) %
-            static_cast<long long>(action_count));
+            static_cast<long long>(action_count);
+        const size_t candidate = 1 + static_cast<size_t>(wrapped);
+        if (IsChildEnabled(candidate)) {
+            active_child_index_ = candidate;
+            return;
+        }
+    }
+    active_child_index_ = 0;
 }
 
 ftxui::Element ModalWindow::RenderHeader(const Theme& theme) {

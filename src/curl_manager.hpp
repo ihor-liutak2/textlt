@@ -8,6 +8,8 @@
 
 namespace textlt {
 
+class RemoteCommandControl;
+
 class CurlManager {
 public:
     static constexpr const char* kUserAgent = "textlt/1.0";
@@ -35,11 +37,13 @@ public:
     static Response Get(const std::string& url, const RequestOptions& options);
     static Response Get(const std::string& url,
                         const RequestOptions& options,
-                        const std::atomic<bool>* cancel_requested);
+                        const std::atomic<bool>* cancel_requested,
+                        RemoteCommandControl* command_control = nullptr);
     static bool DownloadToFile(const std::string& url,
                                const std::filesystem::path& path,
                                ProgressCallback progress = {},
-                               const std::atomic<bool>* cancel_requested = nullptr);
+                               const std::atomic<bool>* cancel_requested = nullptr,
+                               RemoteCommandControl* command_control = nullptr);
     static std::string WithCacheBust(const std::string& url);
 
 private:
