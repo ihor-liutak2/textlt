@@ -1,10 +1,34 @@
 #include "modals/modal_ai_quick_actions.hpp"
+#include "modals/modal_window.hpp"
 
 #include <cassert>
+#include <memory>
 #include <string>
+#include <vector>
 
+#include "ftxui/component/component.hpp"
 #include "ftxui/component/event.hpp"
 #include "ftxui/component/mouse.hpp"
+#include "ftxui/dom/elements.hpp"
+
+namespace {
+
+class FooterTestContent final : public textlt::IModalContent {
+public:
+    FooterTestContent() {
+        component_ = ftxui::Renderer([] { return ftxui::text("body"); });
+    }
+
+    ftxui::Element Render() override { return ftxui::text("body"); }
+    ftxui::Component GetMainComponent() override { return component_; }
+    std::string GetTitle() override { return "Footer test"; }
+    ftxui::Element RenderTitle() override { return ftxui::text("Footer test"); }
+
+private:
+    ftxui::Component component_;
+};
+
+} // namespace
 
 int main() {
     using namespace textlt;
@@ -86,6 +110,24 @@ int main() {
     assert(edit_count == 1);
     assert(stop_count == 1);
     assert(close_count == 1);
+
+    auto footer_content = std::make_shared<FooterTestContent>();
+    textlt::ModalWindow footer_modal(footer_content, nullptr, [] {});
+    footer_modal.SetHeaderCloseVisible(false);
+    int footer_action = -1;
+    std::vector<textlt::ModalWindow::FooterButton> footer_buttons;
+    for (int index = 0; index < 6; ++index) {
+        footer_buttons.push_back({
+            "Action " + std::to_string(index + 1),
+            [&, index] { footer_action = index; },
+        });
+    }
+    footer_modal.SetFooterButtons(std::move(footer_buttons));
+    for (int index = 0; index < 6; ++index) {
+        assert(footer_modal.OnEvent(ftxui::Event::Tab));
+    }
+    assert(footer_modal.OnEvent(ftxui::Event::Return));
+    assert(footer_action == 5);
 
     return 0;
 }

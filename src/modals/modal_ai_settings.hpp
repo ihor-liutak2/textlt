@@ -40,9 +40,13 @@ public:
     void RefreshFromConfig();
     bool SaveConnectionSettings();
     void ConnectAndRefreshServerModels();
-    void StopCurrentOperation();
+    void StartOrRestartLocalModel();
+    void CancelCurrentTask();
+    void UnloadLocalModel();
     void PrepareClose();
-    bool CanStop() const;
+    bool CanStartLocalModel() const;
+    bool CanCancelTask() const;
+    bool CanUnloadModel() const;
 
 private:
     void LoadModels();
@@ -80,6 +84,8 @@ private:
     std::string pending_model_delete_filename_;
 
     bool test_popup_visible_ = false;
+    bool local_model_starting_ = false;
+    bool unload_in_progress_ = false;
     int active_panel_ = 0;
     bool test_running_ = false;
     int test_progress_frame_ = 0;

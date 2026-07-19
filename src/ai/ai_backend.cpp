@@ -5,13 +5,11 @@
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
-#include <fstream>
-#include <sstream>
 #include <thread>
 #include <utility>
 
+#include "ai/local_llama_server.hpp"
 #include "json_utils.hpp"
-#include "remote/remote_command_runner.hpp"
 #include "remote/remote_http_client.hpp"
 
 namespace textlt {
@@ -70,65 +68,6 @@ Json ParseJsonBody(const RemoteHttpResponse& response, std::string& error) {
     return root;
 }
 
-enum class LocalLlamaExecutableKind {
-    Completion,
-    Cli,
-};
-
-struct LocalLlamaExecutable {
-    std::filesystem::path path;
-    LocalLlamaExecutableKind kind = LocalLlamaExecutableKind::Completion;
-
-    explicit operator bool() const { return !path.empty(); }
-};
-
-std::filesystem::path FindLlamaRuntimeBinary(
-    const std::vector<std::string>& filenames) {
-    const std::filesystem::path directory =
-        AiUserDataDirectory() / "ai" / "runtimes" / "llama_cpp";
-    std::error_code error;
-    if (!std::filesystem::exists(directory, error)) {
-        return {};
-    }
-    for (const std::string& wanted : filenames) {
-        error.clear();
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(directory, error)) {
-            if (error) {
-                return {};
-            }
-            if (entry.is_regular_file() && entry.path().filename() == wanted) {
-                return entry.path();
-            }
-        }
-    }
-    return {};
-}
-
-LocalLlamaExecutable FindLocalLlamaExecutable() {
-#ifdef _WIN32
-    const std::filesystem::path completion =
-        FindLlamaRuntimeBinary({"llama-completion.exe"});
-#else
-    const std::filesystem::path completion =
-        FindLlamaRuntimeBinary({"llama-completion"});
-#endif
-    if (!completion.empty()) {
-        return {completion, LocalLlamaExecutableKind::Completion};
-    }
-#ifdef _WIN32
-    const std::filesystem::path cli = FindLlamaRuntimeBinary({"llama-cli.exe"});
-#else
-    const std::filesystem::path cli = FindLlamaRuntimeBinary({"llama-cli"});
-#endif
-    return {cli, LocalLlamaExecutableKind::Cli};
-}
-
-std::string LocalLlamaExecutableName(LocalLlamaExecutableKind kind) {
-    return kind == LocalLlamaExecutableKind::Completion
-        ? "llama-completion"
-        : "llama-cli";
-}
-
 bool IsSafeLocalModelFilename(const std::string& filename) {
     if (filename.empty()) {
         return false;
@@ -136,29 +75,6 @@ bool IsSafeLocalModelFilename(const std::string& filename) {
     const std::filesystem::path path(filename);
     return !path.is_absolute() && path.parent_path().empty() &&
         path.filename() == path && filename != "." && filename != "..";
-}
-
-std::filesystem::path MakeTemporaryAiFilePath(const std::string& label) {
-    const auto ticks = std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::steady_clock::now().time_since_epoch()).count();
-    const auto thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
-    return std::filesystem::temp_directory_path() /
-        ("textlt-ai-" + label + "-" + std::to_string(ticks) + "-" +
-         std::to_string(thread_id) + ".txt");
-}
-
-bool WritePromptFile(const std::filesystem::path& path, const std::string& prompt) {
-    std::ofstream file(path, std::ios::binary | std::ios::trunc);
-    if (!file) {
-        return false;
-    }
-    file.write(prompt.data(), static_cast<std::streamsize>(prompt.size()));
-    return static_cast<bool>(file);
-}
-
-std::string LocalChatPrompt(const AiPromptRequest& request) {
-    return BuildAiSystemPrompt(request) +
-        "\n\nText to process:\n" + BuildAiUserPrompt(request);
 }
 
 bool EndsWithAsciiInsensitive(const std::string& value, const std::string& suffix) {
@@ -225,42 +141,130 @@ void ConsumeCompleteLines(
     }
 }
 
-std::string OllamaStreamContent(const std::string& line) {
+double JsonNumber(const Json& object, const char* key);
+int JsonInteger(const Json& object, const char* key);
+
+struct OllamaStreamEvent {
+    std::string content;
+    std::string done_reason;
+    bool done = false;
+    int prompt_tokens = 0;
+    int generated_tokens = 0;
+    double prompt_ms = 0.0;
+    double generation_ms = 0.0;
+    double tokens_per_second = 0.0;
+};
+
+OllamaStreamEvent ParseOllamaStreamEvent(const std::string& line) {
+    OllamaStreamEvent event;
     if (line.empty()) {
-        return {};
+        return event;
     }
     const Json root = Json::parse(line, nullptr, false);
     if (root.is_discarded() || !root.is_object()) {
-        return {};
+        return event;
     }
     const auto message = root.find("message");
-    return message != root.end() && message->is_object()
-        ? JsonString(*message, "content")
-        : std::string{};
+    if (message != root.end() && message->is_object()) {
+        event.content = JsonString(*message, "content");
+    }
+    event.done = root.value("done", false);
+    event.done_reason = JsonString(root, "done_reason");
+    event.prompt_tokens = JsonInteger(root, "prompt_eval_count");
+    event.generated_tokens = JsonInteger(root, "eval_count");
+    const double prompt_ns = JsonNumber(root, "prompt_eval_duration");
+    const double generation_ns = JsonNumber(root, "eval_duration");
+    event.prompt_ms = prompt_ns > 0.0 ? prompt_ns / 1000000.0 : 0.0;
+    event.generation_ms = generation_ns > 0.0 ? generation_ns / 1000000.0 : 0.0;
+    if (event.generated_tokens > 0 && generation_ns > 0.0) {
+        event.tokens_per_second =
+            static_cast<double>(event.generated_tokens) * 1000000000.0 / generation_ns;
+    }
+    return event;
 }
 
-std::string OpenAiStreamContent(std::string line) {
+struct OpenAiStreamEvent {
+    std::string content;
+    std::string finish_reason;
+    std::string stop_type;
+    int prompt_tokens = 0;
+    int generated_tokens = 0;
+    double prompt_ms = 0.0;
+    double generation_ms = 0.0;
+    double tokens_per_second = 0.0;
+};
+
+double JsonNumber(const Json& object, const char* key) {
+    const auto value = object.find(key);
+    return value != object.end() && value->is_number()
+        ? value->get<double>()
+        : 0.0;
+}
+
+int JsonInteger(const Json& object, const char* key) {
+    const auto value = object.find(key);
+    return value != object.end() && value->is_number_integer()
+        ? value->get<int>()
+        : 0;
+}
+
+OpenAiStreamEvent ParseOpenAiStreamEvent(std::string line) {
+    OpenAiStreamEvent event;
     const std::string prefix = "data:";
     if (line.rfind(prefix, 0) != 0) {
-        return {};
+        return event;
     }
     line = Trim(line.substr(prefix.size()));
     if (line.empty() || line == "[DONE]") {
-        return {};
+        return event;
     }
     const Json root = Json::parse(line, nullptr, false);
     if (root.is_discarded() || !root.is_object()) {
-        return {};
+        return event;
     }
     const auto choices = root.find("choices");
-    if (choices == root.end() || !choices->is_array() || choices->empty() ||
-        !(*choices)[0].is_object()) {
-        return {};
+    if (choices != root.end() && choices->is_array() && !choices->empty() &&
+        (*choices)[0].is_object()) {
+        const Json& choice = (*choices)[0];
+        const auto delta = choice.find("delta");
+        if (delta != choice.end() && delta->is_object()) {
+            event.content = JsonString(*delta, "content");
+        }
+        event.finish_reason = JsonString(choice, "finish_reason");
+        event.stop_type = JsonString(choice, "stop_type");
     }
-    const auto delta = (*choices)[0].find("delta");
-    return delta != (*choices)[0].end() && delta->is_object()
-        ? JsonString(*delta, "content")
-        : std::string{};
+    if (event.stop_type.empty()) {
+        event.stop_type = JsonString(root, "stop_type");
+    }
+    const auto usage = root.find("usage");
+    if (usage != root.end() && usage->is_object()) {
+        event.prompt_tokens = JsonInteger(*usage, "prompt_tokens");
+        event.generated_tokens = JsonInteger(*usage, "completion_tokens");
+    }
+    const auto timings = root.find("timings");
+    if (timings != root.end() && timings->is_object()) {
+        event.prompt_tokens = std::max(event.prompt_tokens, JsonInteger(*timings, "prompt_n"));
+        event.generated_tokens = std::max(event.generated_tokens, JsonInteger(*timings, "predicted_n"));
+        event.prompt_ms = JsonNumber(*timings, "prompt_ms");
+        event.generation_ms = JsonNumber(*timings, "predicted_ms");
+        event.tokens_per_second = JsonNumber(*timings, "predicted_per_second");
+    }
+    return event;
+}
+
+AiFinishReason FinishReasonFromOpenAi(
+    const std::string& value,
+    const std::string& stop_type) {
+    if (stop_type == "word") {
+        return AiFinishReason::StopMarker;
+    }
+    if (stop_type == "limit" || value == "length") {
+        return AiFinishReason::TokenLimit;
+    }
+    if (stop_type == "eos" || value == "stop") {
+        return AiFinishReason::Eos;
+    }
+    return value.empty() ? AiFinishReason::Unknown : AiFinishReason::Eos;
 }
 
 int DefaultLocalThreadCount() {
@@ -271,23 +275,37 @@ int DefaultLocalThreadCount() {
     return static_cast<int>(std::min<unsigned int>(6, std::max<unsigned int>(2, available / 2)));
 }
 
+int CountUtf8Codepoints(const std::string& text) {
+    int count = 0;
+    for (unsigned char ch : text) {
+        if ((ch & 0xC0U) != 0x80U) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 int DefaultMaxOutputTokens(const AiPromptRequest& request) {
-    const std::size_t estimated_input_tokens = std::max<std::size_t>(32, request.text.size() / 3);
-    const std::size_t estimated = request.action == AiActionType::Translate
-        ? estimated_input_tokens * 2
-        : estimated_input_tokens + estimated_input_tokens / 2;
-    return static_cast<int>(std::clamp<std::size_t>(estimated, 128, 2048));
+    const int codepoints = std::max(1, CountUtf8Codepoints(request.text));
+    const int estimated_input_tokens = std::max(8, codepoints / 2 + 8);
+    const int estimated = request.action == AiActionType::Translate
+        ? estimated_input_tokens * 2 + 24
+        : estimated_input_tokens + estimated_input_tokens / 2 + 24;
+    return std::clamp(estimated, 64, 2048);
 }
 
 AiBackendResult ErrorResult(AiProvider provider, std::string error) {
     AiBackendResult result;
     result.provider = provider;
     result.error = std::move(error);
+    result.finish_reason = AiFinishReason::Error;
     return result;
 }
 
 AiBackendResult StoppedResult(AiProvider provider) {
-    return ErrorResult(provider, "Operation stopped.");
+    AiBackendResult result = ErrorResult(provider, "Operation stopped.");
+    result.finish_reason = AiFinishReason::Cancelled;
+    return result;
 }
 
 } // namespace
@@ -368,6 +386,23 @@ std::string AiBackend::NormalizeGeneratedText(std::string text) {
     return NormalizeGeneratedTextImpl(std::move(text));
 }
 
+int AiBackend::RecommendedMaxOutputTokens(const AiPromptRequest& request) {
+    return DefaultMaxOutputTokens(request);
+}
+
+std::string AiBackend::FinishReasonLabel(AiFinishReason reason) {
+    switch (reason) {
+        case AiFinishReason::Eos: return "end of sequence";
+        case AiFinishReason::StopMarker: return "stop marker";
+        case AiFinishReason::TokenLimit: return "token limit";
+        case AiFinishReason::Timeout: return "timeout";
+        case AiFinishReason::Cancelled: return "cancelled";
+        case AiFinishReason::Error: return "error";
+        case AiFinishReason::Unknown:
+        default: return "completed";
+    }
+}
+
 AiConnectionResult AiBackend::TryOllama(
     const std::atomic<bool>* cancel_requested,
     RemoteCommandControl* command_control) const {
@@ -429,6 +464,9 @@ AiConnectionResult AiBackend::TryOllama(
             AiModelSource::Server,
             true,
             false,
+            false,
+            0,
+            {},
         });
     }
     result.success = true;
@@ -493,6 +531,9 @@ AiConnectionResult AiBackend::TryOpenAiCompatible(
             AiModelSource::Server,
             true,
             false,
+            false,
+            0,
+            {},
         });
     }
     result.success = true;
@@ -512,9 +553,9 @@ AiConnectionResult AiBackend::CheckConnectionAndListModels(
         AiConnectionResult result;
         result.provider = AiProvider::LocalLlamaCpp;
         result.provider_label = ProviderLabel(result.provider);
-        result.success = static_cast<bool>(FindLocalLlamaExecutable());
+        result.success = LocalLlamaServerManager::Instance().RuntimeAvailable();
         if (!result.success) {
-            result.error = "llama.cpp runtime is not installed.";
+            result.error = "llama-server is not installed. Download a current llama.cpp runtime.";
         }
         return result;
     }
@@ -556,8 +597,8 @@ AiConnectionResult AiBackend::CheckSelectedModelReady(
          settings_.provider == AiProvider::LocalLlamaCpp)) {
         result.provider = AiProvider::LocalLlamaCpp;
         result.provider_label = ProviderLabel(result.provider);
-        if (!FindLocalLlamaExecutable()) {
-            result.error = "llama.cpp runtime is not installed.";
+        if (!LocalLlamaServerManager::Instance().RuntimeAvailable()) {
+            result.error = "llama-server is not installed. Download a current llama.cpp runtime.";
             return result;
         }
         if (!IsSafeLocalModelFilename(model_id)) {
@@ -571,6 +612,14 @@ AiConnectionResult AiBackend::CheckSelectedModelReady(
             result.error = "Selected local model is not downloaded: " + model_id;
             return result;
         }
+        LocalLlamaServerManager& manager = LocalLlamaServerManager::Instance();
+        std::string hardware_error;
+        if (!manager.IsReadyFor(model_id) &&
+            !manager.CheckModelHardware(
+                model_id, hardware_error, cancel_requested, command_control)) {
+            result.error = hardware_error;
+            return result;
+        }
         result.success = true;
         result.models = {{
             "local:" + model_id,
@@ -581,6 +630,9 @@ AiConnectionResult AiBackend::CheckSelectedModelReady(
             AiModelSource::ManagedLocal,
             true,
             true,
+            false,
+            0,
+            {},
         }};
         return result;
     }
@@ -625,18 +677,39 @@ AiBackendResult AiBackend::RunOllama(
             {"num_predict", settings_.max_output_tokens > 0
                 ? settings_.max_output_tokens
                 : DefaultMaxOutputTokens(request)},
+            {"stop", Json::array({
+                "[end of text]", "<|end_of_text|>", "<|eot_id|>",
+                "<end_of_turn>", "</s>"})},
         }},
     };
 
+    const auto request_started = std::chrono::steady_clock::now();
+    bool first_token_seen = false;
     std::string line_buffer;
     std::string generated;
+    std::string done_reason;
+    AiBackendResult result;
+    result.provider = AiProvider::Ollama;
     auto last_progress_at = std::chrono::steady_clock::now() - std::chrono::seconds(1);
     auto consume_line = [&](std::string line) {
-        const std::string content = OllamaStreamContent(line);
-        if (content.empty()) {
+        const OllamaStreamEvent event = ParseOllamaStreamEvent(line);
+        result.prompt_tokens = std::max(result.prompt_tokens, event.prompt_tokens);
+        result.generated_tokens = std::max(result.generated_tokens, event.generated_tokens);
+        result.prompt_ms = std::max(result.prompt_ms, event.prompt_ms);
+        result.generation_ms = std::max(result.generation_ms, event.generation_ms);
+        result.tokens_per_second = std::max(result.tokens_per_second, event.tokens_per_second);
+        if (event.done && !event.done_reason.empty()) {
+            done_reason = event.done_reason;
+        }
+        if (event.content.empty()) {
             return;
         }
-        generated += content;
+        if (!first_token_seen) {
+            first_token_seen = true;
+            result.time_to_first_token_ms = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - request_started).count();
+        }
+        generated += event.content;
         const auto now = std::chrono::steady_clock::now();
         if (progress && now - last_progress_at >= std::chrono::milliseconds(125)) {
             last_progress_at = now;
@@ -659,13 +732,16 @@ AiBackendResult AiBackend::RunOllama(
     if (!line_buffer.empty()) {
         consume_line(std::move(line_buffer));
     }
-    if (IsCancelled(cancel_requested)) {
+    if (IsCancelled(cancel_requested) ||
+        (command_control && command_control->StopRequested())) {
         return StoppedResult(AiProvider::Ollama);
     }
     if (!response.ok) {
-        return ErrorResult(
-            AiProvider::Ollama,
-            response.error.empty() ? "Ollama request failed." : response.error);
+        result.error = response.error.empty() ? "Ollama request failed." : response.error;
+        result.finish_reason = result.error.find("timed out") != std::string::npos
+            ? AiFinishReason::Timeout
+            : AiFinishReason::Error;
+        return result;
     }
     if (generated.empty()) {
         std::string error;
@@ -681,10 +757,11 @@ AiBackendResult AiBackend::RunOllama(
     if (generated.empty()) {
         return ErrorResult(AiProvider::Ollama, "Ollama returned an empty response.");
     }
-    AiBackendResult result;
     result.success = true;
-    result.provider = AiProvider::Ollama;
     result.text = std::move(generated);
+    result.finish_reason = done_reason == "length"
+        ? AiFinishReason::TokenLimit
+        : (done_reason == "stop" ? AiFinishReason::Eos : AiFinishReason::Unknown);
     return result;
 }
 
@@ -694,6 +771,22 @@ AiBackendResult AiBackend::RunOpenAiCompatible(
     const std::atomic<bool>* cancel_requested,
     ProgressCallback progress,
     RemoteCommandControl* command_control) const {
+    Json messages = Json::array();
+    if (settings_.managed_local_server) {
+        // Gemma's native chat template rejects a separate system role. Keep the
+        // instruction and source text in one user turn for managed local models.
+        messages.push_back(Json{
+            {"role", "user"},
+            {"content", BuildAiSystemPrompt(request) + "\n\n" +
+                BuildAiUserPrompt(request)},
+        });
+    } else {
+        messages.push_back(Json{
+            {"role", "system"}, {"content", BuildAiSystemPrompt(request)}});
+        messages.push_back(Json{
+            {"role", "user"}, {"content", BuildAiUserPrompt(request)}});
+    }
+
     Json body = {
         {"model", model},
         {"temperature", 0.2},
@@ -701,21 +794,46 @@ AiBackendResult AiBackend::RunOpenAiCompatible(
             ? settings_.max_output_tokens
             : DefaultMaxOutputTokens(request)},
         {"stream", true},
-        {"messages", Json::array({
-            Json{{"role", "system"}, {"content", BuildAiSystemPrompt(request)}},
-            Json{{"role", "user"}, {"content", BuildAiUserPrompt(request)}},
-        })},
+        {"stop", Json::array({
+            "[end of text]", "<|end_of_text|>", "<|eot_id|>",
+            "<end_of_turn>", "</s>"})},
+        {"messages", std::move(messages)},
     };
+    if (settings_.managed_local_server) {
+        body["stream_options"] = Json{{"include_usage", true}};
+    }
 
+    const auto request_started = std::chrono::steady_clock::now();
+    bool first_token_seen = false;
     std::string line_buffer;
     std::string generated;
+    std::string finish_reason;
+    std::string stop_type;
+    AiBackendResult result;
+    result.provider = AiProvider::OpenAiCompatible;
     auto last_progress_at = std::chrono::steady_clock::now() - std::chrono::seconds(1);
     auto consume_line = [&](std::string line) {
-        const std::string content = OpenAiStreamContent(std::move(line));
-        if (content.empty()) {
+        const OpenAiStreamEvent event = ParseOpenAiStreamEvent(std::move(line));
+        if (!event.finish_reason.empty()) {
+            finish_reason = event.finish_reason;
+        }
+        if (!event.stop_type.empty()) {
+            stop_type = event.stop_type;
+        }
+        result.prompt_tokens = std::max(result.prompt_tokens, event.prompt_tokens);
+        result.generated_tokens = std::max(result.generated_tokens, event.generated_tokens);
+        result.prompt_ms = std::max(result.prompt_ms, event.prompt_ms);
+        result.generation_ms = std::max(result.generation_ms, event.generation_ms);
+        result.tokens_per_second = std::max(result.tokens_per_second, event.tokens_per_second);
+        if (event.content.empty()) {
             return;
         }
-        generated += content;
+        if (!first_token_seen) {
+            first_token_seen = true;
+            result.time_to_first_token_ms = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - request_started).count();
+        }
+        generated += event.content;
         const auto now = std::chrono::steady_clock::now();
         if (progress && now - last_progress_at >= std::chrono::milliseconds(125)) {
             last_progress_at = now;
@@ -738,15 +856,18 @@ AiBackendResult AiBackend::RunOpenAiCompatible(
     if (!line_buffer.empty()) {
         consume_line(std::move(line_buffer));
     }
-    if (IsCancelled(cancel_requested)) {
+    if (IsCancelled(cancel_requested) ||
+        (command_control && command_control->StopRequested())) {
         return StoppedResult(AiProvider::OpenAiCompatible);
     }
     if (!response.ok) {
-        return ErrorResult(
-            AiProvider::OpenAiCompatible,
-            response.error.empty()
-                ? "OpenAI-compatible request failed."
-                : response.error);
+        result.error = response.error.empty()
+            ? "OpenAI-compatible request failed."
+            : response.error;
+        result.finish_reason = result.error.find("timed out") != std::string::npos
+            ? AiFinishReason::Timeout
+            : AiFinishReason::Error;
+        return result;
     }
     if (generated.empty()) {
         std::string error;
@@ -755,23 +876,27 @@ AiBackendResult AiBackend::RunOpenAiCompatible(
             const auto choices = root.find("choices");
             if (choices != root.end() && choices->is_array() && !choices->empty() &&
                 (*choices)[0].is_object()) {
-                const auto message = (*choices)[0].find("message");
-                generated = message != (*choices)[0].end() && message->is_object()
+                const Json& choice = (*choices)[0];
+                const auto message = choice.find("message");
+                generated = message != choice.end() && message->is_object()
                     ? JsonString(*message, "content")
                     : std::string{};
+                finish_reason = JsonString(choice, "finish_reason");
             }
         }
     }
     generated = NormalizeGeneratedTextImpl(std::move(generated));
     if (generated.empty()) {
-        return ErrorResult(
-            AiProvider::OpenAiCompatible,
-            "OpenAI-compatible server returned an empty response.");
+        result.error = "OpenAI-compatible server returned an empty response.";
+        result.finish_reason = AiFinishReason::Error;
+        return result;
     }
-    AiBackendResult result;
     result.success = true;
-    result.provider = AiProvider::OpenAiCompatible;
     result.text = std::move(generated);
+    result.finish_reason = FinishReasonFromOpenAi(finish_reason, stop_type);
+    if (result.finish_reason == AiFinishReason::Unknown) {
+        result.finish_reason = AiFinishReason::Eos;
+    }
     return result;
 }
 
@@ -784,104 +909,51 @@ AiBackendResult AiBackend::RunLocalLlamaCpp(
     if (!IsSafeLocalModelFilename(filename)) {
         return ErrorResult(AiProvider::LocalLlamaCpp, "Selected local model filename is invalid.");
     }
-    const LocalLlamaExecutable executable = FindLocalLlamaExecutable();
-    if (!executable) {
-        return ErrorResult(AiProvider::LocalLlamaCpp, "llama.cpp runtime is not installed.");
-    }
-    const std::filesystem::path model_path = AiUserDataDirectory() / "ai" / "models" / filename;
-    std::error_code error;
-    if (!std::filesystem::exists(model_path, error)) {
-        return ErrorResult(
-            AiProvider::LocalLlamaCpp,
-            "Selected local model is not downloaded: " + filename);
-    }
-
-    const std::string prompt = LocalChatPrompt(request);
-    const std::filesystem::path prompt_path = MakeTemporaryAiFilePath("prompt");
-    if (!WritePromptFile(prompt_path, prompt)) {
-        return ErrorResult(
-            AiProvider::LocalLlamaCpp,
-            "Could not create the temporary prompt file.");
-    }
-    const int max_output_tokens = settings_.max_output_tokens > 0
-        ? settings_.max_output_tokens
-        : DefaultMaxOutputTokens(request);
-    const int local_threads = settings_.local_threads > 0
-        ? settings_.local_threads
-        : DefaultLocalThreadCount();
-
-    std::vector<std::string> arguments = {
-        executable.path.string(),
-        "--model", model_path.string(),
-        "--jinja",
-        "--single-turn",
-        "--file", prompt_path.string(),
-        "--n-predict", std::to_string(max_output_tokens),
-        "--threads", std::to_string(local_threads),
-        "--threads-batch", std::to_string(local_threads),
-        "--prio", "-1",
-        "--poll", "0",
-        "--temp", "0.2",
-        "--color", "off",
-        "--no-display-prompt",
-        "--simple-io",
-    };
-
-    std::string streamed_output;
-    auto last_progress_at = std::chrono::steady_clock::now() - std::chrono::seconds(1);
-    RemoteCommandRunner runner;
-    const RemoteCommandResult command = runner.RunStreaming(
-        arguments, {}, cancel_requested, [&](const std::string& chunk) {
-        streamed_output += chunk;
-        if (!progress) {
-            return;
-        }
-        const auto now = std::chrono::steady_clock::now();
-        if (now - last_progress_at < std::chrono::milliseconds(125)) {
-            return;
-        }
-        last_progress_at = now;
-        const std::string cleaned = NormalizeGeneratedTextImpl(streamed_output);
-        if (!cleaned.empty()) {
-            progress(cleaned);
-        }
-    }, RemoteCommandOptions{settings_.timeout_seconds, 300, true}, command_control);
-    std::filesystem::remove(prompt_path, error);
-    if (command.timed_out) {
-        return ErrorResult(AiProvider::LocalLlamaCpp, command.error);
-    }
-    if (command.cancelled || IsCancelled(cancel_requested)) {
+    if (IsCancelled(cancel_requested)) {
         return StoppedResult(AiProvider::LocalLlamaCpp);
     }
-    const std::string executable_name = LocalLlamaExecutableName(executable.kind);
-    const std::string diagnostics = command.output + "\n" + command.error;
-    if (diagnostics.find("is not supported by llama-cli") != std::string::npos ||
-        diagnostics.find("please use llama-completion") != std::string::npos) {
+
+    LocalLlamaServerManager& manager = LocalLlamaServerManager::Instance();
+    const bool server_was_ready = manager.IsReadyFor(filename);
+    std::string start_error;
+    if (!manager.EnsureRunning(
+            filename,
+            settings_.local_threads > 0 ? settings_.local_threads : DefaultLocalThreadCount(),
+            120,
+            start_error,
+            cancel_requested)) {
+        if (IsCancelled(cancel_requested)) {
+            return StoppedResult(AiProvider::LocalLlamaCpp);
+        }
         return ErrorResult(
             AiProvider::LocalLlamaCpp,
-            "The installed llama.cpp runtime is incompatible with one-shot execution. "
-            "Install a runtime that includes llama-completion.");
+            start_error.empty() ? "Could not start llama-server." : start_error);
     }
-    if (command.exit_code != 0) {
-        return ErrorResult(
-            AiProvider::LocalLlamaCpp,
-            command.error.empty()
-                ? executable_name + " exited with code " +
-                      std::to_string(command.exit_code) + "."
-                : command.error);
+    if (IsCancelled(cancel_requested)) {
+        return StoppedResult(AiProvider::LocalLlamaCpp);
     }
-    const std::string output = NormalizeGeneratedTextImpl(command.output);
-    if (output.empty()) {
-        return ErrorResult(
-            AiProvider::LocalLlamaCpp,
-            executable_name +
-                " returned an empty response. The model chat template may be "
-                "missing or incompatible.");
-    }
-    AiBackendResult result;
-    result.success = true;
+
+    AiBackendSettings server_settings = settings_;
+    server_settings.provider = AiProvider::OpenAiCompatible;
+    server_settings.server_url = manager.BaseUrl();
+    server_settings.selected_model_key = "openai:" + filename;
+    server_settings.managed_local_server = true;
+    AiBackend server_backend(std::move(server_settings));
+    AiBackendResult result = server_backend.RunOpenAiCompatible(
+        request, filename, cancel_requested, std::move(progress), command_control);
     result.provider = AiProvider::LocalLlamaCpp;
-    result.text = output;
+    if (result.finish_reason == AiFinishReason::Cancelled &&
+        !manager.WaitUntilIdle(2000)) {
+        result.error =
+            "Cancellation requested, but llama-server is still finishing the task. "
+            "Use Unload Model to force-stop the local model.";
+    }
+    if (!server_was_ready) {
+        result.model_load_ms = manager.Snapshot().load_ms;
+    }
+    if (!result.success && result.finish_reason == AiFinishReason::Timeout) {
+        result.error += " The local model remains loaded; retry or use Cancel Task.";
+    }
     return result;
 }
 

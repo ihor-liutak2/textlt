@@ -209,7 +209,9 @@ add_executable(textlt
   src/distraction_mode_controller.cpp
   src/config_manager.cpp
   src/ai/ai_backend.cpp
+  src/ai/ai_model_catalog.cpp
   src/ai/ai_prompts.cpp
+  src/ai/local_llama_server.cpp
   src/curl_manager.cpp
   src/editor_config.cpp
   src/editor_component.cpp
@@ -370,7 +372,9 @@ add_executable(textlt_ai_prompts_test
 add_executable(textlt_ai_backend_utils_test
   tests/ai_backend_utils_test.cpp
   src/ai/ai_backend.cpp
+  src/ai/ai_model_catalog.cpp
   src/ai/ai_prompts.cpp
+  src/ai/local_llama_server.cpp
   src/remote/remote_http_client.cpp
   src/remote/remote_command_runner.cpp
 )

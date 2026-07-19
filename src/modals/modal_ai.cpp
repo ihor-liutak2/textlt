@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cctype>
 #include <functional>
+#include <iomanip>
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -34,6 +36,18 @@ ftxui::Component MakeButton(
 
 std::string ActionLabel(AiActionType action) {
     return action == AiActionType::Translate ? "Translation" : "Editing";
+}
+
+std::string FormatTokenRate(double tokens_per_second) {
+    std::ostringstream stream;
+    stream << std::fixed << std::setprecision(1) << tokens_per_second;
+    return stream.str();
+}
+
+std::string FormatSeconds(double milliseconds) {
+    std::ostringstream stream;
+    stream << std::fixed << std::setprecision(1) << milliseconds / 1000.0;
+    return stream.str();
 }
 
 std::string LowerAscii(std::string value) {
@@ -599,7 +613,7 @@ bool AiActionsModalContent::StartAction(
     settings.provider = AiBackend::ProviderFromConfig(config_->ai_provider);
     settings.selected_model_key = config_->ai_selected_model_key;
     settings.timeout_seconds = whole_document ? 300 : 180;
-    settings.max_output_tokens = whole_document ? 2048 : 512;
+    settings.max_output_tokens = 0;
 
     if (worker_.joinable()) {
         worker_.join();
@@ -702,7 +716,7 @@ void AiActionsModalContent::Stop() {
             cancel_requested_.store(true);
             operation_state_ = OperationState::Stopping;
             status_ = command_control_.IsRunning()
-                ? "Stopping model process..."
+                ? "Cancelling current AI task; the model will remain loaded..."
                 : "Cancelling AI operation...";
         }
     }
@@ -771,6 +785,30 @@ void AiActionsModalContent::ApplyPendingResult() {
         progress_text_ = TailUtf8(result.text, 120);
         status_ = ActionLabel(action) + " applied to " +
             (target.range.whole_document ? "the whole document." : "the current paragraph.");
+        if (result.finish_reason != AiFinishReason::Unknown ||
+            result.generated_tokens > 0 || result.tokens_per_second > 0.0) {
+            status_ += " Finish: " + AiBackend::FinishReasonLabel(result.finish_reason);
+            if (result.generated_tokens > 0) {
+                status_ += " · " + std::to_string(result.generated_tokens) + " tokens";
+            }
+            if (result.tokens_per_second > 0.0) {
+                status_ += " · " + FormatTokenRate(result.tokens_per_second) + " tok/s";
+            }
+            if (result.model_load_ms > 0.0) {
+                status_ += " · load " + FormatSeconds(result.model_load_ms) + " s";
+            }
+            if (result.time_to_first_token_ms > 0.0) {
+                status_ += " · first token " +
+                    FormatSeconds(result.time_to_first_token_ms) + " s";
+            }
+            if (result.prompt_ms > 0.0) {
+                status_ += " · prompt " + FormatSeconds(result.prompt_ms) + " s";
+            }
+            if (result.generation_ms > 0.0) {
+                status_ += " · generation " + FormatSeconds(result.generation_ms) + " s";
+            }
+            status_ += ".";
+        }
         completed_status = status_;
     }
     if (quick_action) {

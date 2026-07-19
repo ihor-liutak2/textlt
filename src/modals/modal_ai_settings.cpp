@@ -1,18 +1,24 @@
 #include "modals/modal_ai_settings.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <functional>
+#include <iomanip>
+#include <sstream>
 #include <string>
 #include <utility>
 
 #include <archive.h>
 #include <archive_entry.h>
 
+#include "ai/ai_model_catalog.hpp"
+#include "ai/local_llama_server.hpp"
 #include "curl_manager.hpp"
 #include "ftxui/component/component_options.hpp"
 #include "json_utils.hpp"
 #include "modals/assistant_modals.hpp"
+#include "remote/remote_http_client.hpp"
 #include "ui_button.hpp"
 
 namespace textlt {
@@ -27,6 +33,32 @@ using assistant_modal_detail::RegistryFilename;
 using assistant_modal_detail::RegistryKind;
 using assistant_modal_detail::RegistryLoadResult;
 using assistant_modal_detail::UserDataDirectory;
+
+std::string FormatAiSeconds(double milliseconds) {
+    std::ostringstream stream;
+    stream << std::fixed << std::setprecision(1) << milliseconds / 1000.0;
+    return stream.str();
+}
+
+std::string TestCompletionStatus(const AiBackendResult& result) {
+    std::string status = "AI editing test completed. Finish: " +
+        AiBackend::FinishReasonLabel(result.finish_reason);
+    if (result.generated_tokens > 0) {
+        status += " · " + std::to_string(result.generated_tokens) + " tokens";
+    }
+    if (result.tokens_per_second > 0.0) {
+        std::ostringstream speed;
+        speed << std::fixed << std::setprecision(1) << result.tokens_per_second;
+        status += " · " + speed.str() + " tok/s";
+    }
+    if (result.model_load_ms > 0.0) {
+        status += " · load " + FormatAiSeconds(result.model_load_ms) + " s";
+    }
+    if (result.time_to_first_token_ms > 0.0) {
+        status += " · first token " + FormatAiSeconds(result.time_to_first_token_ms) + " s";
+    }
+    return status + ".";
+}
 
 ftxui::Element StatusLine(
     const std::string& label,
@@ -74,11 +106,9 @@ std::filesystem::path FindInstalledRuntimeBinary() {
         return {};
     }
 #ifdef _WIN32
-    const std::vector<std::string> preferred_names = {
-        "llama-completion.exe", "llama-cli.exe"};
+    const std::vector<std::string> preferred_names = {"llama-server.exe"};
 #else
-    const std::vector<std::string> preferred_names = {
-        "llama-completion", "llama-cli"};
+    const std::vector<std::string> preferred_names = {"llama-server"};
 #endif
     for (const std::string& wanted : preferred_names) {
         error.clear();
@@ -104,9 +134,9 @@ std::string RuntimeDisplayPath() {
         return installed.string();
     }
 #ifdef _WIN32
-    return "%LOCALAPPDATA%\\textlt\\ai\\runtimes\\llama_cpp\\llama-completion.exe";
+    return "%LOCALAPPDATA%\\textlt\\ai\\runtimes\\llama_cpp\\llama-server.exe";
 #else
-    return "~/.local/share/textlt/ai/runtimes/llama_cpp/llama-completion";
+    return "~/.local/share/textlt/ai/runtimes/llama_cpp/llama-server";
 #endif
 }
 
@@ -244,8 +274,15 @@ bool DownloadFile(
     const std::filesystem::path part_path = final_path.string() + ".part";
     std::error_code error;
     std::filesystem::remove(part_path, error);
-    if (!CurlManager::DownloadToFile(
-            url, part_path, {}, cancel_requested, command_control)) {
+    std::vector<std::string> headers;
+    const char* hf_token = std::getenv("HF_TOKEN");
+    if (hf_token && *hf_token && url.find("huggingface.co/") != std::string::npos) {
+        headers.push_back(std::string("Authorization: Bearer ") + hf_token);
+    }
+    RemoteHttpClient client;
+    const RemoteHttpResponse response = client.DownloadCancelable(
+        "GET", url, headers, part_path, {}, 0, cancel_requested, command_control);
+    if (!response.ok) {
         std::filesystem::remove(part_path, error);
         return false;
     }
@@ -274,35 +311,70 @@ bool IsSafeModelFilename(const std::string& filename) {
 std::vector<AiModelInfo> LoadLocalModels(std::vector<std::string>* descriptions) {
     std::vector<AiModelInfo> models;
     Json root;
-    if (LoadUserRegistryJson(RegistryKind::Ai, &root) != RegistryLoadResult::Loaded) {
-        return models;
-    }
-    const auto items = root.find("models");
-    if (items == root.end() || !items->is_array()) {
-        return models;
-    }
-    for (const Json& item : *items) {
-        if (!item.is_object()) {
-            continue;
+    if (LoadUserRegistryJson(RegistryKind::Ai, &root) == RegistryLoadResult::Loaded) {
+        const auto items = root.find("models");
+        if (items != root.end() && items->is_array()) {
+            for (const Json& item : *items) {
+                if (!item.is_object()) {
+                    continue;
+                }
+                const std::string filename = JsonString(item, "filename");
+                if (!IsSafeModelFilename(filename)) {
+                    continue;
+                }
+                std::error_code error;
+                const bool downloaded = std::filesystem::exists(ModelsDirectory() / filename, error);
+                AiModelInfo model;
+                model.key = "local:" + filename;
+                model.id = JsonString(item, "id", filename);
+                model.title = JsonLabel(item, "title", "id");
+                model.provider_label = JsonString(item, "backend", "llama.cpp");
+                model.filename = filename;
+                model.source = AiModelSource::ManagedLocal;
+                model.available = downloaded && RuntimeBinaryExists();
+                model.downloaded = downloaded;
+                model.gpu_required = JsonBool(item, "gpu_required", false);
+                model.recommended_vram_mb = JsonInt(item, "recommended_vram_mb", 0);
+                model.tier = JsonString(item, "tier");
+                models.push_back(std::move(model));
+                if (descriptions) {
+                    descriptions->push_back(JsonString(item, "description"));
+                }
+            }
         }
-        const std::string filename = JsonString(item, "filename");
-        if (!IsSafeModelFilename(filename)) {
+    }
+    for (const BuiltInAiModel& built_in : BuiltInGpuModels()) {
+        const auto existing = std::find_if(models.begin(), models.end(), [&](const AiModelInfo& model) {
+            return model.filename == built_in.filename;
+        });
+        if (existing != models.end()) {
+            const size_t index = static_cast<size_t>(std::distance(models.begin(), existing));
+            existing->title = built_in.title;
+            existing->gpu_required = built_in.gpu_required;
+            existing->recommended_vram_mb = built_in.recommended_vram_mb;
+            existing->tier = built_in.tier;
+            if (descriptions && index < descriptions->size()) {
+                (*descriptions)[index] = built_in.description;
+            }
             continue;
         }
         std::error_code error;
-        const bool downloaded = std::filesystem::exists(ModelsDirectory() / filename, error);
+        const bool downloaded = std::filesystem::exists(ModelsDirectory() / built_in.filename, error);
         AiModelInfo model;
-        model.key = "local:" + filename;
-        model.id = filename;
-        model.title = JsonLabel(item, "title", "id");
-        model.provider_label = JsonString(item, "backend", "llama.cpp");
-        model.filename = filename;
+        model.key = "local:" + built_in.filename;
+        model.id = built_in.id;
+        model.title = built_in.title;
+        model.provider_label = "llama.cpp";
+        model.filename = built_in.filename;
         model.source = AiModelSource::ManagedLocal;
         model.available = downloaded && RuntimeBinaryExists();
         model.downloaded = downloaded;
+        model.gpu_required = built_in.gpu_required;
+        model.recommended_vram_mb = built_in.recommended_vram_mb;
+        model.tier = built_in.tier;
         models.push_back(std::move(model));
         if (descriptions) {
-            descriptions->push_back(JsonString(item, "description"));
+            descriptions->push_back(built_in.description);
         }
     }
     return models;
@@ -505,8 +577,16 @@ void AiSettingsModalContent::LoadModels() {
 
     model_labels_.clear();
     for (const AiModelInfo& model : models_) {
+        std::string hardware;
+        if (model.gpu_required) {
+            hardware = " | GPU " + std::to_string(model.recommended_vram_mb / 1024) +
+                " GB VRAM recommended";
+        }
+        if (!model.tier.empty()) {
+            hardware += " | " + model.tier;
+        }
         model_labels_.push_back(
-            model.title + " | " + model.provider_label + " | " + ModelStatus(model));
+            model.title + " | " + model.provider_label + hardware + " | " + ModelStatus(model));
     }
     if (model_labels_.empty()) {
         model_labels_.push_back("No models. Fetch the registry or connect to a server.");
@@ -559,8 +639,10 @@ void AiSettingsModalContent::StartWorker(std::function<void()> operation) {
         operation();
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
-            busy_ = false;
-            operation_state_ = OperationState::Idle;
+            if (!unload_in_progress_) {
+                busy_ = false;
+                operation_state_ = OperationState::Idle;
+            }
         }
         RequestRedraw();
     });
@@ -684,6 +766,7 @@ void AiSettingsModalContent::DownloadRuntime() {
         const bool downloaded = DownloadFile(url, archive_path, &cancel_requested_, &command_control_);
         bool installed = false;
         if (downloaded) {
+            LocalLlamaServerManager::Instance().Unload();
             std::error_code error;
             std::filesystem::remove_all(RuntimeDirectory(), error);
             installed = ExtractArchive(archive_path, RuntimeDirectory()) && RuntimeBinaryExists();
@@ -715,6 +798,7 @@ void AiSettingsModalContent::ConfirmRuntimeDelete() {
         status_ = "Deleting llama.cpp runtime...";
     }
     StartWorker([this] {
+        LocalLlamaServerManager::Instance().Unload();
         std::error_code error;
         std::filesystem::remove_all(RuntimeDirectory(), error);
         const bool deleted = !error && !RuntimeBinaryExists();
@@ -743,12 +827,12 @@ void AiSettingsModalContent::DownloadSelectedModel() {
         return;
     }
     Json registry_model;
-    if (!FindRegistryModel(selected.filename, &registry_model)) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        status_ = "Selected model is not present in the registry.";
-        return;
+    std::string url;
+    if (const BuiltInAiModel* built_in = FindBuiltInAiModel(selected.filename)) {
+        url = built_in->download_url;
+    } else if (FindRegistryModel(selected.filename, &registry_model)) {
+        url = JsonString(registry_model, "model_url");
     }
-    const std::string url = JsonString(registry_model, "model_url");
     if (url.empty()) {
         std::lock_guard<std::mutex> lock(state_mutex_);
         status_ = "Selected model has no download URL.";
@@ -766,7 +850,9 @@ void AiSettingsModalContent::DownloadSelectedModel() {
         pending_reload_ = true;
         pending_status_ = cancel_requested_.load()
             ? "Model download stopped."
-            : (downloaded ? "Model downloaded." : "Model download failed.");
+            : (downloaded
+                ? "Model downloaded."
+                : "Model download failed. Gemma files may require accepting the Hugging Face license and setting HF_TOKEN.");
     });
 }
 
@@ -805,6 +891,9 @@ void AiSettingsModalContent::ConfirmSelectedModelDelete() {
         return;
     }
     StartWorker([this, filename] {
+        if (LocalLlamaServerManager::Instance().Snapshot().model_filename == filename) {
+            LocalLlamaServerManager::Instance().Unload();
+        }
         std::error_code error;
         std::filesystem::remove(ModelsDirectory() / filename, error);
         const bool deleted = !error && !std::filesystem::exists(ModelsDirectory() / filename);
@@ -902,7 +991,7 @@ void AiSettingsModalContent::StartTest() {
             pending_status_ = "AI editing test failed.";
         } else {
             test_result_ = result.text;
-            pending_status_ = "AI editing test completed.";
+            pending_status_ = TestCompletionStatus(result);
         }
     });
 }
@@ -927,53 +1016,145 @@ void AiSettingsModalContent::CloseTestPopup() {
     RequestRedraw();
 }
 
-void AiSettingsModalContent::StopCurrentOperation() {
-    bool should_stop = false;
-    bool close_test_popup = false;
-    {
+void AiSettingsModalContent::StartOrRestartLocalModel() {
+    if (selected_model_ < 0 || static_cast<size_t>(selected_model_) >= models_.size()) {
         std::lock_guard<std::mutex> lock(state_mutex_);
-        should_stop = busy_;
-        if (should_stop) {
-            cancel_requested_.store(true);
-            operation_state_ = OperationState::Stopping;
-            close_test_popup = test_running_;
-            if (close_test_popup) {
-                test_popup_visible_ = false;
-                test_result_ = "Test stopped.";
-                status_ = command_control_.IsRunning()
-                    ? "Stopping model test..."
-                    : "Cancelling model test...";
-            } else {
-                status_ = command_control_.IsRunning()
-                    ? "Stopping current command..."
-                    : "Cancelling AI settings operation...";
-            }
-        }
-    }
-    if (!should_stop) {
+        status_ = "Select a local model first.";
         return;
     }
-    command_control_.RequestStop();
-    if (close_test_popup) {
+    const AiModelInfo selected = models_[static_cast<size_t>(selected_model_)];
+    if (selected.source != AiModelSource::ManagedLocal || !selected.downloaded) {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        status_ = "The selected local model must be downloaded before it can be loaded.";
+        return;
+    }
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        local_model_starting_ = true;
+        status_ = "Starting llama-server and loading " + selected.title + "...";
+    }
+    StartWorker([this, selected] {
+        std::string error;
+        const bool ready = LocalLlamaServerManager::Instance().Restart(
+            selected.filename, 0, 120, error);
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        local_model_starting_ = false;
+        pending_status_ = ready
+            ? "Local model loaded and ready."
+            : (error.empty() ? "Could not start the local model." : error);
+    });
+}
+
+void AiSettingsModalContent::CancelCurrentTask() {
+    bool should_cancel = false;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        should_cancel = test_running_ && operation_state_ != OperationState::Stopping;
+        if (should_cancel) {
+            cancel_requested_.store(true);
+            operation_state_ = OperationState::Stopping;
+            status_ = "Cancelling current AI task; the model will remain loaded...";
+            test_result_ = "Cancelling current AI task...";
+        }
+    }
+    if (should_cancel) {
+        command_control_.RequestStop();
+        RequestRedraw();
+    }
+}
+
+void AiSettingsModalContent::UnloadLocalModel() {
+    bool cancel_test = false;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        if (unload_in_progress_) {
+            status_ = "The local model is already being unloaded.";
+            return;
+        }
+        if (busy_ && !test_running_ && !local_model_starting_) {
+            status_ = "Finish the current settings operation before unloading the model.";
+            return;
+        }
+        cancel_test = test_running_;
+        unload_in_progress_ = true;
+        busy_ = true;
+        operation_state_ = OperationState::Stopping;
+        status_ = "Unloading the local model and stopping llama-server...";
+        if (cancel_test) {
+            cancel_requested_.store(true);
+            test_popup_visible_ = false;
+            test_result_ = "Cancelling current AI task...";
+        }
+    }
+    if (cancel_test) {
+        command_control_.RequestStop();
         active_panel_ = 0;
         model_menu_->TakeFocus();
     }
+
+    std::thread previous_worker;
+    if (worker_.joinable()) {
+        previous_worker = std::move(worker_);
+    }
+    worker_ = std::thread([this, previous = std::move(previous_worker)]() mutable {
+        LocalLlamaServerManager::Instance().Unload();
+        if (previous.joinable()) {
+            previous.join();
+        }
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            unload_in_progress_ = false;
+            local_model_starting_ = false;
+            busy_ = false;
+            test_running_ = false;
+            operation_state_ = OperationState::Idle;
+            status_ = "Local model unloaded; llama-server stopped.";
+        }
+        RequestRedraw();
+    });
     RequestRedraw();
 }
 
 void AiSettingsModalContent::PrepareClose() {
-    cancel_requested_.store(true);
-    command_control_.RequestStop();
-    {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        test_popup_visible_ = false;
-    }
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    test_popup_visible_ = false;
     active_panel_ = 0;
 }
 
-bool AiSettingsModalContent::CanStop() const {
+bool AiSettingsModalContent::CanStartLocalModel() const {
+    if (selected_model_ < 0 || static_cast<size_t>(selected_model_) >= models_.size()) {
+        return false;
+    }
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        if (busy_) {
+            return false;
+        }
+    }
+    const AiModelInfo& selected = models_[static_cast<size_t>(selected_model_)];
+    return selected.source == AiModelSource::ManagedLocal && selected.downloaded &&
+        RuntimeBinaryExists();
+}
+
+bool AiSettingsModalContent::CanCancelTask() const {
     std::lock_guard<std::mutex> lock(state_mutex_);
-    return busy_ && operation_state_ != OperationState::Stopping;
+    return test_running_ && operation_state_ != OperationState::Stopping;
+}
+
+bool AiSettingsModalContent::CanUnloadModel() const {
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        if (unload_in_progress_ || operation_state_ == OperationState::Stopping ||
+            (busy_ && !test_running_ && !local_model_starting_)) {
+            return false;
+        }
+        if (local_model_starting_) {
+            return true;
+        }
+    }
+    const LocalLlamaServerSnapshot snapshot = LocalLlamaServerManager::Instance().Snapshot();
+    return snapshot.state != LocalLlamaServerState::Stopped &&
+        snapshot.state != LocalLlamaServerState::Stopping;
 }
 
 void AiSettingsModalContent::ApplyPendingWorkerResult() {
@@ -1089,16 +1270,43 @@ ftxui::Element AiSettingsModalContent::RenderContent(const Theme& theme) {
     bool busy = false;
     bool runtime_confirmation = false;
     bool model_confirmation = false;
+    bool test_running = false;
+    bool local_model_starting = false;
+    bool unload_in_progress = false;
+    OperationState operation_state = OperationState::Idle;
     std::string status;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         busy = busy_;
         runtime_confirmation = runtime_delete_confirmation_;
         model_confirmation = model_delete_confirmation_;
+        test_running = test_running_;
+        local_model_starting = local_model_starting_;
+        unload_in_progress = unload_in_progress_;
+        operation_state = operation_state_;
         status = status_;
     }
     if (busy) {
         ++operation_progress_frame_;
+    }
+    const LocalLlamaServerSnapshot local_server =
+        LocalLlamaServerManager::Instance().Snapshot();
+    std::string local_model_status = "Unloaded";
+    if (local_server.state == LocalLlamaServerState::Starting) {
+        local_model_status = "Loading " + local_server.model_filename;
+    } else if (local_server.state == LocalLlamaServerState::Ready) {
+        local_model_status = "Loaded — " + local_server.model_filename;
+        if (!local_server.gpu_device.empty()) {
+            local_model_status += " · " + local_server.gpu_device;
+            if (local_server.gpu_free_memory_mb > 0) {
+                local_model_status += " · " +
+                    std::to_string(local_server.gpu_free_memory_mb) + " MiB free";
+            }
+        }
+    } else if (local_server.state == LocalLlamaServerState::Stopping) {
+        local_model_status = "Unloading";
+    } else if (local_server.state == LocalLlamaServerState::Failed) {
+        local_model_status = "Failed";
     }
 
     Elements rows;
@@ -1166,13 +1374,19 @@ ftxui::Element AiSettingsModalContent::RenderContent(const Theme& theme) {
 
     rows.push_back(vbox({
         StatusLine("Connection", connection_status_, theme),
+        StatusLine("Local model", local_model_status, theme),
+        StatusLine("Task", test_running
+            ? (operation_state == OperationState::Stopping ? "Cancelling" : "Editing test")
+            : (unload_in_progress
+                ? "Unloading model"
+                : (local_model_starting ? "Loading model" : "Idle")), theme),
         hbox({
             busy ? spinner(0, operation_progress_frame_) | bold : text(" "),
             text(" Status: ") | bold | color(theme.modal_accent),
             paragraph(status.empty() ? "Ready" : status) |
                 color(theme.modal_text_color) | flex,
         }),
-    }) | borderStyled(LIGHT, theme.modal_border) | size(HEIGHT, EQUAL, 5));
+    }) | borderStyled(LIGHT, theme.modal_border) | size(HEIGHT, EQUAL, 7));
     return vbox(std::move(rows)) | borderStyled(LIGHT, theme.modal_border);
 }
 
@@ -1187,8 +1401,12 @@ AiSettingsModal::AiSettingsModal(
     modal_->SetFooterButtons({
         {"Save", [this] { content_->SaveConnectionSettings(); }, ButtonRole::Default},
         {"Connect / Refresh", [this] { content_->ConnectAndRefreshServerModels(); }, ButtonRole::Primary},
-        {"Stop", [this] { content_->StopCurrentOperation(); }, ButtonRole::Warning,
-         [this] { return content_->CanStop(); }},
+        {"Start / Restart", [this] { content_->StartOrRestartLocalModel(); }, ButtonRole::Secondary,
+         [this] { return content_->CanStartLocalModel(); }},
+        {"Cancel Task", [this] { content_->CancelCurrentTask(); }, ButtonRole::Warning,
+         [this] { return content_->CanCancelTask(); }},
+        {"Unload Model", [this] { content_->UnloadLocalModel(); }, ButtonRole::Warning,
+         [this] { return content_->CanUnloadModel(); }},
         {"Close", [this] { Close(); }, ButtonRole::Cancel},
     });
     modal_->SetBodyFrameScrolling(false);
