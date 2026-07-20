@@ -86,19 +86,13 @@ bool DocumentSession::CaptureAiTransformTargetAt(
         return false;
     }
 
-    size_t start_row = cursor_row;
-    while (start_row > 0 && !IsBlankLine(buffer.Line(start_row - 1))) {
-        --start_row;
-    }
-    size_t end_row = cursor_row;
-    while (end_row + 1 < buffer.LineCount() && !IsBlankLine(buffer.Line(end_row + 1))) {
-        ++end_row;
-    }
-
-    target.start_row = start_row;
+    // Imported and normalized TextLT documents store one paragraph in one
+    // logical buffer line. Visual wrapping is handled by the editor viewport,
+    // so adjacent non-empty logical lines must not be merged into one AI target.
+    target.start_row = cursor_row;
     target.start_column = 0;
-    target.end_row = end_row;
-    target.end_column = buffer.Line(end_row).size();
+    target.end_row = cursor_row;
+    target.end_column = buffer.Line(cursor_row).size();
     target.original_text = TextInRange(
         buffer.Lines(),
         target.start_row,

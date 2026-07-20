@@ -83,6 +83,40 @@ std::string CanonicalLanguage(
     return found == languages.end() ? std::string{} : *found;
 }
 
+size_t CountUtf8Characters(const std::string& value) {
+    size_t count = 0;
+    for (unsigned char ch : value) {
+        if ((ch & 0xC0U) != 0x80U) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+std::string FirstParagraphWord(const std::string& value) {
+    size_t start = 0;
+    while (start < value.size() &&
+           std::isspace(static_cast<unsigned char>(value[start])) != 0) {
+        ++start;
+    }
+    size_t end = start;
+    while (end < value.size() &&
+           std::isspace(static_cast<unsigned char>(value[end])) == 0) {
+        ++end;
+    }
+    if (start == end) {
+        return "-";
+    }
+    return value.substr(start, end - start);
+}
+
+std::string ParagraphSummary(const std::string& value) {
+    const size_t character_count = CountUtf8Characters(value);
+    return FirstParagraphWord(value) + " · " +
+        std::to_string(character_count) +
+        (character_count == 1 ? " character" : " characters");
+}
+
 std::string TailUtf8(const std::string& value, size_t character_count) {
     if (value.empty()) {
         return {};
@@ -364,13 +398,30 @@ void AiActionsModalContent::PrepareQuickActions() {
             return;
         }
     }
+
+    AiDocumentTarget target;
+    std::string target_error;
+    const bool target_available = capture_target_ &&
+        capture_target_(false, target, target_error);
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        quick_target_available_ = target_available;
+        quick_target_label_ = target_available
+            ? ParagraphSummary(target.range.original_text)
+            : (target_error.empty() ? "Unavailable" : target_error);
+        quick_action_status_.clear();
+    }
     StartQuickReadinessCheck();
 }
 
 AiQuickStatusSnapshot AiActionsModalContent::QuickStatus() const {
     AiQuickStatusSnapshot snapshot;
     snapshot.model_label = SelectedModelLabel();
+    snapshot.language_label = source_language_ + " -> " + target_language_;
     std::lock_guard<std::mutex> lock(state_mutex_);
+    snapshot.paragraph_label = quick_target_label_;
+    snapshot.action_status_label = quick_action_status_;
+    snapshot.paragraph_available = quick_target_available_;
     snapshot.busy = busy_;
     snapshot.stopping = operation_state_ == OperationState::Stopping;
     snapshot.checking = quick_readiness_checking_;
@@ -622,6 +673,13 @@ bool AiActionsModalContent::StartAction(
     command_control_.Reset();
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
+        if (!whole_document) {
+            quick_target_available_ = true;
+            quick_target_label_ = ParagraphSummary(target.range.original_text);
+        }
+        if (force_current_paragraph) {
+            quick_action_status_.clear();
+        }
         busy_ = true;
         active_action_ = action;
         operation_state_ = OperationState::Starting;
@@ -666,8 +724,7 @@ bool AiActionsModalContent::StartAction(
                 status_ = "AI operation stopped.";
                 progress_text_ = "The model process was terminated.";
                 if (quick_action) {
-                    quick_ready_ = true;
-                    quick_readiness_status_ = "Stopped — ready to run again";
+                    quick_action_status_ = "AI operation stopped. The model remains loaded.";
                 }
             }
             busy_ = false;
@@ -754,7 +811,7 @@ void AiActionsModalContent::ApplyPendingResult() {
             std::lock_guard<std::mutex> lock(state_mutex_);
             status_ = message;
             if (quick_action) {
-                quick_readiness_status_ = "Action failed — " + message;
+                quick_action_status_ = message;
             }
         }
         if (quick_action) {
@@ -812,6 +869,10 @@ void AiActionsModalContent::ApplyPendingResult() {
         completed_status = status_;
     }
     if (quick_action) {
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            quick_action_status_ = completed_status;
+        }
         if (quick_completion_) {
             quick_completion_(true, completed_status);
         } else if (notify_status_) {

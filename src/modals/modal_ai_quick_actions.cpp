@@ -50,14 +50,16 @@ AiQuickActionsModalContent::AiQuickActionsModalContent(
         &theme_, "1 Translate", ButtonRole::Primary,
         [this] {
             const AiQuickStatusSnapshot status = Status();
-            return status.ready && !status.busy && !status.checking;
+            return status.ready && status.paragraph_available &&
+                !status.busy && !status.checking;
         },
         [this] { Trigger(AiActionType::Translate); });
     edit_button_ = MakeQuickButton(
         &theme_, "2 Edit", ButtonRole::Primary,
         [this] {
             const AiQuickStatusSnapshot status = Status();
-            return status.ready && !status.busy && !status.checking;
+            return status.ready && status.paragraph_available &&
+                !status.busy && !status.checking;
         },
         [this] { Trigger(AiActionType::Edit); });
     stop_button_ = MakeQuickButton(
@@ -104,6 +106,12 @@ void AiQuickActionsModalContent::Trigger(AiActionType action) {
         error_message_ = status.status_label.empty()
             ? "AI is not ready."
             : status.status_label;
+        return;
+    }
+    if (!status.paragraph_available) {
+        error_message_ = status.paragraph_label.empty()
+            ? "The current paragraph is unavailable."
+            : status.paragraph_label;
         return;
     }
 
@@ -158,8 +166,14 @@ ftxui::Element AiQuickActionsModalContent::Render() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     const AiQuickStatusSnapshot status = Status();
-    if (last_busy_ && !status.busy && translate_button_) {
-        translate_button_->TakeFocus();
+    if (last_busy_ && !status.busy) {
+        if (translate_button_) {
+            translate_button_->TakeFocus();
+        }
+        if (error_message_ ==
+            "An AI action is already running. Press 3 to stop it.") {
+            error_message_.clear();
+        }
     }
     if (last_checking_ && !status.checking &&
         error_message_ == "Wait until the AI readiness check finishes.") {
@@ -173,12 +187,24 @@ ftxui::Element AiQuickActionsModalContent::Render() {
 
     Elements rows = {
         hbox({
-            text(" Model: ") | bold | color(theme.modal_accent),
+            text(" Model:     ") | bold | color(theme.modal_accent),
             paragraph(status.model_label.empty() ? "Not selected" : status.model_label) |
                 color(theme.modal_text_color) | flex,
         }),
         hbox({
-            text(" AI:    ") | bold | color(theme.modal_accent),
+            text(" Paragraph: ") | bold | color(theme.modal_accent),
+            paragraph(status.paragraph_label.empty() ? "Unavailable" : status.paragraph_label) |
+                color(status.paragraph_available
+                    ? theme.modal_text_color
+                    : theme.modal_accent) | flex,
+        }),
+        hbox({
+            text(" Languages: ") | bold | color(theme.modal_accent),
+            paragraph(status.language_label.empty() ? "Not selected" : status.language_label) |
+                color(theme.modal_text_color) | flex,
+        }),
+        hbox({
+            text(" AI:        ") | bold | color(theme.modal_accent),
             paragraph(status.status_label.empty() ? "Not ready" : status.status_label) |
                 color(status.ready || status.busy
                     ? theme.modal_text_color
@@ -197,6 +223,11 @@ ftxui::Element AiQuickActionsModalContent::Render() {
     };
     if (!error_message_.empty()) {
         rows.push_back(paragraph(error_message_) | color(theme.modal_accent) | bold);
+    } else if (!status.action_status_label.empty()) {
+        rows.push_back(hbox({
+            text(" Result:    ") | bold | color(theme.modal_accent),
+            paragraph(status.action_status_label) | color(theme.modal_text_color) | flex,
+        }));
     } else {
         rows.push_back(text(""));
     }
@@ -255,7 +286,7 @@ void AiQuickActionsModal::Open() {
         modal_->SetTheme(theme_);
         modal_->SetHeaderCloseVisible(false);
         modal_->SetFooterVisible(false);
-        modal_->SetModalSize(58, 14);
+        modal_->SetModalSize(64, 18);
     }
 }
 

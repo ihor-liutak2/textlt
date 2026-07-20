@@ -32,7 +32,7 @@ public:
     ftxui::Element Render() override;
     ftxui::Component GetMainComponent() override { return container_; }
     std::string GetTitle() override { return "Quick AI"; }
-    ModalSizePreference GetModalSizePreference() const override { return {58, 14}; }
+    ModalSizePreference GetModalSizePreference() const override { return {58, 15}; }
     ModalFrameStyle GetModalFrameStyle() const override { return ModalFrameStyle::TitleInBorder; }
     std::string GetFooterText() const override { return {}; }
 

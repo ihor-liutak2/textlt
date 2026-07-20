@@ -39,7 +39,10 @@ int main() {
     int close_count = 0;
     AiQuickStatusSnapshot status;
     status.model_label = "Gemma test";
+    status.language_label = "Russian -> Ukrainian";
     status.status_label = "Ready — llama.cpp";
+    status.paragraph_label = "Hello · 42 characters";
+    status.paragraph_available = true;
     status.ready = true;
 
     AiQuickActionsModalContent content(
@@ -100,6 +103,13 @@ int main() {
     status.status_label = "Not ready — model is unavailable";
     assert(content.HandleEvent(ftxui::Event::Character("2")));
     assert(edit_count == 1);
+
+    status.ready = true;
+    status.paragraph_available = false;
+    status.paragraph_label = "The cursor is on an empty paragraph.";
+    assert(content.HandleEvent(ftxui::Event::Character("1")));
+    assert(translate_count == 1);
+    status.paragraph_available = true;
 
     ftxui::Mouse mouse;
     mouse.button = ftxui::Mouse::Left;

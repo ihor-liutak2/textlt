@@ -142,6 +142,9 @@ private:
     bool quick_readiness_checking_ = false;
     bool quick_ready_ = false;
     std::string quick_readiness_status_ = "Not checked";
+    std::string quick_action_status_;
+    bool quick_target_available_ = false;
+    std::string quick_target_label_ = "Unavailable";
 
     ftxui::Component source_language_input_;
     ftxui::Component target_language_input_;

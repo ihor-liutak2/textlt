@@ -11,11 +11,11 @@ int main() {
     textlt::DocumentTransformTarget paragraph;
     std::string error;
     assert(session.CaptureAiTransformTarget(false, paragraph, error));
-    assert(paragraph.original_text == "First line\nSecond line");
+    assert(paragraph.original_text == "Second line");
     assert(!paragraph.whole_document);
 
     assert(session.ReplaceAiTransformTarget(paragraph, "Edited paragraph", error));
-    assert(session.ToContent() == "Edited paragraph\n\nThird paragraph");
+    assert(session.ToContent() == "First line\nEdited paragraph\n\nThird paragraph");
     assert(session.Undo());
     assert(session.ToContent() == "First line\nSecond line\n\nThird paragraph");
 
@@ -42,9 +42,8 @@ int main() {
     error.clear();
     assert(visible_cursor.CaptureAiTransformTargetAt(
         3, 7, false, cursor_paragraph, error));
-    assert(cursor_paragraph.original_text ==
-           "Second paragraph line one\nSecond paragraph line two");
-    assert(cursor_paragraph.start_row == 2);
+    assert(cursor_paragraph.original_text == "Second paragraph line two");
+    assert(cursor_paragraph.start_row == 3);
     assert(cursor_paragraph.end_row == 3);
 
     return 0;

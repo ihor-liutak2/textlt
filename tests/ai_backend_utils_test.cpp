@@ -204,6 +204,14 @@ class Handler(BaseHTTPRequestHandler):
         assert "[end of text]" in body.get("stop", [])
         assert "chat_template_kwargs" not in body
         text = " ".join(str(m.get("content", "")) for m in messages)
+        if "force-error" in text:
+            self.send_json(400, {
+                "error": {
+                    "message": "Prompt exceeds the available context size.",
+                    "type": "invalid_request_error"
+                }
+            })
+            return
         Handler.active_requests += 1
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
@@ -294,6 +302,15 @@ ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
     const textlt::AiBackendResult second = textlt::AiBackend(local_settings).Run(request);
     assert(second.success);
     assert(second.model_load_ms == 0.0);
+
+    textlt::AiPromptRequest rejected_request = request;
+    rejected_request.text = "force-error";
+    const textlt::AiBackendResult rejected =
+        textlt::AiBackend(local_settings).Run(rejected_request);
+    assert(!rejected.success);
+    assert(rejected.error.find("HTTP 400") != std::string::npos);
+    assert(rejected.error.find("Prompt exceeds the available context size") !=
+           std::string::npos);
     std::ifstream starts_input(starts_file);
     const std::string starts((std::istreambuf_iterator<char>(starts_input)),
                              std::istreambuf_iterator<char>());

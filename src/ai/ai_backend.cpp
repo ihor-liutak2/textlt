@@ -53,11 +53,81 @@ std::string JoinUrl(const std::string& base, const std::string& path) {
     return AiBackend::NormalizeServerUrl(base) + path;
 }
 
+std::string CompactErrorText(std::string value) {
+    std::string result;
+    bool previous_space = false;
+    for (unsigned char ch : value) {
+        const bool is_space = std::isspace(ch) != 0;
+        if (is_space) {
+            if (!result.empty() && !previous_space) {
+                result.push_back(' ');
+            }
+        } else {
+            result.push_back(static_cast<char>(ch));
+        }
+        previous_space = is_space;
+    }
+    return Trim(std::move(result));
+}
+
+std::string JsonErrorDetail(const Json& root) {
+    if (!root.is_object()) {
+        return {};
+    }
+    const auto error = root.find("error");
+    if (error != root.end()) {
+        if (error->is_string()) {
+            return error->get<std::string>();
+        }
+        if (error->is_object()) {
+            const std::string message = JsonString(*error, "message");
+            if (!message.empty()) {
+                return message;
+            }
+            const std::string detail = JsonString(*error, "detail");
+            if (!detail.empty()) {
+                return detail;
+            }
+            const std::string type = JsonString(*error, "type");
+            if (!type.empty()) {
+                return type;
+            }
+        }
+    }
+    const std::string message = JsonString(root, "message");
+    if (!message.empty()) {
+        return message;
+    }
+    return JsonString(root, "detail");
+}
+
+std::string HttpFailureMessage(
+    const RemoteHttpResponse& response,
+    const std::string& fallback) {
+    std::string detail = response.error;
+    if (detail.empty() && !response.body.empty()) {
+        const Json root = Json::parse(response.body, nullptr, false);
+        if (!root.is_discarded()) {
+            detail = JsonErrorDetail(root);
+        }
+    }
+    detail = CompactErrorText(std::move(detail));
+    if (response.status_code > 0) {
+        std::string message = "AI server returned HTTP " +
+            std::to_string(response.status_code);
+        if (!detail.empty()) {
+            message += ": " + detail;
+        } else {
+            message += ".";
+        }
+        return message;
+    }
+    return detail.empty() ? fallback : detail;
+}
+
 Json ParseJsonBody(const RemoteHttpResponse& response, std::string& error) {
     if (!response.ok) {
-        error = response.error.empty()
-            ? "AI server returned HTTP " + std::to_string(response.status_code) + "."
-            : response.error;
+        error = HttpFailureMessage(response, "AI server request failed.");
         return Json();
     }
     Json root = Json::parse(response.body, nullptr, false);
@@ -871,7 +941,7 @@ AiBackendResult AiBackend::RunOllama(
         return StoppedResult(AiProvider::Ollama);
     }
     if (!response.ok && !(stream_completed && !generated.empty())) {
-        result.error = response.error.empty() ? "Ollama request failed." : response.error;
+        result.error = HttpFailureMessage(response, "Ollama request failed.");
         result.finish_reason = result.error.find("timed out") != std::string::npos
             ? AiFinishReason::Timeout
             : AiFinishReason::Error;
@@ -999,9 +1069,8 @@ AiBackendResult AiBackend::RunOpenAiCompatible(
         return StoppedResult(AiProvider::OpenAiCompatible);
     }
     if (!response.ok && !(stream_completed && !generated.empty())) {
-        result.error = response.error.empty()
-            ? "OpenAI-compatible request failed."
-            : response.error;
+        result.error = HttpFailureMessage(
+            response, "OpenAI-compatible request failed.");
         result.finish_reason = result.error.find("timed out") != std::string::npos
             ? AiFinishReason::Timeout
             : AiFinishReason::Error;
