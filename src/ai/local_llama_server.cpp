@@ -11,7 +11,6 @@
 #include <utility>
 #include <vector>
 
-#include "ai/ai_model_catalog.hpp"
 #include "json_utils.hpp"
 #include "remote/remote_http_client.hpp"
 
@@ -82,9 +81,12 @@ int ClampThreads(int threads) {
     return static_cast<int>(std::min<unsigned int>(6, std::max<unsigned int>(2, available / 2)));
 }
 
-bool IsGpuCatalogModel(const std::string& filename) {
-    const BuiltInAiModel* model = FindBuiltInAiModel(filename);
-    return model && model->gpu_required;
+bool SameModelMetadata(
+    const LocalLlamaModelMetadata& left,
+    const LocalLlamaModelMetadata& right) {
+    return left.gpu_required == right.gpu_required &&
+        left.recommended_vram_mb == right.recommended_vram_mb &&
+        left.text_only == right.text_only;
 }
 
 struct GpuProbeResult {
@@ -261,11 +263,11 @@ std::string LocalLlamaServerManager::RuntimePath() const {
 }
 
 bool LocalLlamaServerManager::CheckModelHardware(
-    const std::string& model_filename,
+    const LocalLlamaModelMetadata& model_metadata,
     std::string& error,
     const std::atomic<bool>* cancel_requested,
     RemoteCommandControl* command_control) const {
-    if (!IsGpuCatalogModel(model_filename)) {
+    if (!model_metadata.gpu_required) {
         return true;
     }
     const std::filesystem::path server = FindServerBinary();
@@ -286,14 +288,18 @@ LocalLlamaServerSnapshot LocalLlamaServerManager::Snapshot() const {
     return snapshot_;
 }
 
-bool LocalLlamaServerManager::IsReadyFor(const std::string& model_filename) const {
+bool LocalLlamaServerManager::IsReadyFor(
+    const std::string& model_filename,
+    const LocalLlamaModelMetadata& model_metadata) const {
     std::lock_guard<std::mutex> lock(state_mutex_);
     return snapshot_.state == LocalLlamaServerState::Ready &&
-        snapshot_.model_filename == model_filename;
+        snapshot_.model_filename == model_filename &&
+        SameModelMetadata(snapshot_.model_metadata, model_metadata);
 }
 
 bool LocalLlamaServerManager::EnsureRunning(
     const std::string& model_filename,
+    const LocalLlamaModelMetadata& model_metadata,
     int threads,
     int startup_timeout_seconds,
     std::string& error,
@@ -302,17 +308,19 @@ bool LocalLlamaServerManager::EnsureRunning(
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         if (snapshot_.state == LocalLlamaServerState::Ready &&
-            snapshot_.model_filename == model_filename) {
+            snapshot_.model_filename == model_filename &&
+            SameModelMetadata(snapshot_.model_metadata, model_metadata)) {
             return true;
         }
     }
     StopLocked();
     return StartLocked(
-        model_filename, threads, startup_timeout_seconds, error, cancel_requested);
+        model_filename, model_metadata, threads, startup_timeout_seconds, error, cancel_requested);
 }
 
 bool LocalLlamaServerManager::Restart(
     const std::string& model_filename,
+    const LocalLlamaModelMetadata& model_metadata,
     int threads,
     int startup_timeout_seconds,
     std::string& error,
@@ -320,11 +328,12 @@ bool LocalLlamaServerManager::Restart(
     std::lock_guard<std::mutex> lifecycle_lock(lifecycle_mutex_);
     StopLocked();
     return StartLocked(
-        model_filename, threads, startup_timeout_seconds, error, cancel_requested);
+        model_filename, model_metadata, threads, startup_timeout_seconds, error, cancel_requested);
 }
 
 bool LocalLlamaServerManager::StartLocked(
     const std::string& model_filename,
+    const LocalLlamaModelMetadata& model_metadata,
     int threads,
     int startup_timeout_seconds,
     std::string& error,
@@ -347,7 +356,7 @@ bool LocalLlamaServerManager::StartLocked(
 
     server_control_.Reset();
     GpuProbeResult gpu;
-    if (IsGpuCatalogModel(model_filename)) {
+    if (model_metadata.gpu_required) {
         gpu = ProbeGpuDevice(server, cancel_requested, &server_control_);
         if (!gpu.available) {
             error = gpu.error;
@@ -370,8 +379,10 @@ bool LocalLlamaServerManager::StartLocked(
         "--threads-batch", std::to_string(thread_count),
         "--parallel", "1",
         "--jinja",
-        "--no-mmproj",
     };
+    if (model_metadata.text_only) {
+        arguments.push_back("--no-mmproj");
+    }
 
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
@@ -382,6 +393,7 @@ bool LocalLlamaServerManager::StartLocked(
         snapshot_.gpu_device = gpu.device;
         snapshot_.gpu_total_memory_mb = gpu.total_memory_mb;
         snapshot_.gpu_free_memory_mb = gpu.free_memory_mb;
+        snapshot_.model_metadata = model_metadata;
     }
 
     server_thread_ = std::thread([this, arguments] {
@@ -478,6 +490,7 @@ void LocalLlamaServerManager::StopLocked() {
     snapshot_.gpu_total_memory_mb = 0;
     snapshot_.gpu_free_memory_mb = 0;
     snapshot_.load_ms = 0.0;
+    snapshot_.model_metadata = {};
 }
 
 void LocalLlamaServerManager::Unload() {

@@ -55,6 +55,10 @@ struct AiModelInfo {
     bool gpu_required = false;
     int recommended_vram_mb = 0;
     std::string tier;
+    std::string model_url;
+    std::string description;
+    std::string format;
+    std::string purpose;
 };
 
 struct AiBackendResult {
@@ -107,6 +111,11 @@ public:
     static std::string NormalizeGeneratedText(std::string text);
     static int RecommendedMaxOutputTokens(const AiPromptRequest& request);
     static std::string FinishReasonLabel(AiFinishReason reason);
+    static std::vector<AiModelInfo> LoadManagedLocalModels(std::string* error = nullptr);
+    static bool FindManagedLocalModel(
+        const std::string& filename,
+        AiModelInfo* model,
+        std::string* error = nullptr);
 
 private:
     AiConnectionResult TryOllama(

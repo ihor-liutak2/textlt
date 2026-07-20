@@ -209,7 +209,6 @@ add_executable(textlt
   src/distraction_mode_controller.cpp
   src/config_manager.cpp
   src/ai/ai_backend.cpp
-  src/ai/ai_model_catalog.cpp
   src/ai/ai_prompts.cpp
   src/ai/local_llama_server.cpp
   src/curl_manager.cpp
@@ -372,11 +371,14 @@ add_executable(textlt_ai_prompts_test
 add_executable(textlt_ai_backend_utils_test
   tests/ai_backend_utils_test.cpp
   src/ai/ai_backend.cpp
-  src/ai/ai_model_catalog.cpp
   src/ai/ai_prompts.cpp
   src/ai/local_llama_server.cpp
   src/remote/remote_http_client.cpp
   src/remote/remote_command_runner.cpp
+)
+
+target_compile_definitions(textlt_ai_backend_utils_test PRIVATE
+  TEXTLT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
 
 add_executable(textlt_remote_command_runner_streaming_test

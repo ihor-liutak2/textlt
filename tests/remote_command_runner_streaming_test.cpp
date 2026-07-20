@@ -21,6 +21,18 @@ int main(int argc, char** argv) {
         }
         return 0;
     }
+    if (argc > 1 && std::string(argv[1]) == "--child-active-stream") {
+        for (int index = 0; index < 15; ++index) {
+            std::cout << "x" << std::flush;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        return 0;
+    }
+    if (argc > 1 && std::string(argv[1]) == "--child-stalled-stream") {
+        std::cout << "first" << std::flush;
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        return 0;
+    }
 
     textlt::RemoteCommandRunner runner;
     std::string streamed;
@@ -97,6 +109,29 @@ int main(int argc, char** argv) {
     assert(reused_control_result.exit_code == 0);
     assert(!reused_control_result.cancelled);
     assert(reused_control_result.output == "first second");
+
+    const textlt::RemoteCommandResult active_stream_result = runner.RunStreaming(
+        {argv[0], "--child-active-stream"},
+        {},
+        nullptr,
+        {},
+        textlt::RemoteCommandOptions{0, 100, true, 1});
+    assert(active_stream_result.exit_code == 0);
+    assert(!active_stream_result.timed_out);
+    assert(active_stream_result.output.size() == 15);
+
+    const auto idle_timeout_started = std::chrono::steady_clock::now();
+    const textlt::RemoteCommandResult idle_timeout_result = runner.RunStreaming(
+        {argv[0], "--child-stalled-stream"},
+        {},
+        nullptr,
+        {},
+        textlt::RemoteCommandOptions{0, 100, true, 1});
+    assert(idle_timeout_result.timed_out);
+    assert(idle_timeout_result.exit_code == 124);
+    assert(idle_timeout_result.error.find("without output") != std::string::npos);
+    assert(std::chrono::steady_clock::now() - idle_timeout_started <
+           std::chrono::seconds(3));
 
     const auto timeout_started = std::chrono::steady_clock::now();
     const textlt::RemoteCommandResult timeout_result = runner.RunStreaming(

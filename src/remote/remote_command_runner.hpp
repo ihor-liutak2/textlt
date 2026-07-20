@@ -22,6 +22,7 @@ struct RemoteCommandOptions {
     int timeout_seconds = 0;
     int terminate_grace_ms = 300;
     bool create_process_group = true;
+    int idle_timeout_seconds = 0;
 };
 
 class RemoteCommandControl {

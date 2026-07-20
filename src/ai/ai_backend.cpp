@@ -77,6 +77,80 @@ bool IsSafeLocalModelFilename(const std::string& filename) {
         path.filename() == path && filename != "." && filename != "..";
 }
 
+std::filesystem::path AiRegistryPath() {
+    return AiUserDataDirectory() / "registries" / "ollama_models_index.json";
+}
+
+bool LoadAiRegistryRoot(Json& root, std::string* error) {
+    const std::filesystem::path path = AiRegistryPath();
+    std::error_code fs_error;
+    if (!std::filesystem::is_regular_file(path, fs_error)) {
+        if (error) {
+            *error = "AI model registry is not downloaded.";
+        }
+        return false;
+    }
+    root = LoadJsonValue(path);
+    if (!root.is_object()) {
+        if (error) {
+            *error = "AI model registry is invalid.";
+        }
+        return false;
+    }
+    return true;
+}
+
+bool RegistryModelInfo(const Json& item, AiModelInfo& model) {
+    if (!item.is_object()) {
+        return false;
+    }
+    const std::string filename = JsonString(item, "filename");
+    const std::string id = JsonString(item, "id");
+    const std::string title = JsonString(item, "title");
+    const std::string backend = JsonString(item, "backend");
+    const std::string format = JsonString(item, "format");
+    const std::string purpose = JsonString(item, "purpose");
+    const std::string model_url = JsonString(item, "model_url");
+    const std::string description = JsonString(item, "description");
+    const std::string tier = JsonString(item, "tier");
+    const bool gpu_required = JsonBool(item, "gpu_required", false);
+    const int recommended_vram_mb = JsonInt(item, "recommended_vram_mb", -1);
+    if (!IsSafeLocalModelFilename(filename) || id.empty() || title.empty() ||
+        backend != "llama_cpp" || format != "gguf" || purpose.empty() ||
+        model_url.empty() || description.empty() || tier.empty() ||
+        recommended_vram_mb < 0 || (gpu_required && recommended_vram_mb == 0)) {
+        return false;
+    }
+
+    std::error_code fs_error;
+    const bool downloaded = std::filesystem::is_regular_file(
+        AiUserDataDirectory() / "ai" / "models" / filename, fs_error);
+    model.key = "local:" + filename;
+    model.id = id;
+    model.title = title;
+    model.provider_label = backend;
+    model.filename = filename;
+    model.source = AiModelSource::ManagedLocal;
+    model.available = downloaded && LocalLlamaServerManager::Instance().RuntimeAvailable();
+    model.downloaded = downloaded;
+    model.gpu_required = gpu_required;
+    model.recommended_vram_mb = recommended_vram_mb;
+    model.tier = tier;
+    model.model_url = model_url;
+    model.description = description;
+    model.format = format;
+    model.purpose = purpose;
+    return true;
+}
+
+LocalLlamaModelMetadata LocalModelMetadata(const AiModelInfo& model) {
+    LocalLlamaModelMetadata metadata;
+    metadata.gpu_required = model.gpu_required;
+    metadata.recommended_vram_mb = model.recommended_vram_mb;
+    metadata.text_only = model.purpose == "text";
+    return metadata;
+}
+
 bool EndsWithAsciiInsensitive(const std::string& value, const std::string& suffix) {
     if (value.size() < suffix.size()) {
         return false;
@@ -185,6 +259,7 @@ OllamaStreamEvent ParseOllamaStreamEvent(const std::string& line) {
 
 struct OpenAiStreamEvent {
     std::string content;
+    bool done = false;
     std::string finish_reason;
     std::string stop_type;
     int prompt_tokens = 0;
@@ -215,7 +290,11 @@ OpenAiStreamEvent ParseOpenAiStreamEvent(std::string line) {
         return event;
     }
     line = Trim(line.substr(prefix.size()));
-    if (line.empty() || line == "[DONE]") {
+    if (line.empty()) {
+        return event;
+    }
+    if (line == "[DONE]") {
+        event.done = true;
         return event;
     }
     const Json root = Json::parse(line, nullptr, false);
@@ -316,6 +395,58 @@ AiBackend::AiBackend(AiBackendSettings settings)
     if (settings_.timeout_seconds <= 0) {
         settings_.timeout_seconds = 120;
     }
+}
+
+std::vector<AiModelInfo> AiBackend::LoadManagedLocalModels(std::string* error) {
+    Json root;
+    if (!LoadAiRegistryRoot(root, error)) {
+        return {};
+    }
+    const auto models = root.find("models");
+    if (models == root.end() || !models->is_array()) {
+        if (error) {
+            *error = "AI model registry has no models array.";
+        }
+        return {};
+    }
+
+    std::vector<AiModelInfo> result;
+    for (const Json& item : *models) {
+        AiModelInfo model;
+        if (RegistryModelInfo(item, model)) {
+            result.push_back(std::move(model));
+        }
+    }
+    if (result.empty() && error) {
+        *error = "AI model registry contains no valid local models.";
+    }
+    return result;
+}
+
+bool AiBackend::FindManagedLocalModel(
+    const std::string& filename,
+    AiModelInfo* model,
+    std::string* error) {
+    if (!IsSafeLocalModelFilename(filename)) {
+        if (error) {
+            *error = "Selected local model filename is invalid.";
+        }
+        return false;
+    }
+    const std::vector<AiModelInfo> models = LoadManagedLocalModels(error);
+    const auto found = std::find_if(models.begin(), models.end(), [&](const AiModelInfo& item) {
+        return item.filename == filename;
+    });
+    if (found == models.end()) {
+        if (error && error->empty()) {
+            *error = "Selected local model is not present in the AI model registry.";
+        }
+        return false;
+    }
+    if (model) {
+        *model = *found;
+    }
+    return true;
 }
 
 AiProvider AiBackend::ProviderFromConfig(const std::string& value) {
@@ -467,6 +598,10 @@ AiConnectionResult AiBackend::TryOllama(
             false,
             0,
             {},
+            {},
+            {},
+            {},
+            {},
         });
     }
     result.success = true;
@@ -533,6 +668,10 @@ AiConnectionResult AiBackend::TryOpenAiCompatible(
             false,
             false,
             0,
+            {},
+            {},
+            {},
+            {},
             {},
         });
     }
@@ -601,39 +740,30 @@ AiConnectionResult AiBackend::CheckSelectedModelReady(
             result.error = "llama-server is not installed. Download a current llama.cpp runtime.";
             return result;
         }
-        if (!IsSafeLocalModelFilename(model_id)) {
-            result.error = "Selected local model filename is invalid.";
+        AiModelInfo registry_model;
+        std::string registry_error;
+        if (!FindManagedLocalModel(model_id, &registry_model, &registry_error)) {
+            result.error = registry_error.empty()
+                ? "Selected local model is not present in the AI model registry."
+                : registry_error;
             return result;
         }
-        std::error_code error;
-        const std::filesystem::path model_path =
-            AiUserDataDirectory() / "ai" / "models" / model_id;
-        if (!std::filesystem::is_regular_file(model_path, error)) {
+        if (!registry_model.downloaded) {
             result.error = "Selected local model is not downloaded: " + model_id;
             return result;
         }
+        const LocalLlamaModelMetadata metadata = LocalModelMetadata(registry_model);
         LocalLlamaServerManager& manager = LocalLlamaServerManager::Instance();
         std::string hardware_error;
-        if (!manager.IsReadyFor(model_id) &&
+        if (!manager.IsReadyFor(model_id, metadata) &&
             !manager.CheckModelHardware(
-                model_id, hardware_error, cancel_requested, command_control)) {
+                metadata, hardware_error, cancel_requested, command_control)) {
             result.error = hardware_error;
             return result;
         }
+        registry_model.available = true;
         result.success = true;
-        result.models = {{
-            "local:" + model_id,
-            model_id,
-            model_id,
-            "llama.cpp",
-            model_id,
-            AiModelSource::ManagedLocal,
-            true,
-            true,
-            false,
-            0,
-            {},
-        }};
+        result.models = {std::move(registry_model)};
         return result;
     }
 
@@ -688,6 +818,7 @@ AiBackendResult AiBackend::RunOllama(
     std::string line_buffer;
     std::string generated;
     std::string done_reason;
+    bool stream_completed = false;
     AiBackendResult result;
     result.provider = AiProvider::Ollama;
     auto last_progress_at = std::chrono::steady_clock::now() - std::chrono::seconds(1);
@@ -698,8 +829,11 @@ AiBackendResult AiBackend::RunOllama(
         result.prompt_ms = std::max(result.prompt_ms, event.prompt_ms);
         result.generation_ms = std::max(result.generation_ms, event.generation_ms);
         result.tokens_per_second = std::max(result.tokens_per_second, event.tokens_per_second);
-        if (event.done && !event.done_reason.empty()) {
-            done_reason = event.done_reason;
+        if (event.done) {
+            stream_completed = true;
+            if (!event.done_reason.empty()) {
+                done_reason = event.done_reason;
+            }
         }
         if (event.content.empty()) {
             return;
@@ -736,7 +870,7 @@ AiBackendResult AiBackend::RunOllama(
         (command_control && command_control->StopRequested())) {
         return StoppedResult(AiProvider::Ollama);
     }
-    if (!response.ok) {
+    if (!response.ok && !(stream_completed && !generated.empty())) {
         result.error = response.error.empty() ? "Ollama request failed." : response.error;
         result.finish_reason = result.error.find("timed out") != std::string::npos
             ? AiFinishReason::Timeout
@@ -809,11 +943,15 @@ AiBackendResult AiBackend::RunOpenAiCompatible(
     std::string generated;
     std::string finish_reason;
     std::string stop_type;
+    bool stream_completed = false;
     AiBackendResult result;
     result.provider = AiProvider::OpenAiCompatible;
     auto last_progress_at = std::chrono::steady_clock::now() - std::chrono::seconds(1);
     auto consume_line = [&](std::string line) {
         const OpenAiStreamEvent event = ParseOpenAiStreamEvent(std::move(line));
+        if (event.done || !event.finish_reason.empty()) {
+            stream_completed = true;
+        }
         if (!event.finish_reason.empty()) {
             finish_reason = event.finish_reason;
         }
@@ -860,7 +998,7 @@ AiBackendResult AiBackend::RunOpenAiCompatible(
         (command_control && command_control->StopRequested())) {
         return StoppedResult(AiProvider::OpenAiCompatible);
     }
-    if (!response.ok) {
+    if (!response.ok && !(stream_completed && !generated.empty())) {
         result.error = response.error.empty()
             ? "OpenAI-compatible request failed."
             : response.error;
@@ -913,11 +1051,22 @@ AiBackendResult AiBackend::RunLocalLlamaCpp(
         return StoppedResult(AiProvider::LocalLlamaCpp);
     }
 
+    AiModelInfo registry_model;
+    std::string registry_error;
+    if (!FindManagedLocalModel(filename, &registry_model, &registry_error)) {
+        return ErrorResult(
+            AiProvider::LocalLlamaCpp,
+            registry_error.empty()
+                ? "Selected local model is not present in the AI model registry."
+                : registry_error);
+    }
+    const LocalLlamaModelMetadata metadata = LocalModelMetadata(registry_model);
     LocalLlamaServerManager& manager = LocalLlamaServerManager::Instance();
-    const bool server_was_ready = manager.IsReadyFor(filename);
+    const bool server_was_ready = manager.IsReadyFor(filename, metadata);
     std::string start_error;
     if (!manager.EnsureRunning(
             filename,
+            metadata,
             settings_.local_threads > 0 ? settings_.local_threads : DefaultLocalThreadCount(),
             120,
             start_error,

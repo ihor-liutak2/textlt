@@ -112,6 +112,7 @@ std::string BuildCurlConfig(
     const std::filesystem::path* upload_file_path,
     const std::filesystem::path* body_file_path,
     int timeout_seconds,
+    bool streaming,
     std::string& error) {
     if (!ValidateCurlConfigValue("HTTP method", method, error) ||
         !ValidateCurlConfigValue("HTTP URL", url, error)) {
@@ -122,13 +123,19 @@ std::string BuildCurlConfig(
     config << "show-error\n";
     config << "location\n";
     config << "no-buffer\n";
-    config << "progress-bar\n";
+    if (streaming) {
+        config << "silent\n";
+    } else {
+        config << "progress-bar\n";
+    }
     config << "user-agent = " << CurlConfigQuote(kUserAgent) << "\n";
     config << "connect-timeout = " << kConnectTimeoutSeconds << "\n";
-    config << "speed-time = " << kProgressWindowSeconds << "\n";
-    config << "speed-limit = " << kIdleSpeedLimitBytesPerSecond << "\n";
-    if (timeout_seconds > 0) {
-        config << "max-time = " << timeout_seconds << "\n";
+    if (!streaming) {
+        config << "speed-time = " << kProgressWindowSeconds << "\n";
+        config << "speed-limit = " << kIdleSpeedLimitBytesPerSecond << "\n";
+        if (timeout_seconds > 0) {
+            config << "max-time = " << timeout_seconds << "\n";
+        }
     }
     config << "request = " << CurlConfigQuote(method.empty() ? "GET" : method) << "\n";
     config << "url = " << CurlConfigQuote(url) << "\n";
@@ -318,6 +325,7 @@ RemoteHttpResponse RemoteHttpClient::RunCurl(
         upload_file_path,
         body_path_ptr,
         timeout_seconds,
+        static_cast<bool>(on_body_chunk),
         config_error);
     if (!config_error.empty()) {
         response.error = config_error;
@@ -327,11 +335,15 @@ RemoteHttpResponse RemoteHttpClient::RunCurl(
         return response;
     }
 
+    const bool streaming = static_cast<bool>(on_body_chunk);
     RemoteCommandRunner runner;
-    RemoteCommandResult command_result = cancel_requested || on_body_chunk
+    RemoteCommandResult command_result = cancel_requested || streaming
         ? runner.RunStreaming(
               {"curl", "--config", "-"}, config, cancel_requested, std::move(on_body_chunk),
-              RemoteCommandOptions{timeout_seconds, 300, true}, command_control)
+              streaming
+                  ? RemoteCommandOptions{0, 300, true, timeout_seconds}
+                  : RemoteCommandOptions{timeout_seconds, 300, true, 0},
+              command_control)
         : runner.Run({"curl", "--config", "-"}, config);
     response.body = command_result.output;
     response.status_code = ExtractHttpStatus(response.body);

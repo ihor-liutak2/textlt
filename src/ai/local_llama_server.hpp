@@ -17,6 +17,12 @@ enum class LocalLlamaServerState {
     Failed,
 };
 
+struct LocalLlamaModelMetadata {
+    bool gpu_required = false;
+    int recommended_vram_mb = 0;
+    bool text_only = true;
+};
+
 struct LocalLlamaServerSnapshot {
     LocalLlamaServerState state = LocalLlamaServerState::Stopped;
     std::string model_filename;
@@ -26,6 +32,7 @@ struct LocalLlamaServerSnapshot {
     int gpu_total_memory_mb = 0;
     int gpu_free_memory_mb = 0;
     double load_ms = 0.0;
+    LocalLlamaModelMetadata model_metadata;
 };
 
 class LocalLlamaServerManager {
@@ -37,12 +44,14 @@ public:
 
     bool EnsureRunning(
         const std::string& model_filename,
+        const LocalLlamaModelMetadata& model_metadata,
         int threads,
         int startup_timeout_seconds,
         std::string& error,
         const std::atomic<bool>* cancel_requested = nullptr);
     bool Restart(
         const std::string& model_filename,
+        const LocalLlamaModelMetadata& model_metadata,
         int threads,
         int startup_timeout_seconds,
         std::string& error,
@@ -50,13 +59,15 @@ public:
     void Unload();
 
     LocalLlamaServerSnapshot Snapshot() const;
-    bool IsReadyFor(const std::string& model_filename) const;
+    bool IsReadyFor(
+        const std::string& model_filename,
+        const LocalLlamaModelMetadata& model_metadata) const;
     std::string BaseUrl() const;
     bool WaitUntilIdle(int timeout_milliseconds) const;
     bool RuntimeAvailable() const;
     std::string RuntimePath() const;
     bool CheckModelHardware(
-        const std::string& model_filename,
+        const LocalLlamaModelMetadata& model_metadata,
         std::string& error,
         const std::atomic<bool>* cancel_requested = nullptr,
         RemoteCommandControl* command_control = nullptr) const;
@@ -67,6 +78,7 @@ private:
 
     bool StartLocked(
         const std::string& model_filename,
+        const LocalLlamaModelMetadata& model_metadata,
         int threads,
         int startup_timeout_seconds,
         std::string& error,

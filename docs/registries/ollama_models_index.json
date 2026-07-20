@@ -69,7 +69,10 @@
       "recommended": true,
       "model_url": "https://huggingface.co/unsloth/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf",
       "filename": "gemma-3-1b-it-q4.gguf",
-      "description": "Default small multilingual model for translation, explanation, grammar fixing, summarization and text improvement."
+      "description": "Default small multilingual model for translation, explanation, grammar fixing, summarization and text improvement.",
+      "tier": "Lightweight",
+      "gpu_required": false,
+      "recommended_vram_mb": 0
     },
     {
       "id": "gemma-3-270m-it-q4",
@@ -80,7 +83,38 @@
       "recommended": true,
       "model_url": "https://huggingface.co/unsloth/gemma-3-270m-it-GGUF/resolve/main/gemma-3-270m-it-Q4_0.gguf",
       "filename": "gemma-3-270m-it-q4.gguf",
-      "description": "Small model for converting text-written formulas into calculator expressions. The model should not calculate results."
+      "description": "Small model for converting text-written formulas into calculator expressions. The model should not calculate results.",
+      "tier": "Formula",
+      "gpu_required": false,
+      "recommended_vram_mb": 0
+    },
+    {
+      "id": "gemma-3-4b-it-qat-q4_0",
+      "title": "Gemma 3 4B IT QAT Q4_0",
+      "backend": "llama_cpp",
+      "format": "gguf",
+      "purpose": "text",
+      "recommended": true,
+      "model_url": "https://huggingface.co/google/gemma-3-4b-it-qat-q4_0-gguf/resolve/15f73f5eee9c28f53afefef5723e29680c2fc78a/gemma-3-4b-it-q4_0.gguf?download=true",
+      "filename": "gemma-3-4b-it-q4_0.gguf",
+      "description": "Standard GPU model · 4 GB VRAM recommended · Text only. Official Google QAT Q4_0 GGUF pinned to the published model-file revision; a GPU-enabled llama.cpp runtime, Hugging Face license acceptance and HF_TOKEN may be required.",
+      "tier": "Standard",
+      "gpu_required": true,
+      "recommended_vram_mb": 4096
+    },
+    {
+      "id": "gemma-4-e2b-it-qat-q4_0",
+      "title": "Gemma 4 E2B IT QAT Q4_0",
+      "backend": "llama_cpp",
+      "format": "gguf",
+      "purpose": "text",
+      "recommended": false,
+      "model_url": "https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf/resolve/347eef722ec7f151f37d1ef0b5c7c77d8de4efcb/gemma-4-E2B_q4_0-it.gguf?download=true",
+      "filename": "gemma-4-E2B_q4_0-it.gguf",
+      "description": "Advanced GPU model · 6 GB VRAM recommended · Text only. Official Google validated QAT Q4_0 checkpoint with corrected vocabulary; a GPU-enabled llama.cpp runtime, Hugging Face license acceptance and HF_TOKEN may be required.",
+      "tier": "Advanced",
+      "gpu_required": true,
+      "recommended_vram_mb": 6144
     }
   ],
   "actions": [

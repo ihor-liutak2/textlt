@@ -300,7 +300,10 @@ RemoteCommandResult RemoteCommandRunner::RunStreaming(
     }
     options.timeout_seconds = std::max(0, options.timeout_seconds);
     options.terminate_grace_ms = std::max(0, options.terminate_grace_ms);
+    options.idle_timeout_seconds = std::max(0, options.idle_timeout_seconds);
     const auto started_at = std::chrono::steady_clock::now();
+    auto last_activity_at = started_at;
+    bool timed_out_for_inactivity = false;
 
 #ifdef _WIN32
     SECURITY_ATTRIBUTES security{};
@@ -404,11 +407,20 @@ RemoteCommandResult RemoteCommandRunner::RunStreaming(
     bool stop_started = false;
     auto stop_sent_at = std::chrono::steady_clock::time_point{};
     while (true) {
+        const size_t output_size_before = result.output.size();
+        const size_t error_size_before = result.error.size();
         DrainWindowsPipe(stdout_read, result.output, on_stdout);
         DrainWindowsPipe(stderr_read, result.error, {});
         const auto now = std::chrono::steady_clock::now();
-        const bool timeout = options.timeout_seconds > 0 &&
+        if (result.output.size() != output_size_before ||
+            result.error.size() != error_size_before) {
+            last_activity_at = now;
+        }
+        const bool absolute_timeout = options.timeout_seconds > 0 &&
             now - started_at >= std::chrono::seconds(options.timeout_seconds);
+        const bool idle_timeout = options.idle_timeout_seconds > 0 &&
+            now - last_activity_at >= std::chrono::seconds(options.idle_timeout_seconds);
+        const bool timeout = absolute_timeout || idle_timeout;
         const bool cancelled =
             (cancel_requested && cancel_requested->load()) ||
             (control && control->StopRequested());
@@ -416,6 +428,7 @@ RemoteCommandResult RemoteCommandRunner::RunStreaming(
             stop_started = true;
             stop_sent_at = now;
             result.timed_out = timeout;
+            timed_out_for_inactivity = idle_timeout && !absolute_timeout;
             result.cancelled = !timeout;
             if (control) {
                 control->RequestStop();
@@ -447,8 +460,13 @@ RemoteCommandResult RemoteCommandRunner::RunStreaming(
     }
     result.exit_code = result.timed_out ? 124 : (result.cancelled ? 130 : static_cast<int>(exit_code));
     if (result.timed_out) {
-        result.error = "Operation timed out after " +
-            std::to_string(options.timeout_seconds) + " seconds.";
+        const int seconds = timed_out_for_inactivity
+            ? options.idle_timeout_seconds
+            : options.timeout_seconds;
+        result.error = timed_out_for_inactivity
+            ? "Operation timed out after " + std::to_string(seconds) +
+                " seconds without output."
+            : "Operation timed out after " + std::to_string(seconds) + " seconds.";
     } else if (result.cancelled && result.error.empty()) {
         result.error = "Operation stopped.";
     }
@@ -580,12 +598,21 @@ RemoteCommandResult RemoteCommandRunner::RunStreaming(
             std::this_thread::sleep_for(std::chrono::milliseconds(40));
         }
 
+        const size_t output_size_before = result.output.size();
+        const size_t error_size_before = result.error.size();
         stdout_open = stdout_open && DrainPosixFd(stdout_pipe[0], result.output, on_stdout);
         stderr_open = stderr_open && DrainPosixFd(stderr_pipe[0], result.error, {});
 
         const auto now = std::chrono::steady_clock::now();
-        const bool timeout = options.timeout_seconds > 0 &&
+        if (result.output.size() != output_size_before ||
+            result.error.size() != error_size_before) {
+            last_activity_at = now;
+        }
+        const bool absolute_timeout = options.timeout_seconds > 0 &&
             now - started_at >= std::chrono::seconds(options.timeout_seconds);
+        const bool idle_timeout = options.idle_timeout_seconds > 0 &&
+            now - last_activity_at >= std::chrono::seconds(options.idle_timeout_seconds);
+        const bool timeout = absolute_timeout || idle_timeout;
         const bool cancelled =
             (cancel_requested && cancel_requested->load()) ||
             (control && control->StopRequested());
@@ -594,6 +621,7 @@ RemoteCommandResult RemoteCommandRunner::RunStreaming(
                 stop_started = true;
                 stop_sent_at = now;
                 result.timed_out = timeout;
+                timed_out_for_inactivity = idle_timeout && !absolute_timeout;
                 result.cancelled = !timeout;
                 if (control && !control->StopRequested()) {
                     control->RequestStop();
@@ -629,8 +657,13 @@ RemoteCommandResult RemoteCommandRunner::RunStreaming(
     result.exit_code = result.timed_out ? 124 :
         (result.cancelled ? 130 : DecodeSystemExitCode(wait_status));
     if (result.timed_out) {
-        result.error = "Operation timed out after " +
-            std::to_string(options.timeout_seconds) + " seconds.";
+        const int seconds = timed_out_for_inactivity
+            ? options.idle_timeout_seconds
+            : options.timeout_seconds;
+        result.error = timed_out_for_inactivity
+            ? "Operation timed out after " + std::to_string(seconds) +
+                " seconds without output."
+            : "Operation timed out after " + std::to_string(seconds) + " seconds.";
     } else if (result.cancelled && result.error.empty()) {
         result.error = "Operation stopped.";
     }

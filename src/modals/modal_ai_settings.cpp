@@ -12,7 +12,6 @@
 #include <archive.h>
 #include <archive_entry.h>
 
-#include "ai/ai_model_catalog.hpp"
 #include "ai/local_llama_server.hpp"
 #include "curl_manager.hpp"
 #include "ftxui/component/component_options.hpp"
@@ -299,106 +298,15 @@ bool DownloadFile(
     return true;
 }
 
-bool IsSafeModelFilename(const std::string& filename) {
-    if (filename.empty()) {
-        return false;
-    }
-    const std::filesystem::path path(filename);
-    return !path.is_absolute() && path.parent_path().empty() &&
-        path.filename() == path && filename != "." && filename != "..";
-}
-
 std::vector<AiModelInfo> LoadLocalModels(std::vector<std::string>* descriptions) {
-    std::vector<AiModelInfo> models;
-    Json root;
-    if (LoadUserRegistryJson(RegistryKind::Ai, &root) == RegistryLoadResult::Loaded) {
-        const auto items = root.find("models");
-        if (items != root.end() && items->is_array()) {
-            for (const Json& item : *items) {
-                if (!item.is_object()) {
-                    continue;
-                }
-                const std::string filename = JsonString(item, "filename");
-                if (!IsSafeModelFilename(filename)) {
-                    continue;
-                }
-                std::error_code error;
-                const bool downloaded = std::filesystem::exists(ModelsDirectory() / filename, error);
-                AiModelInfo model;
-                model.key = "local:" + filename;
-                model.id = JsonString(item, "id", filename);
-                model.title = JsonLabel(item, "title", "id");
-                model.provider_label = JsonString(item, "backend", "llama.cpp");
-                model.filename = filename;
-                model.source = AiModelSource::ManagedLocal;
-                model.available = downloaded && RuntimeBinaryExists();
-                model.downloaded = downloaded;
-                model.gpu_required = JsonBool(item, "gpu_required", false);
-                model.recommended_vram_mb = JsonInt(item, "recommended_vram_mb", 0);
-                model.tier = JsonString(item, "tier");
-                models.push_back(std::move(model));
-                if (descriptions) {
-                    descriptions->push_back(JsonString(item, "description"));
-                }
-            }
-        }
-    }
-    for (const BuiltInAiModel& built_in : BuiltInGpuModels()) {
-        const auto existing = std::find_if(models.begin(), models.end(), [&](const AiModelInfo& model) {
-            return model.filename == built_in.filename;
-        });
-        if (existing != models.end()) {
-            const size_t index = static_cast<size_t>(std::distance(models.begin(), existing));
-            existing->title = built_in.title;
-            existing->gpu_required = built_in.gpu_required;
-            existing->recommended_vram_mb = built_in.recommended_vram_mb;
-            existing->tier = built_in.tier;
-            if (descriptions && index < descriptions->size()) {
-                (*descriptions)[index] = built_in.description;
-            }
-            continue;
-        }
-        std::error_code error;
-        const bool downloaded = std::filesystem::exists(ModelsDirectory() / built_in.filename, error);
-        AiModelInfo model;
-        model.key = "local:" + built_in.filename;
-        model.id = built_in.id;
-        model.title = built_in.title;
-        model.provider_label = "llama.cpp";
-        model.filename = built_in.filename;
-        model.source = AiModelSource::ManagedLocal;
-        model.available = downloaded && RuntimeBinaryExists();
-        model.downloaded = downloaded;
-        model.gpu_required = built_in.gpu_required;
-        model.recommended_vram_mb = built_in.recommended_vram_mb;
-        model.tier = built_in.tier;
-        models.push_back(std::move(model));
-        if (descriptions) {
-            descriptions->push_back(built_in.description);
+    std::vector<AiModelInfo> models = AiBackend::LoadManagedLocalModels();
+    if (descriptions) {
+        descriptions->reserve(descriptions->size() + models.size());
+        for (const AiModelInfo& model : models) {
+            descriptions->push_back(model.description);
         }
     }
     return models;
-}
-
-bool FindRegistryModel(const std::string& filename, Json* selected) {
-    Json root;
-    if (LoadUserRegistryJson(RegistryKind::Ai, &root) != RegistryLoadResult::Loaded) {
-        return false;
-    }
-    const auto models = root.find("models");
-    if (models == root.end() || !models->is_array()) {
-        return false;
-    }
-    for (const Json& model : *models) {
-        if (model.is_object() && IsSafeModelFilename(filename) &&
-            JsonString(model, "filename") == filename) {
-            if (selected) {
-                *selected = model;
-            }
-            return true;
-        }
-    }
-    return false;
 }
 
 std::string ModelStatus(const AiModelInfo& model) {
@@ -556,16 +464,6 @@ void AiSettingsModalContent::LoadModels() {
         } else if (selected_key.rfind("openai:", 0) == 0) {
             placeholder.provider_label = "OpenAI-compatible";
             placeholder.source = AiModelSource::Server;
-            recognized_key = true;
-        } else if (selected_key.rfind("local:", 0) == 0 &&
-                   IsSafeModelFilename(placeholder.id)) {
-            placeholder.provider_label = "llama.cpp";
-            placeholder.filename = placeholder.id;
-            placeholder.source = AiModelSource::ManagedLocal;
-            std::error_code error;
-            placeholder.downloaded = std::filesystem::exists(
-                ModelsDirectory() / placeholder.filename, error);
-            placeholder.available = placeholder.downloaded && RuntimeBinaryExists();
             recognized_key = true;
         }
         if (recognized_key && !placeholder.title.empty()) {
@@ -826,13 +724,7 @@ void AiSettingsModalContent::DownloadSelectedModel() {
         status_ = "Server models are managed by the AI server, not downloaded by TextLT.";
         return;
     }
-    Json registry_model;
-    std::string url;
-    if (const BuiltInAiModel* built_in = FindBuiltInAiModel(selected.filename)) {
-        url = built_in->download_url;
-    } else if (FindRegistryModel(selected.filename, &registry_model)) {
-        url = JsonString(registry_model, "model_url");
-    }
+    const std::string url = selected.model_url;
     if (url.empty()) {
         std::lock_guard<std::mutex> lock(state_mutex_);
         status_ = "Selected model has no download URL.";
@@ -1035,8 +927,12 @@ void AiSettingsModalContent::StartOrRestartLocalModel() {
     }
     StartWorker([this, selected] {
         std::string error;
+        LocalLlamaModelMetadata metadata;
+        metadata.gpu_required = selected.gpu_required;
+        metadata.recommended_vram_mb = selected.recommended_vram_mb;
+        metadata.text_only = selected.purpose == "text";
         const bool ready = LocalLlamaServerManager::Instance().Restart(
-            selected.filename, 0, 120, error);
+            selected.filename, metadata, 0, 120, error);
         std::lock_guard<std::mutex> lock(state_mutex_);
         local_model_starting_ = false;
         pending_status_ = ready

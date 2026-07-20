@@ -12,9 +12,9 @@
 #endif
 
 #include "ai/ai_backend.hpp"
-#include "ai/ai_model_catalog.hpp"
 #include "ai/local_llama_server.hpp"
 #include "remote/remote_command_runner.hpp"
+#include "json_utils.hpp"
 
 int main() {
     using textlt::AiBackend;
@@ -46,20 +46,39 @@ int main() {
                "The literal [end of text] label remains inside the sentence.") ==
            "The literal [end of text] label remains inside the sentence.");
 
-    const auto& gpu_models = textlt::BuiltInGpuModels();
-    assert(gpu_models.size() == 2);
-    assert(gpu_models[0].filename == "gemma-3-4b-it-q4_0.gguf");
-    assert(gpu_models[0].tier == "Standard");
-    assert(gpu_models[0].recommended_vram_mb == 4096);
-    assert(gpu_models[0].download_url.find("15f73f5eee9c28f53afefef5723e29680c2fc78a") !=
-           std::string::npos);
-    assert(gpu_models[1].filename == "gemma-4-E2B_q4_0-it.gguf");
-    assert(gpu_models[1].tier == "Advanced");
-    assert(gpu_models[1].recommended_vram_mb == 6144);
-    assert(gpu_models[1].download_url.find("347eef722ec7f151f37d1ef0b5c7c77d8de4efcb") !=
-           std::string::npos);
-    assert(textlt::FindBuiltInAiModel(gpu_models[0].filename) == &gpu_models[0]);
-    assert(textlt::FindBuiltInAiModel("missing.gguf") == nullptr);
+    const std::filesystem::path source_registry =
+        std::filesystem::path(TEXTLT_SOURCE_DIR) / "docs" / "registries" /
+        "ollama_models_index.json";
+    const textlt::Json registry_document = textlt::LoadJsonValue(source_registry);
+    assert(registry_document.is_object());
+    const auto registry_models = registry_document.find("models");
+    assert(registry_models != registry_document.end());
+    assert(registry_models->is_array());
+    assert(registry_models->size() == 4);
+    assert(textlt::JsonString((*registry_models)[0], "id") ==
+           "gemma-3-1b-it-q4");
+    assert(textlt::JsonString((*registry_models)[0], "tier") == "Lightweight");
+    assert(!textlt::JsonBool((*registry_models)[0], "gpu_required", true));
+    assert(textlt::JsonInt((*registry_models)[0], "recommended_vram_mb", -1) == 0);
+    assert(textlt::JsonString((*registry_models)[1], "id") ==
+           "gemma-3-270m-it-q4");
+    assert(textlt::JsonString((*registry_models)[1], "tier") == "Formula");
+    assert(!textlt::JsonBool((*registry_models)[1], "gpu_required", true));
+    assert(textlt::JsonInt((*registry_models)[1], "recommended_vram_mb", -1) == 0);
+    assert(textlt::JsonString((*registry_models)[2], "id") ==
+           "gemma-3-4b-it-qat-q4_0");
+    assert(textlt::JsonString((*registry_models)[2], "filename") ==
+           "gemma-3-4b-it-q4_0.gguf");
+    assert(textlt::JsonInt((*registry_models)[2], "recommended_vram_mb", 0) == 4096);
+    assert(textlt::JsonString((*registry_models)[2], "tier") == "Standard");
+    assert(textlt::JsonBool((*registry_models)[2], "gpu_required", false));
+    assert(textlt::JsonString((*registry_models)[3], "id") ==
+           "gemma-4-e2b-it-qat-q4_0");
+    assert(textlt::JsonString((*registry_models)[3], "filename") ==
+           "gemma-4-E2B_q4_0-it.gguf");
+    assert(textlt::JsonInt((*registry_models)[3], "recommended_vram_mb", 0) == 6144);
+    assert(textlt::JsonString((*registry_models)[3], "tier") == "Advanced");
+    assert(textlt::JsonBool((*registry_models)[3], "gpu_required", false));
 
     textlt::AiPromptRequest request;
     request.text = "text";
@@ -85,8 +104,39 @@ int main() {
     const std::filesystem::path runtime_dir =
         test_root / "textlt" / "ai" / "runtimes" / "llama_cpp";
     const std::filesystem::path models_dir = test_root / "textlt" / "ai" / "models";
+    const std::filesystem::path registry_dir = test_root / "textlt" / "registries";
     std::filesystem::create_directories(runtime_dir);
     std::filesystem::create_directories(models_dir);
+    std::filesystem::create_directories(registry_dir);
+    textlt::Json user_registry = registry_document;
+    user_registry["models"].push_back(textlt::Json{
+        {"id", "test-model"},
+        {"title", "Test model"},
+        {"backend", "llama_cpp"},
+        {"format", "gguf"},
+        {"purpose", "text"},
+        {"model_url", "https://example.test/test.gguf"},
+        {"filename", "test.gguf"},
+        {"description", "Test-only local model."},
+        {"tier", "Test"},
+        {"gpu_required", false},
+        {"recommended_vram_mb", 0},
+    });
+    user_registry["models"].push_back(textlt::Json{
+        {"id", "slow-start-model"},
+        {"title", "Slow start model"},
+        {"backend", "llama_cpp"},
+        {"format", "gguf"},
+        {"purpose", "text"},
+        {"model_url", "https://example.test/slow-start.gguf"},
+        {"filename", "slow-start.gguf"},
+        {"description", "Test-only slow-start model."},
+        {"tier", "Test"},
+        {"gpu_required", false},
+        {"recommended_vram_mb", 0},
+    });
+    assert(textlt::WriteJsonAtomically(
+        registry_dir / "ollama_models_index.json", user_registry));
     const std::filesystem::path server_runtime = runtime_dir / "llama-server";
     const std::filesystem::path model = models_dir / "test.gguf";
     const std::filesystem::path starts_file = test_root / "starts.txt";
@@ -159,14 +209,21 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/event-stream")
         self.end_headers()
         chunks = ["Corrected ", "text. [end of text]"]
-        if "slow" in text:
+        if "active-stream" in text:
+            chunks = ["Active ", "response."]
+        elif "slow" in text:
             chunks = ["First ", "response."]
         try:
             for index, chunk in enumerate(chunks):
                 event = {"choices": [{"delta": {"content": chunk}, "finish_reason": None}]}
                 self.wfile.write(("data: " + json.dumps(event) + "\n\n").encode())
                 self.wfile.flush()
-                if "slow" in text and index == 0:
+                if "active-stream" in text and index == 0:
+                    for _ in range(15):
+                        time.sleep(0.1)
+                        self.wfile.write(b": keepalive\n\n")
+                        self.wfile.flush()
+                elif "slow" in text and index == 0:
                     for _ in range(200):
                         time.sleep(0.05)
                         self.wfile.write(b": keepalive\n\n")
@@ -194,6 +251,25 @@ ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
     setenv("XDG_DATA_HOME", test_root.c_str(), 1);
     setenv("TEXTLT_LLAMA_SERVER_PORT", port_text.c_str(), 1);
     setenv("TEXTLT_TEST_SERVER_STARTS", starts_file.c_str(), 1);
+
+    const textlt::LocalLlamaModelMetadata test_metadata{false, 0, true};
+    const textlt::LocalLlamaModelMetadata gpu_metadata{true, 4096, true};
+
+    std::string registry_error;
+    const std::vector<textlt::AiModelInfo> managed_models =
+        textlt::AiBackend::LoadManagedLocalModels(&registry_error);
+    assert(registry_error.empty());
+    assert(managed_models.size() == 6);
+    textlt::AiModelInfo managed_gpu_model;
+    assert(textlt::AiBackend::FindManagedLocalModel(
+        "gemma-3-4b-it-q4_0.gguf", &managed_gpu_model, &registry_error));
+    assert(managed_gpu_model.gpu_required);
+    assert(managed_gpu_model.recommended_vram_mb == 4096);
+    assert(managed_gpu_model.model_url.find("huggingface.co/google/gemma-3-4b") !=
+           std::string::npos);
+    assert(!textlt::AiBackend::FindManagedLocalModel(
+        "missing.gguf", nullptr, &registry_error));
+    assert(registry_error.find("not present") != std::string::npos);
 
     textlt::AiBackendSettings local_settings;
     local_settings.provider = AiProvider::LocalLlamaCpp;
@@ -223,6 +299,15 @@ ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
                              std::istreambuf_iterator<char>());
     assert(starts == "start\n");
 
+    textlt::AiBackendSettings active_stream_settings = local_settings;
+    active_stream_settings.timeout_seconds = 1;
+    textlt::AiPromptRequest active_stream_request = request;
+    active_stream_request.text = "active-stream";
+    const textlt::AiBackendResult active_stream =
+        textlt::AiBackend(active_stream_settings).Run(active_stream_request);
+    assert(active_stream.success);
+    assert(active_stream.text == "Active response.");
+
     textlt::AiPromptRequest slow_request = request;
     slow_request.text = "slow";
     textlt::RemoteCommandControl task_control;
@@ -248,14 +333,14 @@ ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
     request_thread.join();
     assert(!cancelled.success);
     assert(cancelled.finish_reason == textlt::AiFinishReason::Cancelled);
-    assert(textlt::LocalLlamaServerManager::Instance().IsReadyFor("test.gguf"));
+    assert(textlt::LocalLlamaServerManager::Instance().IsReadyFor("test.gguf", test_metadata));
 
     const textlt::AiBackendResult after_cancel =
         textlt::AiBackend(local_settings).Run(request);
     assert(after_cancel.success);
 
     textlt::LocalLlamaServerManager::Instance().Unload();
-    assert(!textlt::LocalLlamaServerManager::Instance().IsReadyFor("test.gguf"));
+    assert(!textlt::LocalLlamaServerManager::Instance().IsReadyFor("test.gguf", test_metadata));
 
     const std::filesystem::path gpu_model =
         models_dir / "gemma-3-4b-it-q4_0.gguf";
@@ -265,7 +350,7 @@ ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
     assert(textlt::AiBackend(gpu_settings).CheckSelectedModelReady().success);
     std::string gpu_start_error;
     assert(textlt::LocalLlamaServerManager::Instance().EnsureRunning(
-        gpu_model.filename().string(), 2, 5, gpu_start_error));
+        gpu_model.filename().string(), gpu_metadata, 2, 5, gpu_start_error));
     const textlt::LocalLlamaServerSnapshot gpu_snapshot =
         textlt::LocalLlamaServerManager::Instance().Snapshot();
     assert(gpu_snapshot.gpu_device.find("CUDA0") != std::string::npos);
@@ -280,7 +365,7 @@ ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
     assert(no_gpu_ready.error.find("no compatible GPU") != std::string::npos);
     std::string no_gpu_error;
     assert(!textlt::LocalLlamaServerManager::Instance().EnsureRunning(
-        gpu_model.filename().string(), 2, 5, no_gpu_error));
+        gpu_model.filename().string(), gpu_metadata, 2, 5, no_gpu_error));
     assert(no_gpu_error.find("no compatible GPU") != std::string::npos);
     unsetenv("TEXTLT_TEST_NO_GPU");
 
@@ -315,7 +400,7 @@ ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
     std::string slow_start_error;
     std::thread slow_start_thread([&] {
         slow_start_ready = textlt::LocalLlamaServerManager::Instance().EnsureRunning(
-            "slow-start.gguf", 2, 30, slow_start_error);
+            "slow-start.gguf", test_metadata, 2, 30, slow_start_error);
     });
     const auto starting_deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(2);
@@ -340,7 +425,7 @@ ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
     std::string cancelled_start_error;
     std::thread cancelled_start_thread([&] {
         cancelled_start_ready = textlt::LocalLlamaServerManager::Instance().EnsureRunning(
-            "slow-start.gguf", 2, 30, cancelled_start_error, &startup_cancel);
+            "slow-start.gguf", test_metadata, 2, 30, cancelled_start_error, &startup_cancel);
     });
     const auto cancelled_start_deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(2);
