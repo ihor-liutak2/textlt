@@ -24,26 +24,18 @@ include(FetchContent)
 
 FetchContent_Declare(ftxui
   GIT_REPOSITORY https://github.com/ArthurSonzogni/FTXUI.git
-  GIT_TAG v5.0.0
+  GIT_TAG v7.0.1
+  # Preserve Ctrl+H as a distinct event so it remains configurable instead of
+  # being normalized to Backspace by FTXUI's terminal input parser.
   PATCH_COMMAND
     ${CMAKE_COMMAND}
-      -DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/patches/ftxui-v5-shortcuts.patch
-      -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_patch_once.cmake
-    COMMAND
-      ${CMAKE_COMMAND}
-      -DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/patches/ftxui-v5-hidden-cursor.patch
-      -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_patch_once.cmake
-    COMMAND
-      ${CMAKE_COMMAND}
-      -DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/patches/ftxui-v5-italic.patch
+      -DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/patches/ftxui-v7-shortcuts.patch
       -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_patch_once.cmake
 )
 
 # Keep FTXUI's Windows workaround for cursor-position reports. Without it,
 # cursor replies can be interleaved with mouse events in Microsoft terminals,
-# corrupting clicks and leaking response text into the editor. The small FTXUI
-# patch above initializes the native cursor as hidden without disabling this
-# workaround; focused text inputs still opt into a visible cursor explicitly.
+# corrupting clicks and leaking response text into the editor.
 if(WIN32)
   set(FTXUI_MICROSOFT_TERMINAL_FALLBACK ON CACHE BOOL
       "Use FTXUI's Microsoft Terminal compatibility path" FORCE)

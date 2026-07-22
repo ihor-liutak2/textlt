@@ -494,7 +494,7 @@ ftxui::Element NotesWorkspaceComponent::RenderEditor() {
     return vbox({hbox({back, separator(), pin, separator(), group, filler(), trash}), title, toolbar, vbox(std::move(blocks)) | borderStyled(focus_ == FocusArea::Body ? HEAVY : LIGHT, focus_ == FocusArea::Body ? theme.modal_accent : theme.gutter) | frame | yflex, status}) | flex | bgcolor(theme.background);
 }
 
-ftxui::Element NotesWorkspaceComponent::Render() { using namespace ftxui; return hbox({RenderSidebar(), separator() | color((theme_ ? *theme_ : FallbackTheme()).gutter), editing_ ? RenderEditor() : RenderOverview()}) | flex; }
+ftxui::Element NotesWorkspaceComponent::OnRender() { using namespace ftxui; return hbox({RenderSidebar(), separator() | color((theme_ ? *theme_ : FallbackTheme()).gutter), editing_ ? RenderEditor() : RenderOverview()}) | flex; }
 
 std::string NotesWorkspaceComponent::StatusText() const { return save_status_; }
 

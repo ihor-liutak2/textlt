@@ -241,7 +241,7 @@ ftxui::Element TopBarRowComponent::RenderDistractionControls() {
     });
 }
 
-ftxui::Element TopBarRowComponent::Render() {
+ftxui::Element TopBarRowComponent::OnRender() {
     using namespace ftxui;
 
     const Theme& theme = ResolveTheme(theme_);

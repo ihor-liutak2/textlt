@@ -129,19 +129,19 @@ void ModalWindow::SetFooterButtons(std::vector<FooterButton> buttons) {
 }
 
 ftxui::Component ModalWindow::ActiveChild() {
-    if (children_.empty()) {
+    if (children().empty()) {
         return nullptr;
     }
-    active_child_index_ = std::min(active_child_index_, children_.size() - 1);
+    active_child_index_ = std::min(active_child_index_, children().size() - 1);
     if (!IsChildEnabled(active_child_index_)) {
         active_child_index_ = 0;
     }
-    return children_[active_child_index_];
+    return children()[active_child_index_];
 }
 
 void ModalWindow::SetActiveChild(ftxui::ComponentBase* child) {
-    for (size_t index = 0; index < children_.size(); ++index) {
-        if (children_[index].get() == child) {
+    for (size_t index = 0; index < children().size(); ++index) {
+        if (children()[index].get() == child) {
             active_child_index_ = index;
             return;
         }
@@ -162,11 +162,11 @@ bool ModalWindow::IsChildEnabled(size_t child_index) const {
 }
 
 void ModalWindow::MoveActionFocus(int delta) {
-    if (children_.size() <= 1) {
+    if (children().size() <= 1) {
         return;
     }
 
-    const size_t action_count = children_.size() - 1;
+    const size_t action_count = children().size() - 1;
     long long current = active_child_index_ == 0
         ? (delta > 0 ? -1 : 0)
         : static_cast<long long>(active_child_index_ - 1);
@@ -313,7 +313,7 @@ ModalFrameStyle ModalWindow::FrameStyle() const {
     return content_ ? content_->GetModalFrameStyle() : ModalFrameStyle::HeaderInsideBorder;
 }
 
-ftxui::Element ModalWindow::Render() {
+ftxui::Element ModalWindow::OnRender() {
     using namespace ftxui;
     const Theme& current_theme = theme_ ? *theme_ : FallbackTheme();
     const ModalFrameStyle frame_style = FrameStyle();

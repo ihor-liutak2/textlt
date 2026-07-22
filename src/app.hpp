@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "ftxui/component/component.hpp"
-#include "ftxui/component/screen_interactive.hpp"
+#include "ftxui/component/app.hpp"
 #include "ftxui/dom/elements.hpp"
 #include "app_command_registry.hpp"
 #include "app_event_dispatcher.hpp"
@@ -365,7 +365,7 @@ private:
     DistractionModeController distraction_controller_;
     std::vector<Theme> themes_;
     Theme current_theme_;
-    ftxui::ScreenInteractive screen_;
+    ftxui::App screen_;
     AppEventDispatcher app_event_dispatcher_;
     GitManager git_manager_;
     FileManager file_manager_;

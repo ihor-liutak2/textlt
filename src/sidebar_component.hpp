@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "ftxui/component/component.hpp"
+#include "ftxui/component/mouse.hpp"
 #include "ftxui/component/component_base.hpp"
 #include "ftxui/dom/elements.hpp"
 #include "git_manager.hpp"
@@ -66,7 +67,7 @@ public:
         ShortcutLabelProvider shortcut_label_provider,
         OpenNotesCallback on_open_notes);
 
-    ftxui::Element Render() override;
+    ftxui::Element OnRender() override;
     bool OnEvent(ftxui::Event event) override;
     bool Focusable() const override;
     void FocusMenu();

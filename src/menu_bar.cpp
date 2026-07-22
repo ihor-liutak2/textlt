@@ -200,7 +200,7 @@ void MenuBarComponent::RebuildDropdownComponents() {
 }
 
 
-ftxui::Element MenuBarComponent::Render() {
+ftxui::Element MenuBarComponent::OnRender() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
@@ -291,7 +291,7 @@ bool MenuBarComponent::OnEvent(ftxui::Event event) {
 
         if (top_menu_->OnEvent(event)) {
             if (mouse.button == ftxui::Mouse::Left &&
-                mouse.motion == ftxui::Mouse::Released) {
+                mouse.motion == ftxui::Mouse::Pressed) {
                 OpenDropdown(selected_menu_item_);
             }
             return true;
@@ -315,7 +315,7 @@ bool MenuBarComponent::OnEvent(ftxui::Event event) {
         return false;
     }
     if (mouse.button == ftxui::Mouse::Left &&
-        mouse.motion == ftxui::Mouse::Released &&
+        mouse.motion == ftxui::Mouse::Pressed &&
         active_dropdown_ < 0) {
         OpenDropdown(selected_menu_item_);
     }

@@ -382,7 +382,7 @@ bool KeyboardShortcutsModalContent::HandleEvent(ftxui::Event event) {
 }
 
 bool KeyboardShortcutsModalContent::RecordCapturedShortcutEvent(const ftxui::Event& event) {
-    if (event.is_mouse() || event.is_cursor_reporting()) {
+    if (event.is_mouse() || event.is_cursor_position()) {
         return false;
     }
 

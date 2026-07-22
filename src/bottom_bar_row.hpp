@@ -30,7 +30,7 @@ public:
 
     BottomBarRowComponent(const Theme* theme, Callbacks callbacks);
 
-    ftxui::Element Render() override;
+    ftxui::Element OnRender() override;
     bool OnEvent(ftxui::Event event) override;
     bool Focusable() const override;
 

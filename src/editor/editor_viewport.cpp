@@ -521,7 +521,7 @@ bool EditorViewport::HandleMouseEvent(
         return true;
     }
 
-    if (is_dragging_scrollbar && mouse.motion == ftxui::Mouse::Pressed) {
+    if (is_dragging_scrollbar && mouse.motion == ftxui::Mouse::Moved) {
         drag_scrollbar_to_y(mouse.y);
         return true;
     }
@@ -631,8 +631,7 @@ bool EditorViewport::HandleMouseEvent(
 
     if (mouse_selecting &&
         inside_editor &&
-        mouse.motion != ftxui::Mouse::Pressed &&
-        mouse.motion != ftxui::Mouse::Released) {
+        mouse.motion == ftxui::Mouse::Moved) {
         const auto [clicked_row, clicked_col] = PositionAtMouse(session, config, mouse);
         if (session.CursorRow() != clicked_row || session.CursorCol() != clicked_col) {
             session.SetSelectionActive(true);
@@ -643,7 +642,7 @@ bool EditorViewport::HandleMouseEvent(
         return true;
     }
 
-    if (inside_editor && mouse.motion != ftxui::Mouse::Pressed && mouse.motion != ftxui::Mouse::Released) {
+    if (inside_editor && mouse.motion == ftxui::Mouse::Moved) {
         return true;
     }
 

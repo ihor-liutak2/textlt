@@ -62,7 +62,7 @@
         }
     }
 
-    ftxui::Element EditorComponent::Render() {
+    ftxui::Element EditorComponent::OnRender() {
         EditorCursorState* previous = BindViewportCursorState();
         ftxui::Element element = RenderViewport();
         if (session_) {

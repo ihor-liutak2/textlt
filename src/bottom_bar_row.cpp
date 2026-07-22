@@ -86,7 +86,7 @@ ftxui::Element BottomBarRowComponent::SegmentText(
     return element;
 }
 
-ftxui::Element BottomBarRowComponent::Render() {
+ftxui::Element BottomBarRowComponent::OnRender() {
     using namespace ftxui;
 
     const Theme& theme = ResolveTheme(theme_);

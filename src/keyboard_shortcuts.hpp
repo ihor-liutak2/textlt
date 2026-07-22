@@ -79,7 +79,7 @@ inline std::string UkrainianUpperKeyForUsKey(char key) {
 }
 
 inline bool MatchesPlainShortcutKey(const ftxui::Event& event, char us_key) {
-    if (event.is_mouse() || event.is_cursor_reporting()) {
+    if (event.is_mouse() || event.is_cursor_position()) {
         return false;
     }
 

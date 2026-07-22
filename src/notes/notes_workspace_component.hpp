@@ -28,7 +28,7 @@ public:
         ClipboardReadCallback read_clipboard,
         ClipboardWriteCallback write_clipboard,
         std::filesystem::path root = {});
-    ftxui::Element Render() override;
+    ftxui::Element OnRender() override;
     bool OnEvent(ftxui::Event event) override;
     bool Focusable() const override { return true; }
     void Open();

@@ -156,7 +156,7 @@ bool HasMultipleUtf8Codepoints(const std::string& input) {
 }
 
 bool IsPrintableRawTextInput(const ftxui::Event& event) {
-    if (event.is_character() || event.is_mouse() || event.is_cursor_reporting()) {
+    if (event.is_character() || event.is_mouse() || event.is_cursor_position()) {
         return false;
     }
 

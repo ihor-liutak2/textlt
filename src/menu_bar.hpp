@@ -19,7 +19,7 @@ public:
         ActionCallback on_action,
         const Theme* theme = nullptr);
 
-    ftxui::Element Render() override;
+    ftxui::Element OnRender() override;
     ftxui::Element RenderDropdown();
     bool OnEvent(ftxui::Event event) override;
     bool Focusable() const override { return true; }

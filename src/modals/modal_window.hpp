@@ -34,7 +34,7 @@ public:
     ModalWindow(std::shared_ptr<IModalContent> content, const Theme* theme, OnCloseCallback on_close);
 
     // ComponentBase overrides
-    ftxui::Element Render() override;
+    ftxui::Element OnRender() override;
     bool OnEvent(ftxui::Event event) override;
     bool Focusable() const override { return true; }
 

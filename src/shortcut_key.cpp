@@ -348,7 +348,7 @@ bool ShortcutKeysEqual(const ShortcutKey& left, const ShortcutKey& right) {
 }
 
 bool ShortcutKeyMatchesEvent(const ShortcutKey& shortcut, const ftxui::Event& event) {
-    if (shortcut.empty() || event.is_mouse() || event.is_cursor_reporting()) {
+    if (shortcut.empty() || event.is_mouse() || event.is_cursor_position()) {
         return false;
     }
 

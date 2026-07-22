@@ -78,7 +78,7 @@ SidebarPanel::SidebarPanel(
     RebuildEntries();
 }
 
-ftxui::Element SidebarPanel::Render() {
+ftxui::Element SidebarPanel::OnRender() {
     using namespace ftxui;
 
     if (git_manager_) {
