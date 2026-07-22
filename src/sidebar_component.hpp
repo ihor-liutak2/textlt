@@ -49,6 +49,7 @@ public:
     using OpenFilesModalCallback = std::function<void()>;
     using CopyPathCallback = std::function<void(const std::filesystem::path&)>;
     using ShortcutLabelProvider = std::function<std::string(const std::string& command_id)>;
+    using OpenNotesCallback = std::function<void()>;
 
     SidebarPanel(
         FileOpenCallback on_file_open,
@@ -62,7 +63,8 @@ public:
         CloseAllOpenedFilesCallback on_close_all_opened_files,
         OpenFilesModalCallback on_open_files_modal,
         CopyPathCallback on_copy_path,
-        ShortcutLabelProvider shortcut_label_provider);
+        ShortcutLabelProvider shortcut_label_provider,
+        OpenNotesCallback on_open_notes);
 
     ftxui::Element Render() override;
     bool OnEvent(ftxui::Event event) override;
@@ -176,6 +178,7 @@ private:
     OpenFilesModalCallback on_open_files_modal_;
     CopyPathCallback on_copy_path_;
     ShortcutLabelProvider shortcut_label_provider_;
+    OpenNotesCallback on_open_notes_;
     std::filesystem::path current_path_;
     std::vector<OpenedFileEntry> opened_files_;
     size_t active_opened_file_index_ = 0;
@@ -190,6 +193,7 @@ private:
     ftxui::Box opened_tab_box_;
     ftxui::Box project_tab_box_;
     ftxui::Box favorites_tab_box_;
+    ftxui::Box notes_tab_box_;
     ftxui::Box action_primary_box_;
     ftxui::Box action_secondary_box_;
     ftxui::Box panel_box_;

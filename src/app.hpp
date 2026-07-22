@@ -50,6 +50,7 @@
 #include "modals/unsaved_changes_dialog.hpp"
 #include "file_manager.hpp"
 #include "layout_controller.hpp"
+#include "notes/notes_workspace_component.hpp"
 
 namespace textlt {
 
@@ -62,6 +63,11 @@ public:
     void Run();
 
 private:
+    enum class WorkspaceMode {
+        Documents,
+        Notes,
+    };
+
     enum class SearchMode {
         None,
         Find,
@@ -271,6 +277,9 @@ private:
     void ShowOpenedFilesSidebar();
     void ShowProjectSidebar();
     void ShowFavoritesSidebar();
+    void ToggleNotesWorkspace();
+    void ShowNotesWorkspace();
+    void ShowDocumentsWorkspace();
     void ToggleSidebarOpenedProject();
     void CopySidebarSelectedPath();
     void RefreshFindMatches();
@@ -330,6 +339,18 @@ private:
     void CommandDistractionPreviousPage();
     void CommandDistractionGoToPage();
 
+    void CommandNotesToggle();
+    void CommandNotesNew();
+    void CommandNotesBold();
+    void CommandNotesItalic();
+    void CommandNotesUnderline();
+    void CommandNotesStrikethrough();
+    void CommandNotesClearFormatting();
+    void CommandNotesParagraph();
+    void CommandNotesBulletList();
+    void CommandNotesNumberedList();
+    void CommandNotesChecklist();
+
     void CommandTtsPlay();
     void CommandTtsPause();
     void CommandTtsStop();
@@ -361,6 +382,7 @@ private:
     ftxui::Component editor_workspace_three_;
     ftxui::Component editor_workspace_container_;
     ftxui::Component sidebar_panel_;
+    ftxui::Component notes_workspace_component_;
     HelpDialog help_dialog_;
     KeyboardShortcutsModal keyboard_shortcuts_modal_;
     SidebarShortcutModal sidebar_shortcuts_modal_;
@@ -403,6 +425,8 @@ private:
     NavigationPopupMode navigation_popup_mode_ = NavigationPopupMode::GoToLine;
     bool exit_after_save_as_ = false;
     bool terminal_bracketed_paste_active_ = false;
+    WorkspaceMode workspace_mode_ = WorkspaceMode::Documents;
+    int workspace_mode_index_ = static_cast<int>(WorkspaceMode::Documents);
     SearchMode current_search_mode_ = SearchMode::None;
     SearchPanelInput active_search_panel_input_ = SearchPanelInput::Find;
     std::string terminal_bracketed_paste_buffer_;

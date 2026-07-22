@@ -47,6 +47,12 @@ BottomBarRowState TextltApp::CurrentBottomBarRowState() {
     state.line_ending = editor ? editor->ActiveLineEndingLabel() : "LF";
     state.theme_name = current_theme_.name;
 
+    if (workspace_mode_ == WorkspaceMode::Notes) {
+        state.line_ending = "NOTE";
+        state.git_branch = "Notes";
+        return state;
+    }
+
     const std::string file_path = editor ? editor->CurrentFilePath() : std::string();
     const auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
     const std::filesystem::path git_workspace = editor_config_.show_file_explorer && sidebar
@@ -75,7 +81,9 @@ ftxui::Element TextltApp::Render() {
         ? editor_workspace_container_->Render() | xflex
         : text_editor_->Render() | xflex;
 
-    Element workspace = !distraction_mode && editor_config_.show_file_explorer
+    Element workspace = workspace_mode_ == WorkspaceMode::Notes && notes_workspace_component_
+        ? notes_workspace_component_->Render() | flex
+        : !distraction_mode && editor_config_.show_file_explorer
         ? hbox({
               sidebar_panel_->Render() | size(WIDTH, EQUAL, 28),
               separator() | color(MainWindowSeparatorColor(current_theme_)),

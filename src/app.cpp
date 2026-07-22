@@ -129,7 +129,8 @@ TextltApp::TextltApp()
           },
           [this](const std::string& command_id) {
               return shortcut_registry_.EffectiveShortcut(ShortcutContext::Menu, command_id);
-          })),
+          },
+          [this] { ShowNotesWorkspace(); })),
       help_dialog_(&current_theme_),
       keyboard_shortcuts_modal_(
           &current_theme_,
@@ -380,6 +381,16 @@ TextltApp::TextltApp()
     InitializeTextShortcuts();
     shortcut_registry_.SetOverrides(shortcut_store_.Load());
 
+    notes_workspace_component_ = ftxui::Make<notes::NotesWorkspaceComponent>(
+        &current_theme_,
+        [this](const std::string& message) {
+            active_action_ = message;
+            screen_.PostEvent(ftxui::Event::Custom);
+        },
+        [this] { ShowDocumentsWorkspace(); },
+        [this] { return clipboard_controller_.ReadText(); },
+        [this](const std::string& text) { clipboard_controller_.WriteText(text); });
+
     top_bar_row_ = ftxui::Make<TopBarRowComponent>(
         &current_theme_,
         TopBarRowComponent::Callbacks{
@@ -429,10 +440,14 @@ TextltApp::TextltApp()
     UpdateFileMenuLabels();
     UpdateOptionsMenuLabels();
 
-    auto body_content = ftxui::Container::Horizontal({
+    auto documents_body = ftxui::Container::Horizontal({
         sidebar_panel_,
         editor_workspace_container_,
     });
+    auto body_content = ftxui::Container::Tab({
+        documents_body,
+        notes_workspace_component_,
+    }, &workspace_mode_index_);
     body_container_ = ftxui::CatchEvent(body_content, [this](ftxui::Event event) {
         return app_event_dispatcher_.HandleBodyEvent(event);
     });
@@ -630,6 +645,10 @@ void TextltApp::Run() {
     screen_.ForceHandleCtrlC(false);
     BracketedPasteModeGuard bracketed_paste_mode_guard;
     screen_.Loop(global_shortcuts_);
+    if (notes_workspace_component_) {
+        std::string error;
+        std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_)->Save(error);
+    }
     PersistOpenedSessions();
 }
 } // namespace textlt

@@ -114,6 +114,15 @@ void TextltApp::CommandFileCloseAll() {
 
 
 void TextltApp::CommandFileSave() {
+    if (workspace_mode_ == WorkspaceMode::Notes) {
+        std::string error;
+        auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_);
+        if (!notes->Save(error) && !error.empty()) {
+            active_action_ = "Notes save failed: " + error;
+        }
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
     SaveCurrentFile();
     screen_.PostEvent(ftxui::Event::Custom);
 }

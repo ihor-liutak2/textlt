@@ -30,6 +30,7 @@ SidebarShortcutModalContent::SidebarShortcutModalContent(
           {'O', "Opened files (Sidebar)", "sidebar.show_opened_files"},
           {'F', "Favorites (Sidebar)", "sidebar.show_favorites"},
           {'P', "Project (Sidebar)", "sidebar.show_project"},
+          {'N', "Notes view", "notes.toggle"},
           {'M', "File manager", "file.files"},
           {'S', "Search in files", "search.files"},
           {'T', "Text processors", "text_processors.open"},
@@ -146,7 +147,7 @@ void SidebarShortcutModal::Open() {
         modal_->SetTheme(theme_);
         modal_->SetHeaderCloseVisible(false);
         modal_->SetFooterVisible(false);
-        modal_->SetModalSize(34, 12);
+        modal_->SetModalSize(34, 13);
     }
 }
 

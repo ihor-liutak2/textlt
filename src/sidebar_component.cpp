@@ -55,7 +55,8 @@ SidebarPanel::SidebarPanel(
     CloseAllOpenedFilesCallback on_close_all_opened_files,
     OpenFilesModalCallback on_open_files_modal,
     CopyPathCallback on_copy_path,
-    ShortcutLabelProvider shortcut_label_provider)
+    ShortcutLabelProvider shortcut_label_provider,
+    OpenNotesCallback on_open_notes)
     : on_file_open_(std::move(on_file_open)),
       on_opened_file_select_(std::move(on_opened_file_select)),
       theme_(theme),
@@ -68,6 +69,7 @@ SidebarPanel::SidebarPanel(
       on_open_files_modal_(std::move(on_open_files_modal)),
       on_copy_path_(std::move(on_copy_path)),
       shortcut_label_provider_(std::move(shortcut_label_provider)),
+      on_open_notes_(std::move(on_open_notes)),
       current_path_(std::filesystem::current_path()) {
     ftxui::MenuOption option = ftxui::MenuOption::Vertical();
     option.on_enter = [this] { OpenSelectedEntry(); };
@@ -125,8 +127,10 @@ ftxui::Element SidebarPanel::Render() {
         }),
         hbox({
             RenderModeButton("Opened", SidebarMode::Opened, opened_tab_box_),
-            filler(),
-            text(" " + ActiveShortcutLabel() + " ") | color(theme.gutter),
+            text(" "),
+            text(" Notes ") |
+                color(theme.foreground) |
+                reflect(notes_tab_box_),
         }),
         RenderActionRow(),
         separator() | color(SidebarBorderColor(theme)),
@@ -137,6 +141,15 @@ ftxui::Element SidebarPanel::Render() {
 }
 
 bool SidebarPanel::OnEvent(ftxui::Event event) {
+    if (event.is_mouse() &&
+        event.mouse().button == ftxui::Mouse::Left &&
+        event.mouse().motion == ftxui::Mouse::Pressed &&
+        notes_tab_box_.Contain(event.mouse().x, event.mouse().y)) {
+        if (on_open_notes_) {
+            on_open_notes_();
+        }
+        return true;
+    }
     if (event == ftxui::Event::ArrowDown) {
         if (selected_entry_ + 1 < static_cast<int>(entry_labels_.size())) {
             ++selected_entry_;

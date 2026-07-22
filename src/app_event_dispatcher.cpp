@@ -65,6 +65,9 @@ bool AppEventDispatcher::Handle(ftxui::Event event) {
 }
 
 bool AppEventDispatcher::HandleBodyEvent(ftxui::Event event) {
+    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Notes) {
+        return false;
+    }
     if (IsPrimaryMousePress(event) && app_.ActiveLayer() == TextltApp::UiLayer::Main) {
         auto sidebar = std::static_pointer_cast<SidebarPanel>(app_.sidebar_panel_);
         const bool distraction_mode = app_.layout_controller_.IsDistractionModeActive();
@@ -232,6 +235,16 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
         return event.is_mouse() ? false : app_.menu_bar_->OnEvent(event);
     }
 
+    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Notes) {
+        if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'n')) {
+            return app_.RunCommand("notes.toggle");
+        }
+        if (app_.notes_workspace_component_ && app_.notes_workspace_component_->OnEvent(event)) {
+            app_.screen_.PostEvent(ftxui::Event::Custom);
+            return true;
+        }
+    }
+
     // Mouse input on the main screen is routed exclusively by FTXUI through
     // root_container_. Manual dispatch here competes with Container hit-testing
     // and can consume a menu click before it reaches MenuBarComponent.
@@ -240,11 +253,17 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
     }
 
     if (IsAltRightShortcut(event)) {
+        if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Notes) {
+            return false;
+        }
         app_.FocusNextEditorPane();
         return true;
     }
 
     if (IsAltLeftShortcut(event)) {
+        if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Notes) {
+            return false;
+        }
         app_.FocusPreviousEditorPane();
         return true;
     }

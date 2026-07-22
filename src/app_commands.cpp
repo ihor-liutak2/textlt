@@ -74,6 +74,17 @@ void TextltApp::InitializeCommands() {
     add("sidebar.show_opened_files", "Opened Files Sidebar", "Options", "", [this] { ShowOpenedFilesSidebar(); });
     add("sidebar.toggle_opened_project", "Toggle File Explorer Tab", "Options", "", [this] { ToggleSidebarOpenedProject(); });
     add("sidebar.copy_selected_path", "Copy Selected Project Path", "Options", "", [this] { CopySidebarSelectedPath(); });
+    add("notes.toggle", "Notes View", "Notes", "Ctrl+N", [this] { CommandNotesToggle(); });
+    add("notes.new", "New Note", "Notes", "", [this] { CommandNotesNew(); });
+    add("notes.bold", "Bold", "Notes", "", [this] { CommandNotesBold(); });
+    add("notes.italic", "Italic", "Notes", "", [this] { CommandNotesItalic(); });
+    add("notes.underline", "Underline", "Notes", "", [this] { CommandNotesUnderline(); });
+    add("notes.strikethrough", "Strikethrough", "Notes", "", [this] { CommandNotesStrikethrough(); });
+    add("notes.clear_formatting", "Clear Formatting", "Notes", "", [this] { CommandNotesClearFormatting(); });
+    add("notes.paragraph", "Paragraph", "Notes", "", [this] { CommandNotesParagraph(); });
+    add("notes.bullet_list", "Bulleted List", "Notes", "", [this] { CommandNotesBulletList(); });
+    add("notes.numbered_list", "Numbered List", "Notes", "", [this] { CommandNotesNumberedList(); });
+    add("notes.checklist", "Checklist", "Notes", "", [this] { CommandNotesChecklist(); });
     add("editor.toggle_smart_word_wrap", "Toggle Smart Word Wrap", "Options", "", [this] { CommandEditorToggleSmartWordWrap(); });
     add("editor.toggle_syntax_highlighting", "Toggle Syntax Highlighting", "Options", "", [this] { CommandEditorToggleSyntaxHighlighting(); });
     add("editor.toggle_auto_pairing", "Toggle Auto Pairing", "Options", "", [this] { CommandEditorToggleAutoPairing(); });
@@ -161,6 +172,38 @@ bool TextltApp::RunTextShortcut(ftxui::Event event) {
 }
 
 bool TextltApp::RunCommand(const std::string& command_id) {
+    if (workspace_mode_ == WorkspaceMode::Notes) {
+        const std::pair<const char*, const char*> note_edit_commands[] = {
+            {"edit.undo", "Ctrl+Z"},
+            {"edit.redo", "Ctrl+Y"},
+            {"edit.select_all", "Ctrl+A"},
+            {"edit.cut", "Ctrl+X"},
+            {"edit.copy", "Ctrl+C"},
+            {"edit.paste", "Ctrl+V"},
+        };
+        for (const auto& mapping : note_edit_commands) {
+            if (command_id == mapping.first) {
+                if (notes_workspace_component_) {
+                    notes_workspace_component_->OnEvent(ftxui::Event::Special(mapping.second));
+                }
+                CloseDropdown();
+                screen_.PostEvent(ftxui::Event::Custom);
+                return true;
+            }
+        }
+
+        const bool allowed = command_id.rfind("notes.", 0) == 0 ||
+            command_id.rfind("app.", 0) == 0 ||
+            command_id == "file.save" ||
+            command_id == "theme.open";
+        if (!allowed) {
+            active_action_ = "This command is unavailable in Notes view";
+            CloseDropdown();
+            screen_.PostEvent(ftxui::Event::Custom);
+            return true;
+        }
+    }
+
     if (command_registry_.Run(command_id)) {
         return true;
     }

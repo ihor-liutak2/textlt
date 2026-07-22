@@ -33,6 +33,10 @@ FetchContent_Declare(ftxui
       ${CMAKE_COMMAND}
       -DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/patches/ftxui-v5-hidden-cursor.patch
       -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_patch_once.cmake
+    COMMAND
+      ${CMAKE_COMMAND}
+      -DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/patches/ftxui-v5-italic.patch
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_patch_once.cmake
 )
 
 # Keep FTXUI's Windows workaround for cursor-position reports. Without it,
@@ -200,6 +204,7 @@ add_executable(textlt
   src/app_workspace.cpp
   src/app_resources.cpp
   src/app_view.cpp
+  src/app_notes_actions.cpp
   src/shortcut_key.cpp
   src/shortcut_registry.cpp
   src/shortcut_store.cpp
@@ -233,6 +238,11 @@ add_executable(textlt
   src/editor/document_workspace.cpp
   src/editor/document_file_controller.cpp
   src/editor/clipboard_controller.cpp
+  src/notes/note_document.cpp
+  src/notes/note_serializer.cpp
+  src/notes/note_repository.cpp
+  src/notes/note_session.cpp
+  src/notes/notes_workspace_component.cpp
   src/file_utils.cpp
   src/git_manager.cpp
   src/history_manager.cpp
@@ -429,6 +439,19 @@ add_executable(textlt_builtin_text_processors_test
 add_executable(textlt_app_command_registry_test
   tests/app_command_registry_test.cpp
   src/app_command_registry.cpp
+)
+
+add_executable(textlt_note_storage_test
+  tests/note_storage_test.cpp
+  src/notes/note_document.cpp
+  src/notes/note_serializer.cpp
+  src/notes/note_repository.cpp
+)
+
+add_executable(textlt_note_session_test
+  tests/note_session_test.cpp
+  src/notes/note_document.cpp
+  src/notes/note_session.cpp
 )
 
 add_executable(textlt_shortcut_registry_test
@@ -681,6 +704,15 @@ target_include_directories(textlt_ai_quick_actions_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
 
+target_include_directories(textlt_note_storage_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+)
+
+target_include_directories(textlt_note_session_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
 target_include_directories(textlt_document_ai_transform_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -708,6 +740,8 @@ add_test(NAME textlt_keyboard_shortcuts_test COMMAND textlt_keyboard_shortcuts_t
 add_test(NAME textlt_syntax_highlighter_test COMMAND textlt_syntax_highlighter_test)
 add_test(NAME textlt_builtin_text_processors_test COMMAND textlt_builtin_text_processors_test)
 add_test(NAME textlt_app_command_registry_test COMMAND textlt_app_command_registry_test)
+add_test(NAME textlt_note_storage_test COMMAND textlt_note_storage_test)
+add_test(NAME textlt_note_session_test COMMAND textlt_note_session_test)
 add_test(NAME textlt_shortcut_registry_test COMMAND textlt_shortcut_registry_test)
 add_test(NAME textlt_custom_processor_builder_test COMMAND textlt_custom_processor_builder_test)
 add_test(NAME textlt_tts_pipeline_test COMMAND textlt_tts_pipeline_test)
