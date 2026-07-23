@@ -532,7 +532,7 @@ ftxui::Element SidebarPanel::RenderActionRow() {
     return hbox({
         RenderFlatActionButton("Files..", ButtonRole::Primary, action_primary_box_),
         text(" "),
-        RenderFlatActionButton("Copy Path", ButtonRole::Utility, action_secondary_box_),
+        RenderFlatActionButton("Copy Path", ButtonRole::Primary, action_secondary_box_),
     });
 }
 

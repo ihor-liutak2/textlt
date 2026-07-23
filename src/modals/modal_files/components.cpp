@@ -108,7 +108,10 @@ void FilesModalContent::RebuildComponents() {
     }, ButtonRole::Cancel, ButtonVariant::AccentEdges);
 
     entry_list_component_ = ftxui::CatchEvent(
-        ftxui::Renderer([this] { return RenderEntryList(); }),
+        // The bool-renderer overload is focusable. The plain Renderer overload
+        // is not, so TakeFocus() in Open() used to leave focus on another
+        // control and ArrowUp/ArrowDown never reached file-list navigation.
+        ftxui::Renderer([this](bool) { return RenderEntryList(); }),
         [this](ftxui::Event event) { return HandleEvent(event); });
 
     auto primary_container = ftxui::Container::Vertical({
