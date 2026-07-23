@@ -83,9 +83,10 @@ chmod +x "$BIN_DIR/textlt"
 
 ZSHRC="$HOME/.zshrc"
 touch "$ZSHRC"
-grep -qxF 'export PATH="$HOME/.local/bin:$PATH"' "$ZSHRC" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$ZSHRC"
+PATH_LINE="export PATH=\"$BIN_DIR:\$PATH\""
+grep -qxF "$PATH_LINE" "$ZSHRC" || echo "$PATH_LINE" >> "$ZSHRC"
 
-export PATH="$HOME/.local/bin:$PATH"
+export PATH="$BIN_DIR:$PATH"
 
 echo ""
 echo "TextLT $VERSION installed to: $APP_DIR"

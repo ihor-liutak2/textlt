@@ -79,11 +79,12 @@ chmod +x "$BIN_DIR/textlt"
 
 BASHRC="$HOME/.bashrc"
 touch "$BASHRC"
-grep -qxF 'export PATH="$HOME/.local/bin:$PATH"' "$BASHRC" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$BASHRC"
+PATH_LINE="export PATH=\"$BIN_DIR:\$PATH\""
+grep -qxF "$PATH_LINE" "$BASHRC" || echo "$PATH_LINE" >> "$BASHRC"
 grep -qxF 'export COLORTERM=truecolor' "$BASHRC" || echo 'export COLORTERM=truecolor' >> "$BASHRC"
 grep -qxF 'export TERM=xterm-256color' "$BASHRC" || echo 'export TERM=xterm-256color' >> "$BASHRC"
 
-export PATH="$HOME/.local/bin:$PATH"
+export PATH="$BIN_DIR:$PATH"
 export COLORTERM=truecolor
 export TERM=xterm-256color
 
