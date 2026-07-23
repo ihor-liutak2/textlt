@@ -74,7 +74,7 @@ void TextltApp::InitializeCommands() {
     add("sidebar.show_opened_files", "Opened Files Sidebar", "Options", "", [this] { ShowOpenedFilesSidebar(); });
     add("sidebar.toggle_opened_project", "Toggle File Explorer Tab", "Options", "", [this] { ToggleSidebarOpenedProject(); });
     add("sidebar.copy_selected_path", "Copy Selected Project Path", "Options", "", [this] { CopySidebarSelectedPath(); });
-    add("notes.toggle", "Notes View", "Notes", "Ctrl+N", [this] { CommandNotesToggle(); });
+    add("notes.toggle", "Notes", "Options", "Ctrl+N", [this] { CommandNotesToggle(); });
     add("notes.new", "New Note", "Notes", "", [this] { CommandNotesNew(); });
     add("notes.bold", "Bold", "Notes", "", [this] { CommandNotesBold(); });
     add("notes.italic", "Italic", "Notes", "", [this] { CommandNotesItalic(); });

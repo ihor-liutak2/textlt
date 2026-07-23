@@ -3,13 +3,13 @@ if(NOT DEFINED PATCH_FILE)
 endif()
 
 execute_process(
-  COMMAND git apply --check --ignore-whitespace "${PATCH_FILE}"
+  COMMAND git apply --check --ignore-whitespace --unidiff-zero "${PATCH_FILE}"
   RESULT_VARIABLE patch_check_result
 )
 
 if(patch_check_result EQUAL 0)
   execute_process(
-    COMMAND git apply --ignore-whitespace "${PATCH_FILE}"
+    COMMAND git apply --ignore-whitespace --unidiff-zero "${PATCH_FILE}"
     RESULT_VARIABLE patch_result
   )
   if(NOT patch_result EQUAL 0)
@@ -19,7 +19,7 @@ if(patch_check_result EQUAL 0)
 endif()
 
 execute_process(
-  COMMAND git apply --reverse --check --ignore-whitespace "${PATCH_FILE}"
+  COMMAND git apply --reverse --check --ignore-whitespace --unidiff-zero "${PATCH_FILE}"
   RESULT_VARIABLE reverse_check_result
 )
 

@@ -236,9 +236,6 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
     }
 
     if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Notes) {
-        if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'n')) {
-            return app_.RunCommand("notes.toggle");
-        }
         if (app_.notes_workspace_component_ && app_.notes_workspace_component_->OnEvent(event)) {
             app_.screen_.PostEvent(ftxui::Event::Custom);
             return true;

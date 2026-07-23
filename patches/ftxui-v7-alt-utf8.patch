@@ -1,0 +1,28 @@
+diff --git a/src/ftxui/component/terminal_input_parser.cpp b/src/ftxui/component/terminal_input_parser.cpp
+index 07ea370..1287a3c 100644
+--- a/src/ftxui/component/terminal_input_parser.cpp
++++ b/src/ftxui/component/terminal_input_parser.cpp
+@@ -206 +206 @@ TerminalInputParser::Output TerminalInputParser::Parse() {
+-  return ParseUTF8();
++  return ParseUTF8(CHARACTER, 0);
+@@ -225 +225,2 @@ TerminalInputParser::Output TerminalInputParser::Parse() {
+-TerminalInputParser::Output TerminalInputParser::ParseUTF8() {
++TerminalInputParser::Output TerminalInputParser::ParseUTF8(
++    Type completed_type, int prefix_size) {
+@@ -281 +282 @@ TerminalInputParser::Output TerminalInputParser::ParseUTF8() {
+-  if (extra_byte != position_) {
++  if (extra_byte != position_ - prefix_size) {
+@@ -285 +286 @@ TerminalInputParser::Output TerminalInputParser::ParseUTF8() {
+-  return CHARACTER;
++  return completed_type;
+@@ -316,0 +318,3 @@ TerminalInputParser::Output TerminalInputParser::ParseESC() {
++      if (Current() >= 0x80) {
++        return ParseUTF8(SPECIAL, 1);
++      }
+diff --git a/src/ftxui/component/terminal_input_parser.hpp b/src/ftxui/component/terminal_input_parser.hpp
+index 4f1f30c..dffde7e 100644
+--- a/src/ftxui/component/terminal_input_parser.hpp
++++ b/src/ftxui/component/terminal_input_parser.hpp
+@@ -77 +77 @@ class TerminalInputParser {
+-  Output ParseUTF8();
++  Output ParseUTF8(Type completed_type, int prefix_size);

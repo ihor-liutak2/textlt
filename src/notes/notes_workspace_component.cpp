@@ -441,63 +441,106 @@ void NotesWorkspaceComponent::RunSync() {
         sync_thread_.join();
     }
     sync_frame_ = 0;
-    sync_completed_ = false;
-    sync_success_ = false;
-    sync_error_.clear();
-    sync_popup_message_ = "Establishing connection...";
+    {
+        std::lock_guard<std::mutex> lock(sync_mutex_);
+        sync_completed_ = false;
+        sync_success_ = false;
+        sync_error_.clear();
+        sync_popup_message_ = "Establishing connection...";
+    }
     sync_running_ = true;
     const std::filesystem::path root = repository_.Root();
-    if (request_redraw_) {
-        request_redraw_();
-    }
+    RequestSyncRedraw();
 
-    sync_thread_ = std::thread([this, root] {
-        auto future = std::async(std::launch::async, [this, root] {
+    try {
+        sync_thread_ = std::thread([this, root]() noexcept {
+            bool success = false;
             std::string operation_error;
-            const bool success = sync_(
-                root,
-                [this](const std::string& message) {
-                    {
-                        std::lock_guard<std::mutex> lock(sync_mutex_);
-                        sync_popup_message_ = message;
+            try {
+                auto future = std::async(std::launch::async, [this, root] {
+                    std::string error;
+                    bool result = false;
+                    try {
+                        result = sync_(
+                            root,
+                            [this](const std::string& message) {
+                                {
+                                    std::lock_guard<std::mutex> lock(sync_mutex_);
+                                    sync_popup_message_ = message;
+                                }
+                                RequestSyncRedraw();
+                            },
+                            error);
+                    } catch (const std::exception& exception) {
+                        error = exception.what();
+                    } catch (...) {
+                        error = "Unknown Notes synchronization error.";
                     }
-                    if (request_redraw_) {
-                        request_redraw_();
-                    }
-                },
-                operation_error);
-            return std::make_pair(success, operation_error);
-        });
+                    return std::make_pair(result, std::move(error));
+                });
 
-        while (future.wait_for(std::chrono::milliseconds(100)) !=
-               std::future_status::ready) {
-            ++sync_frame_;
-            if (request_redraw_) {
-                request_redraw_();
+                while (future.wait_for(std::chrono::milliseconds(100)) !=
+                       std::future_status::ready) {
+                    ++sync_frame_;
+                    RequestSyncRedraw();
+                }
+
+                auto result = future.get();
+                success = result.first;
+                operation_error = std::move(result.second);
+            } catch (const std::exception& exception) {
+                operation_error = exception.what();
+            } catch (...) {
+                operation_error = "Unknown Notes synchronization error.";
             }
-        }
+            CompleteSyncWorker(success, std::move(operation_error));
+        });
+    } catch (const std::exception& exception) {
+        sync_running_ = false;
+        std::lock_guard<std::mutex> lock(sync_mutex_);
+        sync_success_ = false;
+        sync_error_ = exception.what();
+        sync_popup_message_ = "Synchronization could not start: " + sync_error_;
+    } catch (...) {
+        sync_running_ = false;
+        std::lock_guard<std::mutex> lock(sync_mutex_);
+        sync_success_ = false;
+        sync_error_ = "Unknown thread startup error.";
+        sync_popup_message_ = "Synchronization could not start: " + sync_error_;
+    }
+}
 
-        bool success = false;
-        std::string operation_error;
-        try {
-            auto result = future.get();
-            success = result.first;
-            operation_error = std::move(result.second);
-        } catch (const std::exception& exception) {
-            operation_error = exception.what();
-        } catch (...) {
-            operation_error = "Unknown Notes synchronization error.";
-        }
+void NotesWorkspaceComponent::RequestSyncRedraw() noexcept {
+    if (!request_redraw_) {
+        return;
+    }
+    try {
+        request_redraw_();
+    } catch (...) {
+        // A failed redraw request must not terminate the synchronization worker.
+    }
+}
+
+void NotesWorkspaceComponent::CompleteSyncWorker(
+    bool success,
+    std::string error) noexcept {
+    try {
         {
             std::lock_guard<std::mutex> lock(sync_mutex_);
             sync_success_ = success;
-            sync_error_ = std::move(operation_error);
+            sync_error_ = std::move(error);
             sync_completed_ = true;
         }
-        if (request_redraw_) {
-            request_redraw_();
+    } catch (...) {
+        try {
+            std::lock_guard<std::mutex> lock(sync_mutex_);
+            sync_success_ = false;
+            sync_completed_ = true;
+        } catch (...) {
+            sync_running_ = false;
         }
-    });
+    }
+    RequestSyncRedraw();
 }
 
 void NotesWorkspaceComponent::ApplySyncCompletion() {

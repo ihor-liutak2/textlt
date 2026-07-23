@@ -61,8 +61,34 @@ bool EnsureRemoteDirectory(
         path = found.path;
         return true;
     }
+    if (FindEntry(entries, name, RemoteEntryType::File) ||
+        FindEntry(entries, name, RemoteEntryType::Symlink) ||
+        FindEntry(entries, name, RemoteEntryType::Other)) {
+        error = "Cannot create remote directory '" + name +
+            "': an entry with that name already exists.";
+        return false;
+    }
     path = JoinRemotePath(parent, name);
-    return provider.MakeDirectory(path, error);
+    if (provider.MakeDirectory(path, error)) {
+        return true;
+    }
+
+    // Some SFTP servers report a generic failure when mkdir races with an
+    // existing directory or when the previous attempt created it but lost the
+    // response. Verify the result before treating that response as fatal.
+    const std::string creation_error = error;
+    entries.clear();
+    std::string verification_error;
+    if (provider.List(parent, entries, verification_error) &&
+        FindEntry(entries, name, RemoteEntryType::Directory, &found)) {
+        path = found.path;
+        error.clear();
+        return true;
+    }
+    error = creation_error.empty()
+        ? "Could not create remote directory: " + path
+        : creation_error;
+    return false;
 }
 
 bool RemoteWins(const NoteDocument& remote, const NoteDocument& local) {

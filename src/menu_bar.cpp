@@ -81,6 +81,7 @@ MenuBarComponent::MenuBarComponent(
           {
               {" Toggle Line Numbers ", "view.toggle_line_numbers"},
               {" Sidebar                 (Ctrl+B) ", "sidebar.ctrl_b_file_explorer"},
+              {" Notes                   (Ctrl+N) ", "notes.toggle"},
               {" Smart Word Wrap [ ] ", "editor.toggle_smart_word_wrap"},
               {" Syntax Highlighting [X] ", "editor.toggle_syntax_highlighting"},
               {" Auto Pairing [X] ", "editor.toggle_auto_pairing"},
@@ -384,23 +385,23 @@ void MenuBarComponent::SetOptionLabels(
     bool auto_pairing,
     bool auto_indent,
     int tab_size) {
-    if (dropdown_items_.size() <= 2 || dropdown_items_[2].size() <= 6) {
+    if (dropdown_items_.size() <= 2 || dropdown_items_[2].size() <= 7) {
         return;
     }
 
-    dropdown_items_[2][2].label = smart_word_wrap
+    dropdown_items_[2][3].label = smart_word_wrap
         ? " Smart Word Wrap [X] "
         : " Smart Word Wrap [ ] ";
-    dropdown_items_[2][3].label = syntax_highlighting
+    dropdown_items_[2][4].label = syntax_highlighting
         ? " Syntax Highlighting [X] "
         : " Syntax Highlighting [ ] ";
-    dropdown_items_[2][4].label = auto_pairing
+    dropdown_items_[2][5].label = auto_pairing
         ? " Auto Pairing [X] "
         : " Auto Pairing [ ] ";
-    dropdown_items_[2][5].label = auto_indent
+    dropdown_items_[2][6].label = auto_indent
         ? " Smart Auto-Indent [X] "
         : " Smart Auto-Indent [ ] ";
-    dropdown_items_[2][6].label =
+    dropdown_items_[2][7].label =
         " Tab Size: " + std::to_string(tab_size) + " spaces ";
     RefreshCurrentDropdownEntries();
 }

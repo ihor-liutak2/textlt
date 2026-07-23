@@ -17,6 +17,7 @@ namespace {
 class FakeProvider : public textlt::IRemoteProvider {
 public:
     bool connect_succeeds = true;
+    bool mkdir_reports_failure_after_create = false;
     std::set<std::string> directories{"/"};
     std::map<std::string, std::string> files;
 
@@ -86,8 +87,13 @@ public:
         return false;
     }
     bool RemoveFile(const std::string&, std::string&) override { return false; }
-    bool MakeDirectory(const std::string& path, std::string&) override {
+    bool MakeDirectory(const std::string& path, std::string& error) override {
         directories.insert(path);
+        if (mkdir_reports_failure_after_create) {
+            mkdir_reports_failure_after_create = false;
+            error = "remote mkdir: Failure";
+            return false;
+        }
         return true;
     }
     bool RemoveDirectory(const std::string&, std::string&) override { return false; }
@@ -120,10 +126,12 @@ int main() {
     Expect(repository.Save(local, error), error);
 
     FakeProvider provider;
+    provider.mkdir_reports_failure_after_create = true;
     RemoteConnectionConfig connection;
     connection.remote_root = "/";
     notes::NotesSyncResult result;
     Expect(notes::SyncNotes(root, connection, provider, result, error), error);
+    Expect(error.empty(), "Recovered remote mkdir failure left a stale error.");
     Expect(provider.files.count("/.textlt-notes/items/" + local.id + ".tlnote") == 1,
         "Local note was not uploaded.");
 

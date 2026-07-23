@@ -31,6 +31,10 @@ FetchContent_Declare(ftxui
     ${CMAKE_COMMAND}
       -DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/patches/ftxui-v7-shortcuts.patch
       -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_patch_once.cmake
+    COMMAND
+    ${CMAKE_COMMAND}
+      -DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/patches/ftxui-v7-alt-utf8.patch
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_patch_once.cmake
 )
 
 # Keep FTXUI's Windows workaround for cursor-position reports. Without it,
@@ -415,6 +419,10 @@ add_executable(textlt_keyboard_shortcuts_test
   tests/keyboard_shortcuts_test.cpp
 )
 
+add_executable(textlt_terminal_alt_utf8_test
+  tests/terminal_alt_utf8_test.cpp
+)
+
 add_executable(textlt_syntax_highlighter_test
   tests/syntax_highlighter_test.cpp
   src/syntax_highlighter.cpp
@@ -457,6 +465,17 @@ add_executable(textlt_notes_sync_test
   src/remote/remote_connection_config.cpp
 )
 
+add_executable(textlt_notes_workspace_sync_test
+  tests/notes_workspace_sync_test.cpp
+  src/notes/note_document.cpp
+  src/notes/note_serializer.cpp
+  src/notes/note_repository.cpp
+  src/notes/note_session.cpp
+  src/notes/notes_workspace_component.cpp
+  src/editor_utils.cpp
+  src/theme.cpp
+)
+
 add_executable(textlt_shortcut_registry_test
   tests/shortcut_registry_test.cpp
   src/shortcut_key.cpp
@@ -491,6 +510,10 @@ add_executable(textlt_remote_config_store_test
 
 target_include_directories(textlt_keyboard_shortcuts_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_include_directories(textlt_terminal_alt_utf8_test PRIVATE
+  ${ftxui_SOURCE_DIR}/src
 )
 
 target_include_directories(textlt_syntax_highlighter_test PRIVATE
@@ -671,6 +694,7 @@ target_link_libraries(textlt_tts_audio_player_test PRIVATE Threads::Threads)
 target_link_libraries(textlt_ui_button_test PRIVATE ftxui::component)
 
 target_link_libraries(textlt_keyboard_shortcuts_test PRIVATE ftxui::component)
+target_link_libraries(textlt_terminal_alt_utf8_test PRIVATE ftxui::component)
 target_link_libraries(textlt_syntax_highlighter_test PRIVATE ftxui::dom)
 target_link_libraries(textlt_shortcut_registry_test PRIVATE ftxui::component)
 target_link_libraries(textlt_custom_processor_builder_test PRIVATE lua54)
@@ -721,11 +745,20 @@ target_include_directories(textlt_notes_sync_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
 
+target_include_directories(textlt_notes_workspace_sync_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+)
+
 target_include_directories(textlt_document_ai_transform_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 target_link_libraries(textlt_document_navigation_test PRIVATE ftxui::screen)
+target_link_libraries(textlt_notes_workspace_sync_test PRIVATE
+  ftxui::component
+  Threads::Threads
+)
 
 target_link_libraries(textlt_ai_backend_utils_test PRIVATE Threads::Threads)
 target_link_libraries(textlt_remote_command_runner_streaming_test PRIVATE Threads::Threads)
@@ -745,12 +778,14 @@ add_test(NAME textlt_ai_quick_actions_test COMMAND textlt_ai_quick_actions_test)
 add_test(NAME textlt_document_ai_transform_test COMMAND textlt_document_ai_transform_test)
 add_test(NAME textlt_text_importer_test COMMAND textlt_text_importer_test)
 add_test(NAME textlt_keyboard_shortcuts_test COMMAND textlt_keyboard_shortcuts_test)
+add_test(NAME textlt_terminal_alt_utf8_test COMMAND textlt_terminal_alt_utf8_test)
 add_test(NAME textlt_syntax_highlighter_test COMMAND textlt_syntax_highlighter_test)
 add_test(NAME textlt_builtin_text_processors_test COMMAND textlt_builtin_text_processors_test)
 add_test(NAME textlt_app_command_registry_test COMMAND textlt_app_command_registry_test)
 add_test(NAME textlt_note_storage_test COMMAND textlt_note_storage_test)
 add_test(NAME textlt_note_session_test COMMAND textlt_note_session_test)
 add_test(NAME textlt_notes_sync_test COMMAND textlt_notes_sync_test)
+add_test(NAME textlt_notes_workspace_sync_test COMMAND textlt_notes_workspace_sync_test)
 add_test(NAME textlt_shortcut_registry_test COMMAND textlt_shortcut_registry_test)
 add_test(NAME textlt_custom_processor_builder_test COMMAND textlt_custom_processor_builder_test)
 add_test(NAME textlt_tts_pipeline_test COMMAND textlt_tts_pipeline_test)

@@ -55,6 +55,8 @@ public:
     void NewNote();
 
 private:
+    friend class NotesWorkspaceSyncTestAccess;
+
     enum class FocusArea { Sidebar, Search, Cards, Title, Body, GroupName };
     enum class SidebarEntryKind { Home, Section, NewSection, Trash };
     struct SidebarEntry { SidebarEntryKind kind; std::string id; std::string label; size_t count = 0; };
@@ -78,6 +80,8 @@ private:
     void RunSync();
     void ApplySyncCompletion();
     void CloseSyncPopup();
+    void RequestSyncRedraw() noexcept;
+    void CompleteSyncWorker(bool success, std::string error) noexcept;
     bool HandleOverviewEvent(ftxui::Event event);
     bool HandleEditorEvent(ftxui::Event event);
     bool HandleTextFieldEvent(std::string& value, size_t& cursor, ftxui::Event event, std::function<void()> on_change);
