@@ -852,6 +852,7 @@ GitModal::GitModal(
         [this] { Close(); },
         std::move(request_redraw));
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
+    modal_->SetBodyFrameScrolling(false);
 }
 
 ftxui::Component GitModal::View() const {

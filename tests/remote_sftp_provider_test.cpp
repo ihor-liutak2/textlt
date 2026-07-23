@@ -32,5 +32,21 @@ int main() {
     Expect(entries[1].size == 123, "SFTP file size mismatch.");
     Expect(entries[2].type == RemoteEntryType::Symlink, "SFTP symlink type mismatch.");
     Expect(entries[2].name == "current", "SFTP symlink name mismatch.");
+
+    const std::string absolute_output =
+        "sftp> ls -la \"/home/ubuntu/notes\"\n"
+        "drwxr-xr-x    3 ubuntu ubuntu 4096 Jul 23 12:00 /home/ubuntu/notes/.\n"
+        "drwxr-x---    8 ubuntu ubuntu 4096 Jul 23 11:00 /home/ubuntu/notes/..\n"
+        "drwxr-xr-x    3 ubuntu ubuntu 4096 Jul 23 12:01 /home/ubuntu/notes/.textlt-notes\n"
+        "-rw-r--r--    1 ubuntu ubuntu 80 Jul 23 12:02 /home/ubuntu/notes/note.txt\n";
+    RemoteSftpProvider::ParseSftpListing(absolute_output, "/home/ubuntu/notes", entries);
+    Expect(entries.size() == 2, "SFTP absolute listing must exclude dot entries.");
+    Expect(entries[0].name == ".textlt-notes", "SFTP absolute directory name mismatch.");
+    Expect(entries[0].path == "/home/ubuntu/notes/.textlt-notes",
+        "SFTP absolute directory path mismatch.");
+    Expect(entries[0].hidden, "SFTP hidden directory flag mismatch.");
+    Expect(entries[1].name == "note.txt", "SFTP absolute file name mismatch.");
+    Expect(entries[1].path == "/home/ubuntu/notes/note.txt",
+        "SFTP absolute file path mismatch.");
     return 0;
 }

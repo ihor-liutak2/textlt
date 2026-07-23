@@ -150,6 +150,10 @@ void RemoteSftpProvider::ParseSftpListing(
     const std::string& directory,
     std::vector<RemoteEntry>& entries) {
     entries.clear();
+    const std::string normalized_directory = NormalizeRemoteDirectory(directory);
+    const std::string directory_prefix = normalized_directory == "/"
+        ? "/"
+        : normalized_directory + "/";
     std::istringstream lines(output);
     std::string line;
     while (std::getline(lines, line)) {
@@ -161,7 +165,13 @@ void RemoteSftpProvider::ParseSftpListing(
         if (!ParseLongListLine(line, entry)) {
             continue;
         }
-        entry.path = JoinRemotePath(directory, entry.name);
+        if (entry.name.rfind(directory_prefix, 0) == 0) {
+            entry.name.erase(0, directory_prefix.size());
+        }
+        if (entry.name.empty() || entry.name == "." || entry.name == "..") {
+            continue;
+        }
+        entry.path = JoinRemotePath(normalized_directory, entry.name);
         entry.hidden = !entry.name.empty() && entry.name.front() == '.';
         entries.push_back(std::move(entry));
     }
