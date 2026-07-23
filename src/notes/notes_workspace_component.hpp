@@ -1,10 +1,13 @@
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <functional>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "ftxui/component/component_base.hpp"
@@ -21,13 +24,24 @@ public:
     using DocumentsCallback = std::function<void()>;
     using ClipboardReadCallback = std::function<std::string()>;
     using ClipboardWriteCallback = std::function<void(const std::string&)>;
+    using CanSyncCallback = std::function<bool()>;
+    using SyncProgressCallback = std::function<void(const std::string&)>;
+    using SyncCallback = std::function<bool(
+        const std::filesystem::path&,
+        SyncProgressCallback,
+        std::string&)>;
+    using RequestRedrawCallback = std::function<void()>;
     NotesWorkspaceComponent(
         const Theme* theme,
         StatusCallback on_status,
         DocumentsCallback on_documents,
         ClipboardReadCallback read_clipboard,
         ClipboardWriteCallback write_clipboard,
+        CanSyncCallback can_sync,
+        SyncCallback sync,
+        RequestRedrawCallback request_redraw,
         std::filesystem::path root = {});
+    ~NotesWorkspaceComponent() override;
     ftxui::Element OnRender() override;
     bool OnEvent(ftxui::Event event) override;
     bool Focusable() const override { return true; }
@@ -61,12 +75,16 @@ private:
     void DeleteOrRestoreActiveNote();
     void TouchAndSave();
     void Notify(const std::string& message);
+    void RunSync();
+    void ApplySyncCompletion();
+    void CloseSyncPopup();
     bool HandleOverviewEvent(ftxui::Event event);
     bool HandleEditorEvent(ftxui::Event event);
     bool HandleTextFieldEvent(std::string& value, size_t& cursor, ftxui::Event event, std::function<void()> on_change);
     ftxui::Element RenderSidebar();
     ftxui::Element RenderOverview();
     ftxui::Element RenderEditor();
+    ftxui::Element RenderSyncPopup();
     ftxui::Element RenderCard(NoteDocument& note, bool selected, size_t visible_index);
     ftxui::Element RenderRichBlock(const NoteBlock& block, size_t block_index, size_t number);
     ftxui::Element ToolbarItem(const std::string& text, bool active, ftxui::Box& box);
@@ -78,6 +96,9 @@ private:
     DocumentsCallback on_documents_;
     ClipboardReadCallback read_clipboard_;
     ClipboardWriteCallback write_clipboard_;
+    CanSyncCallback can_sync_;
+    SyncCallback sync_;
+    RequestRedrawCallback request_redraw_;
     NoteRepository repository_;
     NoteSession session_;
     std::vector<SidebarEntry> sidebar_entries_;
@@ -98,8 +119,19 @@ private:
     std::string load_warning_;
     std::string save_status_ = "Ready";
     std::chrono::steady_clock::time_point last_saved_{};
+    std::thread sync_thread_;
+    mutable std::mutex sync_mutex_;
+    std::atomic<bool> sync_running_{false};
+    std::atomic<int> sync_frame_{0};
+    bool sync_completed_ = false;
+    bool sync_success_ = false;
+    bool sync_popup_open_ = false;
+    std::string sync_popup_message_;
+    std::string sync_error_;
     ftxui::Box sidebar_box_;
     ftxui::Box documents_tab_box_;
+    ftxui::Box sync_box_;
+    ftxui::Box sync_popup_close_box_;
     ftxui::Box search_box_;
     ftxui::Box overview_box_;
     ftxui::Box new_note_box_;

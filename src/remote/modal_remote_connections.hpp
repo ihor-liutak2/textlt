@@ -88,6 +88,7 @@ private:
     void DeleteSelected();
     void TestSelected();
     void SetSelectedActive();
+    void SetSelectedForNotesSync();
     void PrepareTokenFile();
     void SaveCloudAccessToken();
     void OpenHelp();
@@ -190,6 +191,7 @@ private:
     ftxui::Component save_button_;
     ftxui::Component test_button_;
     ftxui::Component set_active_button_;
+    ftxui::Component notes_sync_button_;
     ftxui::Component save_token_button_;
     ftxui::Component edit_button_;
     ftxui::Component connections_tab_button_;

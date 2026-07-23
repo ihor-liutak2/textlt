@@ -117,6 +117,8 @@ ftxui::Element RemoteConnectionsModalContent::RenderCustomFooter() {
         buttons.push_back(text(" "));
         buttons.push_back(set_active_button_->Render());
         buttons.push_back(text(" "));
+        buttons.push_back(notes_sync_button_->Render());
+        buttons.push_back(text(" "));
         buttons.push_back(test_button_->Render());
         buttons.push_back(text(" "));
         buttons.push_back(delete_button_->Render());

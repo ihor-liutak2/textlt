@@ -119,6 +119,8 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
         ButtonRole::Cancel, ButtonVariant::AccentEdges, "▶");
     set_active_button_ = MakeTextButton("Set Active", [this] { SetSelectedActive(); },
         ButtonRole::Primary, ButtonVariant::AccentEdges);
+    notes_sync_button_ = MakeTextButton("Notes Sync", [this] { SetSelectedForNotesSync(); },
+        ButtonRole::Success, ButtonVariant::AccentEdges, "↻");
     save_token_button_ = MakeTextButton("Save Token", [this] { SaveCloudAccessToken(); },
         ButtonRole::Primary, ButtonVariant::AccentEdges);
     edit_button_ = MakeTextButton("Edit", [this] { EditSelected(); },

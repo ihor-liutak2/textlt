@@ -712,6 +712,66 @@ bool AiActionsModalContent::StartAction(
                 }
             },
             &command_control_);
+        if (action == AiActionType::Translate && result.success) {
+            std::string normalized;
+            std::string validation_error;
+            const bool valid = NormalizeAiTranslationResponse(
+                request,
+                result.text,
+                normalized,
+                validation_error);
+            if (valid) {
+                result.text = std::move(normalized);
+            } else if (!cancel_requested_.load()) {
+                AiPromptRequest retry_request = request;
+                retry_request.corrective_retry = true;
+                retry_request.corrective_reason = validation_error;
+                {
+                    std::lock_guard<std::mutex> lock(state_mutex_);
+                    progress_text_ =
+                        "Invalid translation output. Retrying once: " +
+                        validation_error;
+                }
+                RequestRedraw();
+                result = AiBackend(settings).Run(
+                    retry_request,
+                    &cancel_requested_,
+                    [this](const std::string& generated) {
+                        bool changed = false;
+                        {
+                            std::lock_guard<std::mutex> lock(state_mutex_);
+                            if (operation_state_ != OperationState::Stopping &&
+                                !cancel_requested_.load()) {
+                                operation_state_ = OperationState::Generating;
+                                progress_text_ = TailUtf8(generated, 120);
+                                changed = true;
+                            }
+                        }
+                        if (changed) {
+                            RequestRedraw();
+                        }
+                    },
+                    &command_control_);
+                if (result.success) {
+                    validation_error.clear();
+                    if (NormalizeAiTranslationResponse(
+                            retry_request,
+                            result.text,
+                            normalized,
+                            validation_error)) {
+                        result.text = std::move(normalized);
+                    } else {
+                        result.success = false;
+                        result.error =
+                            "The selected model did not produce a valid " +
+                            retry_request.target_language +
+                            " translation after one retry: " +
+                            validation_error +
+                            ". Choose a stronger translation model, such as Gemma 3 4B.";
+                    }
+                }
+            }
+        }
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
             if (!discard_result_ && !cancel_requested_.load()) {

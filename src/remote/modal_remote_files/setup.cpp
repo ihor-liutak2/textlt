@@ -64,11 +64,17 @@ RemoteFilesModalContent::RemoteFilesModalContent(
     local_path_input_ = MakePathInput(PanelSide::Local);
     remote_path_input_ = MakePathInput(PanelSide::Remote);
 
+    auto local_menu = ftxui::Menu(
+        &local_panel_.entry_labels,
+        &local_panel_.selected);
     local_list_component_ = ftxui::CatchEvent(
-        ftxui::Renderer([this] { return RenderPanel(PanelSide::Local); }),
+        ftxui::Renderer(local_menu, [this] { return RenderPanel(PanelSide::Local); }),
         [this](ftxui::Event event) { return HandlePanelEvent(PanelSide::Local, std::move(event)); });
+    auto remote_menu = ftxui::Menu(
+        &remote_panel_.entry_labels,
+        &remote_panel_.selected);
     remote_list_component_ = ftxui::CatchEvent(
-        ftxui::Renderer([this] { return RenderPanel(PanelSide::Remote); }),
+        ftxui::Renderer(remote_menu, [this] { return RenderPanel(PanelSide::Remote); }),
         [this](ftxui::Event event) { return HandlePanelEvent(PanelSide::Remote, std::move(event)); });
 
     ftxui::InputOption operation_option;
@@ -195,6 +201,8 @@ void RemoteFilesModalContent::Close() {
     CancelPendingOperation();
     local_panel_.entries.clear();
     remote_panel_.entries.clear();
+    local_panel_.entry_labels.clear();
+    remote_panel_.entry_labels.clear();
     remote_provider_.reset();
     SetStatus("Ready.");
 }

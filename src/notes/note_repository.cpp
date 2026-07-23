@@ -60,6 +60,7 @@ std::filesystem::path NoteRepository::NotePath(const std::string& id) const { re
 
 bool NoteRepository::Save(NoteDocument& note, std::string& error) {
     const std::string saved = UtcNow();
+    note.modified_by_device_id = device_id_;
     NoteDocument copy = note; copy.saved_at = saved;
     if (!NoteSerializer::SaveNote(copy, NotePath(note.id), error)) return false;
     note.saved_at = saved; return true;
@@ -71,18 +72,28 @@ bool NoteRepository::MoveToTrash(NoteDocument& note, std::string& error) { note.
 bool NoteRepository::Restore(NoteDocument& note, std::string& error) { note.deleted_at.reset(); note.updated_at = UtcNow(); ++note.revision; return Save(note, error); }
 
 NoteSection& NoteRepository::CreateSection(const std::string& name) {
-    const std::string now = UtcNow(); sections_.push_back({GenerateUuid(), name, now, now}); return sections_.back();
+    const std::string now = UtcNow();
+    sections_.push_back({GenerateUuid(), name, now, now, std::nullopt});
+    return sections_.back();
 }
 
 bool NoteRepository::RenameSection(const std::string& id, const std::string& name, std::string& error) {
     auto found = std::find_if(sections_.begin(), sections_.end(), [&](const auto& value) { return value.id == id; });
-    if (found == sections_.end()) { error = "Section was not found."; return false; }
+    if (found == sections_.end() || found->deleted_at) { error = "Section was not found."; return false; }
     found->name = name; found->updated_at = UtcNow(); return SaveSections(error);
 }
 
 bool NoteRepository::DeleteSection(const std::string& id, std::string& error) {
     for (auto& note : notes_) if (note.section_id && *note.section_id == id) { note.section_id.reset(); note.updated_at = UtcNow(); ++note.revision; if (!Save(note, error)) return false; }
-    sections_.erase(std::remove_if(sections_.begin(), sections_.end(), [&](const auto& value) { return value.id == id; }), sections_.end());
+    auto found = std::find_if(
+        sections_.begin(), sections_.end(),
+        [&](const NoteSection& section) { return section.id == id; });
+    if (found == sections_.end()) {
+        error = "Section was not found.";
+        return false;
+    }
+    found->deleted_at = UtcNow();
+    found->updated_at = *found->deleted_at;
     return SaveSections(error);
 }
 

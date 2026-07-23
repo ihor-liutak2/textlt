@@ -52,10 +52,16 @@ int main() {
 
     assert(reloaded.DeleteSection(work_id, error));
     assert(!reloaded.Notes().front().section_id);
+    assert(reloaded.Sections().front().deleted_at.has_value());
+    assert(reloaded.SaveSections(error));
     assert(reloaded.MoveToTrash(reloaded.Notes().front(), error));
     assert(reloaded.Notes().front().deleted_at.has_value());
     assert(reloaded.Restore(reloaded.Notes().front(), error));
     assert(!reloaded.Notes().front().deleted_at.has_value());
+
+    notes::NoteRepository after_delete(root);
+    assert(after_delete.Load(warning));
+    assert(after_delete.Sections().front().deleted_at.has_value());
 
     std::filesystem::remove_all(root);
     return 0;

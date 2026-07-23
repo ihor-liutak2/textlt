@@ -54,13 +54,17 @@ std::string RemoteFilesModalContent::EntrySizeLabel(const RemoteEntry& entry) {
 }
 
 std::string RemoteFilesModalContent::TrimForDisplay(const std::string& value, size_t width) {
-    if (value.size() <= width) {
+    if (textlt::utils::Utf8DisplayWidth(value) <= width) {
         return value;
     }
     if (width <= 3) {
-        return value.substr(0, width);
+        return value.substr(
+            0,
+            textlt::utils::Utf8ByteIndexAtDisplayColumn(value, 0, width));
     }
-    return value.substr(0, width - 3) + "...";
+    return value.substr(
+        0,
+        textlt::utils::Utf8ByteIndexAtDisplayColumn(value, 0, width - 3)) + "...";
 }
 
 bool RemoteFilesModalContent::IsParentEntry(const RemoteEntry& entry) {

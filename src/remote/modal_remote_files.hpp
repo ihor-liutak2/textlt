@@ -81,6 +81,7 @@ private:
         std::string path_input;
         int path_cursor = 0;
         std::vector<RemoteEntry> entries;
+        std::vector<std::string> entry_labels;
         std::vector<ftxui::Box> boxes;
         int selected = 0;
         int scroll_offset = 0;

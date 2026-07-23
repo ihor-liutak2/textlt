@@ -10,6 +10,9 @@ void TextltApp::ShowNotesWorkspace() {
     CloseFindPanel();
     workspace_mode_ = WorkspaceMode::Notes;
     workspace_mode_index_ = static_cast<int>(workspace_mode_);
+    if (menu_bar_) {
+        menu_bar_->SetFormatMenuVisible(true);
+    }
     sidebar_has_focus_ = false;
     if (notes_workspace_component_) {
         auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_);
@@ -29,6 +32,9 @@ void TextltApp::ShowDocumentsWorkspace() {
     }
     workspace_mode_ = WorkspaceMode::Documents;
     workspace_mode_index_ = static_cast<int>(workspace_mode_);
+    if (menu_bar_) {
+        menu_bar_->SetFormatMenuVisible(false);
+    }
     FocusEditor();
     screen_.PostEvent(ftxui::Event::Custom);
 }

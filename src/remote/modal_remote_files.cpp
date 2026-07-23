@@ -12,6 +12,7 @@
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/mouse.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "editor_utils.hpp"
 #include "ui_button.hpp"
 #include "remote/remote_dialog_theme.hpp"
 

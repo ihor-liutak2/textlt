@@ -81,6 +81,9 @@ void RemoteConnectionsModalContent::ApplyTypeDefaults(RemoteConnectionType type)
                 ftps_tls_mode_value_ = "explicit";
             }
             break;
+        case RemoteConnectionType::GoogleDrive:
+        case RemoteConnectionType::MicrosoftDrive:
+            break;
     }
 }
 
@@ -271,6 +274,43 @@ void RemoteConnectionsModalContent::SetSelectedActive() {
     }
     Reload();
     SetStatus("Active remote connection: " + ActiveConnectionLabel());
+}
+
+void RemoteConnectionsModalContent::SetSelectedForNotesSync() {
+    if (!config_store_ || connections_.empty() || selected_connection_ < 0 ||
+        selected_connection_ >= static_cast<int>(connections_.size())) {
+        SetStatus("No saved connection selected for Notes sync.", true);
+        return;
+    }
+    const RemoteConnectionConfig& selected =
+        connections_[static_cast<size_t>(selected_connection_)];
+    std::unique_ptr<IRemoteProvider> provider = CreateRemoteProvider(selected.type);
+    if (!provider) {
+        SetStatus("The selected connection type cannot synchronize Notes.", true);
+        return;
+    }
+    std::string error;
+    if (!provider->Connect(selected, error)) {
+        output_ = error;
+        SetStatus("Could not open the connection. Notes sync was not changed.", true);
+        return;
+    }
+    std::string output;
+    if (!provider->TestConnection(output, error)) {
+        output_ = error;
+        SetStatus("Connection test failed. Notes sync was not changed.", true);
+        return;
+    }
+    const std::string previous_id = config_store_->NotesSyncConnectionId();
+    config_store_->SetNotesSyncConnectionId(selected.id);
+    if (!config_store_->Save(error)) {
+        config_store_->SetNotesSyncConnectionId(previous_id);
+        output_ = error;
+        SetStatus("Could not save the Notes sync connection.", true);
+        return;
+    }
+    output_ = output;
+    SetStatus("Notes will synchronize through: " + selected.name);
 }
 
 void RemoteConnectionsModalContent::DeleteSelected() {
@@ -469,6 +509,7 @@ void RemoteConnectionsModalContent::RebuildFooterActions() {
     if (selected_tab_ == MainTab::Connections) {
         add(edit_button_);
         add(set_active_button_);
+        add(notes_sync_button_);
         add(test_button_);
         add(delete_button_);
         add(reload_button_);

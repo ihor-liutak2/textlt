@@ -139,7 +139,13 @@ bool NoteSerializer::LoadNote(const std::filesystem::path& path, NoteDocument& n
 bool NoteSerializer::SaveSections(const std::vector<NoteSection>& sections, const std::filesystem::path& path, std::string& error) {
     Json json = {{"format", "textlt-note-sections"}, {"schema_version", 1}, {"sections", Json::array()}};
     for (const auto& section : sections) {
-        json["sections"].push_back({{"id", section.id}, {"name", section.name}, {"created_at", section.created_at}, {"updated_at", section.updated_at}});
+        json["sections"].push_back({
+            {"id", section.id},
+            {"name", section.name},
+            {"created_at", section.created_at},
+            {"updated_at", section.updated_at},
+            {"deleted_at", section.deleted_at ? Json(*section.deleted_at) : Json(nullptr)},
+        });
     }
     return AtomicWrite(path, json.dump(2) + "\n", error);
 }
@@ -151,7 +157,17 @@ bool NoteSerializer::LoadSections(const std::filesystem::path& path, std::vector
         if (json.value("format", "") != "textlt-note-sections") { error = "Unsupported sections format."; return false; }
         std::vector<NoteSection> parsed;
         for (const auto& item : json.value("sections", Json::array())) {
-            parsed.push_back({item.at("id").get<std::string>(), item.at("name").get<std::string>(), item.at("created_at").get<std::string>(), item.at("updated_at").get<std::string>()});
+            NoteSection section{
+                item.at("id").get<std::string>(),
+                item.at("name").get<std::string>(),
+                item.at("created_at").get<std::string>(),
+                item.at("updated_at").get<std::string>(),
+                std::nullopt,
+            };
+            if (item.contains("deleted_at") && !item["deleted_at"].is_null()) {
+                section.deleted_at = item["deleted_at"].get<std::string>();
+            }
+            parsed.push_back(std::move(section));
         }
         sections = std::move(parsed); return true;
     } catch (const std::exception& exception) { error = std::string("Invalid sections JSON: ") + exception.what(); return false; }

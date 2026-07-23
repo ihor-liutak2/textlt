@@ -25,6 +25,10 @@ int main() {
     assert(registry.MatchAction(ShortcutContext::Menu, ftxui::Event::Special("Alt+M")) == "ai.quick_actions");
     assert(registry.MatchAction(ShortcutContext::Menu, ftxui::Event::Special("\x1Bm")) == "ai.quick_actions");
     assert(registry.MatchAction(ShortcutContext::Menu, ftxui::Event::Special("\x1Bь")) == "ai.quick_actions");
+    assert(registry.MatchAction(ShortcutContext::Menu, ftxui::Event::Special("\x1BЬ")) == "ai.quick_actions");
+    assert(registry.MatchAction(ShortcutContext::Menu, ftxui::Event::Special("Alt+ь")) == "ai.quick_actions");
+    assert(registry.MatchAction(ShortcutContext::Menu, ftxui::Event::Special("Alt+Ь")) == "ai.quick_actions");
+    assert(registry.MatchAction(ShortcutContext::Menu, ftxui::Event::Special("\x1B[1068;3u")) == "ai.quick_actions");
     assert(registry.MatchAction(ShortcutContext::Text, ftxui::Event::Special("Ctrl+Home")) == "editor.document_start");
     assert(registry.MatchAction(ShortcutContext::Text, ftxui::Event::Special("\x1B[1;2H")) == "editor.select_line_start");
     assert(registry.MatchAction(ShortcutContext::Text, ftxui::Event::Special("\x1B[6;2~")) == "editor.select_page_down");

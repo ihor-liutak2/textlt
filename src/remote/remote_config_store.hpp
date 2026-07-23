@@ -20,6 +20,8 @@ public:
 
     const std::string& ActiveConnectionId() const { return active_connection_id_; }
     void SetActiveConnectionId(std::string id);
+    const std::string& NotesSyncConnectionId() const { return notes_sync_connection_id_; }
+    void SetNotesSyncConnectionId(std::string id);
 
     RemoteConnectionConfig* FindById(const std::string& id);
     const RemoteConnectionConfig* FindById(const std::string& id) const;
@@ -37,6 +39,7 @@ private:
     std::filesystem::path path_;
     std::vector<RemoteConnectionConfig> connections_;
     std::string active_connection_id_;
+    std::string notes_sync_connection_id_;
 };
 
 } // namespace textlt

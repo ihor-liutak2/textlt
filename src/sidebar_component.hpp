@@ -155,6 +155,7 @@ private:
         const std::string& label,
         SidebarMode mode,
         ftxui::Box& box) const;
+    ftxui::Element RenderNotesButton(ftxui::Box& box) const;
     ftxui::Element RenderFlatActionButton(
         const std::string& label,
         ButtonRole role,

@@ -72,6 +72,7 @@ int main() {
 
         ExpectEqual(store.ActiveConnectionId(), "first", "First added connection should become active.");
         store.SetActiveConnectionId("second");
+        store.SetNotesSyncConnectionId("third");
         Expect(store.FindActiveConnection() != nullptr, "Active connection must be found.");
         ExpectEqual(store.FindActiveConnection()->id, "second", "Selected active connection mismatch.");
 
@@ -84,6 +85,7 @@ int main() {
         ExpectEqual(store.ActiveConnectionId(), "second", "Active connection id must persist.");
         Expect(store.FindActiveConnection() != nullptr, "Persisted active connection must be found.");
         ExpectEqual(store.FindActiveConnection()->name, "Second", "Persisted active connection mismatch.");
+        ExpectEqual(store.NotesSyncConnectionId(), "third", "Notes sync connection id must persist.");
         ExpectEqual(store.FindActiveConnection()->scope, "files.content.write", "Persisted cloud scope mismatch.");
         const RemoteConnectionConfig* ftps = store.FindById("third");
         Expect(ftps != nullptr, "Persisted FTPS connection must be found.");
@@ -98,6 +100,9 @@ int main() {
         ExpectEqual(store.FindActiveConnection()->auth_mode, "password", "Persisted SFTP auth mode mismatch.");
         ExpectEqual(store.FindActiveConnection()->key_passphrase, "key-secret", "Persisted SFTP key passphrase mismatch.");
         ExpectEqual(store.FindActiveConnection()->known_hosts_file, "~/.ssh/known_hosts", "Persisted SFTP known hosts file mismatch.");
+        Expect(store.RemoveById("third"), "Removing Notes sync connection failed.");
+        Expect(store.NotesSyncConnectionId().empty(),
+            "Removing Notes sync connection must clear its assignment.");
     }
 
     {

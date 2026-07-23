@@ -115,6 +115,7 @@ bool RemoteConfigStore::Load(std::string& error) {
 
     const Json root = LoadJsonObject(path_);
     active_connection_id_ = JsonString(root, "active_connection_id");
+    notes_sync_connection_id_ = JsonString(root, "notes_sync_connection_id");
 
     const auto connections_iter = root.find("connections");
     if (connections_iter == root.end()) {
@@ -143,6 +144,7 @@ bool RemoteConfigStore::Load(std::string& error) {
 bool RemoteConfigStore::Save(std::string& error) const {
     Json root = Json::object();
     root["active_connection_id"] = active_connection_id_;
+    root["notes_sync_connection_id"] = notes_sync_connection_id_;
     root["connections"] = Json::array();
     for (const RemoteConnectionConfig& config : connections_) {
         root["connections"].push_back(SerializeConnection(config));
@@ -187,6 +189,13 @@ void RemoteConfigStore::SetActiveConnectionId(std::string id) {
     NormalizeActiveConnection();
 }
 
+void RemoteConfigStore::SetNotesSyncConnectionId(std::string id) {
+    notes_sync_connection_id_ = std::move(id);
+    if (!notes_sync_connection_id_.empty() && !FindById(notes_sync_connection_id_)) {
+        notes_sync_connection_id_.clear();
+    }
+}
+
 RemoteConnectionConfig* RemoteConfigStore::FindActiveConnection() {
     NormalizeActiveConnection();
     return active_connection_id_.empty() ? nullptr : FindById(active_connection_id_);
@@ -205,7 +214,11 @@ const RemoteConnectionConfig* RemoteConfigStore::FindActiveConnection() const {
 void RemoteConfigStore::NormalizeActiveConnection() {
     if (connections_.empty()) {
         active_connection_id_.clear();
+        notes_sync_connection_id_.clear();
         return;
+    }
+    if (!notes_sync_connection_id_.empty() && !FindById(notes_sync_connection_id_)) {
+        notes_sync_connection_id_.clear();
     }
     if (active_connection_id_.empty() || !FindById(active_connection_id_)) {
         active_connection_id_ = connections_.front().id;
@@ -245,6 +258,9 @@ bool RemoteConfigStore::RemoveById(const std::string& id) {
     const bool removed = connections_.size() != old_size;
     if (removed && active_connection_id_ == id) {
         active_connection_id_.clear();
+    }
+    if (removed && notes_sync_connection_id_ == id) {
+        notes_sync_connection_id_.clear();
     }
     NormalizeActiveConnection();
     return removed;

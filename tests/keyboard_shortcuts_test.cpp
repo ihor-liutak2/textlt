@@ -18,6 +18,12 @@ int main() {
     assert(MatchesShortcut(ftxui::Event::Special("\x1B[1094;5u"), ShortcutModifier::Ctrl, 'w'));
     assert(MatchesShortcut(ftxui::Event::Special("\x1B[27;5;1094~"), ShortcutModifier::Ctrl, 'w'));
     assert(MatchesShortcut(ftxui::Event::Special("\x1Bц"), ShortcutModifier::Alt, 'w'));
+    assert(MatchesShortcut(ftxui::Event::Special("\x1BЦ"), ShortcutModifier::Alt, 'w'));
+    assert(MatchesShortcut(ftxui::Event::Special("Alt+ц"), ShortcutModifier::Alt, 'w'));
+    assert(MatchesShortcut(ftxui::Event::Special("Alt+Ц"), ShortcutModifier::Alt, 'w'));
+    assert(MatchesShortcut(ftxui::Event::Special("\x1B[1062;3u"), ShortcutModifier::Alt, 'w'));
+    assert(MatchesShortcut(ftxui::Event::Special("Ctrl+ц"), ShortcutModifier::Ctrl, 'w'));
+    assert(MatchesShortcut(ftxui::Event::Special("\x1B[1062;5u"), ShortcutModifier::Ctrl, 'w'));
     assert(MatchesShortcut(ftxui::Event::Special("Ctrl+Alt+P"), ShortcutModifier::CtrlAlt, 'p'));
     assert(!MatchesShortcut(ftxui::Event::Character("ц"), ShortcutModifier::Ctrl, 'w'));
     assert(!MatchesShortcut(ftxui::Event::Special("\x1B[1094;5u"), ShortcutModifier::Ctrl, 'q'));

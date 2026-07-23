@@ -157,6 +157,8 @@ MenuBarComponent::MenuBarComponent(
         dropdown_menu_,
     });
     Add(menu_container_);
+    format_dropdown_items_ = dropdown_items_[3];
+    SetFormatMenuVisible(false);
 }
 
 void MenuBarComponent::RebuildDropdownComponents() {
@@ -349,6 +351,30 @@ void MenuBarComponent::SetFileFavoriteLabel(bool is_favorite) {
     dropdown_items_[0][10].label = is_favorite
         ? " [X] Remove from Favorites "
         : " [ ] Add to Favorites ";
+    RefreshCurrentDropdownEntries();
+}
+
+void MenuBarComponent::SetFormatMenuVisible(bool visible) {
+    if (format_menu_visible_ == visible) {
+        return;
+    }
+
+    CloseDropdown();
+    if (visible) {
+        menu_entries_.insert(menu_entries_.begin() + 3, " Format ");
+        dropdown_items_.insert(
+            dropdown_items_.begin() + 3,
+            format_dropdown_items_);
+    } else {
+        menu_entries_.erase(menu_entries_.begin() + 3);
+        dropdown_items_.erase(dropdown_items_.begin() + 3);
+    }
+    format_menu_visible_ = visible;
+    selected_menu_item_ = std::clamp(
+        selected_menu_item_,
+        0,
+        std::max(0, static_cast<int>(menu_entries_.size()) - 1));
+    selected_dropdown_item_ = 0;
     RefreshCurrentDropdownEntries();
 }
 

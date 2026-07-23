@@ -55,6 +55,7 @@ struct NoteSection {
     std::string name;
     std::string created_at;
     std::string updated_at;
+    std::optional<std::string> deleted_at;
 };
 
 std::string GenerateUuid();

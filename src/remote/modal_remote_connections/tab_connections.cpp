@@ -49,9 +49,13 @@ ftxui::Element RemoteConnectionsModalContent::RenderConnectionDetails() {
     const RemoteConnectionConfig& config = connections_[static_cast<size_t>(selected_connection_)];
     const std::string active_id = config_store_ ? config_store_->ActiveConnectionId() : std::string{};
     const bool active = !active_id.empty() && config.id == active_id;
+    const bool notes_sync = config_store_ &&
+        config.id == config_store_->NotesSyncConnectionId();
     rows.push_back(text(" Name: " + (config.name.empty() ? std::string("Unnamed") : config.name)) | color(theme.modal_text_color));
     rows.push_back(text(" Type: " + ConnectionKindLabel(config)) | color(theme.modal_text_color));
     rows.push_back(text(std::string(" Active: ") + (active ? "yes" : "no")) | color(theme.modal_text_color));
+    rows.push_back(text(std::string(" Notes sync: ") + (notes_sync ? "yes" : "no")) |
+        color(theme.modal_text_color));
     const std::string target = ConnectionTargetSummary(config);
     if (!target.empty()) {
         rows.push_back(text(" Target: " + target) | dim | color(theme.modal_text_color));
@@ -59,6 +63,8 @@ ftxui::Element RemoteConnectionsModalContent::RenderConnectionDetails() {
     rows.push_back(text(""));
     rows.push_back(text(" Edit opens the matching type tab.") | dim | color(theme.modal_text_color));
     rows.push_back(text(" Remote Files uses only the active connection.") | dim | color(theme.modal_text_color));
+    rows.push_back(text(" Notes Sync tests and assigns this profile; syncing remains manual.") |
+        dim | color(theme.modal_text_color));
     rows.push_back(filler());
     rows.push_back(RenderOutput(4));
 

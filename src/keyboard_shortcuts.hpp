@@ -170,17 +170,33 @@ inline bool MatchesShortcut(
     const std::string ukrainian = UkrainianKeyForUsKey(lower);
     const int code_point = Utf8CodePoint(ukrainian);
     if (code_point < 0) return false;
+    const std::string ukrainian_upper = UkrainianUpperKeyForUsKey(lower);
+    const int upper_code_point = Utf8CodePoint(ukrainian_upper);
 
-    if (modifier == ShortcutModifier::Alt && input == "\x1B" + ukrainian) {
-        return true;
+    if (modifier == ShortcutModifier::Alt) {
+        return input == "\x1B" + ukrainian ||
+            input == "\x1B" + ukrainian_upper ||
+            input == "Alt+" + ukrainian ||
+            input == "Alt+" + ukrainian_upper ||
+            matches_modified_code_point(code_point) ||
+            (upper_code_point >= 0 && matches_modified_code_point(upper_code_point));
     }
 
     if (modifier == ShortcutModifier::CtrlAlt) {
         return input == "\x1B" + ukrainian ||
-            matches_modified_code_point(code_point);
+            input == "\x1B" + ukrainian_upper ||
+            input == "Ctrl+Alt+" + ukrainian ||
+            input == "Ctrl+Alt+" + ukrainian_upper ||
+            input == "Alt+Ctrl+" + ukrainian ||
+            input == "Alt+Ctrl+" + ukrainian_upper ||
+            matches_modified_code_point(code_point) ||
+            (upper_code_point >= 0 && matches_modified_code_point(upper_code_point));
     }
 
-    return matches_modified_code_point(code_point);
+    return input == "Ctrl+" + ukrainian ||
+        input == "Ctrl+" + ukrainian_upper ||
+        matches_modified_code_point(code_point) ||
+        (upper_code_point >= 0 && matches_modified_code_point(upper_code_point));
 }
 
 } // namespace textlt

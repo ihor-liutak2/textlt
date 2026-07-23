@@ -17,6 +17,9 @@
 #include "ui_button.hpp"
 #include "file_manager.hpp"
 #include "editor/document_session.hpp"
+#include "notes/notes_sync.hpp"
+#include "remote/remote_provider.hpp"
+#include "remote/remote_provider_factory.hpp"
 
 namespace textlt {
 
@@ -389,7 +392,40 @@ TextltApp::TextltApp()
         },
         [this] { ShowDocumentsWorkspace(); },
         [this] { return clipboard_controller_.ReadText(); },
-        [this](const std::string& text) { clipboard_controller_.WriteText(text); });
+        [this](const std::string& text) { clipboard_controller_.WriteText(text); },
+        [this] {
+            const std::string& id = remote_config_store_.NotesSyncConnectionId();
+            return !id.empty() && remote_config_store_.FindById(id) != nullptr;
+        },
+        [this](
+            const std::filesystem::path& root,
+            notes::NotesWorkspaceComponent::SyncProgressCallback progress,
+            std::string& error) {
+            const RemoteConnectionConfig* connection = remote_config_store_.FindById(
+                remote_config_store_.NotesSyncConnectionId());
+            if (!connection) {
+                error = "No Notes sync connection is configured.";
+                return false;
+            }
+            std::unique_ptr<IRemoteProvider> provider =
+                CreateRemoteProvider(connection->type);
+            if (!provider) {
+                error = "The Notes sync connection type is not supported.";
+                return false;
+            }
+            notes::NotesSyncResult result;
+            if (!notes::SyncNotes(
+                    root,
+                    *connection,
+                    *provider,
+                    result,
+                    error,
+                    std::move(progress))) {
+                return false;
+            }
+            return true;
+        },
+        [this] { screen_.PostEvent(ftxui::Event::Custom); });
 
     top_bar_row_ = ftxui::Make<TopBarRowComponent>(
         &current_theme_,

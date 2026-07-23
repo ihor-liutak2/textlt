@@ -128,10 +128,9 @@ ftxui::Element SidebarPanel::OnRender() {
         hbox({
             RenderModeButton("Opened", SidebarMode::Opened, opened_tab_box_),
             text(" "),
-            text(" Notes ") |
-                color(theme.foreground) |
-                reflect(notes_tab_box_),
+            RenderNotesButton(notes_tab_box_),
         }),
+        separator() | color(SidebarBorderColor(theme)),
         RenderActionRow(),
         separator() | color(SidebarBorderColor(theme)),
         vbox(std::move(rows)) | reflect(menu_box_) | frame | yflex,
@@ -491,6 +490,12 @@ ftxui::Element SidebarPanel::RenderModeButton(
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     ButtonSpec spec = TabButtonSpec(label, mode_ == mode, "", ButtonSize::Compact);
     return RenderModalFlatButton(theme, spec, mode_ == mode) | reflect(box);
+}
+
+ftxui::Element SidebarPanel::RenderNotesButton(ftxui::Box& box) const {
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    ButtonSpec spec = TabButtonSpec("Notes", false, "", ButtonSize::Compact);
+    return RenderModalFlatButton(theme, spec) | reflect(box);
 }
 
 ftxui::Element SidebarPanel::RenderFlatActionButton(

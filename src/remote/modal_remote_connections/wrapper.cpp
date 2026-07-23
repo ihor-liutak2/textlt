@@ -68,6 +68,9 @@ RemoteConnectionsModalContent::MainTab RemoteConnectionsModalContent::TabForType
             return MainTab::Ftps;
         case RemoteConnectionType::Dropbox:
             return MainTab::Dropbox;
+        case RemoteConnectionType::GoogleDrive:
+        case RemoteConnectionType::MicrosoftDrive:
+            return MainTab::Connections;
     }
     return MainTab::Connections;
 }

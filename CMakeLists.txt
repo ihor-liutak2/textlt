@@ -234,6 +234,7 @@ add_executable(textlt
   src/notes/note_serializer.cpp
   src/notes/note_repository.cpp
   src/notes/note_session.cpp
+  src/notes/notes_sync.cpp
   src/notes/notes_workspace_component.cpp
   src/file_utils.cpp
   src/git_manager.cpp
@@ -288,6 +289,7 @@ add_executable(textlt
   src/remote/remote_sftp_provider.cpp
   src/remote/remote_ssh_config.cpp
   src/remote/remote_ftps_provider.cpp
+  src/remote/remote_provider_factory.cpp
   src/remote/modal_remote_connections.cpp
   src/remote/modal_remote_files.cpp
   src/sidebar_component.cpp
@@ -444,6 +446,15 @@ add_executable(textlt_note_session_test
   tests/note_session_test.cpp
   src/notes/note_document.cpp
   src/notes/note_session.cpp
+)
+
+add_executable(textlt_notes_sync_test
+  tests/notes_sync_test.cpp
+  src/notes/note_document.cpp
+  src/notes/note_serializer.cpp
+  src/notes/note_repository.cpp
+  src/notes/notes_sync.cpp
+  src/remote/remote_connection_config.cpp
 )
 
 add_executable(textlt_shortcut_registry_test
@@ -705,6 +716,11 @@ target_include_directories(textlt_note_session_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+target_include_directories(textlt_notes_sync_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+)
+
 target_include_directories(textlt_document_ai_transform_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -734,6 +750,7 @@ add_test(NAME textlt_builtin_text_processors_test COMMAND textlt_builtin_text_pr
 add_test(NAME textlt_app_command_registry_test COMMAND textlt_app_command_registry_test)
 add_test(NAME textlt_note_storage_test COMMAND textlt_note_storage_test)
 add_test(NAME textlt_note_session_test COMMAND textlt_note_session_test)
+add_test(NAME textlt_notes_sync_test COMMAND textlt_notes_sync_test)
 add_test(NAME textlt_shortcut_registry_test COMMAND textlt_shortcut_registry_test)
 add_test(NAME textlt_custom_processor_builder_test COMMAND textlt_custom_processor_builder_test)
 add_test(NAME textlt_tts_pipeline_test COMMAND textlt_tts_pipeline_test)

@@ -25,6 +25,7 @@ public:
     bool Focusable() const override { return true; }
 
     void SetTheme(const Theme* theme) { theme_ = theme; }
+    void SetFormatMenuVisible(bool visible);
     void SetFileFavoriteLabel(bool is_favorite);
     void SetOptionLabels(
         bool smart_word_wrap,
@@ -56,6 +57,7 @@ private:
 
     std::vector<std::string> menu_entries_;
     std::vector<std::vector<DropdownItem>> dropdown_items_;
+    std::vector<DropdownItem> format_dropdown_items_;
     std::vector<std::string> current_dropdown_entries_;
     std::vector<std::string> current_dropdown_command_ids_;
     std::vector<bool> current_dropdown_separators_;
@@ -65,6 +67,7 @@ private:
     int selected_menu_item_ = 0;
     int active_dropdown_ = -1;
     int selected_dropdown_item_ = 0;
+    bool format_menu_visible_ = true;
 
     std::vector<ftxui::Box> menu_boxes_;
     std::vector<ftxui::Box> dropdown_boxes_;

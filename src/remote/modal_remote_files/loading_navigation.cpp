@@ -14,6 +14,7 @@ void RemoteFilesModalContent::ReloadConnections() {
         selected_connection_ = 0;
         remote_provider_.reset();
         remote_panel_.entries.clear();
+        remote_panel_.entry_labels.clear();
         remote_panel_.path = "/";
         remote_panel_.path_input = "/";
         SetPanelStatus(PanelSide::Remote,
@@ -23,6 +24,7 @@ void RemoteFilesModalContent::ReloadConnections() {
     selected_connection_ = 0;
     remote_provider_.reset();
     remote_panel_.entries.clear();
+    remote_panel_.entry_labels.clear();
     remote_panel_.boxes.clear();
     remote_panel_.selected = 0;
     remote_panel_.path = connections_.front().remote_root.empty()
@@ -104,6 +106,7 @@ void RemoteFilesModalContent::DisconnectRemote() {
     }
     remote_provider_.reset();
     remote_panel_.entries.clear();
+    remote_panel_.entry_labels.clear();
     remote_panel_.boxes.clear();
     remote_panel_.selected = 0;
     SetPanelStatus(PanelSide::Remote, "Disconnected. Press Connect.");
@@ -129,6 +132,7 @@ void RemoteFilesModalContent::LoadPanel(PanelSide side, const std::string& path)
     panel.path_input = panel.path;
     panel.path_cursor = static_cast<int>(panel.path_input.size());
     panel.entries.clear();
+    panel.entry_labels.clear();
     panel.boxes.clear();
 
     const std::string parent = side == PanelSide::Local
@@ -143,6 +147,10 @@ void RemoteFilesModalContent::LoadPanel(PanelSide side, const std::string& path)
     }
 
     panel.entries.insert(panel.entries.end(), listed.begin(), listed.end());
+    panel.entry_labels.reserve(panel.entries.size());
+    for (const RemoteEntry& entry : panel.entries) {
+        panel.entry_labels.push_back(entry.name);
+    }
     panel.boxes.resize(panel.entries.size());
     panel.selected = panel.entries.empty()
         ? 0

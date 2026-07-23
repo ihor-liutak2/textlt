@@ -94,6 +94,8 @@ std::vector<ftxui::Component> RemoteConnectionsModalContent::GetVisibleInputs() 
     inputs.push_back(name_input_);
 
     switch (selected_tab_) {
+        case MainTab::Connections:
+            break;
         case MainTab::Sftp:
             inputs.push_back(remote_root_input_);
             if (!ssh_config_hosts_.empty()) {
