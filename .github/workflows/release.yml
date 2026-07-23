@@ -75,7 +75,7 @@ jobs:
 
       - name: Build
         run: |
-          cmake --build build --config Release --parallel
+          cmake --build build --config Release --parallel 2
 
       - name: Run tests
         run: |
@@ -213,7 +213,7 @@ jobs:
       - name: Build
         shell: pwsh
         run: |
-          cmake --build build --config Release --parallel
+          cmake --build build --config Release --parallel 2
 
       - name: Run tests
         shell: pwsh
@@ -269,7 +269,7 @@ jobs:
 
       - name: Build
         run: |
-          cmake --build build --config Release --parallel
+          cmake --build build --config Release --parallel 2
 
       - name: Run tests
         run: |

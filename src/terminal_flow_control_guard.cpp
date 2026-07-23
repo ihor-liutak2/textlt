@@ -11,6 +11,7 @@ TerminalFlowControlGuard::~TerminalFlowControlGuard() = default;
 
 #else
 
+#include <cerrno>
 #include <string_view>
 #include <unistd.h>
 
@@ -18,10 +19,21 @@ namespace textlt {
 namespace {
 
 void WriteTerminalSequence(std::string_view sequence) {
-    if (sequence.empty()) {
-        return;
+    size_t offset = 0;
+    while (offset < sequence.size()) {
+        const ssize_t count = write(
+            STDOUT_FILENO,
+            sequence.data() + offset,
+            sequence.size() - offset);
+        if (count > 0) {
+            offset += static_cast<size_t>(count);
+            continue;
+        }
+        if (count < 0 && errno == EINTR) {
+            continue;
+        }
+        break;
     }
-    (void)write(STDOUT_FILENO, sequence.data(), sequence.size());
 }
 
 } // namespace

@@ -524,8 +524,22 @@ RemoteCommandResult RemoteCommandRunner::RunStreaming(
         }
         argv.push_back(nullptr);
         execvp(argv[0], argv.data());
-        const char* message = "Cannot execute command.\n";
-        write(STDERR_FILENO, message, std::strlen(message));
+        constexpr char message[] = "Cannot execute command.\n";
+        size_t offset = 0;
+        while (offset < sizeof(message) - 1) {
+            const ssize_t count = write(
+                STDERR_FILENO,
+                message + offset,
+                sizeof(message) - 1 - offset);
+            if (count > 0) {
+                offset += static_cast<size_t>(count);
+                continue;
+            }
+            if (count < 0 && errno == EINTR) {
+                continue;
+            }
+            break;
+        }
         _exit(127);
     }
 

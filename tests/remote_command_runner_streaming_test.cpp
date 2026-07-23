@@ -45,6 +45,14 @@ int main(int argc, char** argv) {
     assert(output_result.output == "first second");
     assert(streamed == output_result.output);
 
+    const textlt::RemoteCommandResult missing_command_result = runner.RunStreaming(
+        {"/textlt-command-that-does-not-exist"},
+        {},
+        nullptr,
+        {});
+    assert(missing_command_result.exit_code == 127);
+    assert(missing_command_result.error == "Cannot execute command.\n");
+
     std::atomic<bool> cancel_requested{false};
     std::thread cancel_thread([&] {
         std::this_thread::sleep_for(std::chrono::milliseconds(120));

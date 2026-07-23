@@ -509,7 +509,21 @@ private:
             argv.push_back(nullptr);
             execv(config_.piper_path.c_str(), argv.data());
             const std::string message = std::string("execv failed for ") + config_.piper_path + ": " + std::strerror(errno) + "\n";
-            write(STDERR_FILENO, message.data(), message.size());
+            size_t offset = 0;
+            while (offset < message.size()) {
+                const ssize_t count = write(
+                    STDERR_FILENO,
+                    message.data() + offset,
+                    message.size() - offset);
+                if (count > 0) {
+                    offset += static_cast<size_t>(count);
+                    continue;
+                }
+                if (count < 0 && errno == EINTR) {
+                    continue;
+                }
+                break;
+            }
             _exit(127);
         }
 

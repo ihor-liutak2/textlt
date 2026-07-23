@@ -93,6 +93,40 @@ std::filesystem::path ExpandHome(std::filesystem::path path) {
     return path;
 }
 
+bool MatchesWildcard(const std::string& value, const std::string& pattern) {
+    size_t value_index = 0;
+    size_t pattern_index = 0;
+    size_t star_index = std::string::npos;
+    size_t star_value_index = 0;
+    while (value_index < value.size()) {
+#ifdef _WIN32
+        const bool characters_match = pattern_index < pattern.size() &&
+            std::tolower(static_cast<unsigned char>(pattern[pattern_index])) ==
+                std::tolower(static_cast<unsigned char>(value[value_index]));
+#else
+        const bool characters_match =
+            pattern_index < pattern.size() && pattern[pattern_index] == value[value_index];
+#endif
+        if (pattern_index < pattern.size() &&
+            (pattern[pattern_index] == '?' || characters_match)) {
+            ++value_index;
+            ++pattern_index;
+        } else if (pattern_index < pattern.size() && pattern[pattern_index] == '*') {
+            star_index = pattern_index++;
+            star_value_index = value_index;
+        } else if (star_index != std::string::npos) {
+            pattern_index = star_index + 1;
+            value_index = ++star_value_index;
+        } else {
+            return false;
+        }
+    }
+    while (pattern_index < pattern.size() && pattern[pattern_index] == '*') {
+        ++pattern_index;
+    }
+    return pattern_index == pattern.size();
+}
+
 std::vector<std::filesystem::path> ExpandIncludePattern(
     const std::filesystem::path& pattern,
     const std::filesystem::path& base_directory) {
@@ -101,18 +135,41 @@ std::vector<std::filesystem::path> ExpandIncludePattern(
         resolved = base_directory / resolved;
     }
     std::vector<std::filesystem::path> matches;
-#ifdef _WIN32
-    if (std::filesystem::is_regular_file(resolved)) {
-        matches.push_back(resolved);
-    }
-#else
-    glob_t expanded{};
-    if (::glob(resolved.c_str(), GLOB_TILDE, nullptr, &expanded) == 0) {
-        for (size_t index = 0; index < expanded.gl_pathc; ++index) {
-            matches.emplace_back(expanded.gl_pathv[index]);
+    const std::string filename_pattern = resolved.filename().string();
+    const bool filename_has_wildcard =
+        filename_pattern.find_first_of("*?") != std::string::npos;
+    const bool path_has_complex_pattern =
+        filename_pattern.find('[') != std::string::npos ||
+        resolved.parent_path().string().find_first_of("*?[") != std::string::npos;
+    if (!filename_has_wildcard && !path_has_complex_pattern) {
+        if (std::filesystem::is_regular_file(resolved)) {
+            matches.push_back(resolved);
+        }
+    } else if (!path_has_complex_pattern) {
+        std::error_code iteration_error;
+        const std::filesystem::path directory = resolved.parent_path().empty()
+            ? std::filesystem::path(".")
+            : resolved.parent_path();
+        for (std::filesystem::directory_iterator iterator(directory, iteration_error), end;
+             !iteration_error && iterator != end;
+             iterator.increment(iteration_error)) {
+            std::error_code type_error;
+            if (iterator->is_regular_file(type_error) &&
+                MatchesWildcard(iterator->path().filename().string(), filename_pattern)) {
+                matches.push_back(iterator->path());
+            }
         }
     }
-    ::globfree(&expanded);
+#ifndef _WIN32
+    if (matches.empty() && path_has_complex_pattern) {
+        glob_t expanded{};
+        if (::glob(resolved.c_str(), GLOB_TILDE, nullptr, &expanded) == 0) {
+            for (size_t index = 0; index < expanded.gl_pathc; ++index) {
+                matches.emplace_back(expanded.gl_pathv[index]);
+            }
+        }
+        ::globfree(&expanded);
+    }
 #endif
     std::sort(matches.begin(), matches.end());
     return matches;
