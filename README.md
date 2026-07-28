@@ -42,6 +42,11 @@ Optimized to run perfectly in native Linux environments (**MX Linux**, **Ubuntu*
 
 ### Install from Release
 
+Installing or upgrading resets TextLT configuration, custom themes, text-parser
+configuration, and downloaded registries so the release's current defaults and
+themes are used. Installed Piper/TTS voices, the llama.cpp runtime, and local AI
+models are preserved.
+
 #### Linux (Debian, Ubuntu, Fedora, Arch, and others)
 
 One-liner install (downloads the latest release automatically):
@@ -224,4 +229,3 @@ Open the interactive **Help** window inside the editor at any time to view the l
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](https://www.google.com/search?q=LICENSE) file for details.
-

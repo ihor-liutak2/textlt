@@ -23,6 +23,9 @@ ASSET="${TEXTLT_ASSET:-textlt-linux-x64.tar.gz}"
 INSTALL_ROOT="${TEXTLT_INSTALL_ROOT:-$HOME/.local/share/textlt}"
 APP_DIR="$INSTALL_ROOT/app"
 BIN_DIR="${TEXTLT_BIN_DIR:-$HOME/.local/bin}"
+CONFIG_DIR="$HOME/.config/textlt"
+XDG_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/textlt"
+LEGACY_CONFIG_FILE="$HOME/.textlt_config.json"
 ARCHIVE="${TMPDIR:-/tmp}/$ASSET"
 EXTRACT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/textlt-install.XXXXXX")"
 URL="${TEXTLT_DOWNLOAD_URL:-https://github.com/$REPO/releases/download/$VERSION/$ASSET}"
@@ -65,6 +68,23 @@ if [[ -z "$EXE" ]]; then
 fi
 
 EXE_DIR="$(dirname "$EXE")"
+
+echo "Resetting TextLT configuration and bundled resources..."
+rm -rf "$CONFIG_DIR"
+if [[ "$XDG_CONFIG_DIR" != "$CONFIG_DIR" ]]; then
+  rm -rf "$XDG_CONFIG_DIR"
+fi
+rm -f "$LEGACY_CONFIG_FILE"
+
+# Older releases could leave bundled resources beside app/. Remove only those
+# application-managed directories; downloaded Piper voices and AI/llama.cpp
+# data live in $INSTALL_ROOT/piper and $INSTALL_ROOT/ai and are preserved.
+rm -rf \
+  "$INSTALL_ROOT/themes" \
+  "$INSTALL_ROOT/text_processors" \
+  "$INSTALL_ROOT/resources" \
+  "$INSTALL_ROOT/registries"
+
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR"
 cp -a "$EXE_DIR"/. "$APP_DIR"/
