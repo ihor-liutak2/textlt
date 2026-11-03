@@ -94,7 +94,8 @@ ftxui::Element TextltApp::Render() {
           });
 
     Elements base_rows = {
-        top_bar_row_ ? top_bar_row_->Render() : text(" textlt v1.0.0 - Native Non-Modal Text Editor"),
+        top_bar_row_ ? top_bar_row_->Render()
+                     : text(" textlt v" TEXTLT_VERSION " - Native Non-Modal Text Editor"),
     };
 
     if (!distraction_mode) {
@@ -167,6 +168,9 @@ ftxui::Element TextltApp::Render() {
     }
     if (theme_dialog_.IsOpen()) {
         layers.push_back(theme_dialog_.View()->Render() | clear_under | center);
+    }
+    if (theme_colors_modal_.IsOpen()) {
+        layers.push_back(theme_colors_modal_.View()->Render() | clear_under | center);
     }
     if (tts_modal_.IsOpen()) {
         layers.push_back(tts_modal_.View()->Render() | clear_under | center);
@@ -322,6 +326,7 @@ bool TextltApp::ActiveModalIsOpen() const {
         case UiLayer::SidebarShortcuts: return sidebar_shortcuts_modal_.IsOpen();
         case UiLayer::CustomProcessorBuilder: return custom_processor_builder_modal_.IsOpen();
         case UiLayer::Theme: return theme_dialog_.IsOpen();
+        case UiLayer::ThemeColors: return theme_colors_modal_.IsOpen();
         case UiLayer::Find: return current_search_mode_ != SearchMode::None;
         case UiLayer::GoToLine: return show_goto_line_bar_;
         case UiLayer::UnsavedChanges: return unsaved_changes_dialog_.IsOpen();

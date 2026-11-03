@@ -70,7 +70,8 @@ SidebarPanel::SidebarPanel(
       on_copy_path_(std::move(on_copy_path)),
       shortcut_label_provider_(std::move(shortcut_label_provider)),
       on_open_notes_(std::move(on_open_notes)),
-      current_path_(std::filesystem::current_path()) {
+      project_root_(std::filesystem::current_path()),
+      current_path_(project_root_) {
     ftxui::MenuOption option = ftxui::MenuOption::Vertical();
     option.on_enter = [this] { OpenSelectedEntry(); };
     menu_ = ftxui::Menu(&entry_labels_, &selected_entry_, option);
@@ -130,6 +131,9 @@ ftxui::Element SidebarPanel::OnRender() {
             text(" "),
             RenderNotesButton(notes_tab_box_),
         }),
+        mode_ == SidebarMode::Project
+            ? text(" " + DisplayName(project_root_) + "/") | bold | color(sidebar_text)
+            : emptyElement(),
         separator() | color(SidebarBorderColor(theme)),
         RenderActionRow(),
         separator() | color(SidebarBorderColor(theme)),
@@ -169,7 +173,7 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
 
     if (event == ftxui::Event::Backspace && mode_ == SidebarMode::Project) {
         const std::filesystem::path parent = current_path_.parent_path();
-        if (!parent.empty() && parent != current_path_) {
+        if (current_path_ != project_root_ && !parent.empty() && parent != current_path_) {
             current_path_ = parent;
             RebuildEntries();
             list_scroll_offset_ = 0;
@@ -727,7 +731,7 @@ void SidebarPanel::RebuildOpenedEntries() {
 void SidebarPanel::RebuildProjectEntries() {
     std::error_code error;
     const std::filesystem::path parent = current_path_.parent_path();
-    if (!parent.empty() && parent != current_path_) {
+    if (current_path_ != project_root_ && !parent.empty() && parent != current_path_) {
         AddEntry(parent, " ../", EntryKind::Directory);
     }
 

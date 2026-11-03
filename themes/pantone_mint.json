@@ -14,6 +14,8 @@
   "syntax_comment": "#6272A4",
   "gutter": "#2D5A27",
   "cursor": "#A8DF8E",
+  "selection_bg": "cyan",
+  "selection_fg": "black",
   "match_bg": "#4A70D7",
   "active_match_bg": "#CCEE00",
   "modal_background": "#1F4037",

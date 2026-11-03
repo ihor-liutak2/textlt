@@ -1,10 +1,13 @@
 #include "theme.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <cstdint>
+#include <iomanip>
 #include <map>
 #include <cstdio> // Used by sscanf for hexadecimal RGB parsing.
+#include <sstream>
 
 #include "json_utils.hpp"
 
@@ -39,9 +42,16 @@ namespace textlt {
                 {"gray_dark", {ftxui::Color::GrayDark, {85, 85, 85}}},
                 {"gray_light", {ftxui::Color::GrayLight, {170, 170, 170}}},
                 {"green", {ftxui::Color::Green, {0, 170, 0}}},
+                {"green_light", {ftxui::Color::GreenLight, {85, 255, 85}}},
+                {"blue_light", {ftxui::Color::BlueLight, {85, 85, 255}}},
+                {"cyan_light", {ftxui::Color::CyanLight, {85, 255, 255}}},
+                {"magenta", {ftxui::Color::Magenta, {170, 0, 170}}},
+                {"magenta_light", {ftxui::Color::MagentaLight, {255, 85, 255}}},
                 {"red", {ftxui::Color::Red, {170, 0, 0}}},
+                {"red_light", {ftxui::Color::RedLight, {255, 85, 85}}},
                 {"white", {ftxui::Color::White, {255, 255, 255}}},
                 {"yellow", {ftxui::Color::Yellow, {170, 85, 0}}},
+                {"yellow_light", {ftxui::Color::YellowLight, {255, 255, 85}}},
             };
             return colors;
         }
@@ -396,6 +406,133 @@ namespace textlt {
         }
 
         return FallbackTheme();
+    }
+
+    bool ParseThemeColor(const std::string& value, ftxui::Color& color) {
+        const size_t first = value.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos) {
+            return false;
+        }
+        const size_t last = value.find_last_not_of(" \t\r\n");
+        std::string normalized = value.substr(first, last - first + 1);
+        if (normalized.empty() || normalized.front() != '#') {
+            std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+                [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+        }
+
+        Rgb rgb;
+        if (!TryParseRgb(normalized, &rgb)) {
+            return false;
+        }
+        color = ColorFromName(normalized, color);
+        return true;
+    }
+
+    std::string ThemeColorToString(const ftxui::Color& color) {
+        for (const auto& [name, named] : NamedColors()) {
+            if (color == named.color) {
+                return name;
+            }
+        }
+
+        unsigned int red = 0;
+        unsigned int green = 0;
+        unsigned int blue = 0;
+        const std::string printed = color.Print(false);
+        if (std::sscanf(printed.c_str(), "38;2;%u;%u;%u", &red, &green, &blue) != 3) {
+            return "#FFFFFF";
+        }
+
+        std::ostringstream output;
+        output << '#'
+               << std::uppercase << std::hex << std::setfill('0')
+               << std::setw(2) << red
+               << std::setw(2) << green
+               << std::setw(2) << blue;
+        return output.str();
+    }
+
+    bool ApplyThemeColorOverrides(
+        Theme& theme,
+        const std::map<std::string, std::string>& overrides,
+        std::string* error) {
+        using ColorMember = ftxui::Color Theme::*;
+        static const std::map<std::string, ColorMember> members = {
+            {"background", &Theme::background},
+            {"foreground", &Theme::foreground},
+            {"header", &Theme::header},
+            {"menu_background", &Theme::menu_background},
+            {"menu_foreground", &Theme::menu_foreground},
+            {"status", &Theme::status},
+            {"editor_text", &Theme::editor_text},
+            {"syntax_keyword", &Theme::syntax_keyword},
+            {"syntax_type", &Theme::syntax_type},
+            {"syntax_string", &Theme::syntax_string},
+            {"syntax_number", &Theme::syntax_number},
+            {"syntax_comment", &Theme::syntax_comment},
+            {"gutter", &Theme::gutter},
+            {"cursor", &Theme::cursor},
+            {"selection_bg", &Theme::selection_bg},
+            {"selection_fg", &Theme::selection_fg},
+            {"match_bg", &Theme::match_bg},
+            {"active_match_bg", &Theme::active_match_bg},
+            {"modal_background", &Theme::modal_background},
+            {"modal_foreground", &Theme::modal_foreground},
+            {"modal_border", &Theme::modal_border},
+            {"modal_accent", &Theme::modal_accent},
+            {"modal_text_color", &Theme::modal_text_color},
+            {"modal_input_bg", &Theme::modal_input_bg},
+            {"modal_input_fg", &Theme::modal_input_fg},
+            {"modal_selected_item_bg", &Theme::modal_selected_item_bg},
+            {"modal_selected_item_fg", &Theme::modal_selected_item_fg},
+            {"button_default", &Theme::button_default},
+            {"button_primary", &Theme::button_primary},
+            {"button_secondary", &Theme::button_secondary},
+            {"button_success", &Theme::button_success},
+            {"button_warning", &Theme::button_warning},
+            {"button_danger", &Theme::button_danger},
+            {"button_cancel", &Theme::button_cancel},
+            {"button_utility", &Theme::button_utility},
+            {"button_navigation", &Theme::button_navigation},
+            {"button_tab", &Theme::button_tab},
+            {"button_toggle", &Theme::button_toggle},
+            {"button_media", &Theme::button_media},
+            {"button_text", &Theme::button_text},
+            {"button_muted_text", &Theme::button_muted_text},
+            {"button_focused_bg", &Theme::button_focused_bg},
+            {"button_focused_fg", &Theme::button_focused_fg},
+            {"button_selected_bg", &Theme::button_selected_bg},
+            {"button_selected_fg", &Theme::button_selected_fg},
+            {"button_disabled_fg", &Theme::button_disabled_fg},
+            {"button_shadow", &Theme::button_shadow},
+            {"button_bracket", &Theme::button_bracket},
+        };
+
+        for (const auto& [key, value] : overrides) {
+            const auto member = members.find(key);
+            if (member == members.end()) {
+                continue;
+            }
+            ftxui::Color parsed;
+            if (!ParseThemeColor(value, parsed)) {
+                if (error) {
+                    *error = "Invalid color for " + key + ": " + value;
+                }
+                return false;
+            }
+            theme.*(member->second) = parsed;
+        }
+        if (error) {
+            error->clear();
+        }
+        return true;
+    }
+
+    Theme ThemeWithColorOverrides(
+        Theme theme,
+        const std::map<std::string, std::string>& overrides) {
+        ApplyThemeColorOverrides(theme, overrides);
+        return theme;
     }
 
 } // namespace textlt

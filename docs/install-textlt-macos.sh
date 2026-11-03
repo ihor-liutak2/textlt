@@ -96,7 +96,6 @@ chmod +x "$APP_DIR/textlt"
 
 cat > "$BIN_DIR/textlt" <<TEXTLT_WRAPPER
 #!/usr/bin/env bash
-cd "$APP_DIR" || exit 1
 exec "$APP_DIR/textlt" "\$@"
 TEXTLT_WRAPPER
 chmod +x "$BIN_DIR/textlt"

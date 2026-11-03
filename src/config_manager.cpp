@@ -67,6 +67,20 @@ EditorConfig ConfigManager::Load() const {
     }
     config.active_theme_name = JsonString(
         root, "active_theme_name", config.active_theme_name);
+    const auto theme_overrides = root.find("theme_color_overrides");
+    if (theme_overrides != root.end() && theme_overrides->is_object()) {
+        for (auto theme = theme_overrides->begin(); theme != theme_overrides->end(); ++theme) {
+            if (!theme.value().is_object()) {
+                continue;
+            }
+            for (auto color = theme.value().begin(); color != theme.value().end(); ++color) {
+                if (color.value().is_string()) {
+                    config.theme_color_overrides[theme.key()][color.key()] =
+                        color.value().get<std::string>();
+                }
+            }
+        }
+    }
     config.tts_audio_player_id = JsonString(
         root, "tts_audio_player_id", config.tts_audio_player_id);
     if (config.tts_audio_player_id.empty()) {

@@ -82,6 +82,7 @@ public:
     bool IsFavoritesMode() const { return mode_ == SidebarMode::Favorites; }
 
     std::filesystem::path CurrentPath() const { return current_path_; }
+    std::filesystem::path ProjectRoot() const { return project_root_; }
     std::filesystem::path SelectedProjectPath() const;
     bool CopySelectedProjectPath();
 
@@ -181,6 +182,7 @@ private:
     CopyPathCallback on_copy_path_;
     ShortcutLabelProvider shortcut_label_provider_;
     OpenNotesCallback on_open_notes_;
+    std::filesystem::path project_root_;
     std::filesystem::path current_path_;
     std::vector<OpenedFileEntry> opened_files_;
     size_t active_opened_file_index_ = 0;

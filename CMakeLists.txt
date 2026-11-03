@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(textlt VERSION 0.9.5 LANGUAGES C CXX)
+project(textlt VERSION 0.9.7 LANGUAGES C CXX)
 
 include(GNUInstallDirs)
 
@@ -270,6 +270,7 @@ add_executable(textlt
   src/modals/modal_tts.cpp
   src/modals/modal_view_layout.cpp
   src/modals/modal_distraction_options.cpp
+  src/modals/modal_theme_colors.cpp
   src/modals/modal_window.cpp
   src/modals/theme_dialog.cpp
   src/modals/unsaved_changes_dialog.cpp
@@ -314,6 +315,10 @@ target_include_directories(textlt PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party
   ${LibArchive_INCLUDE_DIRS}
+)
+
+target_compile_definitions(textlt PRIVATE
+  TEXTLT_VERSION="${PROJECT_VERSION}"
 )
 
 target_link_libraries(textlt PRIVATE
@@ -364,6 +369,11 @@ add_executable(textlt_document_navigation_test
   src/editor/text_buffer.cpp
   src/editor_utils.cpp
   src/history_manager.cpp
+)
+
+add_executable(textlt_theme_customization_test
+  tests/theme_customization_test.cpp
+  src/theme.cpp
 )
 
 add_executable(textlt_text_importer_test
@@ -713,6 +723,11 @@ target_include_directories(textlt_document_navigation_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+target_include_directories(textlt_theme_customization_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+)
+
 target_include_directories(textlt_ai_prompts_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -755,6 +770,11 @@ target_include_directories(textlt_document_ai_transform_test PRIVATE
 )
 
 target_link_libraries(textlt_document_navigation_test PRIVATE ftxui::screen)
+target_link_libraries(textlt_theme_customization_test PRIVATE
+  ftxui::screen
+  ftxui::dom
+  ftxui::component
+)
 target_link_libraries(textlt_notes_workspace_sync_test PRIVATE
   ftxui::component
   Threads::Threads
@@ -770,6 +790,7 @@ target_link_libraries(textlt_ai_quick_actions_test PRIVATE
 target_link_libraries(textlt_document_ai_transform_test PRIVATE ftxui::screen)
 
 add_test(NAME textlt_document_navigation_test COMMAND textlt_document_navigation_test)
+add_test(NAME textlt_theme_customization_test COMMAND textlt_theme_customization_test)
 add_test(NAME textlt_ai_prompts_test COMMAND textlt_ai_prompts_test)
 add_test(NAME textlt_ai_backend_utils_test COMMAND textlt_ai_backend_utils_test)
 add_test(NAME textlt_remote_command_runner_streaming_test

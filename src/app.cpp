@@ -25,6 +25,17 @@ namespace textlt {
 
 namespace {
 
+Theme ResolveConfiguredTheme(
+    const std::vector<Theme>& themes,
+    const EditorConfig& config) {
+    Theme theme = FindThemeByName(themes, config.active_theme_name);
+    const auto overrides = config.theme_color_overrides.find(theme.name);
+    if (overrides != config.theme_color_overrides.end()) {
+        ApplyThemeColorOverrides(theme, overrides->second);
+    }
+    return theme;
+}
+
 class BracketedPasteModeGuard {
 public:
     BracketedPasteModeGuard() {
@@ -94,7 +105,7 @@ TextltApp::TextltApp()
       editor_config_(config_manager_.Load()),
       distraction_controller_(editor_config_.distraction_mode),
       themes_(LoadThemesFromConfiguredLocations()),
-      current_theme_(FindThemeByName(themes_, editor_config_.active_theme_name)),
+      current_theme_(ResolveConfiguredTheme(themes_, editor_config_)),
       screen_(ftxui::App::Fullscreen()),
       app_event_dispatcher_(*this),
       file_manager_(),
@@ -364,6 +375,41 @@ TextltApp::TextltApp()
       assistant_settings_modal_(
           &current_theme_,
           [this] { screen_.PostEvent(ftxui::Event::Custom); }),
+      theme_colors_modal_(
+          &current_theme_,
+          [this](const std::map<std::string, std::string>& overrides, std::string& error) {
+              Theme updated = FindThemeByName(themes_, current_theme_.name);
+              if (!ApplyThemeColorOverrides(updated, overrides, &error)) {
+                  return false;
+              }
+              const auto previous_overrides = editor_config_.theme_color_overrides;
+              editor_config_.theme_color_overrides[current_theme_.name] = overrides;
+              if (!editor_config_.Persist()) {
+                  editor_config_.theme_color_overrides = previous_overrides;
+                  error = "Could not save theme color settings.";
+                  return false;
+              }
+              current_theme_ = std::move(updated);
+              theme_dialog_.SetTheme(&current_theme_);
+              active_action_ = "Updated colors for " + current_theme_.name;
+              screen_.PostEvent(ftxui::Event::Custom);
+              return true;
+          },
+          [this](std::string& error) {
+              const auto previous_overrides = editor_config_.theme_color_overrides;
+              editor_config_.theme_color_overrides.erase(current_theme_.name);
+              if (!editor_config_.Persist()) {
+                  editor_config_.theme_color_overrides = previous_overrides;
+                  error = "Could not save the reset theme colors.";
+                  return false;
+              }
+              current_theme_ = FindThemeByName(themes_, current_theme_.name);
+              theme_dialog_.SetTheme(&current_theme_);
+              active_action_ = "Reset colors for " + current_theme_.name;
+              screen_.PostEvent(ftxui::Event::Custom);
+              return true;
+          },
+          [this] { CloseThemeColorsModal(); }),
       theme_dialog_(
           &current_theme_,
           [this](const std::string& theme_name) { PreviewTheme(theme_name); },
@@ -638,6 +684,7 @@ TextltApp::TextltApp()
         sidebar_shortcuts_modal_.View(),
         custom_processor_builder_modal_.View(),
         theme_dialog_.View(),
+        theme_colors_modal_.View(),
         find_panel_container_,
         goto_line_popup_container_,
         unsaved_changes_dialog_.View(),

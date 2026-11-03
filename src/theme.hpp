@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -86,5 +87,14 @@ std::vector<Theme> LoadThemesFromDirectory(const std::filesystem::path& director
 std::vector<Theme> LoadThemesFromConfiguredLocations();
 Theme FallbackTheme();
 Theme FindThemeByName(const std::vector<Theme>& themes, const std::string& name);
+bool ParseThemeColor(const std::string& value, ftxui::Color& color);
+std::string ThemeColorToString(const ftxui::Color& color);
+bool ApplyThemeColorOverrides(
+    Theme& theme,
+    const std::map<std::string, std::string>& overrides,
+    std::string* error = nullptr);
+Theme ThemeWithColorOverrides(
+    Theme theme,
+    const std::map<std::string, std::string>& overrides);
 
 } // namespace textlt

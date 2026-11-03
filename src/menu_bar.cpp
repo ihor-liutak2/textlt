@@ -125,6 +125,7 @@ MenuBarComponent::MenuBarComponent(
           {
               {" About textlt ", "app.about"},
               {" Keyboard Shortcuts ", "app.help"},
+              {" Theme Color Settings... ", "theme.colors"},
           },
           {
               {" Exit ", "app.exit"},

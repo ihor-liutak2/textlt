@@ -92,6 +92,7 @@ void TextltApp::InitializeCommands() {
     add("editor.toggle_tab_size", "Toggle Tab Size", "Options", "", [this] { CommandEditorToggleTabSize(); });
     add("editor.convert_tabs_to_spaces", "Convert Tabs to Spaces", "Options", "", [this] { CommandEditorConvertTabsToSpaces(); });
     add("theme.open", "Theme", "Options", "", [this] { CommandThemeOpen(); });
+    add("theme.colors", "Theme Color Settings", "Help", "", [this] { OpenThemeColorsModal(); });
     add("view.layout", "View Layout", "Options", "", [this] { CommandViewLayoutOpen(); });
     add("distraction.open_options", "Distraction Mode", "Options", "", [this] { CommandDistractionOpenOptions(); });
     add("distraction.enter", "Enter Distraction Mode", "Options", "", [this] { CommandDistractionEnter(); });
@@ -195,7 +196,8 @@ bool TextltApp::RunCommand(const std::string& command_id) {
         const bool allowed = command_id.rfind("notes.", 0) == 0 ||
             command_id.rfind("app.", 0) == 0 ||
             command_id == "file.save" ||
-            command_id == "theme.open";
+            command_id == "theme.open" ||
+            command_id == "theme.colors";
         if (!allowed) {
             active_action_ = "This command is unavailable in Notes view";
             CloseDropdown();

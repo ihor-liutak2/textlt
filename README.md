@@ -1,5 +1,7 @@
 # textlt
 
+[Website & installation guide](https://ihor-liutak2.github.io/textlt/)
+
 `textlt` is a lightweight, blazing-fast, and highly customizable **Terminal User Interface (TUI)** text editor built from scratch in C++. Designed for modern developers who love the efficiency of the command line but prefer intuitive, modeless text editing over complex Vim/Emacs modal constraints.
 
 Optimized to run perfectly in native Linux environments (**MX Linux**, **Ubuntu**, **Debian**) as well as **WSL (Windows Subsystem for Linux)**.
@@ -21,6 +23,7 @@ Optimized to run perfectly in native Linux environments (**MX Linux**, **Ubuntu*
 - **Embedded Syntax Engine (Heredoc/Nowdoc):** Seamlessly shifts lexical token states inside PHP code streams when encountering `<<<HTML`, `<<<CSS`, or `<<<JS` blocks, matching enterprise IDE behavior.
 - **Full Interactive Mouse Integration:**
   - Fluid drag-selection tracking mapped directly onto character coordinate structures.
+  - `Ctrl+Click` extends text selection inside the editor without triggering the terminal's native `Shift+Click` screen selection.
   - Smooth terminal scroll-wheel navigation.
   - Single-click cursor repositioning and side-panel file manager navigation.
 - **Smart Code Commenting:** Context-aware line/block comment toggling via `Ctrl + /` that dynamically inserts language-specific prefixes (`//`, `#`, `--`) aligned cleanly before the first non-whitespace character.
@@ -58,7 +61,7 @@ curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-linux.sh | bash
 Or install a specific version:
 
 ```bash
-curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-linux.sh | bash -s -- v0.9.3
+curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-linux.sh | bash -s -- v0.9.7
 ```
 
 After installing, start the editor from any terminal with:
@@ -85,7 +88,7 @@ irm https://ihor-liutak2.github.io/textlt/install-textlt-windows.ps1 | iex
 Or install a specific version:
 
 ```powershell
-$env:TEXTLT_VERSION = "v0.9.3"; irm https://ihor-liutak2.github.io/textlt/install-textlt-windows.ps1 | iex
+$env:TEXTLT_VERSION = "v0.9.7"; irm https://ihor-liutak2.github.io/textlt/install-textlt-windows.ps1 | iex
 ```
 
 Open a new PowerShell window after installing so Windows reloads `PATH`, then start the editor with:
@@ -112,7 +115,7 @@ curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-macos.sh | bash
 Or install a specific version:
 
 ```bash
-curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-macos.sh | bash -s -- v0.9.3
+curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-macos.sh | bash -s -- v0.9.7
 ```
 
 After installing, start the editor from any terminal with:
@@ -151,6 +154,23 @@ Run from the build directory:
 ```bash
 ./build/textlt path/to/file.cpp
 ```
+
+#### Rebuild and Test Local Changes
+
+From the repository root, configure the project, rebuild it, and run the local
+binary:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel 2
+./build/textlt
+```
+
+Run `./build/textlt` while testing changes. Running `textlt` without the
+`./build/` prefix may start an older installed version instead. For mouse
+selection testing, drag with the left mouse button to select text, or use
+`Ctrl+left-click`/`Ctrl+drag` to extend the selection inside the editor without
+triggering the terminal's native `Shift+mouse` screen selection.
 
 Install the built binary for the current user:
 

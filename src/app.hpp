@@ -36,6 +36,7 @@
 #include "modals/modal_tts.hpp"
 #include "modals/modal_view_layout.hpp"
 #include "modals/modal_distraction_options.hpp"
+#include "modals/modal_theme_colors.hpp"
 #include "modals/modal_search_files.hpp"
 #include "modals/modal_files.hpp"
 #include "modals/modal_text_processors.hpp"
@@ -96,6 +97,7 @@ private:
         SidebarShortcuts,
         CustomProcessorBuilder,
         Theme,
+        ThemeColors,
         Find,
         GoToLine,
         UnsavedChanges,
@@ -196,6 +198,8 @@ private:
     void CloseAssistantSettingsModal();
     void OpenThemeDialog();
     void CloseThemeDialog();
+    void OpenThemeColorsModal();
+    void CloseThemeColorsModal();
     void ShowExitConfirmationDialog();
     void CloseExitConfirmationDialog();
     void RequestExit();
@@ -405,6 +409,7 @@ private:
     AiQuickActionsModal ai_quick_actions_modal_;
     AiSettingsModal ai_settings_modal_;
     AssistantSettingsModal assistant_settings_modal_;
+    ThemeColorsModal theme_colors_modal_;
     ThemeDialog theme_dialog_;
     UnsavedChangesDialog unsaved_changes_dialog_;
     std::string find_query_;

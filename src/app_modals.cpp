@@ -87,7 +87,8 @@ std::vector<std::string> BuiltInHelpLines() {
         "  Shift+PageUp/Down Select one page up/down",
         "  Ctrl+Shift+Home/End Select to document start/end",
         "  Ctrl+Shift+Up/Down Select by paragraph boundary",
-        "  Shift+Click   Select from the cursor to the clicked position",
+        "  Ctrl+Click    Select from the cursor to the clicked position",
+        "  Shift+Click   Same when forwarded by the terminal",
         "  Mouse Drag    Select text inside the editor viewport",
         "  Double Click  Select a word",
         "  Triple Click  Select a logical line",
@@ -128,6 +129,7 @@ std::vector<std::string> BuiltInHelpLines() {
         "  Auto Pairing inserts matching brackets and quotes.",
         "  Smart Auto-Indent carries indentation onto new lines.",
         "  Theme opens the dynamic theme selector.",
+        "  Help > Theme Color Settings customizes or resets the active theme.",
         "  View Layout opens the pane and column manager.",
         "",
         "Syntax Highlighting",
@@ -739,8 +741,30 @@ void TextltApp::CloseThemeDialog() {
 }
 
 
+void TextltApp::OpenThemeColorsModal() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+    SetActiveLayer(UiLayer::ThemeColors);
+    theme_colors_modal_.Open();
+    active_action_ = "Opened Theme Color Settings";
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+
+void TextltApp::CloseThemeColorsModal() {
+    theme_colors_modal_.Close();
+    SetActiveLayer(UiLayer::Main);
+    FocusEditor();
+}
+
+
 void TextltApp::PreviewTheme(const std::string& theme_name) {
     current_theme_ = FindThemeByName(themes_, theme_name);
+    const auto overrides = editor_config_.theme_color_overrides.find(current_theme_.name);
+    if (overrides != editor_config_.theme_color_overrides.end()) {
+        ApplyThemeColorOverrides(current_theme_, overrides->second);
+    }
     editor_config_.SetActiveThemeName(current_theme_.name);
     active_action_ = "Previewing theme " + current_theme_.name;
     screen_.PostEvent(ftxui::Event::Custom);
@@ -749,6 +773,10 @@ void TextltApp::PreviewTheme(const std::string& theme_name) {
 
 void TextltApp::SelectTheme(const std::string& theme_name) {
     current_theme_ = FindThemeByName(themes_, theme_name);
+    const auto overrides = editor_config_.theme_color_overrides.find(current_theme_.name);
+    if (overrides != editor_config_.theme_color_overrides.end()) {
+        ApplyThemeColorOverrides(current_theme_, overrides->second);
+    }
     editor_config_.SetActiveThemeName(current_theme_.name);
     active_action_ = "Theme changed to " + current_theme_.name;
     screen_.PostEvent(ftxui::Event::Custom);

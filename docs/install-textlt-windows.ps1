@@ -77,7 +77,6 @@ try {
     $CmdPath = Join-Path $InstallRoot "textlt.cmd"
     @"
 @echo off
-cd /d "%~dp0app"
 "%~dp0app\textlt.exe" %*
 "@ | Set-Content -Encoding ASCII $CmdPath
 

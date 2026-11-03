@@ -254,7 +254,7 @@ ftxui::Element TopBarRowComponent::OnRender() {
     }
 
     return hbox({
-        text(" textlt v1.0.0 - Native Non-Modal Text Editor") |
+        text(" textlt v" TEXTLT_VERSION " - Native Non-Modal Text Editor") |
             bold |
             color(theme.menu_foreground),
         filler(),

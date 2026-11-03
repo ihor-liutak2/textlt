@@ -561,7 +561,11 @@ bool EditorViewport::HandleMouseEvent(
         const auto [clicked_row, clicked_col] = PositionAtMouse(session, config, mouse);
         const size_t old_cursor_row = session.CursorRow();
         const size_t old_cursor_col = session.CursorCol();
-        const bool extend_selection = mouse.shift;
+        // Many terminal emulators reserve Shift+mouse for their own screen
+        // selection, which can spill across the editor and sidebar. Keep
+        // Shift support when the terminal forwards it, and provide Ctrl as a
+        // reliable application-level modifier.
+        const bool extend_selection = mouse.shift || mouse.control;
         const size_t anchor_row = session.HasSelection()
             ? session.SelectionState().anchor_y
             : old_cursor_row;

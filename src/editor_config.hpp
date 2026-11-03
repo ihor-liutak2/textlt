@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,7 @@ struct EditorConfig {
     bool search_whole_word = false;
     int tab_size = 4;
     std::string active_theme_name = "Blueprint";
+    std::map<std::string, std::map<std::string, std::string>> theme_color_overrides;
     std::string tts_audio_player_id = "auto";
     std::string tts_audio_player_command;
     std::string tts_player_voice_id;
