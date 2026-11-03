@@ -51,6 +51,10 @@ public:
     virtual bool HasCustomFooter() const { return false; }
     virtual int GetCustomFooterHeight() const { return 1; }
     virtual ftxui::Element RenderCustomFooter() { return ftxui::text(""); }
+
+    // Standard footers may place status text above the action buttons while
+    // retaining ModalWindow's shared button handling and keyboard navigation.
+    virtual bool FooterTextAboveButtons() const { return false; }
 };
 
 } // namespace textlt

@@ -31,6 +31,7 @@ public:
     std::string GetTitle() override { return "Theme Color Settings"; }
     ModalSizePreference GetModalSizePreference() const override { return {84, 31}; }
     std::string GetFooterText() const override { return status_; }
+    bool FooterTextAboveButtons() const override { return true; }
 
     void Open();
     bool Apply();

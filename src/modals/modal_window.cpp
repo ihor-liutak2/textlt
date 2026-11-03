@@ -238,34 +238,46 @@ ftxui::Element ModalWindow::RenderFooter(const Theme& theme) {
             size(HEIGHT, EQUAL, std::max(1, content_->GetCustomFooterHeight()));
     }
 
-    Elements row;
     const std::string footer_text =
         content_ && !content_->GetFooterText().empty()
             ? content_->GetFooterText()
             : footer_text_;
+    Elements button_row = {filler()};
+    for (size_t index = 0; index < footer_buttons_.size(); ++index) {
+        if (index > 0) {
+            button_row.push_back(text(" "));
+        }
+        button_row.push_back(footer_buttons_[index]->Render());
+    }
+
+    const auto footer_style = [&](Element element) {
+        return element |
+            bgcolor(theme.modal_background) |
+            color(theme.modal_text_color) |
+            size(WIDTH, EQUAL, BodyWidth());
+    };
+
+    if (content_ && content_->FooterTextAboveButtons() && !footer_text.empty()) {
+        return vbox({
+            footer_style(hbox({
+                text(" " + footer_text + " ") | dim | color(theme.modal_text_color),
+                filler(),
+            })),
+            footer_style(hbox(std::move(button_row))),
+        });
+    }
+
+    Elements row;
     if (!footer_text.empty()) {
         row.push_back(text(" " + footer_text + " ") |
                       dim |
                       color(theme.modal_text_color));
     }
-
-    row.push_back(filler());
-
-    for (size_t index = 0; index < footer_buttons_.size(); ++index) {
-        if (index > 0) {
-            row.push_back(text(" "));
-        }
-        row.push_back(footer_buttons_[index]->Render());
-    }
-
+    row.insert(row.end(), button_row.begin(), button_row.end());
     if (footer_text.empty() && footer_buttons_.empty()) {
         row.push_back(text(" "));
     }
-
-    return hbox(std::move(row)) |
-        bgcolor(theme.modal_background) |
-        color(theme.modal_text_color) |
-        size(WIDTH, EQUAL, BodyWidth());
+    return footer_style(hbox(std::move(row)));
 }
 
 int ModalWindow::ModalWidth() const {
@@ -302,7 +314,7 @@ int ModalWindow::BodyHeight() const {
         if (show_footer_) {
             used_rows += 1 + (content_ && content_->HasCustomFooter()
                 ? std::max(1, content_->GetCustomFooterHeight())
-                : 1);
+                : content_ && content_->FooterTextAboveButtons() ? 2 : 1);
         }
         return std::max(1, modal_height - used_rows);
     }
