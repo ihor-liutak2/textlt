@@ -302,6 +302,22 @@ ftxui::Element GitModalContent::RenderBranchesTab() {
                 ftxui::color(theme.modal_input_fg) |
                 ftxui::xflex,
         }),
+        ftxui::separator() | ftxui::color(theme.modal_border),
+        ftxui::hbox({
+            checkout_button_->Render(),
+            ftxui::text(" "),
+            merge_button_->Render(),
+            ftxui::text(" "),
+            rebase_button_->Render(),
+            ftxui::text(" "),
+            rename_button_->Render(),
+            ftxui::text(" "),
+            delete_branch_button_->Render(),
+            ftxui::text(" "),
+            update_button_->Render(),
+            ftxui::text(" "),
+            new_branch_button_->Render(),
+        }),
     });
 }
 
