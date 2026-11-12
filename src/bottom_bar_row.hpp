@@ -18,6 +18,7 @@ struct BottomBarRowState {
     int document_percent = 100;
     std::string line_ending;
     std::string git_branch;
+    std::string project_name;
     std::string theme_name;
 };
 

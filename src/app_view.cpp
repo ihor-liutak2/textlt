@@ -54,6 +54,9 @@ BottomBarRowState TextltApp::CurrentBottomBarRowState() {
     }
 
     state.git_branch = git_manager_.GetCurrentBranch();
+    if (const ProjectRecord* project = ActiveWorkspaceProject()) {
+        state.project_name = project->name;
+    }
 
     return state;
 }

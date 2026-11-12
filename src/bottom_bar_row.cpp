@@ -92,7 +92,9 @@ ftxui::Element BottomBarRowComponent::OnRender() {
     const Theme& theme = ResolveTheme(theme_);
     const BottomBarRowState state = State();
     const std::string branch = TruncateLabel(state.git_branch, 15);
+    const std::string project = TruncateLabel(state.project_name, 20);
     const bool has_branch = !branch.empty();
+    const bool has_project = !project.empty();
     const bool has_theme = !state.theme_name.empty();
 
     segment_hit_boxes_.clear();
@@ -116,6 +118,9 @@ ftxui::Element BottomBarRowComponent::OnRender() {
     if (has_branch) {
         parts.push_back(static_text(" | branch: "));
         parts.push_back(clickable_text(branch, Segment::Branch, true));
+    }
+    if (has_project) {
+        parts.push_back(static_text(" | Project: " + project));
     }
     parts.push_back(static_text(" | " + std::to_string(state.document_percent) + "%"));
     parts.push_back(static_text(" | Theme: "));
