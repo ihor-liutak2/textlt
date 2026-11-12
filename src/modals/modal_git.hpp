@@ -139,6 +139,19 @@ private:
     bool HandleConfirmEvent(ftxui::Event event);
     ftxui::Element RenderConfirmOverlay();
 
+    // Branches-tab popup used by New, Rename, and Delete.
+    void RequestBranchInput(
+        const std::string& title,
+        const std::string& message,
+        const std::string& label,
+        const std::string& initial_value,
+        const std::string& required_text,
+        std::function<void()> on_confirm);
+    void ConfirmBranchInput();
+    void CancelBranchInput();
+    bool HandleBranchInputEvent(ftxui::Event event);
+    ftxui::Element RenderBranchInputOverlay();
+
     enum class BackgroundOperation { None, Commit, CheckConnection, Fetch, Push, ForcePush };
     void StartBackgroundOperation(
         BackgroundOperation operation,
@@ -235,8 +248,6 @@ private:
     std::vector<std::string> branches_;
     std::vector<std::string> branch_labels_;
     int selected_branch_ = 0;
-    std::string rename_branch_input_;
-
     std::vector<std::string> remote_branches_;
     std::vector<std::string> filtered_remote_branches_;
     std::vector<std::string> remote_branch_labels_;
@@ -275,6 +286,15 @@ private:
     std::string confirm_typed_text_;
     std::function<void()> confirm_action_;
 
+    // Branches-tab action popup state.
+    bool branch_input_active_ = false;
+    std::string branch_input_title_;
+    std::string branch_input_message_;
+    std::string branch_input_label_;
+    std::string branch_input_value_;
+    std::string branch_input_required_text_;
+    std::function<void()> branch_input_callback_;
+
     ftxui::Component status_tab_button_;
     ftxui::Component logs_tab_button_;
     ftxui::Component diff_tab_button_;
@@ -311,7 +331,10 @@ private:
     ftxui::Component rename_button_;
     ftxui::Component delete_branch_button_;
     ftxui::Component update_button_;
-    ftxui::Component rename_branch_input_component_;
+    ftxui::Component branch_input_component_;
+    ftxui::Component branch_input_confirm_button_;
+    ftxui::Component branch_input_cancel_button_;
+    ftxui::Component branch_input_container_;
 
     ftxui::Component remote_filter_input_component_;
     ftxui::Component remote_branch_menu_;

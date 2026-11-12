@@ -158,9 +158,6 @@ GitModalContent::GitModalContent(
     commit_button_ = MakeTextButton("Commit", [this] { CommitStagedFiles(); });
 
     ftxui::MenuOption branch_menu_option = ftxui::MenuOption::Vertical();
-    branch_menu_option.on_change = [this] {
-        rename_branch_input_ = SelectedBranchName();
-    };
     branch_menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
         ftxui::Element row = ftxui::text(state.label);
@@ -181,14 +178,35 @@ GitModalContent::GitModalContent(
     new_branch_button_ = MakeTextButton("New", [this] { CreateNewBranch(); });
     update_button_ = MakeTextButton("Update", [this] { UpdateSelectedBranch(); });
 
-    ftxui::InputOption rename_branch_option;
-    rename_branch_option.multiline = false;
-    rename_branch_option.transform = [this](ftxui::InputState state) {
+    ftxui::InputOption branch_input_option;
+    branch_input_option.multiline = false;
+    branch_input_option.transform = [this](ftxui::InputState state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
         return theme.InputTransform(std::move(state));
     };
-    rename_branch_input_component_ =
-        ftxui::Input(&rename_branch_input_, "new branch name", rename_branch_option);
+    branch_input_component_ =
+        ftxui::Input(&branch_input_value_, "", branch_input_option);
+    branch_input_confirm_button_ = MakeTextButton("Confirm", [this] { ConfirmBranchInput(); });
+    branch_input_cancel_button_ = MakeTextButton("Cancel", [this] { CancelBranchInput(); });
+    branch_input_container_ = ftxui::CatchEvent(
+        ftxui::Container::Vertical({
+            branch_input_component_,
+            ftxui::Container::Horizontal({
+                branch_input_confirm_button_,
+                branch_input_cancel_button_,
+            }),
+        }),
+        [this](ftxui::Event event) {
+            if (event == ftxui::Event::Escape) {
+                CancelBranchInput();
+                return true;
+            }
+            if (event == ftxui::Event::Return) {
+                ConfirmBranchInput();
+                return true;
+            }
+            return false;
+        });
 
     ftxui::InputOption remote_filter_option;
     remote_filter_option.multiline = false;
@@ -381,7 +399,6 @@ GitModalContent::GitModalContent(
 
     branches_tab_container_ = ftxui::Container::Vertical({
         branch_menu_,
-        rename_branch_input_component_,
         ftxui::Container::Horizontal({
             checkout_button_,
             merge_button_,
@@ -538,7 +555,7 @@ GitModalContent::GitModalContent(
         primary_container,
         [this](ftxui::Event event) { return HandleEvent(std::move(event)); });
     container_ = ftxui::Container::Tab(
-        {primary_container, confirm_container_}, &confirm_layer_index_);
+        {primary_container, confirm_container_, branch_input_container_}, &confirm_layer_index_);
 }
 
 GitModalContent::~GitModalContent() {
@@ -705,6 +722,8 @@ ftxui::Component GitModalContent::MakeTabButton(std::string label, int tab_index
 
 void GitModalContent::Open() {
     confirm_active_ = false;
+    branch_input_active_ = false;
+    branch_input_callback_ = nullptr;
     confirm_layer_index_ = 0;
     selected_tab_ = static_cast<int>(Tab::Status);
     status_ = "Ready";
@@ -725,6 +744,8 @@ void GitModalContent::Open() {
 
 void GitModalContent::Close() {
     confirm_active_ = false;
+    branch_input_active_ = false;
+    branch_input_callback_ = nullptr;
     confirm_layer_index_ = 0;
 }
 
@@ -791,13 +812,13 @@ ftxui::Element GitModalContent::Render() {
         ftxui::bgcolor(theme.modal_background) |
         ftxui::color(theme.modal_foreground);
 
-    if (!confirm_active_ && !operation_running_) {
+    if (!confirm_active_ && !branch_input_active_ && !operation_running_) {
         return body;
     }
 
     ftxui::Element overlay = operation_running_
         ? RenderOperationOverlay()
-        : RenderConfirmOverlay();
+        : (branch_input_active_ ? RenderBranchInputOverlay() : RenderConfirmOverlay());
 
     return ftxui::dbox({
         body,
@@ -1064,6 +1085,9 @@ bool GitModalContent::HandleEvent(ftxui::Event event) {
     ApplyBackgroundOperationCompletion();
     if (operation_running_) {
         return true;
+    }
+    if (branch_input_active_) {
+        return HandleBranchInputEvent(event);
     }
     if (confirm_active_) {
         return HandleConfirmEvent(event);

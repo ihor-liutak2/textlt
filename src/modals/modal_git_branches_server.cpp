@@ -22,6 +22,109 @@ std::string TrimCopy(std::string value) {
 
 } // namespace
 
+void GitModalContent::RequestBranchInput(
+    const std::string& title,
+    const std::string& message,
+    const std::string& label,
+    const std::string& initial_value,
+    const std::string& required_text,
+    std::function<void()> on_confirm) {
+    branch_input_active_ = true;
+    confirm_layer_index_ = 2;
+    branch_input_title_ = title;
+    branch_input_message_ = message;
+    branch_input_label_ = label;
+    branch_input_value_ = initial_value;
+    branch_input_required_text_ = required_text;
+    branch_input_callback_ = std::move(on_confirm);
+
+    if (branch_input_component_) {
+        branch_input_component_->TakeFocus();
+    }
+}
+
+void GitModalContent::ConfirmBranchInput() {
+    if (!branch_input_active_) {
+        return;
+    }
+    if (!branch_input_required_text_.empty() &&
+        branch_input_value_ != branch_input_required_text_) {
+        status_ = "Confirmation text does not match.";
+        return;
+    }
+    if (TrimCopy(branch_input_value_).empty()) {
+        status_ = "Branch name is required.";
+        return;
+    }
+
+    auto callback = std::move(branch_input_callback_);
+    branch_input_active_ = false;
+    confirm_layer_index_ = 0;
+    if (callback) {
+        callback();
+    }
+    branch_input_title_.clear();
+    branch_input_message_.clear();
+    branch_input_label_.clear();
+    branch_input_value_.clear();
+    branch_input_required_text_.clear();
+}
+
+void GitModalContent::CancelBranchInput() {
+    branch_input_active_ = false;
+    confirm_layer_index_ = 0;
+    branch_input_callback_ = nullptr;
+    branch_input_title_.clear();
+    branch_input_message_.clear();
+    branch_input_label_.clear();
+    branch_input_value_.clear();
+    branch_input_required_text_.clear();
+    status_ = "Branch action cancelled.";
+}
+
+bool GitModalContent::HandleBranchInputEvent(ftxui::Event event) {
+    if (event == ftxui::Event::Escape) {
+        CancelBranchInput();
+        return true;
+    }
+    if (event == ftxui::Event::Return) {
+        ConfirmBranchInput();
+        return true;
+    }
+    return branch_input_container_ ? branch_input_container_->OnEvent(event) : true;
+}
+
+ftxui::Element GitModalContent::RenderBranchInputOverlay() {
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+
+    return ftxui::vbox({
+        ftxui::text(branch_input_title_) |
+            ftxui::bold | ftxui::color(theme.modal_accent),
+        ftxui::separator() | ftxui::color(theme.modal_border),
+        ftxui::text(branch_input_message_) | ftxui::color(theme.modal_text_color),
+        ftxui::text(""),
+        ftxui::hbox({
+            ftxui::text(branch_input_label_ + " ") |
+                ftxui::bold | ftxui::color(theme.modal_text_color),
+            branch_input_component_->Render() |
+                ftxui::bgcolor(theme.modal_input_bg) |
+                ftxui::color(theme.modal_input_fg) |
+                ftxui::xflex,
+        }),
+        ftxui::text(""),
+        ftxui::hbox({
+            ftxui::filler(),
+            branch_input_confirm_button_->Render(),
+            ftxui::text(" "),
+            branch_input_cancel_button_->Render(),
+        }),
+    }) |
+        ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 96) |
+        ftxui::border |
+        ftxui::bgcolor(theme.modal_background) |
+        ftxui::color(theme.modal_foreground);
+}
+
 void GitModalContent::RefreshBranches() {
     branches_.clear();
     if (!git_manager_) {
@@ -34,7 +137,6 @@ void GitModalContent::RefreshBranches() {
         branch_ = current;
     }
     RebuildBranchLabels();
-    rename_branch_input_ = SelectedBranchName();
 }
 
 
@@ -69,12 +171,14 @@ void GitModalContent::CreateNewBranch() {
         status_ = "Cannot create branch: repository has uncommitted changes.";
         return;
     }
-    RequestConfirm(
+    RequestBranchInput(
         "Create Branch",
-        "Enter new branch name:",
-        "git checkout -b <name>",
+        "Create and check out a new local branch.",
+        "Branch name:",
+        "",
+        "",
         [this] {
-            std::string name = TrimCopy(confirm_typed_text_);
+            std::string name = TrimCopy(branch_input_value_);
             if (name.empty()) {
                 status_ = "Branch name is empty.";
                 return;
@@ -86,8 +190,7 @@ void GitModalContent::CreateNewBranch() {
                 }
             }
             RunAndRefresh("Create branch", git_manager_->CreateBranch(name));
-        },
-        "");
+        });
 }
 
 void GitModalContent::MergeSelectedBranch() {
@@ -125,20 +228,26 @@ void GitModalContent::RenameSelectedBranch() {
         return;
     }
     const std::string old_name = SelectedBranchName();
-    const std::string new_name = TrimCopy(rename_branch_input_);
-    if (old_name.empty() || new_name.empty()) {
-        status_ = "Branch name is empty.";
+    if (old_name.empty()) {
+        status_ = "No branch selected.";
         return;
     }
-    if (old_name == new_name) {
-        status_ = "Branch name did not change.";
-        return;
-    }
-    RequestConfirm(
-        "Confirm rename",
-        "Rename selected branch.",
-        "git branch -m " + old_name + " " + new_name,
-        [this, old_name, new_name] {
+    RequestBranchInput(
+        "Rename Branch",
+        "Rename local branch \"" + old_name + "\".",
+        "New name:",
+        old_name,
+        "",
+        [this, old_name] {
+            std::string new_name = TrimCopy(branch_input_value_);
+            if (new_name.empty()) {
+                status_ = "Branch name is empty.";
+                return;
+            }
+            if (new_name == old_name) {
+                status_ = "Branch name did not change.";
+                return;
+            }
             RunAndRefresh("Rename", git_manager_->RenameBranch(old_name, new_name));
         });
 }
@@ -208,14 +317,15 @@ void GitModalContent::DeleteSelectedBranch() {
         status_ = "Cannot delete the active branch.";
         return;
     }
-    RequestConfirm(
-        "Confirm branch delete",
-        "Delete selected local branch.",
-        "git branch -d " + branch,
+    RequestBranchInput(
+        "Delete Branch",
+        "Delete local branch \"" + branch + "\". This cannot be undone.",
+        "Type DELETE to confirm:",
+        "",
+        "DELETE",
         [this, branch] {
             RunAndRefresh("Delete branch", git_manager_->DeleteLocalBranch(branch));
-        },
-        "DELETE");
+        });
 }
 
 void GitModalContent::CheckConnection() {
@@ -294,14 +404,6 @@ ftxui::Element GitModalContent::RenderBranchesTab() {
         branch_labels_.empty()
             ? (ftxui::text("No local branches.") | ftxui::color(theme.modal_text_color) | ftxui::frame | ftxui::yflex)
             : (branch_menu_->Render() | ftxui::vscroll_indicator | ftxui::frame | ftxui::yflex),
-        ftxui::separator() | ftxui::color(theme.modal_border),
-        ftxui::hbox({
-            ftxui::text("Rename to: ") | ftxui::color(theme.modal_text_color),
-            rename_branch_input_component_->Render() |
-                ftxui::bgcolor(theme.modal_input_bg) |
-                ftxui::color(theme.modal_input_fg) |
-                ftxui::xflex,
-        }),
         ftxui::separator() | ftxui::color(theme.modal_border),
         ftxui::hbox({
             checkout_button_->Render(),
