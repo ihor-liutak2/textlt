@@ -35,13 +35,26 @@ ftxui::Component MakeTabButton(
 ThemeColorsModalContent::ThemeColorsModalContent(
     const Theme* theme,
     ApplyCallback apply_callback,
-    ResetCallback reset_callback)
+    ResetCallback reset_callback,
+    CloseCallback close_callback)
     : theme_(theme),
       apply_callback_(std::move(apply_callback)),
-      reset_callback_(std::move(reset_callback)) {
+      reset_callback_(std::move(reset_callback)),
+      close_callback_(std::move(close_callback)) {
     BuildFields();
     BuildComponents();
     LoadValuesFromTheme();
+
+    apply_button_ = MakePrimaryButton(
+        theme_, "Apply", [this] { Apply(); });
+    reset_button_ = MakeWarningButton(
+        theme_, "Reset Default", [this] { ResetToDefault(); });
+    close_button_ = MakeCancelButton(
+        theme_, [this] {
+            if (close_callback_) {
+                close_callback_();
+            }
+        }, "Close");
 }
 
 void ThemeColorsModalContent::BuildFields() {
@@ -237,6 +250,32 @@ ftxui::Element ThemeColorsModalContent::RenderGroup() const {
     return vbox(std::move(rows));
 }
 
+ftxui::Element ThemeColorsModalContent::RenderCustomFooter() {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+
+    // Divided footer text: status on the left, theme info on the right.
+    std::string theme_info = "Theme: " +
+        (theme_ ? theme_->name : std::string("active theme"));
+
+    ftxui::Elements actions;
+    actions.push_back(apply_button_->Render());
+    actions.push_back(text(" "));
+    actions.push_back(reset_button_->Render());
+    actions.push_back(text(" "));
+    actions.push_back(close_button_->Render());
+
+    return vbox({
+        hbox({
+            text(" " + status_) | dim | color(theme.modal_text_color),
+            filler(),
+            text(" " + theme_info + " ") | dim | color(theme.modal_text_color),
+        }),
+        separator() | color(theme.modal_border),
+        hbox(std::move(actions)),
+    }) | bgcolor(theme.modal_background) | color(theme.modal_text_color);
+}
+
 ftxui::Element ThemeColorsModalContent::Render() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
@@ -254,15 +293,11 @@ ThemeColorsModal::ThemeColorsModal(
     CloseCallback close_callback)
     : close_callback_(std::move(close_callback)) {
     content_ = std::make_shared<ThemeColorsModalContent>(
-        theme, std::move(apply_callback), std::move(reset_callback));
+        theme, std::move(apply_callback), std::move(reset_callback),
+        [this] { RequestClose(); });
     modal_ = std::make_shared<ModalWindow>(
         content_, theme, [this] { RequestClose(); });
     modal_->SetBodyFrameScrolling(false);
-    modal_->SetFooterButtons({
-        {"Apply", [this] { content_->Apply(); }, ButtonRole::Primary},
-        {"Reset Default", [this] { content_->ResetToDefault(); }, ButtonRole::Warning},
-        {"Close", [this] { RequestClose(); }, ButtonRole::Cancel},
-    });
 }
 
 void ThemeColorsModal::Open() {

@@ -20,18 +20,24 @@ public:
         const std::map<std::string, std::string>& overrides,
         std::string& error)>;
     using ResetCallback = std::function<bool(std::string& error)>;
+    using CloseCallback = std::function<void()>;
 
     ThemeColorsModalContent(
         const Theme* theme,
         ApplyCallback apply_callback,
-        ResetCallback reset_callback);
+        ResetCallback reset_callback,
+        CloseCallback close_callback = {});
 
     ftxui::Element Render() override;
     ftxui::Component GetMainComponent() override { return container_; }
     std::string GetTitle() override { return "Theme Color Settings"; }
     ModalSizePreference GetModalSizePreference() const override { return {84, 31}; }
+    ModalFrameStyle GetModalFrameStyle() const override { return ModalFrameStyle::TitleInBorder; }
     std::string GetFooterText() const override { return status_; }
     bool FooterTextAboveButtons() const override { return true; }
+    bool HasCustomFooter() const override { return true; }
+    int GetCustomFooterHeight() const override { return 3; }
+    ftxui::Element RenderCustomFooter() override;
 
     void Open();
     bool Apply();
@@ -57,6 +63,7 @@ private:
     const Theme* theme_ = nullptr;
     ApplyCallback apply_callback_;
     ResetCallback reset_callback_;
+    CloseCallback close_callback_;
     std::vector<ColorField> fields_;
     std::vector<ftxui::Component> inputs_;
     std::vector<ftxui::Component> group_components_;
@@ -71,6 +78,10 @@ private:
     ftxui::Component tabs_;
     ftxui::Component groups_;
     ftxui::Component container_;
+
+    ftxui::Component apply_button_;
+    ftxui::Component reset_button_;
+    ftxui::Component close_button_;
 };
 
 class ThemeColorsModal {
