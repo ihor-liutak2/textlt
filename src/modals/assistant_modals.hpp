@@ -26,7 +26,6 @@ class RemoteCommandControl;
 namespace assistant_modal_detail {
 
 constexpr const char* kPiperRegistryFile = "piper_voices_index.json";
-constexpr const char* kAiRegistryFile = "ollama_models_index.json";
 
 enum class RegistryDownloadResult {
     Saved,
@@ -43,7 +42,6 @@ enum class RegistryLoadResult {
 
 enum class RegistryKind {
     Piper,
-    Ai,
 };
 
 std::filesystem::path UserDataDirectory();

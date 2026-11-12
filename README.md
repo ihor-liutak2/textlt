@@ -47,8 +47,9 @@ Optimized to run perfectly in native Linux environments (**MX Linux**, **Ubuntu*
 
 Installing or upgrading resets TextLT configuration, custom themes, text-parser
 configuration, and downloaded registries so the release's current defaults and
-themes are used. Installed Piper/TTS voices, the llama.cpp runtime, and local AI
-models are preserved.
+themes are used. Installed Piper/TTS voices are preserved. Legacy managed local
+AI runtimes and models are removed because TextLT now connects only to an
+already-running Ollama or OpenAI-compatible service through its URL.
 
 #### Linux (Debian, Ubuntu, Fedora, Arch, and others)
 

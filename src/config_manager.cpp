@@ -98,12 +98,19 @@ EditorConfig ConfigManager::Load() const {
     if (config.ai_provider == "auto") {
         config.ai_provider = "ollama";
     }
-    if (config.ai_provider != "ollama" && config.ai_provider != "openai" &&
-        config.ai_provider != "llama_cpp") {
+    if (config.ai_provider == "llama_cpp") {
+        // Managed local llama.cpp support was removed. Keep the existing URL
+        // available for users who replace it with an OpenAI-compatible server.
+        config.ai_provider = "openai";
+    }
+    if (config.ai_provider != "ollama" && config.ai_provider != "openai") {
         config.ai_provider = "ollama";
     }
     config.ai_selected_model_key = JsonString(
         root, "ai_selected_model_key", config.ai_selected_model_key);
+    if (config.ai_selected_model_key.rfind("local:", 0) == 0) {
+        config.ai_selected_model_key.clear();
+    }
     config.ai_translation_source_language = JsonString(
         root, "ai_translation_source_language", config.ai_translation_source_language);
     if (config.ai_translation_source_language.empty()) {

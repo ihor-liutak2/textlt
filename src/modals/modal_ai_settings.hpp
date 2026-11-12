@@ -32,7 +32,7 @@ public:
     ftxui::Component GetMainComponent() override { return container_; }
     std::string GetTitle() override { return "AI Settings"; }
     ftxui::Element RenderTitle() override;
-    ModalSizePreference GetModalSizePreference() const override { return {108, 34}; }
+    ModalSizePreference GetModalSizePreference() const override { return {100, 28}; }
     ModalFrameStyle GetModalFrameStyle() const override { return ModalFrameStyle::TitleInBorder; }
     std::string GetFooterText() const override { return {}; }
 
@@ -40,27 +40,16 @@ public:
     void RefreshFromConfig();
     bool SaveConnectionSettings();
     void ConnectAndRefreshServerModels();
-    void StartOrRestartLocalModel();
     void CancelCurrentTask();
-    void UnloadLocalModel();
     void PrepareClose();
-    bool CanStartLocalModel() const;
     bool CanCancelTask() const;
-    bool CanUnloadModel() const;
 
 private:
+    enum class OperationState { Idle, Starting, Running, Stopping };
+
     void LoadModels();
     void ApplyPendingWorkerResult();
     void SelectProvider(AiProvider provider);
-    void FetchAiRegistry();
-    void DownloadRuntime();
-    void RequestRuntimeDelete();
-    void ConfirmRuntimeDelete();
-    void CancelRuntimeDelete();
-    void DownloadSelectedModel();
-    void RequestSelectedModelDelete();
-    void ConfirmSelectedModelDelete();
-    void CancelSelectedModelDelete();
     void PersistSelectedModel();
     void StartTest();
     void CloseTestPopup();
@@ -79,39 +68,28 @@ private:
     std::string status_ = "Ready";
     std::string connection_status_ = "Not connected";
     bool busy_ = false;
-    bool runtime_delete_confirmation_ = false;
-    bool model_delete_confirmation_ = false;
-    std::string pending_model_delete_filename_;
-
     bool test_popup_visible_ = false;
-    bool local_model_starting_ = false;
-    bool unload_in_progress_ = false;
-    int active_panel_ = 0;
     bool test_running_ = false;
+    int active_panel_ = 0;
     int test_progress_frame_ = 0;
     int operation_progress_frame_ = 0;
     std::string test_result_ = "Press Test to run the selected model.";
     const std::string test_source_ =
-        "Corwin wake up from a coma in a hospital in New York with amnesia, and he soon discover "
-        "that he is part of a superhuman royal family who can wanders among infinite parallel "
-        "worlds, called shadows, and rules over the one true world, Amber.";
+        "Corwin wakes from a coma in a New York hospital with amnesia and soon discovers "
+        "that he belongs to a superhuman royal family that travels among parallel worlds.";
 
     std::vector<AiModelInfo> models_;
-    std::vector<AiModelInfo> server_models_;
     std::vector<std::string> model_labels_{"No models"};
     std::vector<std::string> model_descriptions_;
     int selected_model_ = 0;
     int persisted_model_index_ = -1;
-
-    enum class OperationState { Idle, Starting, Running, Stopping };
 
     mutable std::mutex state_mutex_;
     std::thread worker_;
     std::atomic<bool> cancel_requested_{false};
     RemoteCommandControl command_control_;
     OperationState operation_state_ = OperationState::Idle;
-    bool pending_reload_ = false;
-    bool pending_server_models_ = false;
+    bool pending_models_ready_ = false;
     bool pending_connection_success_ = false;
     AiProvider pending_detected_provider_ = AiProvider::Ollama;
     std::string pending_status_;
@@ -120,16 +98,6 @@ private:
     ftxui::Component server_url_input_;
     ftxui::Component provider_ollama_button_;
     ftxui::Component provider_openai_button_;
-    ftxui::Component provider_local_button_;
-    ftxui::Component fetch_registry_button_;
-    ftxui::Component runtime_download_button_;
-    ftxui::Component runtime_delete_button_;
-    ftxui::Component runtime_confirm_delete_button_;
-    ftxui::Component runtime_cancel_delete_button_;
-    ftxui::Component model_download_button_;
-    ftxui::Component model_delete_button_;
-    ftxui::Component model_confirm_delete_button_;
-    ftxui::Component model_cancel_delete_button_;
     ftxui::Component test_button_;
     ftxui::Component close_test_button_;
     ftxui::Component model_menu_;

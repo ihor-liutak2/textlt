@@ -15,7 +15,6 @@ enum class AiProvider {
     Auto,
     Ollama,
     OpenAiCompatible,
-    LocalLlamaCpp,
 };
 
 enum class AiFinishReason {
@@ -28,19 +27,12 @@ enum class AiFinishReason {
     Error,
 };
 
-enum class AiModelSource {
-    Server,
-    ManagedLocal,
-};
-
 struct AiBackendSettings {
     std::string server_url;
     AiProvider provider = AiProvider::Auto;
     std::string selected_model_key;
     int timeout_seconds = 120;
     int max_output_tokens = 0;
-    int local_threads = 0;
-    bool managed_local_server = false;
 };
 
 struct AiModelInfo {
@@ -48,17 +40,8 @@ struct AiModelInfo {
     std::string id;
     std::string title;
     std::string provider_label;
-    std::string filename;
-    AiModelSource source = AiModelSource::Server;
     bool available = false;
-    bool downloaded = false;
-    bool gpu_required = false;
-    int recommended_vram_mb = 0;
-    std::string tier;
-    std::string model_url;
     std::string description;
-    std::string format;
-    std::string purpose;
 };
 
 struct AiBackendResult {
@@ -111,12 +94,6 @@ public:
     static std::string NormalizeGeneratedText(std::string text);
     static int RecommendedMaxOutputTokens(const AiPromptRequest& request);
     static std::string FinishReasonLabel(AiFinishReason reason);
-    static std::vector<AiModelInfo> LoadManagedLocalModels(std::string* error = nullptr);
-    static bool FindManagedLocalModel(
-        const std::string& filename,
-        AiModelInfo* model,
-        std::string* error = nullptr);
-
 private:
     AiConnectionResult TryOllama(
         const std::atomic<bool>* cancel_requested,
@@ -134,13 +111,6 @@ private:
         const std::atomic<bool>* cancel_requested,
         ProgressCallback progress,
         RemoteCommandControl* command_control) const;
-    AiBackendResult RunLocalLlamaCpp(
-        const AiPromptRequest& request,
-        const std::string& filename,
-        const std::atomic<bool>* cancel_requested,
-        ProgressCallback progress,
-        RemoteCommandControl* command_control) const;
-
     AiBackendSettings settings_;
 };
 

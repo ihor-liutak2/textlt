@@ -15,8 +15,6 @@ public:
     static constexpr const char* kUserAgent = "textlt/1.0";
     static constexpr const char* kPiperRegistryUrl =
         "https://ihor-liutak2.github.io/textlt/registries/piper_voices_index.json";
-    static constexpr const char* kAiRegistryUrl =
-        "https://ihor-liutak2.github.io/textlt/registries/ollama_models_index.json";
 
     struct Response {
         bool ok = false;

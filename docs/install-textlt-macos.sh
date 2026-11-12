@@ -80,14 +80,14 @@ if [[ "$XDG_CONFIG_DIR" != "$CONFIG_DIR" ]]; then
 fi
 rm -f "$LEGACY_CONFIG_FILE"
 
-# Older releases could leave bundled resources beside app/. Remove only those
-# application-managed directories; downloaded Piper voices and AI/llama.cpp
-# data live in $INSTALL_ROOT/piper and $INSTALL_ROOT/ai and are preserved.
+# Older releases could leave bundled resources and managed local-AI files beside
+# app/. Piper voices remain in $INSTALL_ROOT/piper; obsolete AI files are removed.
 rm -rf \
   "$INSTALL_ROOT/themes" \
   "$INSTALL_ROOT/text_processors" \
   "$INSTALL_ROOT/resources" \
-  "$INSTALL_ROOT/registries"
+  "$INSTALL_ROOT/registries" \
+  "$INSTALL_ROOT/ai"
 
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR"

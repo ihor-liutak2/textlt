@@ -40,7 +40,7 @@ int main() {
     AiQuickStatusSnapshot status;
     status.model_label = "Gemma test";
     status.language_label = "Russian -> Ukrainian";
-    status.status_label = "Ready — llama.cpp";
+    status.status_label = "Ready — OpenAI-compatible";
     status.paragraph_label = "Hello · 42 characters";
     status.paragraph_available = true;
     status.ready = true;
@@ -84,7 +84,7 @@ int main() {
     status.busy = false;
     status.stopping = false;
     status.ready = true;
-    status.status_label = "Ready — llama.cpp";
+    status.status_label = "Ready — OpenAI-compatible";
     assert(content.HandleEvent(ftxui::Event::Character("2")));
     assert(translate_count == 1);
     assert(edit_count == 1);

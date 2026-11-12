@@ -63,10 +63,9 @@ try {
         }
     }
 
-    # Remove application-managed leftovers from older releases. Installed
-    # Piper voices and AI/llama.cpp data use the piper and ai directories;
-    # those directories are deliberately not removed.
-    @("themes", "text_processors", "resources", "registries") | ForEach-Object {
+    # Remove application-managed leftovers and obsolete managed local-AI files
+    # from older releases. Installed Piper voices remain in the piper directory.
+    @("themes", "text_processors", "resources", "registries", "ai") | ForEach-Object {
         Remove-Item (Join-Path $InstallRoot $_) -Recurse -Force -ErrorAction SilentlyContinue
     }
 

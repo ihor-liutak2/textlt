@@ -1,37 +1,16 @@
 #include "modals/modal_ai_settings.hpp"
 
 #include <algorithm>
-#include <cstdlib>
-#include <filesystem>
-#include <functional>
 #include <iomanip>
 #include <sstream>
 #include <string>
 #include <utility>
 
-#include <archive.h>
-#include <archive_entry.h>
-
-#include "ai/local_llama_server.hpp"
-#include "curl_manager.hpp"
 #include "ftxui/component/component_options.hpp"
-#include "json_utils.hpp"
-#include "modals/assistant_modals.hpp"
-#include "remote/remote_http_client.hpp"
 #include "ui_button.hpp"
 
 namespace textlt {
 namespace {
-
-using assistant_modal_detail::DownloadCacheDirectory;
-using assistant_modal_detail::DownloadRegistry;
-using assistant_modal_detail::EnsureDirectory;
-using assistant_modal_detail::JsonLabel;
-using assistant_modal_detail::LoadUserRegistryJson;
-using assistant_modal_detail::RegistryFilename;
-using assistant_modal_detail::RegistryKind;
-using assistant_modal_detail::RegistryLoadResult;
-using assistant_modal_detail::UserDataDirectory;
 
 std::string FormatAiSeconds(double milliseconds) {
     std::ostringstream stream;
@@ -49,9 +28,6 @@ std::string TestCompletionStatus(const AiBackendResult& result) {
         std::ostringstream speed;
         speed << std::fixed << std::setprecision(1) << result.tokens_per_second;
         status += " · " + speed.str() + " tok/s";
-    }
-    if (result.model_load_ms > 0.0) {
-        status += " · load " + FormatAiSeconds(result.model_load_ms) + " s";
     }
     if (result.time_to_first_token_ms > 0.0) {
         status += " · first token " + FormatAiSeconds(result.time_to_first_token_ms) + " s";
@@ -90,232 +66,6 @@ ftxui::Component MakeButton(
     return ftxui::Button(option);
 }
 
-std::filesystem::path RuntimeDirectory() {
-    return UserDataDirectory() / "ai" / "runtimes" / "llama_cpp";
-}
-
-std::filesystem::path ModelsDirectory() {
-    return UserDataDirectory() / "ai" / "models";
-}
-
-std::filesystem::path FindInstalledRuntimeBinary() {
-    std::error_code error;
-    const std::filesystem::path directory = RuntimeDirectory();
-    if (!std::filesystem::exists(directory, error)) {
-        return {};
-    }
-#ifdef _WIN32
-    const std::vector<std::string> preferred_names = {"llama-server.exe"};
-#else
-    const std::vector<std::string> preferred_names = {"llama-server"};
-#endif
-    for (const std::string& wanted : preferred_names) {
-        error.clear();
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(directory, error)) {
-            if (error) {
-                return {};
-            }
-            if (entry.is_regular_file() && entry.path().filename() == wanted) {
-                return entry.path();
-            }
-        }
-    }
-    return {};
-}
-
-bool RuntimeBinaryExists() {
-    return !FindInstalledRuntimeBinary().empty();
-}
-
-std::string RuntimeDisplayPath() {
-    const std::filesystem::path installed = FindInstalledRuntimeBinary();
-    if (!installed.empty()) {
-        return installed.string();
-    }
-#ifdef _WIN32
-    return "%LOCALAPPDATA%\\textlt\\ai\\runtimes\\llama_cpp\\llama-server.exe";
-#else
-    return "~/.local/share/textlt/ai/runtimes/llama_cpp/llama-server";
-#endif
-}
-
-std::string CurrentPlatform() {
-#ifdef _WIN32
-    return "windows";
-#elif defined(__APPLE__)
-    return "macos";
-#else
-    return "linux";
-#endif
-}
-
-std::string CurrentArchitecture() {
-#if defined(__aarch64__) || defined(_M_ARM64)
-    return "arm64";
-#elif defined(__x86_64__) || defined(_M_X64)
-    return "x64";
-#else
-    return {};
-#endif
-}
-
-std::string RuntimeDownloadUrl() {
-    Json root;
-    if (LoadUserRegistryJson(RegistryKind::Ai, &root) != RegistryLoadResult::Loaded) {
-        return {};
-    }
-    const std::string backend_id = JsonString(root, "default_backend", "llama_cpp");
-    const std::string runtime_key = CurrentPlatform() + "_" + CurrentArchitecture();
-    const auto backends = root.find("backends");
-    if (CurrentArchitecture().empty() || backends == root.end() || !backends->is_array()) {
-        return {};
-    }
-    for (const Json& backend : *backends) {
-        if (!backend.is_object() || JsonString(backend, "id") != backend_id) {
-            continue;
-        }
-        const auto runtime = backend.find("runtime");
-        if (runtime == backend.end() || !runtime->is_object()) {
-            return {};
-        }
-        const auto urls = runtime->find("runtime_download_urls");
-        if (urls == runtime->end() || !urls->is_object()) {
-            return {};
-        }
-        return JsonString(*urls, runtime_key.c_str());
-    }
-    return {};
-}
-
-bool IsSafeArchivePath(const std::filesystem::path& path) {
-    if (path.empty() || path.is_absolute()) {
-        return false;
-    }
-    for (const auto& part : path) {
-        if (part == "..") {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool CopyArchiveData(archive* input, archive* output) {
-    const void* buffer = nullptr;
-    size_t size = 0;
-    la_int64_t offset = 0;
-    while (true) {
-        const int result = archive_read_data_block(input, &buffer, &size, &offset);
-        if (result == ARCHIVE_EOF) {
-            return true;
-        }
-        if (result != ARCHIVE_OK ||
-            archive_write_data_block(output, buffer, size, offset) != ARCHIVE_OK) {
-            return false;
-        }
-    }
-}
-
-bool ExtractArchive(
-    const std::filesystem::path& archive_path,
-    const std::filesystem::path& destination) {
-    EnsureDirectory(destination);
-    archive* input = archive_read_new();
-    archive* output = archive_write_disk_new();
-    if (!input || !output) {
-        if (input) archive_read_free(input);
-        if (output) archive_write_free(output);
-        return false;
-    }
-    archive_read_support_filter_all(input);
-    archive_read_support_format_all(input);
-    archive_write_disk_set_options(
-        output,
-        ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_PERM | ARCHIVE_EXTRACT_SECURE_SYMLINKS);
-    if (archive_read_open_filename(input, archive_path.string().c_str(), 10240) != ARCHIVE_OK) {
-        archive_read_free(input);
-        archive_write_free(output);
-        return false;
-    }
-
-    bool ok = true;
-    archive_entry* entry = nullptr;
-    while (archive_read_next_header(input, &entry) == ARCHIVE_OK) {
-        const std::filesystem::path relative = archive_entry_pathname(entry)
-            ? archive_entry_pathname(entry)
-            : "";
-        if (!IsSafeArchivePath(relative)) {
-            archive_read_data_skip(input);
-            continue;
-        }
-        const std::string full = (destination / relative).string();
-        archive_entry_set_pathname(entry, full.c_str());
-        const int header = archive_write_header(output, entry);
-        if ((header != ARCHIVE_OK && header != ARCHIVE_WARN) ||
-            (archive_entry_size(entry) > 0 && !CopyArchiveData(input, output)) ||
-            archive_write_finish_entry(output) != ARCHIVE_OK) {
-            ok = false;
-            break;
-        }
-    }
-    archive_read_close(input);
-    archive_read_free(input);
-    archive_write_close(output);
-    archive_write_free(output);
-    return ok;
-}
-
-bool DownloadFile(
-    const std::string& url,
-    const std::filesystem::path& final_path,
-    const std::atomic<bool>* cancel_requested,
-    RemoteCommandControl* command_control) {
-    EnsureDirectory(final_path.parent_path());
-    const std::filesystem::path part_path = final_path.string() + ".part";
-    std::error_code error;
-    std::filesystem::remove(part_path, error);
-    std::vector<std::string> headers;
-    const char* hf_token = std::getenv("HF_TOKEN");
-    if (hf_token && *hf_token && url.find("huggingface.co/") != std::string::npos) {
-        headers.push_back(std::string("Authorization: Bearer ") + hf_token);
-    }
-    RemoteHttpClient client;
-    const RemoteHttpResponse response = client.DownloadCancelable(
-        "GET", url, headers, part_path, {}, 0, cancel_requested, command_control);
-    if (!response.ok) {
-        std::filesystem::remove(part_path, error);
-        return false;
-    }
-    std::filesystem::rename(part_path, final_path, error);
-    if (error) {
-        std::filesystem::remove(final_path, error);
-        error.clear();
-        std::filesystem::rename(part_path, final_path, error);
-    }
-    if (error) {
-        std::filesystem::remove(part_path, error);
-        return false;
-    }
-    return true;
-}
-
-std::vector<AiModelInfo> LoadLocalModels(std::vector<std::string>* descriptions) {
-    std::vector<AiModelInfo> models = AiBackend::LoadManagedLocalModels();
-    if (descriptions) {
-        descriptions->reserve(descriptions->size() + models.size());
-        for (const AiModelInfo& model : models) {
-            descriptions->push_back(model.description);
-        }
-    }
-    return models;
-}
-
-std::string ModelStatus(const AiModelInfo& model) {
-    if (model.source == AiModelSource::Server) {
-        return model.available ? "available" : "offline";
-    }
-    return model.downloaded ? "downloaded" : "not downloaded";
-}
-
 } // namespace
 
 AiSettingsModalContent::AiSettingsModalContent(
@@ -333,38 +83,18 @@ AiSettingsModalContent::AiSettingsModalContent(
         const Theme& resolved = theme_ ? *theme_ : FallbackTheme();
         return resolved.InputTransform(std::move(state));
     };
-    server_url_input_ = ftxui::Input(&server_url_, "http://127.0.0.1:11434", input_option);
+    server_url_input_ = ftxui::Input(
+        &server_url_, "http://127.0.0.1:11434", input_option);
 
     provider_ollama_button_ = MakeButton(
         &theme_, "Ollama", [this] { SelectProvider(AiProvider::Ollama); },
         ButtonRole::Toggle,
         [this] { return provider_ == AiProvider::Ollama; });
     provider_openai_button_ = MakeButton(
-        &theme_, "OpenAI-compatible", [this] { SelectProvider(AiProvider::OpenAiCompatible); },
+        &theme_, "OpenAI-compatible",
+        [this] { SelectProvider(AiProvider::OpenAiCompatible); },
         ButtonRole::Toggle,
         [this] { return provider_ == AiProvider::OpenAiCompatible; });
-    provider_local_button_ = MakeButton(
-        &theme_, "Local llama.cpp", [this] { SelectProvider(AiProvider::LocalLlamaCpp); },
-        ButtonRole::Toggle,
-        [this] { return provider_ == AiProvider::LocalLlamaCpp; });
-    fetch_registry_button_ = MakeButton(
-        &theme_, "Fetch registry", [this] { FetchAiRegistry(); });
-    runtime_download_button_ = MakeButton(
-        &theme_, "Download runtime", [this] { DownloadRuntime(); });
-    runtime_delete_button_ = MakeButton(
-        &theme_, "Delete runtime", [this] { RequestRuntimeDelete(); });
-    runtime_confirm_delete_button_ = MakeButton(
-        &theme_, "Confirm delete", [this] { ConfirmRuntimeDelete(); });
-    runtime_cancel_delete_button_ = MakeButton(
-        &theme_, "Cancel", [this] { CancelRuntimeDelete(); });
-    model_download_button_ = MakeButton(
-        &theme_, "Download model", [this] { DownloadSelectedModel(); });
-    model_delete_button_ = MakeButton(
-        &theme_, "Delete model", [this] { RequestSelectedModelDelete(); });
-    model_confirm_delete_button_ = MakeButton(
-        &theme_, "Confirm delete", [this] { ConfirmSelectedModelDelete(); });
-    model_cancel_delete_button_ = MakeButton(
-        &theme_, "Cancel", [this] { CancelSelectedModelDelete(); });
     test_button_ = MakeButton(
         &theme_, "Test model", [this] { StartTest(); }, ButtonRole::Primary);
     close_test_button_ = MakeButton(
@@ -387,31 +117,22 @@ AiSettingsModalContent::AiSettingsModalContent(
     auto main_content = ftxui::Container::Vertical({
         server_url_input_,
         ftxui::Container::Horizontal({
-            provider_ollama_button_, provider_openai_button_, provider_local_button_,
-        }),
-        ftxui::Container::Horizontal({
-            runtime_download_button_, runtime_delete_button_, fetch_registry_button_,
-            model_download_button_, model_delete_button_, test_button_,
-        }),
-        ftxui::Container::Horizontal({
-            runtime_confirm_delete_button_, runtime_cancel_delete_button_,
-            model_confirm_delete_button_, model_cancel_delete_button_,
+            provider_ollama_button_, provider_openai_button_,
         }),
         model_menu_,
+        test_button_,
     });
     auto test_content = ftxui::Container::Vertical({close_test_button_});
     auto panels = ftxui::Container::Tab({main_content, test_content}, &active_panel_);
     container_ = ftxui::CatchEvent(panels, [this](ftxui::Event event) {
-        if (event == ftxui::Event::Escape) {
-            bool test_popup_visible = false;
-            {
-                std::lock_guard<std::mutex> lock(state_mutex_);
-                test_popup_visible = test_popup_visible_;
-            }
-            if (test_popup_visible) {
-                CloseTestPopup();
-                return true;
-            }
+        bool test_popup_visible = false;
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            test_popup_visible = test_popup_visible_;
+        }
+        if (event == ftxui::Event::Escape && test_popup_visible) {
+            CloseTestPopup();
+            return true;
         }
         return false;
     });
@@ -435,86 +156,59 @@ void AiSettingsModalContent::RefreshFromConfig() {
         }
     }
     server_url_cursor_ = static_cast<int>(server_url_.size());
+    models_.clear();
     LoadModels();
 }
 
 void AiSettingsModalContent::LoadModels() {
     const std::string selected_key = config_ ? config_->ai_selected_model_key : std::string{};
-    model_descriptions_.clear();
-    models_ = LoadLocalModels(&model_descriptions_);
-    for (const AiModelInfo& model : server_models_) {
-        models_.push_back(model);
-        model_descriptions_.push_back("Model reported by the configured AI server.");
-    }
-
-    const auto selected_iter = std::find_if(
-        models_.begin(), models_.end(), [&](const AiModelInfo& model) {
-            return model.key == selected_key;
-        });
-    if (!selected_key.empty() && selected_iter == models_.end()) {
-        AiModelInfo placeholder;
-        placeholder.key = selected_key;
-        placeholder.id = AiBackend::ModelIdFromKey(selected_key);
-        placeholder.title = placeholder.id;
-        bool recognized_key = false;
-        if (selected_key.rfind("ollama:", 0) == 0) {
-            placeholder.provider_label = "Ollama";
-            placeholder.source = AiModelSource::Server;
-            recognized_key = true;
-        } else if (selected_key.rfind("openai:", 0) == 0) {
-            placeholder.provider_label = "OpenAI-compatible";
-            placeholder.source = AiModelSource::Server;
-            recognized_key = true;
-        }
-        if (recognized_key && !placeholder.title.empty()) {
-            models_.push_back(std::move(placeholder));
-            model_descriptions_.push_back(
-                "Previously selected model. Refresh its server or registry to update availability.");
-        }
-    }
-
     model_labels_.clear();
+    model_descriptions_.clear();
+
     for (const AiModelInfo& model : models_) {
-        std::string hardware;
-        if (model.gpu_required) {
-            hardware = " | GPU " + std::to_string(model.recommended_vram_mb / 1024) +
-                " GB VRAM recommended";
-        }
-        if (!model.tier.empty()) {
-            hardware += " | " + model.tier;
-        }
-        model_labels_.push_back(
-            model.title + " | " + model.provider_label + hardware + " | " + ModelStatus(model));
+        model_labels_.push_back(model.title + " | " + model.provider_label);
+        model_descriptions_.push_back(model.description.empty()
+            ? "Model reported by the configured AI server."
+            : model.description);
     }
+
+    if (!selected_key.empty() &&
+        std::none_of(models_.begin(), models_.end(), [&](const AiModelInfo& model) {
+            return model.key == selected_key;
+        })) {
+        const bool ollama = selected_key.rfind("ollama:", 0) == 0;
+        const bool openai = selected_key.rfind("openai:", 0) == 0;
+        if ((ollama && provider_ == AiProvider::Ollama) ||
+            (openai && provider_ == AiProvider::OpenAiCompatible)) {
+            AiModelInfo placeholder;
+            placeholder.key = selected_key;
+            placeholder.id = AiBackend::ModelIdFromKey(selected_key);
+            placeholder.title = placeholder.id;
+            placeholder.provider_label = ollama ? "Ollama" : "OpenAI-compatible";
+            placeholder.description =
+                "Previously selected server model. Connect to refresh its availability.";
+            models_.push_back(placeholder);
+            model_labels_.push_back(placeholder.title + " | " + placeholder.provider_label);
+            model_descriptions_.push_back(placeholder.description);
+        }
+    }
+
     if (model_labels_.empty()) {
-        model_labels_.push_back("No models. Fetch the registry or connect to a server.");
+        model_labels_.push_back("No models. Connect to a running AI server.");
         selected_model_ = 0;
         persisted_model_index_ = -1;
         return;
     }
 
     selected_model_ = 0;
-    bool selection_found = false;
+    persisted_model_index_ = -1;
     for (size_t index = 0; index < models_.size(); ++index) {
         if (models_[index].key == selected_key) {
             selected_model_ = static_cast<int>(index);
-            selection_found = true;
+            persisted_model_index_ = selected_model_;
             break;
         }
     }
-    if (!selection_found) {
-        const auto preferred = std::find_if(
-            models_.begin(), models_.end(), [](const AiModelInfo& model) {
-                return model.available || model.downloaded;
-            });
-        if (preferred != models_.end()) {
-            selected_model_ = static_cast<int>(
-                std::distance(models_.begin(), preferred));
-        }
-        persisted_model_index_ = -1;
-        return;
-    }
-    persisted_model_index_ = selected_model_;
 }
 
 void AiSettingsModalContent::StartWorker(std::function<void()> operation) {
@@ -537,10 +231,8 @@ void AiSettingsModalContent::StartWorker(std::function<void()> operation) {
         operation();
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
-            if (!unload_in_progress_) {
-                busy_ = false;
-                operation_state_ = OperationState::Idle;
-            }
+            busy_ = false;
+            operation_state_ = OperationState::Idle;
         }
         RequestRedraw();
     });
@@ -548,43 +240,45 @@ void AiSettingsModalContent::StartWorker(std::function<void()> operation) {
 
 bool AiSettingsModalContent::SaveConnectionSettings() {
     server_url_ = AiBackend::NormalizeServerUrl(server_url_);
-    if (server_url_.empty() && provider_ != AiProvider::LocalLlamaCpp) {
+    if (server_url_.empty()) {
         std::lock_guard<std::mutex> lock(state_mutex_);
         status_ = "AI server URL cannot be empty.";
         return false;
     }
-    if (provider_ != AiProvider::LocalLlamaCpp &&
-        !AiBackend::IsSupportedServerUrl(server_url_)) {
+    if (!AiBackend::IsSupportedServerUrl(server_url_)) {
         std::lock_guard<std::mutex> lock(state_mutex_);
         status_ = "AI server URL must start with http:// or https://.";
         return false;
     }
-    bool connection_changed = false;
     if (config_) {
-        const std::string provider_value = AiBackend::ProviderToConfig(provider_);
-        connection_changed =
-            config_->ai_server_url != server_url_ || config_->ai_provider != provider_value;
+        const bool changed = config_->ai_server_url != server_url_ ||
+            config_->ai_provider != AiBackend::ProviderToConfig(provider_);
         config_->ai_server_url = server_url_;
-        config_->ai_provider = provider_value;
+        config_->ai_provider = AiBackend::ProviderToConfig(provider_);
         if (!config_->Persist()) {
             std::lock_guard<std::mutex> lock(state_mutex_);
             status_ = "Could not save AI settings.";
             return false;
         }
+        if (changed) {
+            connection_status_ = "Not checked after settings change";
+        }
     }
     std::lock_guard<std::mutex> lock(state_mutex_);
     status_ = "AI connection settings saved.";
-    if (config_ && connection_changed) {
-        connection_status_ = "Not checked after settings change";
-    }
     return true;
 }
 
 void AiSettingsModalContent::SelectProvider(AiProvider provider) {
     provider_ = provider;
+    models_.clear();
+    if (config_) {
+        config_->ai_selected_model_key.clear();
+    }
+    LoadModels();
     std::lock_guard<std::mutex> lock(state_mutex_);
     connection_status_ = "Not checked after provider change";
-    status_ = "Provider selected. Use Save or Connect / Refresh to apply it.";
+    status_ = "Provider selected. Connect to load models from its URL.";
 }
 
 void AiSettingsModalContent::ConnectAndRefreshServerModels() {
@@ -598,213 +292,30 @@ void AiSettingsModalContent::ConnectAndRefreshServerModels() {
     settings.timeout_seconds = 30;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
-        status_ = provider_ == AiProvider::LocalLlamaCpp
-            ? "Checking local llama.cpp runtime..."
-            : "Connecting to AI server...";
-        connection_status_ = provider_ == AiProvider::LocalLlamaCpp
-            ? "Checking local llama.cpp"
-            : "Connecting to " + AiBackend::ProviderLabel(provider_);
+        status_ = "Connecting to AI server...";
+        connection_status_ = "Connecting to " + AiBackend::ProviderLabel(provider_);
     }
     StartWorker([this, settings] {
         const AiConnectionResult result =
-            AiBackend(settings).CheckConnectionAndListModels(&cancel_requested_, &command_control_);
+            AiBackend(settings).CheckConnectionAndListModels(
+                &cancel_requested_, &command_control_);
         std::lock_guard<std::mutex> lock(state_mutex_);
-        pending_server_models_ = true;
+        pending_models_ready_ = true;
         pending_connection_success_ = result.success;
         pending_detected_provider_ = result.provider;
-        if (cancel_requested_.load()) {
-            pending_status_ = "Connection check stopped.";
-        } else if (!result.success) {
-            pending_status_ = result.error;
-        } else if (result.provider == AiProvider::LocalLlamaCpp) {
-            pending_status_ = "llama.cpp runtime is ready. Managed local models are shown below.";
-        } else {
-            pending_status_ = result.provider_label + " connected. " +
-                std::to_string(result.models.size()) + " model(s) found.";
-        }
         pending_models_ = result.models;
-    });
-}
-
-void AiSettingsModalContent::FetchAiRegistry() {
-    {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        status_ = "Fetching AI registry...";
-    }
-    StartWorker([this] {
-        const auto result = DownloadRegistry(
-            CurlManager::kAiRegistryUrl,
-            RegistryFilename(RegistryKind::Ai),
-            &cancel_requested_,
-            &command_control_);
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        pending_reload_ = result == assistant_modal_detail::RegistryDownloadResult::Saved;
         pending_status_ = cancel_requested_.load()
-            ? "AI registry download stopped."
-            : (pending_reload_ ? "AI registry loaded." : "AI registry download failed.");
+            ? "Connection check stopped."
+            : (result.success
+                ? result.provider_label + " connected. " +
+                    std::to_string(result.models.size()) + " model(s) found."
+                : result.error);
     });
-}
-
-void AiSettingsModalContent::DownloadRuntime() {
-    const std::string url = RuntimeDownloadUrl();
-    if (url.empty()) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        status_ = "No runtime package exists for " + CurrentPlatform() + " " +
-            CurrentArchitecture() + ".";
-        return;
-    }
-    {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        status_ = "Downloading llama.cpp runtime...";
-        runtime_delete_confirmation_ = false;
-    }
-    StartWorker([this, url] {
-        const std::filesystem::path archive_path =
-            DownloadCacheDirectory() / std::filesystem::path(url).filename();
-        const bool downloaded = DownloadFile(url, archive_path, &cancel_requested_, &command_control_);
-        bool installed = false;
-        if (downloaded) {
-            LocalLlamaServerManager::Instance().Unload();
-            std::error_code error;
-            std::filesystem::remove_all(RuntimeDirectory(), error);
-            installed = ExtractArchive(archive_path, RuntimeDirectory()) && RuntimeBinaryExists();
-            std::filesystem::remove(archive_path, error);
-        }
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        pending_reload_ = true;
-        pending_status_ = cancel_requested_.load()
-            ? "Runtime download stopped."
-            : (installed ? "llama.cpp runtime installed." : "Runtime installation failed.");
-    });
-}
-
-void AiSettingsModalContent::RequestRuntimeDelete() {
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    if (!RuntimeBinaryExists()) {
-        status_ = "llama.cpp runtime is not installed.";
-        return;
-    }
-    runtime_delete_confirmation_ = true;
-    model_delete_confirmation_ = false;
-    status_ = "Confirm llama.cpp runtime deletion.";
-}
-
-void AiSettingsModalContent::ConfirmRuntimeDelete() {
-    {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        runtime_delete_confirmation_ = false;
-        status_ = "Deleting llama.cpp runtime...";
-    }
-    StartWorker([this] {
-        LocalLlamaServerManager::Instance().Unload();
-        std::error_code error;
-        std::filesystem::remove_all(RuntimeDirectory(), error);
-        const bool deleted = !error && !RuntimeBinaryExists();
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        pending_reload_ = true;
-        pending_status_ = deleted ? "llama.cpp runtime deleted." : "Runtime deletion failed.";
-    });
-}
-
-void AiSettingsModalContent::CancelRuntimeDelete() {
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    runtime_delete_confirmation_ = false;
-    status_ = "Runtime deletion cancelled.";
-}
-
-void AiSettingsModalContent::DownloadSelectedModel() {
-    if (selected_model_ < 0 || static_cast<size_t>(selected_model_) >= models_.size()) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        status_ = "No model selected.";
-        return;
-    }
-    const AiModelInfo selected = models_[static_cast<size_t>(selected_model_)];
-    if (selected.source != AiModelSource::ManagedLocal) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        status_ = "Server models are managed by the AI server, not downloaded by TextLT.";
-        return;
-    }
-    const std::string url = selected.model_url;
-    if (url.empty()) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        status_ = "Selected model has no download URL.";
-        return;
-    }
-    {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        status_ = "Downloading " + selected.title + "...";
-        model_delete_confirmation_ = false;
-    }
-    StartWorker([this, url, selected] {
-        const bool downloaded = DownloadFile(
-            url, ModelsDirectory() / selected.filename, &cancel_requested_, &command_control_);
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        pending_reload_ = true;
-        pending_status_ = cancel_requested_.load()
-            ? "Model download stopped."
-            : (downloaded
-                ? "Model downloaded."
-                : "Model download failed. Gemma files may require accepting the Hugging Face license and setting HF_TOKEN.");
-    });
-}
-
-void AiSettingsModalContent::RequestSelectedModelDelete() {
-    if (selected_model_ < 0 || static_cast<size_t>(selected_model_) >= models_.size()) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        status_ = "No model selected.";
-        return;
-    }
-    const AiModelInfo& selected = models_[static_cast<size_t>(selected_model_)];
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    if (selected.source != AiModelSource::ManagedLocal) {
-        status_ = "Server models must be removed in the AI server.";
-        return;
-    }
-    if (!selected.downloaded) {
-        status_ = "Selected model is not downloaded.";
-        return;
-    }
-    pending_model_delete_filename_ = selected.filename;
-    model_delete_confirmation_ = true;
-    runtime_delete_confirmation_ = false;
-    status_ = "Confirm selected model deletion.";
-}
-
-void AiSettingsModalContent::ConfirmSelectedModelDelete() {
-    std::string filename;
-    {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        filename = pending_model_delete_filename_;
-        pending_model_delete_filename_.clear();
-        model_delete_confirmation_ = false;
-        status_ = "Deleting selected model...";
-    }
-    if (filename.empty()) {
-        return;
-    }
-    StartWorker([this, filename] {
-        if (LocalLlamaServerManager::Instance().Snapshot().model_filename == filename) {
-            LocalLlamaServerManager::Instance().Unload();
-        }
-        std::error_code error;
-        std::filesystem::remove(ModelsDirectory() / filename, error);
-        const bool deleted = !error && !std::filesystem::exists(ModelsDirectory() / filename);
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        pending_reload_ = true;
-        pending_status_ = deleted ? "Model deleted." : "Model deletion failed.";
-    });
-}
-
-void AiSettingsModalContent::CancelSelectedModelDelete() {
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    pending_model_delete_filename_.clear();
-    model_delete_confirmation_ = false;
-    status_ = "Model deletion cancelled.";
 }
 
 void AiSettingsModalContent::PersistSelectedModel() {
-    if (selected_model_ == persisted_model_index_ || selected_model_ < 0 ||
-        static_cast<size_t>(selected_model_) >= models_.size() || !config_) {
+    if (!config_ || selected_model_ == persisted_model_index_ || selected_model_ < 0 ||
+        static_cast<size_t>(selected_model_) >= models_.size()) {
         return;
     }
     persisted_model_index_ = selected_model_;
@@ -820,10 +331,9 @@ void AiSettingsModalContent::PersistSelectedModel() {
 void AiSettingsModalContent::StartTest() {
     PersistSelectedModel();
     if (!config_ || config_->ai_selected_model_key.empty()) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
         test_popup_visible_ = true;
-        test_result_ = "Select a model before running the test.";
-        status_ = "AI test cannot start without a selected model.";
+        test_result_ = "Connect to a server and select a model before running the test.";
+        status_ = "AI test cannot start without a selected server model.";
         active_panel_ = 1;
         close_test_button_->TakeFocus();
         return;
@@ -840,8 +350,8 @@ void AiSettingsModalContent::StartTest() {
         }
         test_popup_visible_ = true;
         test_running_ = true;
-        test_result_ = "Waiting for model output...";
-        status_ = "Running editing test with the selected model...";
+        test_result_ = "Waiting for server output...";
+        status_ = "Running editing test with the selected server model...";
     }
     active_panel_ = 1;
     close_test_button_->TakeFocus();
@@ -857,7 +367,7 @@ void AiSettingsModalContent::StartTest() {
     settings.timeout_seconds = 60;
     settings.max_output_tokens = 128;
     StartWorker([this, settings, request] {
-        AiBackendResult result = AiBackend(settings).Run(
+        const AiBackendResult result = AiBackend(settings).Run(
             request,
             &cancel_requested_,
             [this](const std::string& generated) {
@@ -889,68 +399,31 @@ void AiSettingsModalContent::StartTest() {
 }
 
 void AiSettingsModalContent::CloseTestPopup() {
-    bool stop_test = false;
+    const bool stop = CanCancelTask();
+    if (stop) {
+        CancelCurrentTask();
+    }
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
-        stop_test = test_running_;
         test_popup_visible_ = false;
-        if (stop_test) {
-            cancel_requested_.store(true);
-            operation_state_ = OperationState::Stopping;
-            status_ = "Stopping model test because the test window was closed...";
-        }
-    }
-    if (stop_test) {
-        command_control_.RequestStop();
     }
     active_panel_ = 0;
     model_menu_->TakeFocus();
     RequestRedraw();
 }
 
-void AiSettingsModalContent::StartOrRestartLocalModel() {
-    if (selected_model_ < 0 || static_cast<size_t>(selected_model_) >= models_.size()) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        status_ = "Select a local model first.";
-        return;
-    }
-    const AiModelInfo selected = models_[static_cast<size_t>(selected_model_)];
-    if (selected.source != AiModelSource::ManagedLocal || !selected.downloaded) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        status_ = "The selected local model must be downloaded before it can be loaded.";
-        return;
-    }
-    {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        local_model_starting_ = true;
-        status_ = "Starting llama-server and loading " + selected.title + "...";
-    }
-    StartWorker([this, selected] {
-        std::string error;
-        LocalLlamaModelMetadata metadata;
-        metadata.gpu_required = selected.gpu_required;
-        metadata.recommended_vram_mb = selected.recommended_vram_mb;
-        metadata.text_only = selected.purpose == "text";
-        const bool ready = LocalLlamaServerManager::Instance().Restart(
-            selected.filename, metadata, 0, 120, error);
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        local_model_starting_ = false;
-        pending_status_ = ready
-            ? "Local model loaded and ready."
-            : (error.empty() ? "Could not start the local model." : error);
-    });
-}
-
 void AiSettingsModalContent::CancelCurrentTask() {
     bool should_cancel = false;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
-        should_cancel = test_running_ && operation_state_ != OperationState::Stopping;
+        should_cancel = busy_ && operation_state_ != OperationState::Stopping;
         if (should_cancel) {
             cancel_requested_.store(true);
             operation_state_ = OperationState::Stopping;
-            status_ = "Cancelling current AI task; the model will remain loaded...";
-            test_result_ = "Cancelling current AI task...";
+            status_ = "Stopping the current AI request...";
+            if (test_running_) {
+                test_result_ = "Stopping AI request...";
+            }
         }
     }
     if (should_cancel) {
@@ -959,118 +432,32 @@ void AiSettingsModalContent::CancelCurrentTask() {
     }
 }
 
-void AiSettingsModalContent::UnloadLocalModel() {
-    bool cancel_test = false;
-    {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        if (unload_in_progress_) {
-            status_ = "The local model is already being unloaded.";
-            return;
-        }
-        if (busy_ && !test_running_ && !local_model_starting_) {
-            status_ = "Finish the current settings operation before unloading the model.";
-            return;
-        }
-        cancel_test = test_running_;
-        unload_in_progress_ = true;
-        busy_ = true;
-        operation_state_ = OperationState::Stopping;
-        status_ = "Unloading the local model and stopping llama-server...";
-        if (cancel_test) {
-            cancel_requested_.store(true);
-            test_popup_visible_ = false;
-            test_result_ = "Cancelling current AI task...";
-        }
-    }
-    if (cancel_test) {
-        command_control_.RequestStop();
-        active_panel_ = 0;
-        model_menu_->TakeFocus();
-    }
-
-    std::thread previous_worker;
-    if (worker_.joinable()) {
-        previous_worker = std::move(worker_);
-    }
-    worker_ = std::thread([this, previous = std::move(previous_worker)]() mutable {
-        LocalLlamaServerManager::Instance().Unload();
-        if (previous.joinable()) {
-            previous.join();
-        }
-        {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            unload_in_progress_ = false;
-            local_model_starting_ = false;
-            busy_ = false;
-            test_running_ = false;
-            operation_state_ = OperationState::Idle;
-            status_ = "Local model unloaded; llama-server stopped.";
-        }
-        RequestRedraw();
-    });
-    RequestRedraw();
-}
-
 void AiSettingsModalContent::PrepareClose() {
     std::lock_guard<std::mutex> lock(state_mutex_);
     test_popup_visible_ = false;
     active_panel_ = 0;
 }
 
-bool AiSettingsModalContent::CanStartLocalModel() const {
-    if (selected_model_ < 0 || static_cast<size_t>(selected_model_) >= models_.size()) {
-        return false;
-    }
-    {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        if (busy_) {
-            return false;
-        }
-    }
-    const AiModelInfo& selected = models_[static_cast<size_t>(selected_model_)];
-    return selected.source == AiModelSource::ManagedLocal && selected.downloaded &&
-        RuntimeBinaryExists();
-}
-
 bool AiSettingsModalContent::CanCancelTask() const {
     std::lock_guard<std::mutex> lock(state_mutex_);
-    return test_running_ && operation_state_ != OperationState::Stopping;
-}
-
-bool AiSettingsModalContent::CanUnloadModel() const {
-    {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        if (unload_in_progress_ || operation_state_ == OperationState::Stopping ||
-            (busy_ && !test_running_ && !local_model_starting_)) {
-            return false;
-        }
-        if (local_model_starting_) {
-            return true;
-        }
-    }
-    const LocalLlamaServerSnapshot snapshot = LocalLlamaServerManager::Instance().Snapshot();
-    return snapshot.state != LocalLlamaServerState::Stopped &&
-        snapshot.state != LocalLlamaServerState::Stopping;
+    return busy_ && operation_state_ != OperationState::Stopping;
 }
 
 void AiSettingsModalContent::ApplyPendingWorkerResult() {
-    bool reload = false;
-    bool apply_server_models = false;
+    bool models_ready = false;
     bool connection_success = false;
     AiProvider detected = AiProvider::Auto;
     std::string pending_status;
     std::vector<AiModelInfo> pending_models;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
-        reload = pending_reload_;
-        pending_reload_ = false;
-        apply_server_models = pending_server_models_;
-        pending_server_models_ = false;
+        models_ready = pending_models_ready_;
+        pending_models_ready_ = false;
         connection_success = pending_connection_success_;
         detected = pending_detected_provider_;
         pending_status = std::move(pending_status_);
         pending_status_.clear();
-        if (apply_server_models) {
+        if (models_ready) {
             pending_models = std::move(pending_models_);
             pending_models_.clear();
         }
@@ -1078,16 +465,13 @@ void AiSettingsModalContent::ApplyPendingWorkerResult() {
             status_ = pending_status;
         }
     }
-    if (apply_server_models) {
-        server_models_ = connection_success ? std::move(pending_models) : std::vector<AiModelInfo>{};
+    if (models_ready) {
+        models_ = connection_success ? std::move(pending_models) : std::vector<AiModelInfo>{};
         connection_status_ = connection_success
-            ? "Connected — " + AiBackend::ProviderLabel(detected) + " detected"
+            ? "Connected — " + AiBackend::ProviderLabel(detected)
             : (cancel_requested_.load()
-                   ? "Connection check stopped"
-                   : AiBackend::ProviderLabel(provider_) + " connection failed");
-        reload = true;
-    }
-    if (reload) {
+                ? "Connection check stopped"
+                : AiBackend::ProviderLabel(provider_) + " connection failed");
         LoadModels();
     }
 }
@@ -1141,7 +525,7 @@ ftxui::Element AiSettingsModalContent::RenderTestPopup(const Theme& theme) {
     }
     return vbox({
         hbox({
-            text(" Editing test") | bold | color(theme.modal_accent),
+            text(" Server model test") | bold | color(theme.modal_accent),
             filler(),
             running ? spinner(0, test_progress_frame_) | bold : text(""),
         }),
@@ -1149,7 +533,7 @@ ftxui::Element AiSettingsModalContent::RenderTestPopup(const Theme& theme) {
         paragraph(test_source_) | color(theme.modal_text_color),
         separator() | color(theme.modal_border),
         text(" Result") | bold | color(theme.modal_accent),
-        paragraph(result.empty() ? "Waiting for model output..." : result) |
+        paragraph(result.empty() ? "Waiting for server output..." : result) |
             color(theme.modal_text_color) |
             size(HEIGHT, EQUAL, 9) |
             yframe |
@@ -1164,126 +548,66 @@ ftxui::Element AiSettingsModalContent::RenderTestPopup(const Theme& theme) {
 ftxui::Element AiSettingsModalContent::RenderContent(const Theme& theme) {
     using namespace ftxui;
     bool busy = false;
-    bool runtime_confirmation = false;
-    bool model_confirmation = false;
-    bool test_running = false;
-    bool local_model_starting = false;
-    bool unload_in_progress = false;
     OperationState operation_state = OperationState::Idle;
     std::string status;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         busy = busy_;
-        runtime_confirmation = runtime_delete_confirmation_;
-        model_confirmation = model_delete_confirmation_;
-        test_running = test_running_;
-        local_model_starting = local_model_starting_;
-        unload_in_progress = unload_in_progress_;
         operation_state = operation_state_;
         status = status_;
     }
     if (busy) {
         ++operation_progress_frame_;
     }
-    const LocalLlamaServerSnapshot local_server =
-        LocalLlamaServerManager::Instance().Snapshot();
-    std::string local_model_status = "Unloaded";
-    if (local_server.state == LocalLlamaServerState::Starting) {
-        local_model_status = "Loading " + local_server.model_filename;
-    } else if (local_server.state == LocalLlamaServerState::Ready) {
-        local_model_status = "Loaded — " + local_server.model_filename;
-        if (!local_server.gpu_device.empty()) {
-            local_model_status += " · " + local_server.gpu_device;
-            if (local_server.gpu_free_memory_mb > 0) {
-                local_model_status += " · " +
-                    std::to_string(local_server.gpu_free_memory_mb) + " MiB free";
-            }
-        }
-    } else if (local_server.state == LocalLlamaServerState::Stopping) {
-        local_model_status = "Unloading";
-    } else if (local_server.state == LocalLlamaServerState::Failed) {
-        local_model_status = "Failed";
-    }
 
-    Elements rows;
-    rows.push_back(text(" Connection") | bold | color(theme.modal_text_color));
-    rows.push_back(hbox({
-        text(" URL: ") | bold | color(theme.modal_accent),
-        server_url_input_->Render() |
-            borderStyled(LIGHT, theme.modal_border) | flex,
-    }));
-    rows.push_back(hbox({
-        text(" Provider: ") | bold | color(theme.modal_accent),
-        provider_ollama_button_->Render(), text(" "),
-        provider_openai_button_->Render(), text(" "),
-        provider_local_button_->Render(),
-    }));
-    rows.push_back(separator() | color(theme.modal_border));
-
-    rows.push_back(hbox({
-        text(" Models") | bold | color(theme.modal_text_color),
-        filler(),
-        model_download_button_->Render(), text(" "), model_delete_button_->Render(),
-        text(" "), test_button_->Render(),
-    }));
-    if (model_confirmation) {
-        rows.push_back(hbox({
-            text(" Delete the selected local model? ") | bold,
-            model_confirm_delete_button_->Render(), text(" "),
-            model_cancel_delete_button_->Render(),
-        }));
-    }
-    rows.push_back(model_menu_->Render() |
-                   borderStyled(LIGHT, theme.modal_border) |
-                   size(HEIGHT, EQUAL, 7));
-    std::string model_description = "Select a model to view its description.";
-    if (selected_model_ >= 0 && static_cast<size_t>(selected_model_) < model_descriptions_.size() &&
-        !model_descriptions_[static_cast<size_t>(selected_model_)].empty()) {
+    std::string model_description = "Connect to a running server to load its models.";
+    if (selected_model_ >= 0 &&
+        static_cast<size_t>(selected_model_) < model_descriptions_.size()) {
         model_description = model_descriptions_[static_cast<size_t>(selected_model_)];
     }
-    rows.push_back(paragraph(" " + model_description) |
-        dim | color(theme.modal_text_color) | size(HEIGHT, EQUAL, 2));
-    rows.push_back(text(
-        " [x] active model · server models are managed by the configured AI service") |
-        dim | color(theme.modal_text_color));
-    rows.push_back(separator() | color(theme.modal_border));
 
-    rows.push_back(hbox({
-        text(" Local llama.cpp runtime: ") | bold | color(theme.modal_text_color),
-        text(RuntimeBinaryExists() ? "installed" : "not installed") |
-            color(theme.modal_accent),
-        text("   Path: ") | bold | color(theme.modal_text_color),
-        paragraph(RuntimeDisplayPath()) | color(theme.modal_text_color) | flex,
-    }));
-    rows.push_back(hbox({
-        runtime_download_button_->Render(), text(" "), runtime_delete_button_->Render(),
-        text(" "), fetch_registry_button_->Render(),
-    }));
-    if (runtime_confirmation) {
-        rows.push_back(hbox({
-            text(" Delete the llama.cpp runtime? ") | bold,
-            runtime_confirm_delete_button_->Render(), text(" "),
-            runtime_cancel_delete_button_->Render(),
-        }));
-    }
-    rows.push_back(separator() | color(theme.modal_border));
-
-    rows.push_back(vbox({
-        StatusLine("Connection", connection_status_, theme),
-        StatusLine("Local model", local_model_status, theme),
-        StatusLine("Task", test_running
-            ? (operation_state == OperationState::Stopping ? "Cancelling" : "Editing test")
-            : (unload_in_progress
-                ? "Unloading model"
-                : (local_model_starting ? "Loading model" : "Idle")), theme),
+    return vbox({
+        text(" Connection") | bold | color(theme.modal_text_color),
         hbox({
-            busy ? spinner(0, operation_progress_frame_) | bold : text(" "),
-            text(" Status: ") | bold | color(theme.modal_accent),
-            paragraph(status.empty() ? "Ready" : status) |
-                color(theme.modal_text_color) | flex,
+            text(" URL: ") | bold | color(theme.modal_accent),
+            server_url_input_->Render() | borderStyled(LIGHT, theme.modal_border) | flex,
         }),
-    }) | borderStyled(LIGHT, theme.modal_border) | size(HEIGHT, EQUAL, 7));
-    return vbox(std::move(rows)) | borderStyled(LIGHT, theme.modal_border);
+        hbox({
+            text(" API: ") | bold | color(theme.modal_accent),
+            provider_ollama_button_->Render(), text(" "),
+            provider_openai_button_->Render(),
+        }),
+        paragraph(
+            "TextLT only connects to an already-running AI service. "
+            "Models and server processes are managed outside TextLT.") |
+            dim | color(theme.modal_text_color),
+        separator() | color(theme.modal_border),
+        hbox({
+            text(" Server models") | bold | color(theme.modal_text_color),
+            filler(),
+            test_button_->Render(),
+        }),
+        model_menu_->Render() |
+            borderStyled(LIGHT, theme.modal_border) |
+            size(HEIGHT, EQUAL, 7),
+        paragraph(" " + model_description) |
+            dim | color(theme.modal_text_color) | size(HEIGHT, EQUAL, 2),
+        text(" [x] active model · model management belongs to the configured server") |
+            dim | color(theme.modal_text_color),
+        separator() | color(theme.modal_border),
+        vbox({
+            StatusLine("Connection", connection_status_, theme),
+            StatusLine("Task", busy
+                ? (operation_state == OperationState::Stopping ? "Stopping" : "Running")
+                : "Idle", theme),
+            hbox({
+                busy ? spinner(0, operation_progress_frame_) | bold : text(" "),
+                text(" Status: ") | bold | color(theme.modal_accent),
+                paragraph(status.empty() ? "Ready" : status) |
+                    color(theme.modal_text_color) | flex,
+            }),
+        }) | borderStyled(LIGHT, theme.modal_border) | size(HEIGHT, EQUAL, 6),
+    }) | borderStyled(LIGHT, theme.modal_border);
 }
 
 AiSettingsModal::AiSettingsModal(
@@ -1297,12 +621,8 @@ AiSettingsModal::AiSettingsModal(
     modal_->SetFooterButtons({
         {"Save", [this] { content_->SaveConnectionSettings(); }, ButtonRole::Default},
         {"Connect / Refresh", [this] { content_->ConnectAndRefreshServerModels(); }, ButtonRole::Primary},
-        {"Start / Restart", [this] { content_->StartOrRestartLocalModel(); }, ButtonRole::Secondary,
-         [this] { return content_->CanStartLocalModel(); }},
         {"Cancel Task", [this] { content_->CancelCurrentTask(); }, ButtonRole::Warning,
          [this] { return content_->CanCancelTask(); }},
-        {"Unload Model", [this] { content_->UnloadLocalModel(); }, ButtonRole::Warning,
-         [this] { return content_->CanUnloadModel(); }},
         {"Close", [this] { Close(); }, ButtonRole::Cancel},
     });
     modal_->SetBodyFrameScrolling(false);

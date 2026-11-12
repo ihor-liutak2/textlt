@@ -104,7 +104,8 @@ RegistryLoadResult LoadUserRegistryJson(const char* filename, Json* root) {
 }
 
 const char* RegistryFilename(RegistryKind kind) {
-    return kind == RegistryKind::Piper ? kPiperRegistryFile : kAiRegistryFile;
+    (void)kind;
+    return kPiperRegistryFile;
 }
 
 RegistryLoadResult LoadUserRegistryJson(RegistryKind kind, Json* root) {

@@ -1008,9 +1008,6 @@ std::string AiActionsModalContent::SelectedBackendLabel() const {
     if (key.rfind("openai:", 0) == 0) {
         return AiBackend::ProviderLabel(AiProvider::OpenAiCompatible);
     }
-    if (key.rfind("local:", 0) == 0) {
-        return AiBackend::ProviderLabel(AiProvider::LocalLlamaCpp);
-    }
     return AiBackend::ProviderLabel(AiBackend::ProviderFromConfig(config_->ai_provider));
 }
 
