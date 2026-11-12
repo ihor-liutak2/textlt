@@ -5,16 +5,26 @@ SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 INSTALLER="$SELF_DIR/textlt-install-runtime-deps.sh"
 BINARY="$SELF_DIR/textlt-bin"
 
+libarchive_is_missing() {
+  [ -x "$BINARY" ] || return 1
+  command -v ldd >/dev/null 2>&1 || return 1
+  ldd "$BINARY" 2>/dev/null |
+    grep -Eq 'libarchive[^[:space:]]*[[:space:]]+=>[[:space:]]+not found'
+}
+
 missing=""
 for tool in curl ssh sftp; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     missing="$missing $tool"
   fi
 done
+if libarchive_is_missing; then
+  missing="$missing libarchive"
+fi
 
 if [ "${TEXTLT_CHECK_RUNTIME_ONLY:-}" = "1" ]; then
   if [ -z "$missing" ]; then
-    echo "TextLT runtime dependencies are available: curl ssh sftp"
+    echo "TextLT runtime dependencies are available: curl ssh sftp libarchive"
     exit 0
   fi
   if [ -x "$INSTALLER" ]; then
@@ -30,7 +40,7 @@ if [ -n "$missing" ]; then
     "$INSTALLER"
   else
     echo "Installer script was not found: $INSTALLER" >&2
-    echo "Install manually: curl and openssh-client" >&2
+    echo "Install manually: curl, openssh-client, and libarchive" >&2
     exit 127
   fi
 fi
