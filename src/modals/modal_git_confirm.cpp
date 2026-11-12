@@ -87,16 +87,20 @@ ftxui::Element GitModalContent::RenderConfirmOverlay() {
     rows.push_back(ftxui::text("Command:") | ftxui::bold | ftxui::color(theme.modal_text_color));
     rows.push_back(ftxui::text(confirm_command_preview_) | ftxui::color(theme.modal_text_color));
 
+    rows.push_back(ftxui::text(""));
     if (!confirm_required_text_.empty()) {
-        rows.push_back(ftxui::text(""));
         rows.push_back(ftxui::text("Type " + confirm_required_text_ + " to confirm:") |
                        ftxui::bold | ftxui::color(theme.modal_text_color));
-        rows.push_back(confirm_input_component_->Render() |
-                       ftxui::bgcolor(theme.modal_input_bg) |
-                       ftxui::color(theme.modal_input_fg) |
-                       ftxui::frame);
+    } else {
+        rows.push_back(ftxui::text("Enter value:") |
+                       ftxui::bold | ftxui::color(theme.modal_text_color));
     }
+    rows.push_back(confirm_input_component_->Render() |
+                   ftxui::bgcolor(theme.modal_input_bg) |
+                   ftxui::color(theme.modal_input_fg) |
+                   ftxui::frame);
 
+    rows.push_back(ftxui::text(""));
     rows.push_back(ftxui::text(""));
     rows.push_back(ftxui::hbox({
         ftxui::filler(),
