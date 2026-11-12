@@ -273,7 +273,29 @@ void RemoteConnectionsModalContent::SetSelectedActive() {
         return;
     }
     Reload();
-    SetStatus("Active remote connection: " + ActiveConnectionLabel());
+    SetStatus("Default remote connection: " + ActiveConnectionLabel());
+}
+
+void RemoteConnectionsModalContent::AssignSelectedToProject() {
+    if (assignment_project_id_.empty() || !assign_project_) {
+        SetStatus("This dialog was not opened for a project.", true);
+        return;
+    }
+    if (connections_.empty() || selected_connection_ < 0 ||
+        selected_connection_ >= static_cast<int>(connections_.size())) {
+        SetStatus("No saved connection selected.", true);
+        return;
+    }
+    const RemoteConnectionConfig& selected = connections_[static_cast<size_t>(selected_connection_)];
+    std::string error;
+    if (!assign_project_(assignment_project_id_, selected.id, error)) {
+        SetStatus(error.empty() ? "Could not assign connection to project." : error, true);
+        return;
+    }
+    SetStatus("Project connection: " + selected.name);
+    if (on_close_) {
+        on_close_();
+    }
 }
 
 void RemoteConnectionsModalContent::SetSelectedForNotesSync() {
@@ -321,12 +343,22 @@ void RemoteConnectionsModalContent::DeleteSelected() {
     }
     const std::string id = connections_[selected_connection_].id;
     const std::string name = connections_[selected_connection_].name;
+    std::string error;
+    if (can_delete_ && !can_delete_(id, error)) {
+        SetStatus(error.empty() ? "Connection is in use and cannot be deleted." : error, true);
+        return;
+    }
+    const std::vector<RemoteConnectionConfig> previous_connections = config_store_->Connections();
+    const std::string previous_active = config_store_->ActiveConnectionId();
+    const std::string previous_notes = config_store_->NotesSyncConnectionId();
     if (!config_store_->RemoveById(id)) {
         SetStatus("Connection was not removed.", true);
         return;
     }
-    std::string error;
     if (!config_store_->Save(error)) {
+        config_store_->MutableConnections() = previous_connections;
+        config_store_->SetActiveConnectionId(previous_active);
+        config_store_->SetNotesSyncConnectionId(previous_notes);
         SetStatus(error, true);
         return;
     }
@@ -508,6 +540,9 @@ void RemoteConnectionsModalContent::RebuildFooterActions() {
 
     if (selected_tab_ == MainTab::Connections) {
         add(edit_button_);
+        if (!assignment_project_id_.empty()) {
+            add(assign_project_button_);
+        }
         add(set_active_button_);
         add(notes_sync_button_);
         add(test_button_);

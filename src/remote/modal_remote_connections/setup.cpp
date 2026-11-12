@@ -2,10 +2,14 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     const Theme* theme,
     RemoteConfigStore* config_store,
     WriteClipboardCallback write_clipboard,
+    AssignProjectCallback assign_project,
+    DeleteGuardCallback can_delete,
     CloseCallback on_close)
     : theme_(theme),
       config_store_(config_store),
       write_clipboard_(std::move(write_clipboard)),
+      assign_project_(std::move(assign_project)),
+      can_delete_(std::move(can_delete)),
       on_close_(std::move(on_close)) {
     auto input_transform = [this](ftxui::InputState state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
@@ -117,8 +121,10 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
         ButtonRole::Primary, ButtonVariant::AccentEdges);
     test_button_ = MakeTextButton("Test", [this] { TestSelected(); },
         ButtonRole::Cancel, ButtonVariant::AccentEdges, "▶");
-    set_active_button_ = MakeTextButton("Set Active", [this] { SetSelectedActive(); },
+    set_active_button_ = MakeTextButton("Set Default", [this] { SetSelectedActive(); },
         ButtonRole::Primary, ButtonVariant::AccentEdges);
+    assign_project_button_ = MakeTextButton("Set to Project", [this] { AssignSelectedToProject(); },
+        ButtonRole::Success, ButtonVariant::AccentEdges);
     notes_sync_button_ = MakeTextButton("Notes Sync", [this] { SetSelectedForNotesSync(); },
         ButtonRole::Success, ButtonVariant::AccentEdges, "↻");
     save_token_button_ = MakeTextButton("Save Token", [this] { SaveCloudAccessToken(); },
@@ -267,6 +273,9 @@ ftxui::Component RemoteConnectionsModalContent::MakeTabButton(
 }
 
 void RemoteConnectionsModalContent::Open() {
+    assignment_project_id_.clear();
+    assignment_project_name_.clear();
+    preferred_connection_id_.clear();
     selected_tab_ = MainTab::Connections;
     RebuildFooterActions();
     ReloadSshConfigHosts();
@@ -278,12 +287,46 @@ void RemoteConnectionsModalContent::Open() {
     }
 }
 
+void RemoteConnectionsModalContent::OpenForProject(
+    std::string project_id,
+    std::string project_name,
+    std::string current_connection_id) {
+    assignment_project_id_ = std::move(project_id);
+    assignment_project_name_ = std::move(project_name);
+    preferred_connection_id_ = std::move(current_connection_id);
+    id_value_.clear();
+    selected_tab_ = MainTab::Connections;
+    RebuildFooterActions();
+    ReloadSshConfigHosts();
+    Reload();
+    help_active_ = false;
+    help_layer_index_ = 0;
+    if (list_component_) {
+        list_component_->TakeFocus();
+    }
+    SetStatus("Select a connection for project: " + assignment_project_name_);
+}
+
+void RemoteConnectionsModalContent::OpenForEdit(std::string connection_id) {
+    assignment_project_id_.clear();
+    assignment_project_name_.clear();
+    preferred_connection_id_ = std::move(connection_id);
+    id_value_.clear();
+    selected_tab_ = MainTab::Connections;
+    ReloadSshConfigHosts();
+    Reload();
+    EditSelected();
+}
+
 void RemoteConnectionsModalContent::Close() {
     output_.clear();
     status_ = "Ready.";
     status_is_error_ = false;
     help_active_ = false;
     help_layer_index_ = 0;
+    assignment_project_id_.clear();
+    assignment_project_name_.clear();
+    preferred_connection_id_.clear();
 }
 
 void RemoteConnectionsModalContent::Reload() {
@@ -300,9 +343,10 @@ void RemoteConnectionsModalContent::Reload() {
         return;
     }
     const std::string active_id = config_store_ ? config_store_->ActiveConnectionId() : std::string{};
-    if (!active_id.empty()) {
+    const std::string selection_id = preferred_connection_id_.empty() ? active_id : preferred_connection_id_;
+    if (!selection_id.empty()) {
         for (size_t index = 0; index < connections_.size(); ++index) {
-            if (connections_[index].id == active_id) {
+            if (connections_[index].id == selection_id) {
                 selected_connection_ = static_cast<int>(index);
                 break;
             }

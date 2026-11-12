@@ -28,6 +28,14 @@ void RemoteFilesModal::Open() {
     modal_->TakeFocus();
 }
 
+void RemoteFilesModal::OpenForConnection(
+    const std::string& connection_id,
+    bool connect_immediately) {
+    open_ = true;
+    content_->Open(connection_id, connect_immediately);
+    modal_->TakeFocus();
+}
+
 void RemoteFilesModal::Close() {
     open_ = false;
     content_->Close();

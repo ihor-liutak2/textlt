@@ -5,7 +5,12 @@ void RemoteFilesModalContent::ReloadConnections() {
     }
 
     connections_.clear();
-    const RemoteConnectionConfig* active = config_store_ ? config_store_->FindActiveConnection() : nullptr;
+    const RemoteConnectionConfig* active = nullptr;
+    if (config_store_) {
+        active = preferred_connection_id_.empty()
+            ? config_store_->FindActiveConnection()
+            : config_store_->FindById(preferred_connection_id_);
+    }
     if (active) {
         connections_.push_back(*active);
     }

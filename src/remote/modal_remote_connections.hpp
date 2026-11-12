@@ -23,11 +23,20 @@ class RemoteConnectionsModalContent : public IModalContent {
 public:
     using CloseCallback = std::function<void()>;
     using WriteClipboardCallback = std::function<void(const std::string&)>;
+    using AssignProjectCallback = std::function<bool(
+        const std::string& project_id,
+        const std::string& connection_id,
+        std::string& error)>;
+    using DeleteGuardCallback = std::function<bool(
+        const std::string& connection_id,
+        std::string& error)>;
 
     RemoteConnectionsModalContent(
         const Theme* theme,
         RemoteConfigStore* config_store,
         WriteClipboardCallback write_clipboard,
+        AssignProjectCallback assign_project,
+        DeleteGuardCallback can_delete,
         CloseCallback on_close);
 
     ftxui::Element Render() override;
@@ -41,6 +50,11 @@ public:
     ftxui::Element RenderCustomFooter() override;
 
     void Open();
+    void OpenForProject(
+        std::string project_id,
+        std::string project_name,
+        std::string current_connection_id);
+    void OpenForEdit(std::string connection_id);
     void Close();
     void Reload();
     bool HandleEvent(ftxui::Event event);
@@ -88,6 +102,7 @@ private:
     void DeleteSelected();
     void TestSelected();
     void SetSelectedActive();
+    void AssignSelectedToProject();
     void SetSelectedForNotesSync();
     void PrepareTokenFile();
     void SaveCloudAccessToken();
@@ -117,12 +132,17 @@ private:
     const Theme* theme_ = nullptr;
     RemoteConfigStore* config_store_ = nullptr;
     WriteClipboardCallback write_clipboard_;
+    AssignProjectCallback assign_project_;
+    DeleteGuardCallback can_delete_;
     CloseCallback on_close_;
 
     std::vector<RemoteConnectionConfig> connections_;
     int selected_connection_ = 0;
     std::vector<ftxui::Box> connection_boxes_;
     MainTab selected_tab_ = MainTab::Connections;
+    std::string assignment_project_id_;
+    std::string assignment_project_name_;
+    std::string preferred_connection_id_;
 
     std::string id_value_;
     std::string name_value_;
@@ -191,6 +211,7 @@ private:
     ftxui::Component save_button_;
     ftxui::Component test_button_;
     ftxui::Component set_active_button_;
+    ftxui::Component assign_project_button_;
     ftxui::Component notes_sync_button_;
     ftxui::Component save_token_button_;
     ftxui::Component edit_button_;
@@ -213,14 +234,23 @@ private:
 class RemoteConnectionsModal {
 public:
     using WriteClipboardCallback = RemoteConnectionsModalContent::WriteClipboardCallback;
+    using AssignProjectCallback = RemoteConnectionsModalContent::AssignProjectCallback;
+    using DeleteGuardCallback = RemoteConnectionsModalContent::DeleteGuardCallback;
 
     RemoteConnectionsModal(
         const Theme* theme,
         RemoteConfigStore* config_store,
-        WriteClipboardCallback write_clipboard);
+        WriteClipboardCallback write_clipboard,
+        AssignProjectCallback assign_project = {},
+        DeleteGuardCallback can_delete = {});
 
     ftxui::Component View() const;
     void Open();
+    void OpenForProject(
+        const std::string& project_id,
+        const std::string& project_name,
+        const std::string& current_connection_id);
+    void OpenForEdit(const std::string& connection_id);
     void Close();
     bool IsOpen() const;
     bool OnEvent(ftxui::Event event);

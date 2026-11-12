@@ -213,12 +213,16 @@ ftxui::Element RemoteConnectionsModalContent::RenderHelpOverlay() {
 RemoteConnectionsModal::RemoteConnectionsModal(
     const Theme* theme,
     RemoteConfigStore* config_store,
-    WriteClipboardCallback write_clipboard)
+    WriteClipboardCallback write_clipboard,
+    AssignProjectCallback assign_project,
+    DeleteGuardCallback can_delete)
     : theme_(theme) {
     content_ = std::make_shared<RemoteConnectionsModalContent>(
         theme_,
         config_store,
         std::move(write_clipboard),
+        std::move(assign_project),
+        std::move(can_delete),
         [this] { Close(); });
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
     modal_->SetBodyFrameScrolling(false);
@@ -234,6 +238,21 @@ void RemoteConnectionsModal::Open() {
     if (content_) {
         content_->GetMainComponent()->TakeFocus();
     }
+}
+
+void RemoteConnectionsModal::OpenForProject(
+    const std::string& project_id,
+    const std::string& project_name,
+    const std::string& current_connection_id) {
+    open_ = true;
+    content_->OpenForProject(project_id, project_name, current_connection_id);
+    content_->GetMainComponent()->TakeFocus();
+}
+
+void RemoteConnectionsModal::OpenForEdit(const std::string& connection_id) {
+    open_ = true;
+    content_->OpenForEdit(connection_id);
+    content_->GetMainComponent()->TakeFocus();
 }
 
 void RemoteConnectionsModal::Close() {

@@ -57,7 +57,7 @@ public:
     int GetCustomFooterHeight() const override;
     ftxui::Element RenderCustomFooter() override;
 
-    void Open();
+    void Open(std::string preferred_connection_id = {}, bool connect_immediately = false);
     void Close();
 
 private:
@@ -173,6 +173,7 @@ private:
     std::unique_ptr<IRemoteProvider> remote_provider_;
     std::vector<RemoteConnectionConfig> connections_;
     int selected_connection_ = 0;
+    std::string preferred_connection_id_;
 
     PanelState local_panel_;
     PanelState remote_panel_;
@@ -243,6 +244,7 @@ public:
 
     ftxui::Component View() const;
     void Open();
+    void OpenForConnection(const std::string& connection_id, bool connect_immediately = false);
     void Close();
     bool IsOpen() const;
     bool OnEvent(ftxui::Event event);

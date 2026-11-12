@@ -52,6 +52,8 @@ private:
     void HandleDropdownAction();
     void RefreshCurrentDropdownEntries();
     void RebuildDropdownComponents();
+    bool SetItemLabel(const std::string& command_id, std::string label);
+    int MenuIndex(const std::string& label) const;
     bool IsCurrentSeparator(int item_index) const;
     int DropdownX() const;
 

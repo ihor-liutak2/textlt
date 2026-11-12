@@ -40,6 +40,7 @@ void TextltApp::InitializeCommands() {
     add("file.new", "New", "File", "", [this] { CommandFileNew(); });
     add("file.files", "Files", "File", "", [this] { CommandFileManageFiles(); });
     add("file.open", "Open", "File", "Ctrl+O", [this] { CommandFileOpen(); });
+    add("file.open_folder", "Open Folder", "File", "", [this] { CommandFileOpenFolder(); });
     add("file.save_as", "Save As", "File", "", [this] { CommandFileSaveAs(); });
     add("file.import", "Import", "File", "", [this] { CommandFileImport(); });
     add("file.recent", "Recent Files", "File", "", [this] { CommandFileRecent(); });
@@ -48,6 +49,59 @@ void TextltApp::InitializeCommands() {
     add("file.save", "Save", "File", "Ctrl+S", [this] { CommandFileSave(); });
     add("file.save_all", "Save All", "File", "", [this] { CommandFileSaveAll(); });
     add("file.toggle_favorite", "Toggle Favorite", "File", "", [this] { CommandFileToggleFavorite(); });
+
+    add("project.show", "Projects Sidebar", "Project", "", [this] { ShowProjectsSidebar(); });
+    add("project.add", "Add Project", "Project", "", [this] {
+        OpenFilesModal(FilesModalMode::SelectDirectory);
+    });
+    add("project.add_current", "Add Current Folder as Project", "Project", "", [this] {
+        AddCurrentFolderAsProject();
+    });
+    add("project.remove", "Remove Current Project", "Project", "", [this] {
+        const ProjectRecord* project = ActiveWorkspaceProject();
+        if (project) {
+            RemoveProject(project->id);
+        } else {
+            active_action_ = "Current folder is not a registered project";
+            screen_.PostEvent(ftxui::Event::Custom);
+        }
+    });
+    add("project.remote_files", "Project Remote Files", "Project", "", [this] {
+        const ProjectRecord* project = ActiveWorkspaceProject();
+        if (project) {
+            OpenProjectRemote(project->id);
+        } else {
+            active_action_ = "Add the current folder as a project before assigning a remote";
+            screen_.PostEvent(ftxui::Event::Custom);
+        }
+    });
+    add("project.assign_connection", "Set Project Connection", "Project", "", [this] {
+        const ProjectRecord* project = ActiveWorkspaceProject();
+        if (project) {
+            AssignProjectConnection(project->id);
+        } else {
+            active_action_ = "Add the current folder as a project before assigning a remote";
+            screen_.PostEvent(ftxui::Event::Custom);
+        }
+    });
+    add("project.edit_connection", "Edit Project Connection", "Project", "", [this] {
+        const ProjectRecord* project = ActiveWorkspaceProject();
+        if (project) {
+            EditProjectConnection(project->id);
+        } else {
+            active_action_ = "Current folder has no project connection";
+            screen_.PostEvent(ftxui::Event::Custom);
+        }
+    });
+    add("project.unlink_connection", "Unlink Project Connection", "Project", "", [this] {
+        const ProjectRecord* project = ActiveWorkspaceProject();
+        if (project) {
+            UnlinkProjectConnection(project->id);
+        } else {
+            active_action_ = "Current folder has no project connection";
+            screen_.PostEvent(ftxui::Event::Custom);
+        }
+    });
 
     add("edit.undo", "Undo", "Edit", "Ctrl+Z", [this] { CommandEditUndo(); });
     add("edit.redo", "Redo", "Edit", "Ctrl+Y", [this] { CommandEditRedo(); });
@@ -69,7 +123,8 @@ void TextltApp::InitializeCommands() {
     add("view.toggle_line_numbers", "Toggle Line Numbers", "Options", "", [this] { CommandViewToggleLineNumbers(); });
     add("sidebar.toggle_file_explorer", "Toggle File Explorer", "Options", "", [this] { CommandSidebarToggleFileExplorer(); });
     add("sidebar.ctrl_b_file_explorer", "Sidebar", "Options", "Ctrl+B", [this] { OpenSidebarShortcutModal(); });
-    add("sidebar.show_project", "Project Sidebar", "Options", "", [this] { ShowProjectSidebar(); });
+    add("sidebar.show_project", "Folder Sidebar", "Options", "", [this] { ShowProjectSidebar(); });
+    add("sidebar.show_projects", "Projects Sidebar", "Options", "", [this] { ShowProjectsSidebar(); });
     add("sidebar.show_favorites", "Favorites Sidebar", "Options", "", [this] { ShowFavoritesSidebar(); });
     add("sidebar.show_opened_files", "Opened Files Sidebar", "Options", "", [this] { ShowOpenedFilesSidebar(); });
     add("sidebar.toggle_opened_project", "Toggle File Explorer Tab", "Options", "", [this] { ToggleSidebarOpenedProject(); });

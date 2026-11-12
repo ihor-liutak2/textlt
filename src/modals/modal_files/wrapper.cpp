@@ -90,6 +90,8 @@ void FilesModal::RebuildFooterButtons() {
 
     modal_->SetFooterButtons({
         {content_->Mode() == FilesModalMode::SaveAs ? "Save As" :
+            content_->Mode() == FilesModalMode::OpenFolder ? "Open Folder" :
+            content_->Mode() == FilesModalMode::SelectDirectory ? "Add Project" :
             content_->Mode() == FilesModalMode::Import ? "Import" : "Open",
             [this] {
                 if (content_) {

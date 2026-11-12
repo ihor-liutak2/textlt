@@ -39,6 +39,7 @@ MenuBarComponent::MenuBarComponent(
     const Theme* theme)
     : menu_entries_({
           " File ",
+          " Project ",
           " Edit ",
           " Options ",
           " Format ",
@@ -51,6 +52,7 @@ MenuBarComponent::MenuBarComponent(
               {" New ", "file.new"},
               {" Files... ", "file.files"},
               {" Open...            (Ctrl+O) ", "file.open"},
+              {" Open Folder... ", "file.open_folder"},
               {" Save As... ", "file.save_as"},
               {" Import... ", "file.import"},
               {" Recent Files ", "file.recent"},
@@ -60,6 +62,19 @@ MenuBarComponent::MenuBarComponent(
               {" Save All ", "file.save_all"},
               {" [ ] Add to Favorites ", "file.toggle_favorite"},
               {" Exit               (Ctrl+Q) ", "app.exit"},
+          },
+          {
+              {" Projects Sidebar ", "project.show"},
+              {" Add Project... ", "project.add"},
+              {" Add Current Folder as Project ", "project.add_current"},
+              {" Remove Current Project ", "project.remove"},
+              {" ───────────────────────── ", "", true},
+              {" Remote Files... ", "project.remote_files"},
+              {" Set/Change Connection... ", "project.assign_connection"},
+              {" Edit Connection... ", "project.edit_connection"},
+              {" Unlink Remote ", "project.unlink_connection"},
+              {" ───────────────────────── ", "", true},
+              {" Manage Connections... ", "remote.connections"},
           },
           {
               {" Undo               (Ctrl+Z) ", "edit.undo"},
@@ -159,7 +174,10 @@ MenuBarComponent::MenuBarComponent(
         dropdown_menu_,
     });
     Add(menu_container_);
-    format_dropdown_items_ = dropdown_items_[3];
+    const int format_index = MenuIndex(" Format ");
+    if (format_index >= 0) {
+        format_dropdown_items_ = dropdown_items_[static_cast<size_t>(format_index)];
+    }
     SetFormatMenuVisible(false);
 }
 
@@ -346,13 +364,9 @@ std::string MenuBarComponent::CommandIdAt(int menu_index, int item_index) const 
     
     
 void MenuBarComponent::SetFileFavoriteLabel(bool is_favorite) {
-    if (dropdown_items_.empty() || dropdown_items_[0].size() <= 10) {
-        return;
-    }
-
-    dropdown_items_[0][10].label = is_favorite
+    SetItemLabel("file.toggle_favorite", is_favorite
         ? " [X] Remove from Favorites "
-        : " [ ] Add to Favorites ";
+        : " [ ] Add to Favorites ");
     RefreshCurrentDropdownEntries();
 }
 
@@ -362,14 +376,19 @@ void MenuBarComponent::SetFormatMenuVisible(bool visible) {
     }
 
     CloseDropdown();
-    if (visible) {
-        menu_entries_.insert(menu_entries_.begin() + 3, " Format ");
+    const int current_format_index = MenuIndex(" Format ");
+    if (visible && current_format_index < 0) {
+        const int tools_index = MenuIndex(" Tools ");
+        const size_t insertion = tools_index < 0
+            ? menu_entries_.size()
+            : static_cast<size_t>(tools_index);
+        menu_entries_.insert(menu_entries_.begin() + static_cast<std::ptrdiff_t>(insertion), " Format ");
         dropdown_items_.insert(
-            dropdown_items_.begin() + 3,
+            dropdown_items_.begin() + static_cast<std::ptrdiff_t>(insertion),
             format_dropdown_items_);
-    } else {
-        menu_entries_.erase(menu_entries_.begin() + 3);
-        dropdown_items_.erase(dropdown_items_.begin() + 3);
+    } else if (!visible && current_format_index >= 0) {
+        menu_entries_.erase(menu_entries_.begin() + current_format_index);
+        dropdown_items_.erase(dropdown_items_.begin() + current_format_index);
     }
     format_menu_visible_ = visible;
     selected_menu_item_ = std::clamp(
@@ -386,25 +405,39 @@ void MenuBarComponent::SetOptionLabels(
     bool auto_pairing,
     bool auto_indent,
     int tab_size) {
-    if (dropdown_items_.size() <= 2 || dropdown_items_[2].size() <= 7) {
-        return;
-    }
-
-    dropdown_items_[2][3].label = smart_word_wrap
+    SetItemLabel("editor.toggle_smart_word_wrap", smart_word_wrap
         ? " Smart Word Wrap [X] "
-        : " Smart Word Wrap [ ] ";
-    dropdown_items_[2][4].label = syntax_highlighting
+        : " Smart Word Wrap [ ] ");
+    SetItemLabel("editor.toggle_syntax_highlighting", syntax_highlighting
         ? " Syntax Highlighting [X] "
-        : " Syntax Highlighting [ ] ";
-    dropdown_items_[2][5].label = auto_pairing
+        : " Syntax Highlighting [ ] ");
+    SetItemLabel("editor.toggle_auto_pairing", auto_pairing
         ? " Auto Pairing [X] "
-        : " Auto Pairing [ ] ";
-    dropdown_items_[2][6].label = auto_indent
+        : " Auto Pairing [ ] ");
+    SetItemLabel("editor.toggle_auto_indent", auto_indent
         ? " Smart Auto-Indent [X] "
-        : " Smart Auto-Indent [ ] ";
-    dropdown_items_[2][7].label =
-        " Tab Size: " + std::to_string(tab_size) + " spaces ";
+        : " Smart Auto-Indent [ ] ");
+    SetItemLabel("editor.toggle_tab_size", " Tab Size: " + std::to_string(tab_size) + " spaces ");
     RefreshCurrentDropdownEntries();
+}
+
+bool MenuBarComponent::SetItemLabel(const std::string& command_id, std::string label) {
+    for (auto& menu : dropdown_items_) {
+        for (DropdownItem& item : menu) {
+            if (item.command_id == command_id) {
+                item.label = std::move(label);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+int MenuBarComponent::MenuIndex(const std::string& label) const {
+    const auto iter = std::find(menu_entries_.begin(), menu_entries_.end(), label);
+    return iter == menu_entries_.end()
+        ? -1
+        : static_cast<int>(std::distance(menu_entries_.begin(), iter));
 }
 
 void MenuBarComponent::CloseDropdown() {

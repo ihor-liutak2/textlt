@@ -62,7 +62,11 @@ ftxui::Element RemoteConnectionsModalContent::RenderConnectionDetails() {
     }
     rows.push_back(text(""));
     rows.push_back(text(" Edit opens the matching type tab.") | dim | color(theme.modal_text_color));
-    rows.push_back(text(" Remote Files uses only the active connection.") | dim | color(theme.modal_text_color));
+    rows.push_back(text(" Generic Remote Files uses the default connection.") | dim | color(theme.modal_text_color));
+    if (!assignment_project_id_.empty()) {
+        rows.push_back(text(" Set to Project assigns this profile without connecting.") |
+            dim | color(theme.modal_text_color));
+    }
     rows.push_back(text(" Notes Sync tests and assigns this profile; syncing remains manual.") |
         dim | color(theme.modal_text_color));
     rows.push_back(filler());

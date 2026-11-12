@@ -192,6 +192,7 @@ add_executable(textlt
   src/app_distraction_actions.cpp
   src/app_workspace.cpp
   src/app_resources.cpp
+  src/app_projects.cpp
   src/app_view.cpp
   src/app_notes_actions.cpp
   src/shortcut_key.cpp
@@ -202,6 +203,7 @@ add_executable(textlt
   src/builtin_text_processors.cpp
   src/distraction_mode_controller.cpp
   src/config_manager.cpp
+  src/project_store.cpp
   src/ai/ai_backend.cpp
   src/ai/ai_prompts.cpp
   src/curl_manager.cpp
@@ -505,6 +507,11 @@ add_executable(textlt_remote_config_store_test
   src/remote/remote_config_store.cpp
 )
 
+add_executable(textlt_project_store_test
+  tests/project_store_test.cpp
+  src/project_store.cpp
+)
+
 target_include_directories(textlt_keyboard_shortcuts_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -544,6 +551,11 @@ target_include_directories(textlt_remote_oauth_token_store_test PRIVATE
 )
 
 target_include_directories(textlt_remote_config_store_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+)
+
+target_include_directories(textlt_project_store_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
@@ -803,6 +815,7 @@ add_test(NAME textlt_ui_button_test COMMAND textlt_ui_button_test)
 add_test(NAME textlt_remote_path_test COMMAND textlt_remote_path_test)
 add_test(NAME textlt_remote_oauth_token_store_test COMMAND textlt_remote_oauth_token_store_test)
 add_test(NAME textlt_remote_config_store_test COMMAND textlt_remote_config_store_test)
+add_test(NAME textlt_project_store_test COMMAND textlt_project_store_test)
 add_test(NAME textlt_remote_http_client_test COMMAND textlt_remote_http_client_test)
 add_test(NAME textlt_remote_ftps_provider_test COMMAND textlt_remote_ftps_provider_test)
 add_test(NAME textlt_remote_ssh_config_test COMMAND textlt_remote_ssh_config_test)

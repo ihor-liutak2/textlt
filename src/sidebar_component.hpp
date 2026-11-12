@@ -20,7 +20,8 @@ class SidebarPanel : public ftxui::ComponentBase {
 private:
     enum class SidebarMode {
         Opened,
-        Project,
+        Folder,
+        Projects,
         Favorites,
     };
 
@@ -29,6 +30,7 @@ private:
         Directory,
         File,
         FavoriteFile,
+        Project,
         Placeholder,
     };
 
@@ -38,6 +40,16 @@ public:
         std::string label;
         bool dirty = false;
         bool active = false;
+    };
+
+    struct ProjectEntry {
+        std::string id;
+        std::string name;
+        std::filesystem::path root;
+        bool active = false;
+        bool missing = false;
+        bool has_remote = false;
+        bool remote_missing = false;
     };
 
     using FileOpenCallback = std::function<void(const std::filesystem::path&)>;
@@ -51,6 +63,9 @@ public:
     using CopyPathCallback = std::function<void(const std::filesystem::path&)>;
     using ShortcutLabelProvider = std::function<std::string(const std::string& command_id)>;
     using OpenNotesCallback = std::function<void()>;
+    using ProjectsProvider = std::function<std::vector<ProjectEntry>()>;
+    using ProjectIdCallback = std::function<void(const std::string&)>;
+    using AddProjectCallback = std::function<void(const std::filesystem::path&)>;
 
     SidebarPanel(
         FileOpenCallback on_file_open,
@@ -65,7 +80,15 @@ public:
         OpenFilesModalCallback on_open_files_modal,
         CopyPathCallback on_copy_path,
         ShortcutLabelProvider shortcut_label_provider,
-        OpenNotesCallback on_open_notes);
+        OpenNotesCallback on_open_notes,
+        ProjectsProvider projects_provider,
+        ProjectIdCallback on_project_select,
+        AddProjectCallback on_project_add,
+        ProjectIdCallback on_project_remove,
+        ProjectIdCallback on_project_remote,
+        ProjectIdCallback on_project_assign_remote,
+        ProjectIdCallback on_project_edit_remote,
+        ProjectIdCallback on_project_unlink_remote);
 
     ftxui::Element OnRender() override;
     bool OnEvent(ftxui::Event event) override;
@@ -75,14 +98,17 @@ public:
     void SetOpenedFiles(std::vector<OpenedFileEntry> opened_files, size_t active_index);
     void ShowOpenedFiles();
     void ShowProject();
+    void ShowProjects();
     void ShowFavorites();
     void ToggleOpenedProject();
     bool IsOpenedMode() const { return mode_ == SidebarMode::Opened; }
-    bool IsProjectMode() const { return mode_ == SidebarMode::Project; }
+    bool IsProjectMode() const { return mode_ == SidebarMode::Folder; }
+    bool IsProjectsMode() const { return mode_ == SidebarMode::Projects; }
     bool IsFavoritesMode() const { return mode_ == SidebarMode::Favorites; }
 
     std::filesystem::path CurrentPath() const { return current_path_; }
     std::filesystem::path ProjectRoot() const { return project_root_; }
+    void SetProjectRoot(const std::filesystem::path& root);
     std::filesystem::path SelectedProjectPath() const;
     bool CopySelectedProjectPath();
 
@@ -91,7 +117,7 @@ public:
     }
 
     std::filesystem::path GetSelectedDirectoryPath() const {
-        if (mode_ == SidebarMode::Project &&
+        if (mode_ == SidebarMode::Folder &&
             selected_entry_ >= 0 &&
             selected_entry_ < static_cast<int>(entry_paths_.size()) &&
             selected_entry_ < static_cast<int>(entry_kinds_.size())) {
@@ -105,7 +131,7 @@ public:
     }
 
     std::filesystem::path GetSelectedFileNameInCurrentDirectory() const {
-        if (mode_ == SidebarMode::Project &&
+        if (mode_ == SidebarMode::Folder &&
             selected_entry_ >= 0 &&
             selected_entry_ < static_cast<int>(entry_paths_.size()) &&
             selected_entry_ < static_cast<int>(entry_kinds_.size()) &&
@@ -119,7 +145,7 @@ public:
     }
 
     std::filesystem::path GetSelectedPathInCurrentDirectory() const {
-        if (mode_ == SidebarMode::Project &&
+        if (mode_ == SidebarMode::Folder &&
             selected_entry_ >= 0 &&
             selected_entry_ < static_cast<int>(entry_paths_.size()) &&
             selected_entry_ < static_cast<int>(entry_kinds_.size()) &&
@@ -148,6 +174,7 @@ private:
     void RebuildEntries();
     void RebuildOpenedEntries();
     void RebuildProjectEntries();
+    void RebuildProjectsEntries();
     void RebuildFavoriteEntries();
     void AddEntry(std::filesystem::path path, std::string label, EntryKind kind);
     std::string ShortcutLabelForMode(SidebarMode mode) const;
@@ -182,6 +209,14 @@ private:
     CopyPathCallback on_copy_path_;
     ShortcutLabelProvider shortcut_label_provider_;
     OpenNotesCallback on_open_notes_;
+    ProjectsProvider projects_provider_;
+    ProjectIdCallback on_project_select_;
+    AddProjectCallback on_project_add_;
+    ProjectIdCallback on_project_remove_;
+    ProjectIdCallback on_project_remote_;
+    ProjectIdCallback on_project_assign_remote_;
+    ProjectIdCallback on_project_edit_remote_;
+    ProjectIdCallback on_project_unlink_remote_;
     std::filesystem::path project_root_;
     std::filesystem::path current_path_;
     std::vector<OpenedFileEntry> opened_files_;
@@ -189,17 +224,23 @@ private:
     std::vector<std::filesystem::path> entry_paths_;
     std::vector<std::string> entry_labels_;
     std::vector<EntryKind> entry_kinds_;
+    std::vector<std::string> entry_ids_;
+    std::vector<ProjectEntry> project_entries_;
     int selected_entry_ = 0;
     size_t list_scroll_offset_ = 0;
     int last_clicked_entry_ = -1;
-    SidebarMode mode_ = SidebarMode::Project;
+    SidebarMode mode_ = SidebarMode::Folder;
     std::chrono::steady_clock::time_point last_click_time_{};
     ftxui::Box opened_tab_box_;
     ftxui::Box project_tab_box_;
+    ftxui::Box projects_tab_box_;
     ftxui::Box favorites_tab_box_;
     ftxui::Box notes_tab_box_;
     ftxui::Box action_primary_box_;
     ftxui::Box action_secondary_box_;
+    ftxui::Box action_tertiary_box_;
+    ftxui::Box action_quaternary_box_;
+    ftxui::Box action_quinary_box_;
     ftxui::Box panel_box_;
     ftxui::Box menu_box_;
     ftxui::Component menu_;

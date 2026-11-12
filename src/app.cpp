@@ -113,6 +113,7 @@ TextltApp::TextltApp()
       layout_controller_(document_workspace_, &distraction_controller_),
       document_file_controller_(file_manager_, document_workspace_),
       remote_config_store_(),
+      project_store_(),
       text_editor_(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_)),
       sidebar_panel_(ftxui::Make<SidebarPanel>(
           [this](const std::filesystem::path& path) { OpenSidebarFile(path); },
@@ -144,7 +145,15 @@ TextltApp::TextltApp()
           [this](const std::string& command_id) {
               return shortcut_registry_.EffectiveShortcut(ShortcutContext::Menu, command_id);
           },
-          [this] { ShowNotesWorkspace(); })),
+          [this] { ShowNotesWorkspace(); },
+          [this] { return SidebarProjects(); },
+          [this](const std::string& id) { ActivateProject(id); },
+          [this](const std::filesystem::path&) { OpenFilesModal(FilesModalMode::SelectDirectory); },
+          [this](const std::string& id) { RemoveProject(id); },
+          [this](const std::string& id) { OpenProjectRemote(id); },
+          [this](const std::string& id) { AssignProjectConnection(id); },
+          [this](const std::string& id) { EditProjectConnection(id); },
+          [this](const std::string& id) { UnlinkProjectConnection(id); })),
       help_dialog_(&current_theme_),
       keyboard_shortcuts_modal_(
           &current_theme_,
@@ -225,6 +234,15 @@ TextltApp::TextltApp()
           &remote_config_store_,
           [this](const std::string& text) {
               clipboard_controller_.WriteText(text);
+          },
+          [this](
+              const std::string& project_id,
+              const std::string& connection_id,
+              std::string& error) {
+              return SetProjectConnection(project_id, connection_id, error);
+          },
+          [this](const std::string& connection_id, std::string& error) {
+              return CanDeleteRemoteConnection(connection_id, error);
           }),
       remote_files_modal_(
           &current_theme_,
@@ -429,6 +447,7 @@ TextltApp::TextltApp()
     InitializeMenuShortcuts();
     InitializeTextShortcuts();
     shortcut_registry_.SetOverrides(shortcut_store_.Load());
+    InitializeProjects();
 
     notes_workspace_component_ = ftxui::Make<notes::NotesWorkspaceComponent>(
         &current_theme_,

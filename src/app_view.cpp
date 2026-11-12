@@ -53,13 +53,6 @@ BottomBarRowState TextltApp::CurrentBottomBarRowState() {
         return state;
     }
 
-    const std::string file_path = editor ? editor->CurrentFilePath() : std::string();
-    const auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
-    const std::filesystem::path git_workspace = editor_config_.show_file_explorer && sidebar
-        ? sidebar->CurrentPath()
-        : std::filesystem::path(file_path).parent_path();
-    git_manager_.SetWorkingDirectory(
-        git_workspace.empty() ? std::filesystem::current_path() : git_workspace);
     state.git_branch = git_manager_.GetCurrentBranch();
 
     return state;

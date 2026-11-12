@@ -56,7 +56,15 @@ SidebarPanel::SidebarPanel(
     OpenFilesModalCallback on_open_files_modal,
     CopyPathCallback on_copy_path,
     ShortcutLabelProvider shortcut_label_provider,
-    OpenNotesCallback on_open_notes)
+    OpenNotesCallback on_open_notes,
+    ProjectsProvider projects_provider,
+    ProjectIdCallback on_project_select,
+    AddProjectCallback on_project_add,
+    ProjectIdCallback on_project_remove,
+    ProjectIdCallback on_project_remote,
+    ProjectIdCallback on_project_assign_remote,
+    ProjectIdCallback on_project_edit_remote,
+    ProjectIdCallback on_project_unlink_remote)
     : on_file_open_(std::move(on_file_open)),
       on_opened_file_select_(std::move(on_opened_file_select)),
       theme_(theme),
@@ -70,6 +78,14 @@ SidebarPanel::SidebarPanel(
       on_copy_path_(std::move(on_copy_path)),
       shortcut_label_provider_(std::move(shortcut_label_provider)),
       on_open_notes_(std::move(on_open_notes)),
+      projects_provider_(std::move(projects_provider)),
+      on_project_select_(std::move(on_project_select)),
+      on_project_add_(std::move(on_project_add)),
+      on_project_remove_(std::move(on_project_remove)),
+      on_project_remote_(std::move(on_project_remote)),
+      on_project_assign_remote_(std::move(on_project_assign_remote)),
+      on_project_edit_remote_(std::move(on_project_edit_remote)),
+      on_project_unlink_remote_(std::move(on_project_unlink_remote)),
       project_root_(std::filesystem::current_path()),
       current_path_(project_root_) {
     ftxui::MenuOption option = ftxui::MenuOption::Vertical();
@@ -82,9 +98,6 @@ SidebarPanel::SidebarPanel(
 ftxui::Element SidebarPanel::OnRender() {
     using namespace ftxui;
 
-    if (git_manager_) {
-        git_manager_->SetWorkingDirectory(current_path_);
-    }
     ClampScrollOffset();
 
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
@@ -96,7 +109,7 @@ ftxui::Element SidebarPanel::OnRender() {
         std::min(entry_labels_.size(), list_scroll_offset_ + visible_entry_count);
     for (size_t index = list_scroll_offset_; index < end_index; ++index) {
         Element row = text(entry_labels_[index]) | color(sidebar_text);
-        if (mode_ == SidebarMode::Project &&
+        if (mode_ == SidebarMode::Folder &&
             index < entry_paths_.size() &&
             index < entry_kinds_.size() &&
             (entry_kinds_[index] == EntryKind::Directory ||
@@ -122,16 +135,17 @@ ftxui::Element SidebarPanel::OnRender() {
 
     return vbox({
         hbox({
-            RenderModeButton("Project", SidebarMode::Project, project_tab_box_),
+            RenderModeButton("Folder", SidebarMode::Folder, project_tab_box_),
             text(" "),
-            RenderModeButton("Favorites", SidebarMode::Favorites, favorites_tab_box_),
+            RenderModeButton("Projects", SidebarMode::Projects, projects_tab_box_),
         }),
         hbox({
             RenderModeButton("Opened", SidebarMode::Opened, opened_tab_box_),
             text(" "),
-            RenderNotesButton(notes_tab_box_),
+            RenderModeButton("Favorites", SidebarMode::Favorites, favorites_tab_box_),
         }),
-        mode_ == SidebarMode::Project
+        hbox({ RenderNotesButton(notes_tab_box_) }),
+        mode_ == SidebarMode::Folder
             ? text(" " + DisplayName(project_root_) + "/") | bold | color(sidebar_text)
             : emptyElement(),
         separator() | color(SidebarBorderColor(theme)),
@@ -171,7 +185,7 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
         return true;
     }
 
-    if (event == ftxui::Event::Backspace && mode_ == SidebarMode::Project) {
+    if (event == ftxui::Event::Backspace && mode_ == SidebarMode::Folder) {
         const std::filesystem::path parent = current_path_.parent_path();
         if (current_path_ != project_root_ && !parent.empty() && parent != current_path_) {
             current_path_ = parent;
@@ -203,7 +217,15 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
         event.mouse().button == ftxui::Mouse::Left &&
         event.mouse().motion == ftxui::Mouse::Pressed &&
         project_tab_box_.Contain(event.mouse().x, event.mouse().y)) {
-        SetMode(SidebarMode::Project);
+        SetMode(SidebarMode::Folder);
+        return true;
+    }
+
+    if (event.is_mouse() &&
+        event.mouse().button == ftxui::Mouse::Left &&
+        event.mouse().motion == ftxui::Mouse::Pressed &&
+        projects_tab_box_.Contain(event.mouse().x, event.mouse().y)) {
+        SetMode(SidebarMode::Projects);
         return true;
     }
 
@@ -237,7 +259,8 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
             selected_entry_ = clicked_entry;
             EnsureSelectedEntryVisible();
             FocusMenu();
-            if (mode_ == SidebarMode::Opened || mode_ == SidebarMode::Favorites) {
+            if (mode_ == SidebarMode::Opened || mode_ == SidebarMode::Favorites ||
+                mode_ == SidebarMode::Projects) {
                 OpenSelectedEntry();
                 last_clicked_entry_ = -1;
                 last_click_time_ = {};
@@ -289,7 +312,11 @@ void SidebarPanel::ShowOpenedFiles() {
 }
 
 void SidebarPanel::ShowProject() {
-    SetMode(SidebarMode::Project);
+    SetMode(SidebarMode::Folder);
+}
+
+void SidebarPanel::ShowProjects() {
+    SetMode(SidebarMode::Projects);
 }
 
 void SidebarPanel::ShowFavorites() {
@@ -297,7 +324,7 @@ void SidebarPanel::ShowFavorites() {
 }
 
 void SidebarPanel::ToggleOpenedProject() {
-    SetMode(mode_ == SidebarMode::Opened ? SidebarMode::Project : SidebarMode::Opened);
+    SetMode(mode_ == SidebarMode::Opened ? SidebarMode::Folder : SidebarMode::Opened);
 }
 
 void SidebarPanel::SetMode(SidebarMode mode) {
@@ -330,6 +357,13 @@ void SidebarPanel::OpenSelectedEntry() {
         return;
     }
 
+    if (selected_kind == EntryKind::Project) {
+        if (on_project_select_ && selected_entry_ < static_cast<int>(entry_ids_.size())) {
+            on_project_select_(entry_ids_[selected_entry_]);
+        }
+        return;
+    }
+
     if (selected_kind == EntryKind::FavoriteFile) {
         if (std::filesystem::is_regular_file(selected_path, error) && on_file_open_) {
             on_file_open_(selected_path);
@@ -355,7 +389,7 @@ void SidebarPanel::OpenSelectedEntry() {
 }
 
 bool SidebarPanel::OpenDirectoryEntry(int entry_index) {
-    if (mode_ != SidebarMode::Project ||
+    if (mode_ != SidebarMode::Folder ||
         entry_index < 0 ||
         entry_index >= static_cast<int>(entry_paths_.size()) ||
         entry_index >= static_cast<int>(entry_kinds_.size()) ||
@@ -460,9 +494,12 @@ std::string SidebarPanel::ShortcutLabelForMode(SidebarMode mode) const {
     std::string command_id;
     std::string fallback;
     switch (mode) {
-        case SidebarMode::Project:
+        case SidebarMode::Folder:
             command_id = "sidebar.show_project";
             fallback = "P";
+            break;
+        case SidebarMode::Projects:
+            fallback = "";
             break;
         case SidebarMode::Favorites:
             command_id = "sidebar.show_favorites";
@@ -513,9 +550,51 @@ ftxui::Element SidebarPanel::RenderFlatActionButton(
 
 ftxui::Element SidebarPanel::RenderActionRow() {
     using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    const Color label_color = SidebarTextColor(theme);
 
     action_primary_box_ = {};
     action_secondary_box_ = {};
+    action_tertiary_box_ = {};
+    action_quaternary_box_ = {};
+    action_quinary_box_ = {};
+
+    if (mode_ == SidebarMode::Projects) {
+        const bool selected = selected_entry_ >= 0 &&
+            selected_entry_ < static_cast<int>(project_entries_.size());
+        const bool has_remote = selected && project_entries_[selected_entry_].has_remote;
+        const bool missing_remote = selected && project_entries_[selected_entry_].remote_missing;
+        Element remote_actions = has_remote && !missing_remote
+            ? hbox({
+                  RenderFlatActionButton("Files", ButtonRole::Primary, action_primary_box_),
+                  text(" "),
+                  RenderFlatActionButton("Edit", ButtonRole::Primary, action_quaternary_box_),
+                  text(" "),
+                  RenderFlatActionButton("Unlink", ButtonRole::Warning, action_quinary_box_),
+              })
+            : hbox({
+                  RenderFlatActionButton(
+                      "Set",
+                      ButtonRole::Primary,
+                      action_primary_box_),
+                  has_remote
+                      ? hbox({
+                            text(" "),
+                            RenderFlatActionButton("Unlink", ButtonRole::Warning, action_quinary_box_),
+                        })
+                      : emptyElement(),
+              });
+        return vbox({
+            text(" Projects:") | bold | color(label_color),
+            hbox({
+                RenderFlatActionButton("Add", ButtonRole::Primary, action_secondary_box_),
+                text(" "),
+                RenderFlatActionButton("Remove", ButtonRole::Danger, action_tertiary_box_),
+            }),
+            text(" Connection:") | bold | color(label_color),
+            remote_actions,
+        });
+    }
 
     if (mode_ == SidebarMode::Favorites) {
         return hbox({
@@ -549,8 +628,20 @@ bool SidebarPanel::HandleActionButtonMouse(const ftxui::Mouse& mouse) {
             case SidebarMode::Opened:
                 CloseSelectedOpenedFile();
                 return true;
-            case SidebarMode::Project:
+            case SidebarMode::Folder:
                 OpenFilesModal();
+                return true;
+            case SidebarMode::Projects:
+                if (selected_entry_ < static_cast<int>(entry_ids_.size())) {
+                    const bool has_valid_remote = selected_entry_ < static_cast<int>(project_entries_.size()) &&
+                        project_entries_[selected_entry_].has_remote &&
+                        !project_entries_[selected_entry_].remote_missing;
+                    if (has_valid_remote && on_project_remote_) {
+                        on_project_remote_(entry_ids_[selected_entry_]);
+                    } else if (on_project_assign_remote_) {
+                        on_project_assign_remote_(entry_ids_[selected_entry_]);
+                    }
+                }
                 return true;
         }
     }
@@ -563,10 +654,36 @@ bool SidebarPanel::HandleActionButtonMouse(const ftxui::Mouse& mouse) {
             case SidebarMode::Opened:
                 CloseAllOpenedFiles();
                 return true;
-            case SidebarMode::Project:
+            case SidebarMode::Folder:
                 CopySelectedProjectPath();
                 return true;
+            case SidebarMode::Projects:
+                if (on_project_add_) {
+                    on_project_add_(current_path_);
+                }
+                return true;
         }
+    }
+
+    if (action_tertiary_box_.Contain(mouse.x, mouse.y) && mode_ == SidebarMode::Projects) {
+        if (on_project_remove_ && selected_entry_ < static_cast<int>(entry_ids_.size())) {
+            on_project_remove_(entry_ids_[selected_entry_]);
+        }
+        return true;
+    }
+
+    if (action_quaternary_box_.Contain(mouse.x, mouse.y) && mode_ == SidebarMode::Projects) {
+        if (on_project_edit_remote_ && selected_entry_ < static_cast<int>(entry_ids_.size())) {
+            on_project_edit_remote_(entry_ids_[selected_entry_]);
+        }
+        return true;
+    }
+
+    if (action_quinary_box_.Contain(mouse.x, mouse.y) && mode_ == SidebarMode::Projects) {
+        if (on_project_unlink_remote_ && selected_entry_ < static_cast<int>(entry_ids_.size())) {
+            on_project_unlink_remote_(entry_ids_[selected_entry_]);
+        }
+        return true;
     }
 
     return false;
@@ -620,7 +737,7 @@ void SidebarPanel::OpenFilesModal() {
 }
 
 std::filesystem::path SidebarPanel::SelectedProjectPath() const {
-    if (mode_ != SidebarMode::Project || selected_entry_ < 0 ||
+    if (mode_ != SidebarMode::Folder || selected_entry_ < 0 ||
         selected_entry_ >= static_cast<int>(entry_paths_.size()) ||
         selected_entry_ >= static_cast<int>(entry_kinds_.size())) {
         return {};
@@ -689,13 +806,18 @@ void SidebarPanel::RebuildEntries() {
     entry_paths_.clear();
     entry_labels_.clear();
     entry_kinds_.clear();
+    entry_ids_.clear();
+    project_entries_.clear();
 
     switch (mode_) {
         case SidebarMode::Opened:
             RebuildOpenedEntries();
             break;
-        case SidebarMode::Project:
+        case SidebarMode::Folder:
             RebuildProjectEntries();
+            break;
+        case SidebarMode::Projects:
+            RebuildProjectsEntries();
             break;
         case SidebarMode::Favorites:
             RebuildFavoriteEntries();
@@ -706,6 +828,7 @@ void SidebarPanel::RebuildEntries() {
         const std::string placeholder =
             mode_ == SidebarMode::Opened ? " No opened files" :
             mode_ == SidebarMode::Favorites ? " No favorites" :
+            mode_ == SidebarMode::Projects ? " No projects" :
             " <empty>";
         AddEntry({}, placeholder, EntryKind::Placeholder);
     }
@@ -782,10 +905,46 @@ void SidebarPanel::RebuildFavoriteEntries() {
     }
 }
 
+void SidebarPanel::RebuildProjectsEntries() {
+    if (!projects_provider_) {
+        return;
+    }
+    project_entries_ = projects_provider_();
+    for (const ProjectEntry& project : project_entries_) {
+        std::string label = project.active ? "> " : "  ";
+        label += project.name.empty() ? DisplayName(project.root) : project.name;
+        if (project.missing) {
+            label += " [missing]";
+        } else if (project.remote_missing) {
+            label += " [remote missing]";
+        } else if (project.has_remote) {
+            label += " [remote]";
+        }
+        AddEntry(project.root, std::move(label), EntryKind::Project);
+        entry_ids_.back() = project.id;
+    }
+}
+
 void SidebarPanel::AddEntry(std::filesystem::path path, std::string label, EntryKind kind) {
     entry_paths_.push_back(std::move(path));
     entry_labels_.push_back(std::move(label));
     entry_kinds_.push_back(kind);
+    entry_ids_.emplace_back();
+}
+
+void SidebarPanel::SetProjectRoot(const std::filesystem::path& root) {
+    if (root.empty()) {
+        return;
+    }
+    std::error_code error;
+    project_root_ = std::filesystem::weakly_canonical(root, error);
+    if (error) {
+        project_root_ = root.lexically_normal();
+    }
+    current_path_ = project_root_;
+    selected_entry_ = 0;
+    list_scroll_offset_ = 0;
+    RebuildEntries();
 }
 
 } // namespace textlt

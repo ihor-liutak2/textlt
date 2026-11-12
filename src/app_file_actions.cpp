@@ -23,7 +23,6 @@ bool TextltApp::SaveFile(const std::string& path, std::string& error) {
         }
         RefreshOpenedDocumentsSidebar();
         RefreshProjectSidebar();
-        git_manager_.SetWorkingDirectory(std::filesystem::path(path).parent_path());
         git_manager_.Invalidate();
 
         active_action_ = "Saved " + path;
@@ -45,7 +44,6 @@ bool TextltApp::OpenFile(const std::string& path, std::string& error) {
         BindEditorComponentsToWorkspace();
         RefreshOpenedDocumentsSidebar();
         UpdateFileMenuLabels();
-        git_manager_.SetWorkingDirectory(std::filesystem::path(path).parent_path());
         active_action_ = "Opened " + path;
         return true;
     } catch (const std::exception& exception) {
@@ -105,7 +103,6 @@ void TextltApp::SaveCurrentFile() {
 
     RefreshOpenedDocumentsSidebar();
     RefreshProjectSidebar();
-    git_manager_.SetWorkingDirectory(document->path.parent_path());
     git_manager_.Invalidate();
     active_action_ = "Saved " + document->path.string();
 }
@@ -151,6 +148,15 @@ bool TextltApp::ConfirmFilesModalAction(
             return false;
         }
         success = InsertImportedText(path, result.text, error);
+    } else if (mode == FilesModalMode::OpenFolder) {
+        success = OpenWorkspaceFolder(path, error);
+    } else if (mode == FilesModalMode::SelectDirectory) {
+        if (RegisterProject(path, error)) {
+            const std::string id = project_store_.ActiveProjectId();
+            ActivateProject(id);
+            std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->ShowProjects();
+            success = true;
+        }
     } else {
         error = "No file action selected.";
         return false;
@@ -163,7 +169,9 @@ bool TextltApp::ConfirmFilesModalAction(
     }
 
     if (success) {
-        RefreshProjectSidebar();
+        if (mode != FilesModalMode::SelectDirectory) {
+            RefreshProjectSidebar();
+        }
         git_manager_.Invalidate();
         screen_.PostEvent(ftxui::Event::Custom);
     }

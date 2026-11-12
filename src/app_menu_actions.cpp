@@ -87,6 +87,10 @@ void TextltApp::CommandFileOpen() {
     OpenFilesModal(FilesModalMode::Open);
 }
 
+void TextltApp::CommandFileOpenFolder() {
+    OpenFilesModal(FilesModalMode::OpenFolder);
+}
+
 
 void TextltApp::CommandFileSaveAs() {
     OpenFilesModal(FilesModalMode::SaveAs);

@@ -79,8 +79,20 @@ void TextltApp::ShowProjectSidebar() {
     }
 
     sidebar->ShowProject();
-    active_action_ = "Project files";
+    active_action_ = "Folder files";
     FocusSidebar();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::ShowProjectsSidebar() {
+    if (!editor_config_.show_file_explorer) {
+        editor_config_.show_file_explorer = true;
+        SaveConfig();
+    }
+    auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
+    sidebar->ShowProjects();
+    FocusSidebar();
+    active_action_ = "Projects";
     screen_.PostEvent(ftxui::Event::Custom);
 }
 

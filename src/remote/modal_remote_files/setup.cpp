@@ -170,8 +170,11 @@ ftxui::Component RemoteFilesModalContent::MakePathInput(PanelSide side) {
     return ftxui::Input(&panel.path_input, side == PanelSide::Local ? "local path" : "remote path", option);
 }
 
-void RemoteFilesModalContent::Open() {
+void RemoteFilesModalContent::Open(
+    std::string preferred_connection_id,
+    bool connect_immediately) {
     CancelPendingOperation();
+    preferred_connection_id_ = std::move(preferred_connection_id);
     ReloadConnections();
 
     std::filesystem::path start_path;
@@ -195,6 +198,9 @@ void RemoteFilesModalContent::Open() {
         local_list_component_->TakeFocus();
     }
     SetStatus("Remote is disconnected. Press Connect to open the active connection.");
+    if (connect_immediately && !connections_.empty()) {
+        ConnectRemote();
+    }
 }
 
 void RemoteFilesModalContent::Close() {

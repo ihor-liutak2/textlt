@@ -3,6 +3,10 @@ ftxui::Element RemoteConnectionsModalContent::Render() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
     Element body = vbox({
+        assignment_project_id_.empty()
+            ? emptyElement()
+            : text(" Assign connection to project: " + assignment_project_name_) |
+                bold | color(theme.modal_accent),
         RenderTabButtons(),
         separator() | color(theme.modal_border),
         RenderCurrentTab() | flex,
@@ -115,6 +119,10 @@ ftxui::Element RemoteConnectionsModalContent::RenderCustomFooter() {
     if (selected_tab_ == MainTab::Connections) {
         buttons.push_back(edit_button_->Render());
         buttons.push_back(text(" "));
+        if (!assignment_project_id_.empty()) {
+            buttons.push_back(assign_project_button_->Render());
+            buttons.push_back(text(" "));
+        }
         buttons.push_back(set_active_button_->Render());
         buttons.push_back(text(" "));
         buttons.push_back(notes_sync_button_->Render());

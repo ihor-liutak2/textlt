@@ -52,6 +52,7 @@
 #include "file_manager.hpp"
 #include "layout_controller.hpp"
 #include "notes/notes_workspace_component.hpp"
+#include "project_store.hpp"
 
 namespace textlt {
 
@@ -280,12 +281,30 @@ private:
     void ToggleFileExplorer();
     void ShowOpenedFilesSidebar();
     void ShowProjectSidebar();
+    void ShowProjectsSidebar();
     void ShowFavoritesSidebar();
     void ToggleNotesWorkspace();
     void ShowNotesWorkspace();
     void ShowDocumentsWorkspace();
     void ToggleSidebarOpenedProject();
     void CopySidebarSelectedPath();
+    void InitializeProjects();
+    std::vector<SidebarPanel::ProjectEntry> SidebarProjects() const;
+    bool RegisterProject(const std::filesystem::path& root, std::string& error);
+    void ActivateProject(const std::string& id);
+    void RemoveProject(const std::string& id);
+    void OpenProjectRemote(const std::string& id);
+    bool OpenWorkspaceFolder(const std::filesystem::path& root, std::string& error);
+    const ProjectRecord* ActiveWorkspaceProject() const;
+    void AddCurrentFolderAsProject();
+    void AssignProjectConnection(const std::string& id);
+    void EditProjectConnection(const std::string& id);
+    void UnlinkProjectConnection(const std::string& id);
+    bool SetProjectConnection(
+        const std::string& project_id,
+        const std::string& connection_id,
+        std::string& error);
+    bool CanDeleteRemoteConnection(const std::string& connection_id, std::string& error) const;
     void RefreshFindMatches();
     void FindNext();
     void FindPrevious();
@@ -300,6 +319,7 @@ private:
     void CommandFileNew();
     void CommandFileManageFiles();
     void CommandFileOpen();
+    void CommandFileOpenFolder();
     void CommandFileSaveAs();
     void CommandFileImport();
     void CommandFileRecent();
@@ -378,6 +398,7 @@ private:
     DocumentFileController document_file_controller_;
     ClipboardController clipboard_controller_;
     RemoteConfigStore remote_config_store_;
+    ProjectStore project_store_;
     ftxui::Component text_editor_;
     std::vector<ftxui::Component> editor_pane_components_;
     std::vector<ftxui::Component> editor_pane_renderers_;
@@ -435,6 +456,7 @@ private:
     SearchMode current_search_mode_ = SearchMode::None;
     SearchPanelInput active_search_panel_input_ = SearchPanelInput::Find;
     std::string terminal_bracketed_paste_buffer_;
+    std::string workspace_project_id_;
     std::shared_ptr<MenuBarComponent> menu_bar_;
     ftxui::Component top_bar_row_;
     ftxui::Component bottom_bar_row_;

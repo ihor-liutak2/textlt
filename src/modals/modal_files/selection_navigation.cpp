@@ -240,11 +240,25 @@ bool FilesModalContent::TargetPathForMode(std::filesystem::path& path, std::stri
         return true;
     }
 
+    if ((mode_ == FilesModalMode::OpenFolder || mode_ == FilesModalMode::SelectDirectory) &&
+        !current_directory_.empty()) {
+        path = current_directory_;
+        error.clear();
+        return true;
+    }
+
     if (!SelectedPath(path, error)) {
         return false;
     }
 
     std::error_code status_error;
+    if (mode_ == FilesModalMode::OpenFolder || mode_ == FilesModalMode::SelectDirectory) {
+        if (std::filesystem::is_directory(path, status_error)) {
+            return true;
+        }
+        error = "Select a project directory.";
+        return false;
+    }
     if (std::filesystem::is_directory(path, status_error)) {
         error = "Selected item is a directory.";
         return false;
@@ -261,6 +275,8 @@ FileFilter FilesModalContent::FilterForMode() const {
         case FilesModalMode::Import:
             filter.extensions = {".docx", ".fb2", ".fb2.zip", ".rtf", ".odt", ".ott", ".gdoc"};
             break;
+        case FilesModalMode::SelectDirectory:
+        case FilesModalMode::OpenFolder:
         case FilesModalMode::None:
         case FilesModalMode::Open:
         case FilesModalMode::SaveAs:
@@ -277,7 +293,9 @@ bool FilesModalContent::IsParentEntry(const FileEntry& entry) const {
 bool FilesModalContent::IsFileActionMode() const {
     return mode_ == FilesModalMode::Open ||
         mode_ == FilesModalMode::SaveAs ||
-        mode_ == FilesModalMode::Import;
+        mode_ == FilesModalMode::Import ||
+        mode_ == FilesModalMode::OpenFolder ||
+        mode_ == FilesModalMode::SelectDirectory;
 }
 
 bool FilesModalContent::IsSaveLikeMode() const {

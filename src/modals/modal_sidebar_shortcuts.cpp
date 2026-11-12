@@ -29,7 +29,7 @@ SidebarShortcutModalContent::SidebarShortcutModalContent(
           {'B', "Toggle sidebar", "sidebar.toggle_file_explorer"},
           {'O', "Opened files (Sidebar)", "sidebar.show_opened_files"},
           {'F', "Favorites (Sidebar)", "sidebar.show_favorites"},
-          {'P', "Project (Sidebar)", "sidebar.show_project"},
+          {'P', "Folder (Sidebar)", "sidebar.show_project"},
           {'N', "Notes view", "notes.toggle"},
           {'M', "File manager", "file.files"},
           {'S', "Search in files", "search.files"},
