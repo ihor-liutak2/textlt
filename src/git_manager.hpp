@@ -87,6 +87,7 @@ public:
 
     std::vector<std::string> GetLocalBranches(std::string* current_branch = nullptr);
     CommandResult CheckoutBranch(const std::string& branch);
+    CommandResult CreateBranch(const std::string& name);
     CommandResult MergeBranch(const std::string& branch);
     CommandResult RebaseBranch(const std::string& branch);
     CommandResult DeleteLocalBranch(const std::string& branch);

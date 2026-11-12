@@ -149,6 +149,10 @@ GitManager::CommandResult GitManager::CheckoutBranch(const std::string& branch) 
     return RunGitCommand({"checkout", branch});
 }
 
+GitManager::CommandResult GitManager::CreateBranch(const std::string& name) {
+    return RunGitCommand({"checkout", "-b", name});
+}
+
 GitManager::CommandResult GitManager::MergeBranch(const std::string& branch) {
     return RunGitCommand({"merge", branch});
 }

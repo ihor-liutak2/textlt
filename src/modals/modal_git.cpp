@@ -178,6 +178,7 @@ GitModalContent::GitModalContent(
     rebase_button_ = MakeTextButton("Rebase", [this] { RebaseSelectedBranch(); });
     rename_button_ = MakeTextButton("Rename", [this] { RenameSelectedBranch(); });
     delete_branch_button_ = MakeTextButton("Delete", [this] { DeleteSelectedBranch(); });
+    new_branch_button_ = MakeTextButton("New", [this] { CreateNewBranch(); });
     update_button_ = MakeTextButton("Update", [this] { UpdateSelectedBranch(); });
 
     ftxui::InputOption rename_branch_option;
@@ -388,6 +389,7 @@ GitModalContent::GitModalContent(
             rename_button_,
             delete_branch_button_,
             update_button_,
+            new_branch_button_,
         }),
     });
 
@@ -835,8 +837,8 @@ ftxui::Element GitModalContent::RenderCustomFooter() {
     } else if (tab == Tab::Commit) {
         add(commit_button_);
     } else if (tab == Tab::Branches) {
-        add(checkout_button_); add(merge_button_); add(rebase_button_);
-        add(rename_button_); add(delete_branch_button_); add(update_button_);
+        // Branch action buttons are rendered in the tab body (branches_tab_container_)
+        // so they are proper clickable components. Footer shows status only.
     } else if (tab == Tab::Remote) {
         add(refresh_remote_button_); add(checkout_remote_button_); add(delete_remote_button_);
     } else if (tab == Tab::Tags) {

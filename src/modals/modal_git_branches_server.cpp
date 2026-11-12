@@ -60,6 +60,36 @@ void GitModalContent::CheckoutSelectedBranch() {
         });
 }
 
+void GitModalContent::CreateNewBranch() {
+    if (!git_manager_) {
+        status_ = "Git manager is not configured.";
+        return;
+    }
+    if (HasUncommittedChanges()) {
+        status_ = "Cannot create branch: repository has uncommitted changes.";
+        return;
+    }
+    RequestConfirm(
+        "Create Branch",
+        "Enter new branch name:",
+        "git checkout -b <name>",
+        [this] {
+            std::string name = TrimCopy(confirm_typed_text_);
+            if (name.empty()) {
+                status_ = "Branch name is empty.";
+                return;
+            }
+            for (const auto& existing : branches_) {
+                if (existing == name) {
+                    status_ = "Branch already exists: " + name;
+                    return;
+                }
+            }
+            RunAndRefresh("Create branch", git_manager_->CreateBranch(name));
+        },
+        "");
+}
+
 void GitModalContent::MergeSelectedBranch() {
     if (!git_manager_) {
         return;

@@ -105,6 +105,7 @@ private:
     void CopyCompareDiff();
 
     void CheckoutSelectedBranch();
+    void CreateNewBranch();
     void MergeSelectedBranch();
     void RenameSelectedBranch();
     void UpdateSelectedBranch();
@@ -303,6 +304,7 @@ private:
     ftxui::Component commit_button_;
 
     ftxui::Component branch_menu_;
+    ftxui::Component new_branch_button_;
     ftxui::Component checkout_button_;
     ftxui::Component merge_button_;
     ftxui::Component rebase_button_;
