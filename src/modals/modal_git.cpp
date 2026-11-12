@@ -999,14 +999,6 @@ ftxui::Element GitModalContent::RenderLogsTab() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
-    // Button row: Local / Remote / Refresh.
-    Elements button_elements;
-    button_elements.push_back(log_local_button_->Render());
-    button_elements.push_back(text(" "));
-    button_elements.push_back(log_remote_button_->Render());
-    button_elements.push_back(text(" "));
-    button_elements.push_back(log_refresh_button_->Render());
-
     // Column headers.
     std::string left_header = log_remote_mode_ ? "Remote branches" : "Local branches";
     std::string middle_header = "Commits";
@@ -1069,8 +1061,6 @@ ftxui::Element GitModalContent::RenderLogsTab() {
     }
 
     return vbox({
-        hbox(std::move(button_elements)),
-        separator() | color(theme.modal_border),
         hbox({
             vbox(std::move(left_rows)) | xflex,
             separator() | color(theme.modal_border),
