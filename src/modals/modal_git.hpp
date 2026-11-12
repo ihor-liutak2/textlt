@@ -62,13 +62,14 @@ public:
 private:
     enum class Tab {
         Status = 0,
-        Diff = 1,
-        Commit = 2,
-        Branches = 3,
-        Remote = 4,
-        Tags = 5,
-        Server = 6,
-        Compare = 7,
+        Logs = 1,
+        Diff = 2,
+        Commit = 3,
+        Branches = 4,
+        Remote = 5,
+        Tags = 6,
+        Server = 7,
+        Compare = 8,
     };
 
     ftxui::Component MakeTextButton(std::string label, std::function<void()> on_click);
@@ -81,6 +82,15 @@ private:
     void RefreshCompareRefs();
     void RefreshCompareFiles();
     void RefreshAll();
+
+    // Logs tab methods.
+    void RefreshLogs();
+    void RebuildLogBranchLabels();
+    void RebuildLogCommitLabels();
+    void SelectLogBranch();
+    void SelectLogCommit();
+    std::string SelectedLogBranch() const;
+    std::string SelectedLogCommitHash() const;
 
     void ToggleSelectedFileStaged();
     void StageAllShownFiles();
@@ -165,6 +175,8 @@ private:
     ftxui::Element RenderTagsTab();
     ftxui::Element RenderServerTab();
     ftxui::Element RenderCompareTab();
+    ftxui::Element RenderLogsTab();
+
     ftxui::Element RenderTextLines(
         const std::vector<std::string>& lines,
         const std::string& empty_text,
@@ -191,6 +203,19 @@ private:
     std::string status_ = "Ready";
     std::string branch_;
     std::filesystem::path repo_root_;
+
+    // Logs tab state.
+    int log_selected_branch_ = 0;
+    int log_selected_commit_ = 0;
+    int log_focus_column_ = 0; // 0 = branches, 1 = commits
+    bool log_remote_mode_ = false;
+    std::vector<std::string> log_branches_;
+    std::vector<std::string> log_branch_labels_;
+    std::vector<GitManager::CommitEntry> log_commits_;
+    std::vector<std::string> log_commit_labels_;
+    bool log_has_commit_detail_ = false;
+    GitManager::CommitDetail log_commit_detail_;
+    std::string log_status_;
 
     std::vector<GitManager::StatusEntry> status_entries_;
     std::vector<std::string> status_labels_;
@@ -250,6 +275,7 @@ private:
     std::function<void()> confirm_action_;
 
     ftxui::Component status_tab_button_;
+    ftxui::Component logs_tab_button_;
     ftxui::Component diff_tab_button_;
     ftxui::Component commit_tab_button_;
     ftxui::Component branches_tab_button_;
@@ -320,12 +346,21 @@ private:
     ftxui::Component open_compare_diff_button_;
     ftxui::Component copy_compare_diff_button_;
 
+    // Logs tab components.
+    ftxui::Component log_branch_component_;
+    ftxui::Component log_branch_menu_;
+    ftxui::Component log_commit_menu_;
+    ftxui::Component log_local_button_;
+    ftxui::Component log_remote_button_;
+    ftxui::Component log_refresh_button_;
+
     ftxui::Component status_tab_container_;
     ftxui::Component diff_tab_container_;
     ftxui::Component commit_tab_container_;
     ftxui::Component branches_tab_container_;
     ftxui::Component remote_tab_container_;
     ftxui::Component tags_tab_container_;
+    ftxui::Component logs_tab_container_;
     ftxui::Component server_tab_container_;
     ftxui::Component compare_tab_container_;
     ftxui::Component tab_body_container_;

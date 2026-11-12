@@ -67,6 +67,7 @@ GitModalContent::GitModalContent(
       on_close_(std::move(on_close)),
       request_redraw_(std::move(request_redraw)) {
     status_tab_button_ = MakeTabButton("Status", static_cast<int>(Tab::Status));
+    logs_tab_button_ = MakeTabButton("Logs", static_cast<int>(Tab::Logs));
     diff_tab_button_ = MakeTabButton("Diff", static_cast<int>(Tab::Diff));
     commit_tab_button_ = MakeTabButton("Commit", static_cast<int>(Tab::Commit));
     branches_tab_button_ = MakeTabButton("Branches", static_cast<int>(Tab::Branches));
@@ -77,6 +78,7 @@ GitModalContent::GitModalContent(
 
     tab_buttons_ = ftxui::Container::Horizontal({
         status_tab_button_,
+        logs_tab_button_,
         diff_tab_button_,
         commit_tab_button_,
         branches_tab_button_,
@@ -437,8 +439,76 @@ GitModalContent::GitModalContent(
         compare_file_menu_,
     });
 
+    // --- Logs tab components ---
+    ftxui::MenuOption log_branch_menu_option = ftxui::MenuOption::Vertical();
+    log_branch_menu_option.on_enter = [this] { SelectLogBranch(); };
+    log_branch_menu_option.on_change = [this] {
+        // Auto-load commits when branch changes via keyboard navigation.
+        SelectLogBranch();
+    };
+    log_branch_menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        ftxui::Element row = ftxui::text(state.label);
+        if (state.focused || state.active) {
+            return row |
+                ftxui::bgcolor(theme.modal_selected_item_bg) |
+                ftxui::color(theme.modal_selected_item_fg) |
+                ftxui::bold;
+        }
+        return row | ftxui::color(theme.modal_text_color);
+    };
+    log_branch_menu_ = ftxui::Menu(&log_branch_labels_, &log_selected_branch_, log_branch_menu_option);
+    log_branch_component_ = ftxui::CatchEvent(
+        log_branch_menu_,
+        [this](ftxui::Event event) {
+            if (event == ftxui::Event::Character(" ")) {
+                SelectLogBranch();
+                return true;
+            }
+            return false;
+        });
+
+    ftxui::MenuOption log_commit_menu_option = ftxui::MenuOption::Vertical();
+    log_commit_menu_option.on_enter = [this] { SelectLogCommit(); };
+    log_commit_menu_option.on_change = [this] {
+        SelectLogCommit();
+    };
+    log_commit_menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        ftxui::Element row = ftxui::text(state.label);
+        if (state.focused || state.active) {
+            return row |
+                ftxui::bgcolor(theme.modal_selected_item_bg) |
+                ftxui::color(theme.modal_selected_item_fg) |
+                ftxui::bold;
+        }
+        return row | ftxui::color(theme.modal_text_color);
+    };
+    log_commit_menu_ = ftxui::Menu(&log_commit_labels_, &log_selected_commit_, log_commit_menu_option);
+
+    log_local_button_ = MakeTextButton("Local", [this] {
+        log_remote_mode_ = false;
+        RefreshLogs();
+    });
+    log_remote_button_ = MakeTextButton("Remote", [this] {
+        log_remote_mode_ = true;
+        RefreshLogs();
+    });
+    log_refresh_button_ = MakeTextButton("Refresh", [this] {
+        RefreshLogs();
+    });
+
+    logs_tab_container_ = ftxui::Container::Vertical({
+        ftxui::Container::Horizontal({
+            log_local_button_,
+            log_remote_button_,
+            log_refresh_button_,
+        }),
+    });
+
     tab_body_container_ = ftxui::Container::Tab({
         status_tab_container_,
+        logs_tab_container_,
         diff_tab_container_,
         commit_tab_container_,
         branches_tab_container_,
@@ -631,8 +701,11 @@ void GitModalContent::Open() {
     RefreshTags();
     RefreshCompareRefs();
     RefreshCompareFiles();
+    RefreshLogs();
     if (status_list_component_) {
         status_list_component_->TakeFocus();
+    } else if (log_branch_component_) {
+        log_branch_component_->TakeFocus();
     }
 }
 
@@ -676,6 +749,8 @@ ftxui::Element GitModalContent::Render() {
     ftxui::Element body;
     if (selected_tab_ == static_cast<int>(Tab::Status)) {
         body = RenderStatusTab();
+    } else if (selected_tab_ == static_cast<int>(Tab::Logs)) {
+        body = RenderLogsTab();
     } else if (selected_tab_ == static_cast<int>(Tab::Diff)) {
         body = RenderDiffTab();
     } else if (selected_tab_ == static_cast<int>(Tab::Commit)) {
@@ -758,6 +833,8 @@ ftxui::Element GitModalContent::RenderCustomFooter() {
     } else if (tab == Tab::Compare) {
         add(refresh_compare_refs_button_); add(refresh_compare_files_button_);
         add(open_compare_side_button_); add(open_compare_diff_button_); add(copy_compare_diff_button_);
+    } else if (tab == Tab::Logs) {
+        add(log_local_button_); add(log_remote_button_); add(log_refresh_button_);
     }
 
     return ftxui::vbox({
@@ -765,6 +842,206 @@ ftxui::Element GitModalContent::RenderCustomFooter() {
         ftxui::separator() | ftxui::color(theme.modal_border),
         ftxui::hbox(std::move(actions)),
     });
+}
+
+// --- Logs tab implementation ---
+
+std::string GitModalContent::SelectedLogBranch() const {
+    if (log_selected_branch_ < 0 ||
+        log_selected_branch_ >= static_cast<int>(log_branches_.size())) {
+        return "";
+    }
+    return log_branches_[static_cast<size_t>(log_selected_branch_)];
+}
+
+std::string GitModalContent::SelectedLogCommitHash() const {
+    if (log_selected_commit_ < 0 ||
+        log_selected_commit_ >= static_cast<int>(log_commits_.size())) {
+        return "";
+    }
+    return log_commits_[static_cast<size_t>(log_selected_commit_)].full_hash;
+}
+
+void GitModalContent::SelectLogBranch() {
+    const std::string branch = SelectedLogBranch();
+    if (branch.empty()) {
+        return;
+    }
+    log_commits_ = git_manager_->GetBranchCommits(branch);
+    RebuildLogCommitLabels();
+    log_selected_commit_ = 0;
+    if (!log_commits_.empty()) {
+        SelectLogCommit();
+    } else {
+        log_has_commit_detail_ = false;
+    }
+    log_status_ = log_commits_.empty()
+        ? "No commits on branch " + branch + "."
+        : std::to_string(log_commits_.size()) + " commit(s) on " + branch;
+}
+
+void GitModalContent::SelectLogCommit() {
+    const std::string hash = SelectedLogCommitHash();
+    if (hash.empty()) {
+        log_has_commit_detail_ = false;
+        return;
+    }
+    log_commit_detail_ = git_manager_->GetCommitDetail(hash);
+    log_has_commit_detail_ = true;
+    log_status_ = "Commit " + log_commit_detail_.full_hash.substr(0, 7);
+}
+
+void GitModalContent::RebuildLogBranchLabels() {
+    log_branch_labels_.clear();
+    log_branch_labels_.reserve(log_branches_.size());
+    for (size_t index = 0; index < log_branches_.size(); ++index) {
+        const std::string& branch = log_branches_[index];
+        std::string marker = (log_selected_branch_ == static_cast<int>(index)) ? "> " : "  ";
+        log_branch_labels_.push_back(marker + branch);
+    }
+    if (log_selected_branch_ >= static_cast<int>(log_branch_labels_.size())) {
+        log_selected_branch_ = static_cast<int>(log_branch_labels_.size()) - 1;
+    }
+    if (log_selected_branch_ < 0) {
+        log_selected_branch_ = 0;
+    }
+}
+
+void GitModalContent::RebuildLogCommitLabels() {
+    log_commit_labels_.clear();
+    log_commit_labels_.reserve(log_commits_.size());
+    for (const auto& commit : log_commits_) {
+        std::string label = commit.hash + "  " + commit.subject;
+        if (!commit.author.empty()) {
+            label += "  (" + commit.author + ")";
+        }
+        if (!commit.date.empty()) {
+            label += "  " + commit.date;
+        }
+        log_commit_labels_.push_back(label);
+    }
+    if (log_selected_commit_ >= static_cast<int>(log_commit_labels_.size())) {
+        log_selected_commit_ = static_cast<int>(log_commit_labels_.size()) - 1;
+    }
+    if (log_selected_commit_ < 0) {
+        log_selected_commit_ = 0;
+    }
+}
+
+void GitModalContent::RefreshLogs() {
+    if (!git_manager_) {
+        log_status_ = "Git manager is not configured.";
+        return;
+    }
+
+    log_branches_.clear();
+    if (log_remote_mode_) {
+        log_branches_ = git_manager_->GetRemoteBranches();
+    } else {
+        std::string current;
+        log_branches_ = git_manager_->GetLocalBranches(&current);
+    }
+
+    RebuildLogBranchLabels();
+    log_commits_.clear();
+    RebuildLogCommitLabels();
+    log_selected_commit_ = 0;
+    log_has_commit_detail_ = false;
+
+    if (log_branches_.empty()) {
+        log_status_ = log_remote_mode_ ? "No remote branches found." : "No local branches found.";
+        return;
+    }
+
+    // Auto-select the first branch and load its commits.
+    log_selected_branch_ = 0;
+    SelectLogBranch();
+}
+
+ftxui::Element GitModalContent::RenderLogsTab() {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+
+    // Button row: Local / Remote / Refresh.
+    Elements button_elements;
+    button_elements.push_back(log_local_button_->Render());
+    button_elements.push_back(text(" "));
+    button_elements.push_back(log_remote_button_->Render());
+    button_elements.push_back(text(" "));
+    button_elements.push_back(log_refresh_button_->Render());
+
+    // Column headers.
+    std::string left_header = log_remote_mode_ ? "Remote branches" : "Local branches";
+    std::string middle_header = "Commits";
+    std::string right_header = "Commit details";
+
+    // Left column: branch list.
+    Elements left_rows;
+    left_rows.push_back(text(left_header) | bold | color(theme.modal_accent));
+    left_rows.push_back(separator() | color(theme.modal_border));
+    if (log_branches_.empty()) {
+        left_rows.push_back(text("None.") | color(theme.modal_text_color) | frame | yflex);
+    } else {
+        left_rows.push_back(log_branch_component_->Render() |
+                            vscroll_indicator |
+                            frame |
+                            yflex);
+    }
+
+    // Middle column: commit list.
+    Elements middle_rows;
+    middle_rows.push_back(text(middle_header) | bold | color(theme.modal_accent));
+    middle_rows.push_back(separator() | color(theme.modal_border));
+    if (log_commits_.empty()) {
+        middle_rows.push_back(text("No commits.") | color(theme.modal_text_color) | frame | yflex);
+    } else {
+        middle_rows.push_back(log_commit_menu_->Render() |
+                              vscroll_indicator |
+                              frame |
+                              yflex);
+    }
+
+    // Right column: commit detail.
+    Elements right_rows;
+    right_rows.push_back(text(right_header) | bold | color(theme.modal_accent));
+    right_rows.push_back(separator() | color(theme.modal_border));
+    if (!log_has_commit_detail_) {
+        right_rows.push_back(text("Select a commit to view details.") |
+                             color(theme.modal_text_color) |
+                             frame |
+                             yflex);
+    } else {
+        const GitManager::CommitDetail& detail = log_commit_detail_;
+        right_rows.push_back(text("Hash: " + detail.full_hash) | color(theme.modal_text_color));
+        right_rows.push_back(text("Author: " + detail.author_name + " <" + detail.author_email + ">") |
+                             color(theme.modal_text_color));
+        right_rows.push_back(text("Date: " + detail.date) | color(theme.modal_text_color));
+        right_rows.push_back(text("") | color(theme.modal_text_color));
+        right_rows.push_back(text("Message:") | bold | color(theme.modal_accent));
+        right_rows.push_back(paragraph(detail.full_message) | color(theme.modal_text_color));
+        right_rows.push_back(text("") | color(theme.modal_text_color));
+        right_rows.push_back(text("Changed files:") | bold | color(theme.modal_accent));
+        if (detail.changed_files.empty()) {
+            right_rows.push_back(text("  (none)") | color(theme.modal_text_color));
+        } else {
+            for (const auto& file : detail.changed_files) {
+                right_rows.push_back(text("  " + file) | color(theme.modal_text_color));
+            }
+        }
+        right_rows.push_back(text("") | color(theme.modal_text_color) | yflex);
+    }
+
+    return vbox({
+        hbox(std::move(button_elements)),
+        separator() | color(theme.modal_border),
+        hbox({
+            vbox(std::move(left_rows)) | xflex,
+            separator() | color(theme.modal_border),
+            vbox(std::move(middle_rows)) | xflex,
+            separator() | color(theme.modal_border),
+            vbox(std::move(right_rows)) | xflex,
+        }) | flex,
+    }) | bgcolor(theme.modal_background) | color(theme.modal_foreground);
 }
 
 bool GitModalContent::HandleEvent(ftxui::Event event) {
@@ -819,6 +1096,40 @@ bool GitModalContent::HandleEvent(ftxui::Event event) {
         }
         if (event == ftxui::Event::ArrowUp || event == ftxui::Event::PageUp || wheel_up) {
             server_output_scroll_offset_ = std::max(0, server_output_scroll_offset_ - (event == ftxui::Event::PageUp ? 10 : 3));
+            return true;
+        }
+    }
+
+    // Logs tab navigation: switch focus between columns and scroll.
+    if (selected_tab_ == static_cast<int>(Tab::Logs)) {
+        if (event == ftxui::Event::ArrowLeft || event == ftxui::Event::ArrowRight) {
+            log_focus_column_ = (log_focus_column_ == 0) ? 1 : 0;
+            return true;
+        }
+        const bool wheel_down = event.is_mouse() && event.mouse().button == ftxui::Mouse::WheelDown;
+        const bool wheel_up = event.is_mouse() && event.mouse().button == ftxui::Mouse::WheelUp;
+        if (log_focus_column_ == 0 && log_branch_component_) {
+            if (event == ftxui::Event::ArrowDown || event == ftxui::Event::PageDown || wheel_down) {
+                return log_branch_component_->OnEvent(event);
+            }
+            if (event == ftxui::Event::ArrowUp || event == ftxui::Event::PageUp || wheel_up) {
+                return log_branch_component_->OnEvent(event);
+            }
+        }
+        if (log_focus_column_ == 1 && log_commit_menu_) {
+            if (event == ftxui::Event::ArrowDown || event == ftxui::Event::PageDown || wheel_down) {
+                return log_commit_menu_->OnEvent(event);
+            }
+            if (event == ftxui::Event::ArrowUp || event == ftxui::Event::PageUp || wheel_up) {
+                return log_commit_menu_->OnEvent(event);
+            }
+        }
+        if (event == ftxui::Event::Return || event == ftxui::Event::Character(" ")) {
+            if (log_focus_column_ == 0) {
+                SelectLogBranch();
+            } else {
+                SelectLogCommit();
+            }
             return true;
         }
     }

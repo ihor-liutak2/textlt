@@ -229,6 +229,111 @@ std::vector<std::string> GitManager::GetTags() {
     return tags;
 }
 
+std::vector<GitManager::CommitEntry> GitManager::GetBranchCommits(
+    const std::string& branch,
+    int limit) {
+    std::vector<CommitEntry> commits;
+    if (branch.empty()) {
+        return commits;
+    }
+
+    CommandResult result = RunGitCommand({
+        "log",
+        branch,
+        "--pretty=format:%h%x09%H%x09%s%x09%an%x09%ad",
+        "--date=short",
+        "-n",
+        std::to_string(limit),
+    });
+    if (!result.success()) {
+        return commits;
+    }
+
+    std::istringstream stream(result.output);
+    std::string line;
+    while (std::getline(stream, line)) {
+        line = Trim(line);
+        if (line.empty()) {
+            continue;
+        }
+
+        std::istringstream line_stream(line);
+        CommitEntry entry;
+        std::getline(line_stream, entry.hash, '\t');
+        std::getline(line_stream, entry.full_hash, '\t');
+        std::getline(line_stream, entry.subject, '\t');
+        std::getline(line_stream, entry.author, '\t');
+        std::getline(line_stream, entry.date, '\t');
+
+        if (!entry.full_hash.empty()) {
+            commits.push_back(std::move(entry));
+        }
+    }
+
+    return commits;
+}
+
+GitManager::CommitDetail GitManager::GetCommitDetail(
+    const std::string& full_hash) {
+    CommitDetail detail;
+    if (full_hash.empty()) {
+        return detail;
+    }
+
+    // Metadata line: full_hash<TAB>author_name<TAB>author_email<TAB>date
+    CommandResult meta_result = RunGitCommand({
+        "show",
+        full_hash,
+        "-s",
+        "--pretty=format:%H%x09%an%x09%ae%x09%ad",
+        "--date=short",
+    });
+    if (meta_result.success()) {
+        std::istringstream stream(meta_result.output);
+        std::string line;
+        if (std::getline(stream, line)) {
+            line = Trim(line);
+            std::istringstream line_stream(line);
+            std::getline(line_stream, detail.full_hash, '\t');
+            std::getline(line_stream, detail.author_name, '\t');
+            std::getline(line_stream, detail.author_email, '\t');
+            std::getline(line_stream, detail.date, '\t');
+        }
+    }
+
+    // Full commit message body.
+    CommandResult message_result = RunGitCommand({
+        "log",
+        "-1",
+        "--format=%B",
+        full_hash,
+    });
+    if (message_result.success()) {
+        detail.full_message = Trim(message_result.output);
+    }
+
+    // Changed files list.
+    CommandResult files_result = RunGitCommand({
+        "diff-tree",
+        "--no-commit-id",
+        "--name-only",
+        "-r",
+        full_hash,
+    });
+    if (files_result.success()) {
+        std::istringstream stream(files_result.output);
+        std::string line;
+        while (std::getline(stream, line)) {
+            line = Trim(line);
+            if (!line.empty()) {
+                detail.changed_files.push_back(std::move(line));
+            }
+        }
+    }
+
+    return detail;
+}
+
 GitManager::CommandResult GitManager::CreateTag(
     const std::string& tag_name,
     const std::string& message) {

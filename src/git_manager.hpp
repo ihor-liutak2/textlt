@@ -45,6 +45,23 @@ public:
         std::string status;
     };
 
+    struct CommitEntry {
+        std::string hash;      // short hash (7 chars)
+        std::string full_hash; // full SHA
+        std::string subject;   // first line of commit message
+        std::string author;
+        std::string date;
+    };
+
+    struct CommitDetail {
+        std::string full_hash;
+        std::string author_name;
+        std::string author_email;
+        std::string date;
+        std::string full_message;
+        std::vector<std::string> changed_files;
+    };
+
     struct GitIdentity {
         std::string effective_name;
         std::string effective_email;
@@ -115,6 +132,12 @@ public:
         const std::string& right_ref,
         const std::string& path);
     CommandResult ReadFileAtRef(const std::string& ref, const std::string& path);
+
+    // Commit history for the Logs tab.
+    std::vector<CommitEntry> GetBranchCommits(
+        const std::string& branch,
+        int limit = 50);
+    CommitDetail GetCommitDetail(const std::string& full_hash);
 
 private:
     struct Snapshot {
