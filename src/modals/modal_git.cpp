@@ -660,6 +660,8 @@ ftxui::Component GitModalContent::MakeTabButton(std::string label, int tab_index
         selected_tab_ = tab_index;
         if (selected_tab_ == static_cast<int>(Tab::Status) && status_list_component_) {
             status_list_component_->TakeFocus();
+        } else if (selected_tab_ == static_cast<int>(Tab::Logs) && log_branch_component_) {
+            log_branch_component_->TakeFocus();
         } else if (selected_tab_ == static_cast<int>(Tab::Branches) && branch_menu_) {
             branch_menu_->TakeFocus();
         } else if (selected_tab_ == static_cast<int>(Tab::Commit) && commit_file_menu_) {
@@ -724,6 +726,8 @@ ftxui::Element GitModalContent::RenderHeaderRow() {
 
     return hbox({
         status_tab_button_->Render(),
+        text(" "),
+        logs_tab_button_->Render(),
         text(" "),
         diff_tab_button_->Render(),
         text(" "),
