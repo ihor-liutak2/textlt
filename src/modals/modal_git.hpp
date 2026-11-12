@@ -349,6 +349,7 @@ private:
     // Logs tab components.
     ftxui::Component log_branch_component_;
     ftxui::Component log_branch_menu_;
+    ftxui::Component log_commit_component_;
     ftxui::Component log_commit_menu_;
     ftxui::Component log_local_button_;
     ftxui::Component log_remote_button_;

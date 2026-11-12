@@ -485,6 +485,15 @@ GitModalContent::GitModalContent(
         return row | ftxui::color(theme.modal_text_color);
     };
     log_commit_menu_ = ftxui::Menu(&log_commit_labels_, &log_selected_commit_, log_commit_menu_option);
+    log_commit_component_ = ftxui::CatchEvent(
+        log_commit_menu_,
+        [this](ftxui::Event event) {
+            if (event == ftxui::Event::Character(" ")) {
+                SelectLogCommit();
+                return true;
+            }
+            return false;
+        });
 
     log_local_button_ = MakeTextButton("Local", [this] {
         log_remote_mode_ = false;
@@ -498,11 +507,12 @@ GitModalContent::GitModalContent(
         RefreshLogs();
     });
 
-    logs_tab_container_ = ftxui::Container::Vertical({
-        ftxui::Container::Horizontal({
-            log_local_button_,
-            log_remote_button_,
-            log_refresh_button_,
+    logs_tab_container_ = ftxui::Container::Horizontal({
+        ftxui::Container::Vertical({
+            log_branch_component_,
+        }),
+        ftxui::Container::Vertical({
+            log_commit_component_,
         }),
     });
 
@@ -1100,48 +1110,6 @@ bool GitModalContent::HandleEvent(ftxui::Event event) {
         }
         if (event == ftxui::Event::ArrowUp || event == ftxui::Event::PageUp || wheel_up) {
             server_output_scroll_offset_ = std::max(0, server_output_scroll_offset_ - (event == ftxui::Event::PageUp ? 10 : 3));
-            return true;
-        }
-    }
-
-    // Logs tab navigation: switch focus between columns and scroll/click.
-    if (selected_tab_ == static_cast<int>(Tab::Logs)) {
-        if (event == ftxui::Event::ArrowLeft || event == ftxui::Event::ArrowRight) {
-            log_focus_column_ = (log_focus_column_ == 0) ? 1 : 0;
-            return true;
-        }
-
-        // Forward mouse events (clicks, wheel) to the focused menu component.
-        if (event.is_mouse()) {
-            if (log_focus_column_ == 0 && log_branch_component_) {
-                return log_branch_component_->OnEvent(event);
-            }
-            if (log_focus_column_ == 1 && log_commit_menu_) {
-                return log_commit_menu_->OnEvent(event);
-            }
-            return true;
-        }
-
-        // Forward keyboard navigation to the focused menu component.
-        if (log_focus_column_ == 0 && log_branch_component_) {
-            if (event == ftxui::Event::ArrowDown || event == ftxui::Event::PageDown ||
-                event == ftxui::Event::ArrowUp || event == ftxui::Event::PageUp) {
-                return log_branch_component_->OnEvent(event);
-            }
-        }
-        if (log_focus_column_ == 1 && log_commit_menu_) {
-            if (event == ftxui::Event::ArrowDown || event == ftxui::Event::PageDown ||
-                event == ftxui::Event::ArrowUp || event == ftxui::Event::PageUp) {
-                return log_commit_menu_->OnEvent(event);
-            }
-        }
-
-        if (event == ftxui::Event::Return || event == ftxui::Event::Character(" ")) {
-            if (log_focus_column_ == 0) {
-                SelectLogBranch();
-            } else {
-                SelectLogCommit();
-            }
             return true;
         }
     }
