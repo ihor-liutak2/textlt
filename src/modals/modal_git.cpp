@@ -533,6 +533,14 @@ GitModalContent::GitModalContent(
         ftxui::Container::Vertical({
             log_commit_component_,
         }),
+        // These controls are rendered in the custom footer. They must also be
+        // present in the active component tree so FTXUI can route mouse clicks
+        // to the footer buttons.
+        ftxui::Container::Horizontal({
+            log_local_button_,
+            log_remote_button_,
+            log_refresh_button_,
+        }),
     });
 
     tab_body_container_ = ftxui::Container::Tab({
@@ -987,12 +995,16 @@ void GitModalContent::RefreshLogs() {
 
     if (log_branches_.empty()) {
         log_status_ = log_remote_mode_ ? "No remote branches found." : "No local branches found.";
+        status_ = log_status_;
         return;
     }
 
     // Auto-select the first branch and load its commits.
     log_selected_branch_ = 0;
     SelectLogBranch();
+    status_ = (log_remote_mode_ ? "Remote" : "Local") +
+        std::string(" logs refreshed: ") + std::to_string(log_branches_.size()) +
+        " branch(es).";
 }
 
 ftxui::Element GitModalContent::RenderLogsTab() {
@@ -1000,7 +1012,9 @@ ftxui::Element GitModalContent::RenderLogsTab() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
     // Column headers.
-    std::string left_header = log_remote_mode_ ? "Remote branches" : "Local branches";
+    std::string left_header =
+        (log_remote_mode_ ? "Remote branches" : "Local branches") +
+        std::string(" (") + std::to_string(log_branches_.size()) + ")";
     std::string middle_header = "Commits";
     std::string right_header = "Commit details";
 

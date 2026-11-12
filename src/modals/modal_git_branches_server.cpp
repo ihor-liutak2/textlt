@@ -167,10 +167,6 @@ void GitModalContent::CreateNewBranch() {
         status_ = "Git manager is not configured.";
         return;
     }
-    if (HasUncommittedChanges()) {
-        status_ = "Cannot create branch: repository has uncommitted changes.";
-        return;
-    }
     RequestBranchInput(
         "Create Branch",
         "Create and check out a new local branch.",
@@ -221,10 +217,6 @@ void GitModalContent::MergeSelectedBranch() {
 
 void GitModalContent::RenameSelectedBranch() {
     if (!git_manager_) {
-        return;
-    }
-    if (HasUncommittedChanges()) {
-        status_ = "Cannot rename: repository has uncommitted changes.";
         return;
     }
     const std::string old_name = SelectedBranchName();

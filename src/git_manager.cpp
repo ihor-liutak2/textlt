@@ -116,7 +116,11 @@ GitManager::CommandResult GitManager::Commit(const std::string& message) {
 
 std::vector<std::string> GitManager::GetLocalBranches(std::string* current_branch) {
     std::vector<std::string> branches;
-    CommandResult result = RunGitCommand({"branch", "--format=%(refname:short)"});
+    CommandResult result = RunGitCommand({
+        "for-each-ref",
+        "--format=%(refname:short)",
+        "refs/heads/",
+    });
     if (!result.success()) {
         return branches;
     }
