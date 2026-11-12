@@ -122,6 +122,33 @@ ftxui::Element FilesModalContent::RenderConfirmOverlay() {
         paragraph(pending_operation_message_) | color(theme.modal_text_color),
     };
 
+    // Show item list for delete operations: name + type on each line.
+    if (pending_operation_ == PendingFileOperation::DeleteItems &&
+        !pending_delete_entries_.empty()) {
+        rows.push_back(text(""));
+        for (const auto& entry : pending_delete_entries_) {
+            std::string type_label;
+            switch (entry.type) {
+                case FileEntryType::Directory:
+                    type_label = "[DIR]";
+                    break;
+                case FileEntryType::File:
+                    type_label = "[FILE]";
+                    break;
+                case FileEntryType::Symlink:
+                    type_label = "[LINK]";
+                    break;
+                case FileEntryType::Other:
+                default:
+                    type_label = "[OTHER]";
+                    break;
+            }
+            rows.push_back(text("  " + type_label + " " +
+                                FileManager::PathToUtf8(entry.path.filename())) |
+                           color(theme.modal_text_color));
+        }
+    }
+
     if (PendingOperationNeedsInput()) {
         rows.push_back(text(pending_operation_input_label_ + ":") | color(theme.modal_accent));
         rows.push_back(operation_input_->Render() |
@@ -137,7 +164,7 @@ ftxui::Element FilesModalContent::RenderConfirmOverlay() {
         confirm_cancel_button_->Render(),
     }));
     return vbox(std::move(rows)) |
-        size(WIDTH, LESS_THAN, 66) |
+        size(WIDTH, LESS_THAN, 100) |
         border |
         bgcolor(theme.modal_background) |
         color(theme.modal_foreground);

@@ -197,6 +197,7 @@ private:
     std::string pending_operation_input_value_;
     int pending_operation_input_cursor_ = 0;
     std::vector<std::filesystem::path> pending_operation_paths_;
+    std::vector<FileEntry> pending_delete_entries_;
     int operation_layer_index_ = 0;
 
     std::chrono::steady_clock::time_point last_entry_click_time_{};

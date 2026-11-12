@@ -21,9 +21,34 @@ void FilesModalContent::StartDeleteOperation() {
         SetStatus(error, true);
         return;
     }
+
+    // Collect FileEntry objects for display in the confirmation popup.
+    pending_delete_entries_.clear();
+    const std::vector<int> indices = SortedSelectedIndices();
+    if (!indices.empty()) {
+        for (int index : indices) {
+            if (index < 0 || index >= static_cast<int>(entries_.size())) {
+                continue;
+            }
+            const FileEntry& entry = entries_[static_cast<size_t>(index)];
+            if (!IsParentEntry(entry)) {
+                pending_delete_entries_.push_back(entry);
+            }
+        }
+    }
+    // Single-selection fallback: match the path against the entry list.
+    if (pending_delete_entries_.empty() && !paths.empty()) {
+        for (const auto& entry : entries_) {
+            if (entry.path == paths.front() && !IsParentEntry(entry)) {
+                pending_delete_entries_.push_back(entry);
+                break;
+            }
+        }
+    }
+
     StartConfirmOperation(
         PendingFileOperation::DeleteItems,
-        "Delete " + std::to_string(paths.size()) + " selected item(s)?");
+        "Delete the following " + std::to_string(paths.size()) + " item(s)?");
     pending_operation_paths_ = paths;
 }
 
