@@ -1104,30 +1104,38 @@ bool GitModalContent::HandleEvent(ftxui::Event event) {
         }
     }
 
-    // Logs tab navigation: switch focus between columns and scroll.
+    // Logs tab navigation: switch focus between columns and scroll/click.
     if (selected_tab_ == static_cast<int>(Tab::Logs)) {
         if (event == ftxui::Event::ArrowLeft || event == ftxui::Event::ArrowRight) {
             log_focus_column_ = (log_focus_column_ == 0) ? 1 : 0;
             return true;
         }
-        const bool wheel_down = event.is_mouse() && event.mouse().button == ftxui::Mouse::WheelDown;
-        const bool wheel_up = event.is_mouse() && event.mouse().button == ftxui::Mouse::WheelUp;
-        if (log_focus_column_ == 0 && log_branch_component_) {
-            if (event == ftxui::Event::ArrowDown || event == ftxui::Event::PageDown || wheel_down) {
+
+        // Forward mouse events (clicks, wheel) to the focused menu component.
+        if (event.is_mouse()) {
+            if (log_focus_column_ == 0 && log_branch_component_) {
                 return log_branch_component_->OnEvent(event);
             }
-            if (event == ftxui::Event::ArrowUp || event == ftxui::Event::PageUp || wheel_up) {
+            if (log_focus_column_ == 1 && log_commit_menu_) {
+                return log_commit_menu_->OnEvent(event);
+            }
+            return true;
+        }
+
+        // Forward keyboard navigation to the focused menu component.
+        if (log_focus_column_ == 0 && log_branch_component_) {
+            if (event == ftxui::Event::ArrowDown || event == ftxui::Event::PageDown ||
+                event == ftxui::Event::ArrowUp || event == ftxui::Event::PageUp) {
                 return log_branch_component_->OnEvent(event);
             }
         }
         if (log_focus_column_ == 1 && log_commit_menu_) {
-            if (event == ftxui::Event::ArrowDown || event == ftxui::Event::PageDown || wheel_down) {
-                return log_commit_menu_->OnEvent(event);
-            }
-            if (event == ftxui::Event::ArrowUp || event == ftxui::Event::PageUp || wheel_up) {
+            if (event == ftxui::Event::ArrowDown || event == ftxui::Event::PageDown ||
+                event == ftxui::Event::ArrowUp || event == ftxui::Event::PageUp) {
                 return log_commit_menu_->OnEvent(event);
             }
         }
+
         if (event == ftxui::Event::Return || event == ftxui::Event::Character(" ")) {
             if (log_focus_column_ == 0) {
                 SelectLogBranch();
