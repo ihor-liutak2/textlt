@@ -170,7 +170,7 @@ void TextltApp::OpenAboutDialog() {
     }
     help_dialog_.OpenContent("About", {
         "textlt — Modern TUI Text Editor",
-        "Version: 1.0.0 (Stable Release)",
+        "Version: " TEXTLT_VERSION " (Stable Release)",
         "",
         "Author: Ihor Liutak (ihorlt)",
         "Contact: ihorlt@gmail.com",
