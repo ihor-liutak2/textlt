@@ -152,7 +152,17 @@ private:
     bool HandleBranchInputEvent(ftxui::Event event);
     ftxui::Element RenderBranchInputOverlay();
 
-    enum class BackgroundOperation { None, Commit, CheckConnection, Fetch, Push, ForcePush };
+    enum class BackgroundOperation {
+        None,
+        Commit,
+        CheckConnection,
+        Fetch,
+        Push,
+        ForcePush,
+        PushTag,
+        PushAllTags,
+        FetchTags,
+    };
     void StartBackgroundOperation(
         BackgroundOperation operation,
         std::string action,

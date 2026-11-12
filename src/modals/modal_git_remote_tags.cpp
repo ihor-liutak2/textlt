@@ -156,7 +156,10 @@ void GitModalContent::PushSelectedTag() {
         "Push selected tag to origin.",
         "git push origin " + tag,
         [this, tag] {
-            RunAndRefresh("Push tag", git_manager_->PushTag(tag));
+            StartBackgroundOperation(
+                BackgroundOperation::PushTag,
+                "Push tag",
+                [this, tag] { return git_manager_->PushTag(tag); });
         });
 }
 
@@ -169,7 +172,10 @@ void GitModalContent::PushAllTags() {
         "Push all local tags to origin.",
         "git push origin --tags",
         [this] {
-            RunAndRefresh("Push all tags", git_manager_->PushAllTags());
+            StartBackgroundOperation(
+                BackgroundOperation::PushAllTags,
+                "Push all tags",
+                [this] { return git_manager_->PushAllTags(); });
         });
 }
 
@@ -177,9 +183,10 @@ void GitModalContent::FetchTags() {
     if (!git_manager_) {
         return;
     }
-    GitManager::CommandResult result = git_manager_->FetchTags();
-    RunAndRefresh("Fetch tags", result);
-    RefreshTags();
+    StartBackgroundOperation(
+        BackgroundOperation::FetchTags,
+        "Fetch tags",
+        [this] { return git_manager_->FetchTags(); });
 }
 
 void GitModalContent::RebuildRemoteBranchLabels() {
