@@ -50,6 +50,9 @@ BottomBarRowState TextltApp::CurrentBottomBarRowState() {
     if (workspace_mode_ == WorkspaceMode::Notes) {
         state.line_ending = "NOTE";
         state.git_branch = "Notes";
+        if (const ProjectRecord* project = ActiveWorkspaceProject()) {
+            state.project_name = project->name;
+        }
         return state;
     }
 

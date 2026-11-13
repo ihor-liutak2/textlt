@@ -1,6 +1,7 @@
 #include "notes/note_repository.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <fstream>
 #include <system_error>
@@ -8,6 +9,16 @@
 #include "notes/note_serializer.hpp"
 
 namespace textlt::notes {
+namespace {
+
+std::string Lower(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
+        return static_cast<char>(std::tolower(character));
+    });
+    return value;
+}
+
+} // namespace
 
 NoteRepository::NoteRepository(std::filesystem::path root)
     : root_(root.empty() ? DefaultRoot() : std::move(root)) {}
@@ -105,24 +116,170 @@ bool NoteRepository::EmptyTrash(std::string& error) {
 
 NoteSection& NoteRepository::CreateSection(const std::string& name) {
     const std::string now = UtcNow();
-    sections_.push_back({GenerateUuid(), name, now, now, std::nullopt});
+    sections_.push_back({GenerateUuid(), name, now, now, std::nullopt, std::nullopt, false});
     return sections_.back();
+}
+
+std::string NoteRepository::UniqueSectionName(const std::string& base, const std::string& exclude_id) const {
+    std::string candidate = base.empty() ? "Project" : base;
+    auto taken = [&](const std::string& name) {
+        const std::string lower = Lower(name);
+        return std::any_of(sections_.begin(), sections_.end(), [&](const NoteSection& section) {
+            return !section.deleted_at && section.id != exclude_id && Lower(section.name) == lower;
+        });
+    };
+    if (!taken(candidate)) return candidate;
+    for (int suffix = 2; ; ++suffix) {
+        std::string next = candidate + " (" + std::to_string(suffix) + ")";
+        if (!taken(next)) return next;
+    }
+}
+
+NoteSection* NoteRepository::FindProjectSection(const std::string& project_id) {
+    const auto found = std::find_if(
+        sections_.begin(), sections_.end(),
+        [&](const NoteSection& section) {
+            return !section.deleted_at && section.project_id && *section.project_id == project_id;
+        });
+    return found == sections_.end() ? nullptr : &*found;
+}
+
+const NoteSection* NoteRepository::FindProjectSection(const std::string& project_id) const {
+    const auto found = std::find_if(
+        sections_.begin(), sections_.end(),
+        [&](const NoteSection& section) {
+            return !section.deleted_at && section.project_id && *section.project_id == project_id;
+        });
+    return found == sections_.end() ? nullptr : &*found;
+}
+
+NoteSection* NoteRepository::EnsureProjectSection(
+    const std::string& project_id,
+    const std::string& project_name,
+    std::string& error) {
+    error.clear();
+    if (project_id.empty()) {
+        error = "Project is not available.";
+        return nullptr;
+    }
+    if (NoteSection* existing = FindProjectSection(project_id)) return existing;
+
+    const std::string now = UtcNow();
+    sections_.push_back({
+        GenerateUuid(),
+        UniqueSectionName(project_name),
+        now,
+        now,
+        std::nullopt,
+        project_id,
+        true,
+    });
+    if (!SaveSections(error)) {
+        sections_.pop_back();
+        if (error.empty()) error = "Could not save notes groups.";
+        return nullptr;
+    }
+    return &sections_.back();
+}
+
+bool NoteRepository::ConvertSectionToGeneral(const std::string& id, std::string& error) {
+    auto found = std::find_if(
+        sections_.begin(), sections_.end(),
+        [&](const NoteSection& section) { return section.id == id && !section.deleted_at; });
+    if (found == sections_.end()) {
+        error = "Group was not found.";
+        return false;
+    }
+    if (!found->project_id) return true;
+    found->project_id.reset();
+    found->auto_named = false;
+    found->updated_at = UtcNow();
+    return SaveSections(error);
+}
+
+bool NoteRepository::RelinkSectionToProject(
+    const std::string& id,
+    const std::string& project_id,
+    const std::string& project_name,
+    std::string& resulting_id,
+    std::string& error) {
+    resulting_id.clear();
+    if (project_id.empty()) {
+        error = "Project is not available.";
+        return false;
+    }
+    auto source = std::find_if(
+        sections_.begin(), sections_.end(),
+        [&](const NoteSection& section) { return section.id == id && !section.deleted_at; });
+    if (source == sections_.end()) {
+        error = "Group was not found.";
+        return false;
+    }
+    if (source->project_id && *source->project_id == project_id) {
+        resulting_id = source->id;
+        return true;
+    }
+
+    NoteSection* target = FindProjectSection(project_id);
+    if (!target) {
+        source->project_id = project_id;
+        source->auto_named = true;
+        if (!project_name.empty()) source->name = UniqueSectionName(project_name, source->id);
+        source->updated_at = UtcNow();
+        if (!SaveSections(error)) return false;
+        resulting_id = source->id;
+        return true;
+    }
+
+    // The project already owns a group: preserve the orphaned group's notes
+    // by moving them into the managed group, then retire the orphan.
+    const std::string target_id = target->id;
+    for (NoteDocument& note : notes_) {
+        if (!note.section_id || *note.section_id != id) continue;
+        note.section_id = target_id;
+        note.updated_at = UtcNow();
+        ++note.revision;
+        if (!Save(note, error)) return false;
+    }
+    source->deleted_at = UtcNow();
+    source->updated_at = *source->deleted_at;
+    // The merge may have removed the only group that was blocking the
+    // project's original name; normalize the managed group now.
+    if (!project_name.empty()) {
+        target->name = UniqueSectionName(project_name, target->id);
+        target->auto_named = true;
+        target->updated_at = UtcNow();
+    }
+    if (!SaveSections(error)) return false;
+    resulting_id = target_id;
+    return true;
 }
 
 bool NoteRepository::RenameSection(const std::string& id, const std::string& name, std::string& error) {
     auto found = std::find_if(sections_.begin(), sections_.end(), [&](const auto& value) { return value.id == id; });
     if (found == sections_.end() || found->deleted_at) { error = "Section was not found."; return false; }
+    if (found->project_id) { error = "Project groups cannot be renamed; keep the group as General first."; return false; }
     found->name = name; found->updated_at = UtcNow(); return SaveSections(error);
 }
 
 bool NoteRepository::DeleteSection(const std::string& id, std::string& error) {
-    for (auto& note : notes_) if (note.section_id && *note.section_id == id) { note.section_id.reset(); note.updated_at = UtcNow(); ++note.revision; if (!Save(note, error)) return false; }
     auto found = std::find_if(
         sections_.begin(), sections_.end(),
-        [&](const NoteSection& section) { return section.id == id; });
+        [&](const NoteSection& section) { return section.id == id && !section.deleted_at; });
     if (found == sections_.end()) {
         error = "Section was not found.";
         return false;
+    }
+    if (found->project_id) {
+        error = "Project groups cannot be deleted; keep the group as General first.";
+        return false;
+    }
+    for (auto& note : notes_) {
+        if (!note.section_id || *note.section_id != id) continue;
+        note.section_id.reset();
+        note.updated_at = UtcNow();
+        ++note.revision;
+        if (!Save(note, error)) return false;
     }
     found->deleted_at = UtcNow();
     found->updated_at = *found->deleted_at;

@@ -1,6 +1,7 @@
 #include "app.hpp"
 
 #include <filesystem>
+#include <optional>
 #include <system_error>
 #include <utility>
 
@@ -31,6 +32,21 @@ void TextltApp::InitializeProjects() {
     sidebar->SetProjectRoot(active->local_root);
     git_manager_.SetWorkingDirectory(active->local_root);
     workspace_project_id_ = active->id;
+}
+
+void TextltApp::SyncNotesProjectContext() {
+    if (!notes_workspace_component_) return;
+    auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_);
+    std::optional<notes::ProjectContext> active_project;
+    if (const ProjectRecord* project = ActiveWorkspaceProject()) {
+        active_project = notes::ProjectContext{project->id, project->name};
+    }
+    std::vector<std::string> known_project_ids;
+    known_project_ids.reserve(project_store_.Projects().size());
+    for (const ProjectRecord& project : project_store_.Projects()) {
+        known_project_ids.push_back(project.id);
+    }
+    notes->SetProjectContext(std::move(active_project), std::move(known_project_ids));
 }
 
 std::vector<SidebarPanel::ProjectEntry> TextltApp::SidebarProjects() const {
@@ -94,6 +110,7 @@ void TextltApp::ActivateProject(const std::string& id) {
     git_manager_.Invalidate();
     workspace_project_id_ = project->id;
     sidebar->Refresh();
+    SyncNotesProjectContext();
     active_action_ = "Switched project: " + project->name;
     screen_.PostEvent(ftxui::Event::Custom);
 }
@@ -120,7 +137,10 @@ void TextltApp::RemoveProject(const std::string& id) {
         sidebar->ShowProjects();
         git_manager_.SetWorkingDirectory(active->local_root);
         workspace_project_id_ = active->id;
+    } else {
+        workspace_project_id_.clear();
     }
+    SyncNotesProjectContext();
     active_action_ = "Removed project registration: " + name;
     screen_.PostEvent(ftxui::Event::Custom);
 }
@@ -167,6 +187,7 @@ bool TextltApp::OpenWorkspaceFolder(
     git_manager_.SetWorkingDirectory(root);
     git_manager_.Invalidate();
     workspace_project_id_.clear();
+    SyncNotesProjectContext();
     active_action_ = "Opened folder: " + root.string();
     error.clear();
     return true;

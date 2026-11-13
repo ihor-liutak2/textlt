@@ -289,6 +289,7 @@ private:
     void ToggleSidebarOpenedProject();
     void CopySidebarSelectedPath();
     void InitializeProjects();
+    void SyncNotesProjectContext();
     std::vector<SidebarPanel::ProjectEntry> SidebarProjects() const;
     bool RegisterProject(const std::filesystem::path& root, std::string& error);
     void ActivateProject(const std::string& id);

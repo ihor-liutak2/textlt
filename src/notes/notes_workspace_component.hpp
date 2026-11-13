@@ -15,6 +15,11 @@
 
 namespace textlt::notes {
 
+struct ProjectContext {
+    std::string id;
+    std::string name;
+};
+
 class NotesWorkspaceComponent : public ftxui::ComponentBase {
 public:
     using StatusCallback = std::function<void(const std::string&)>;
@@ -32,6 +37,11 @@ public:
     bool OnEvent(ftxui::Event event) override;
     bool Focusable() const override { return true; }
     void Open();
+    // Updates the active project and the set of projects that still exist.
+    // The project group is created lazily and is never associated by name.
+    void SetProjectContext(
+        std::optional<ProjectContext> project,
+        std::vector<std::string> known_project_ids);
     bool Save(std::string& error);
     bool IsEditing() const { return editing_; }
     std::string StatusText() const;
@@ -47,12 +57,21 @@ private:
     enum class SidebarEntryKind { Home, Section, NewSection, Trash };
     enum class SortMode { Updated, Created, Title, Pinned };
     enum class ConfirmAction { None, TrashNote, DeleteGroup, DeletePermanently, EmptyTrash };
-    struct SidebarEntry { SidebarEntryKind kind; std::string id; std::string label; size_t count = 0; };
+    struct SidebarEntry {
+        SidebarEntryKind kind;
+        std::string id;
+        std::string label;
+        size_t count = 0;
+        bool project = false;
+        bool orphaned = false;
+    };
 
     void RebuildSidebar();
     void RebuildVisibleNotes();
     bool NoteMatchesFilter(const NoteDocument& note) const;
     void SelectSidebarEntry(int index);
+    bool SelectSectionById(const std::string& id);
+    bool IsKnownProject(const std::string& id) const;
     void OpenSelectedNote();
     void OpenNote(size_t note_index);
     void CloseEditor();
@@ -64,6 +83,9 @@ private:
     void RestoreSelectedNote();
     void PermanentlyDeleteSelectedNote();
     void EmptyTrash();
+    void OpenProjectNotes();
+    void ConvertSelectedGroupToGeneral();
+    void RelinkSelectedGroupToActiveProject();
     void RequestConfirmation(ConfirmAction action, std::string title, std::string message);
     void AcceptConfirmation();
     void CloseConfirmation();
@@ -98,6 +120,9 @@ private:
     NoteSession session_;
     std::vector<SidebarEntry> sidebar_entries_;
     std::vector<size_t> visible_notes_;
+    std::optional<ProjectContext> project_context_;
+    std::vector<std::string> known_project_ids_;
+    std::optional<std::string> active_project_section_id_;
     std::string selected_section_id_;
     bool trash_selected_ = false;
     SortMode sort_mode_ = SortMode::Updated;
@@ -129,6 +154,9 @@ private:
     ftxui::Box footer_new_group_box_;
     ftxui::Box footer_rename_group_box_;
     ftxui::Box footer_delete_group_box_;
+    ftxui::Box footer_project_notes_box_;
+    ftxui::Box footer_orphan_general_box_;
+    ftxui::Box footer_orphan_relink_box_;
     ftxui::Box confirm_yes_box_;
     ftxui::Box confirm_cancel_box_;
     std::vector<ftxui::Box> group_picker_boxes_;

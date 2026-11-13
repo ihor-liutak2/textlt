@@ -56,6 +56,16 @@ struct NoteSection {
     std::string created_at;
     std::string updated_at;
     std::optional<std::string> deleted_at;
+    // When set, this group is owned by a project. Ownership lives on the
+    // group, not on individual notes, so moving a note between groups is the
+    // only way to change its project association.
+    std::optional<std::string> project_id;
+    // True when the group name was generated from the project name and may be
+    // updated automatically. Renaming is enabled after the group is converted
+    // to a General group.
+    bool auto_named = false;
+
+    bool IsProjectGroup() const { return project_id.has_value(); }
 };
 
 std::string GenerateUuid();

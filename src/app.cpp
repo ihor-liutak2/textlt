@@ -455,6 +455,7 @@ TextltApp::TextltApp()
         [this] { ShowDocumentsWorkspace(); },
         [this] { return clipboard_controller_.ReadText(); },
         [this](const std::string& text) { clipboard_controller_.WriteText(text); });
+    SyncNotesProjectContext();
 
     top_bar_row_ = ftxui::Make<TopBarRowComponent>(
         &current_theme_,

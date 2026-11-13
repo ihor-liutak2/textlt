@@ -21,6 +21,23 @@ public:
     NoteSection& CreateSection(const std::string& name);
     bool RenameSection(const std::string& id, const std::string& name, std::string& error);
     bool DeleteSection(const std::string& id, std::string& error);
+    // Project-owned groups. Ownership is identified by project_id so renaming
+    // a project never breaks the association.
+    NoteSection* FindProjectSection(const std::string& project_id);
+    const NoteSection* FindProjectSection(const std::string& project_id) const;
+    NoteSection* EnsureProjectSection(
+        const std::string& project_id,
+        const std::string& project_name,
+        std::string& error);
+    bool ConvertSectionToGeneral(const std::string& id, std::string& error);
+    // Links an orphaned group to a project. When the project already has a
+    // group, its notes are moved there and the orphaned group is retired.
+    bool RelinkSectionToProject(
+        const std::string& id,
+        const std::string& project_id,
+        const std::string& project_name,
+        std::string& resulting_id,
+        std::string& error);
     const std::filesystem::path& Root() const { return root_; }
     const std::string& DeviceId() const { return device_id_; }
     std::vector<NoteDocument>& Notes() { return notes_; }
@@ -32,6 +49,7 @@ public:
 private:
     bool LoadOrCreateDeviceId(std::string& error);
     std::filesystem::path NotePath(const std::string& id) const;
+    std::string UniqueSectionName(const std::string& base, const std::string& exclude_id = {}) const;
     std::filesystem::path root_;
     std::string device_id_;
     std::vector<NoteDocument> notes_;

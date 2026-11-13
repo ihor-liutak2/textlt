@@ -269,6 +269,9 @@ std::filesystem::path ProjectStore::NormalizeRoot(const std::filesystem::path& r
 }
 
 std::string ProjectStore::MakeId() {
+    // Local-only identity. Note groups link to projects through this ID, so
+    // cross-device notes sync must replace it with a stable, portable
+    // identifier before it can rely on project ownership.
     static std::atomic<unsigned long long> sequence{0};
     const auto ticks = std::chrono::steady_clock::now().time_since_epoch().count();
     return "project-" + std::to_string(ticks) + "-" + std::to_string(++sequence);

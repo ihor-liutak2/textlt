@@ -137,7 +137,7 @@ bool NoteSerializer::LoadNote(const std::filesystem::path& path, NoteDocument& n
 }
 
 bool NoteSerializer::SaveSections(const std::vector<NoteSection>& sections, const std::filesystem::path& path, std::string& error) {
-    Json json = {{"format", "textlt-note-sections"}, {"schema_version", 1}, {"sections", Json::array()}};
+    Json json = {{"format", "textlt-note-sections"}, {"schema_version", 2}, {"sections", Json::array()}};
     for (const auto& section : sections) {
         json["sections"].push_back({
             {"id", section.id},
@@ -145,6 +145,8 @@ bool NoteSerializer::SaveSections(const std::vector<NoteSection>& sections, cons
             {"created_at", section.created_at},
             {"updated_at", section.updated_at},
             {"deleted_at", section.deleted_at ? Json(*section.deleted_at) : Json(nullptr)},
+            {"project_id", section.project_id ? Json(*section.project_id) : Json(nullptr)},
+            {"auto_named", section.auto_named},
         });
     }
     return AtomicWrite(path, json.dump(2) + "\n", error);
@@ -155,6 +157,11 @@ bool NoteSerializer::LoadSections(const std::filesystem::path& path, std::vector
     try {
         std::ifstream input(path, std::ios::binary); Json json; input >> json;
         if (json.value("format", "") != "textlt-note-sections") { error = "Unsupported sections format."; return false; }
+        const int schema_version = json.value("schema_version", 1);
+        if (schema_version < 1 || schema_version > 2) {
+            error = "Unsupported sections schema version.";
+            return false;
+        }
         std::vector<NoteSection> parsed;
         for (const auto& item : json.value("sections", Json::array())) {
             NoteSection section{
@@ -163,9 +170,17 @@ bool NoteSerializer::LoadSections(const std::filesystem::path& path, std::vector
                 item.at("created_at").get<std::string>(),
                 item.at("updated_at").get<std::string>(),
                 std::nullopt,
+                std::nullopt,
+                false,
             };
             if (item.contains("deleted_at") && !item["deleted_at"].is_null()) {
                 section.deleted_at = item["deleted_at"].get<std::string>();
+            }
+            if (schema_version >= 2) {
+                if (item.contains("project_id") && !item["project_id"].is_null()) {
+                    section.project_id = item["project_id"].get<std::string>();
+                }
+                section.auto_named = item.value("auto_named", false);
             }
             parsed.push_back(std::move(section));
         }
