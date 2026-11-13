@@ -125,8 +125,6 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
         ButtonRole::Primary, ButtonVariant::AccentEdges);
     assign_project_button_ = MakeTextButton("Set to Project", [this] { AssignSelectedToProject(); },
         ButtonRole::Success, ButtonVariant::AccentEdges);
-    notes_sync_button_ = MakeTextButton("Notes Sync", [this] { SetSelectedForNotesSync(); },
-        ButtonRole::Success, ButtonVariant::AccentEdges, "↻");
     save_token_button_ = MakeTextButton("Save Token", [this] { SaveCloudAccessToken(); },
         ButtonRole::Primary, ButtonVariant::AccentEdges);
     edit_button_ = MakeTextButton("Edit", [this] { EditSelected(); },

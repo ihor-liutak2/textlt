@@ -16,6 +16,8 @@ public:
     bool SaveSections(std::string& error) const;
     bool MoveToTrash(NoteDocument& note, std::string& error);
     bool Restore(NoteDocument& note, std::string& error);
+    bool PermanentlyDelete(const std::string& id, std::string& error);
+    bool EmptyTrash(std::string& error);
     NoteSection& CreateSection(const std::string& name);
     bool RenameSection(const std::string& id, const std::string& name, std::string& error);
     bool DeleteSection(const std::string& id, std::string& error);

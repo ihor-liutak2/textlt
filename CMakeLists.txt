@@ -232,7 +232,6 @@ add_executable(textlt
   src/notes/note_serializer.cpp
   src/notes/note_repository.cpp
   src/notes/note_session.cpp
-  src/notes/notes_sync.cpp
   src/notes/notes_workspace_component.cpp
   src/file_utils.cpp
   src/git_manager.cpp
@@ -455,17 +454,8 @@ add_executable(textlt_note_session_test
   src/notes/note_session.cpp
 )
 
-add_executable(textlt_notes_sync_test
-  tests/notes_sync_test.cpp
-  src/notes/note_document.cpp
-  src/notes/note_serializer.cpp
-  src/notes/note_repository.cpp
-  src/notes/notes_sync.cpp
-  src/remote/remote_connection_config.cpp
-)
-
-add_executable(textlt_notes_workspace_sync_test
-  tests/notes_workspace_sync_test.cpp
+add_executable(textlt_notes_workspace_actions_test
+  tests/notes_workspace_actions_test.cpp
   src/notes/note_document.cpp
   src/notes/note_serializer.cpp
   src/notes/note_repository.cpp
@@ -754,12 +744,7 @@ target_include_directories(textlt_note_session_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_include_directories(textlt_notes_sync_test PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/src
-  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
-)
-
-target_include_directories(textlt_notes_workspace_sync_test PRIVATE
+target_include_directories(textlt_notes_workspace_actions_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
@@ -774,7 +759,7 @@ target_link_libraries(textlt_theme_customization_test PRIVATE
   ftxui::dom
   ftxui::component
 )
-target_link_libraries(textlt_notes_workspace_sync_test PRIVATE
+target_link_libraries(textlt_notes_workspace_actions_test PRIVATE
   ftxui::component
   Threads::Threads
 )
@@ -804,8 +789,7 @@ add_test(NAME textlt_builtin_text_processors_test COMMAND textlt_builtin_text_pr
 add_test(NAME textlt_app_command_registry_test COMMAND textlt_app_command_registry_test)
 add_test(NAME textlt_note_storage_test COMMAND textlt_note_storage_test)
 add_test(NAME textlt_note_session_test COMMAND textlt_note_session_test)
-add_test(NAME textlt_notes_sync_test COMMAND textlt_notes_sync_test)
-add_test(NAME textlt_notes_workspace_sync_test COMMAND textlt_notes_workspace_sync_test)
+add_test(NAME textlt_notes_workspace_actions_test COMMAND textlt_notes_workspace_actions_test)
 add_test(NAME textlt_shortcut_registry_test COMMAND textlt_shortcut_registry_test)
 add_test(NAME textlt_custom_processor_builder_test COMMAND textlt_custom_processor_builder_test)
 add_test(NAME textlt_tts_pipeline_test COMMAND textlt_tts_pipeline_test)

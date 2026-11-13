@@ -237,7 +237,12 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
 
     if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Notes) {
         if (app_.notes_workspace_component_ && app_.notes_workspace_component_->OnEvent(event)) {
-            app_.screen_.PostEvent(ftxui::Event::Custom);
+            // Do not answer a redraw request with another redraw request:
+            // components that swallow every event would otherwise keep the
+            // event queue busy forever.
+            if (event != ftxui::Event::Custom) {
+                app_.screen_.PostEvent(ftxui::Event::Custom);
+            }
             return true;
         }
     }
@@ -295,7 +300,9 @@ bool AppEventDispatcher::HandleSidebarEvent(const ftxui::Event& event) {
     }
 
     if (app_.sidebar_panel_->OnEvent(event)) {
-        app_.screen_.PostEvent(ftxui::Event::Custom);
+        if (event != ftxui::Event::Custom) {
+            app_.screen_.PostEvent(ftxui::Event::Custom);
+        }
         return true;
     }
 

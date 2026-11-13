@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <future>
 #include <utility>
 
 #include "editor_utils.hpp"
@@ -50,27 +49,15 @@ NotesWorkspaceComponent::NotesWorkspaceComponent(
     DocumentsCallback on_documents,
     ClipboardReadCallback read_clipboard,
     ClipboardWriteCallback write_clipboard,
-    CanSyncCallback can_sync,
-    SyncCallback sync,
-    RequestRedrawCallback request_redraw,
     std::filesystem::path root)
     : theme_(theme),
       on_status_(std::move(on_status)),
       on_documents_(std::move(on_documents)),
       read_clipboard_(std::move(read_clipboard)),
       write_clipboard_(std::move(write_clipboard)),
-      can_sync_(std::move(can_sync)),
-      sync_(std::move(sync)),
-      request_redraw_(std::move(request_redraw)),
       repository_(std::move(root)),
       session_(nullptr) {
     repository_.Load(load_warning_); RebuildSidebar(); RebuildVisibleNotes();
-}
-
-NotesWorkspaceComponent::~NotesWorkspaceComponent() {
-    if (sync_thread_.joinable()) {
-        sync_thread_.join();
-    }
 }
 
 void NotesWorkspaceComponent::Open() { TakeFocus(); if (!load_warning_.empty()) Notify("Notes warning: " + load_warning_); }
@@ -102,7 +89,6 @@ void NotesWorkspaceComponent::RebuildSidebar() {
         size_t count = 0; for (const auto& note : repository_.Notes()) if (!note.deleted_at && note.section_id && *note.section_id == section.id) ++count;
         sidebar_entries_.push_back({SidebarEntryKind::Section, section.id, section.name, count});
     }
-    sidebar_entries_.push_back({SidebarEntryKind::NewSection, "", "+ New group", 0});
     sidebar_entries_.push_back({SidebarEntryKind::Trash, "", "Trash", trash_count});
     selected_sidebar_ = std::clamp(selected_sidebar_, 0, std::max(0, static_cast<int>(sidebar_entries_.size()) - 1));
 }
@@ -121,8 +107,18 @@ void NotesWorkspaceComponent::RebuildVisibleNotes() {
     visible_notes_.clear(); const auto& notes = repository_.Notes();
     for (size_t index = 0; index < notes.size(); ++index) if (NoteMatchesFilter(notes[index])) visible_notes_.push_back(index);
     std::stable_sort(visible_notes_.begin(), visible_notes_.end(), [&](size_t left, size_t right) {
-        if (selected_section_id_.empty() && !trash_selected_ && notes[left].pinned != notes[right].pinned) return notes[left].pinned > notes[right].pinned;
-        return notes[left].updated_at > notes[right].updated_at;
+        switch (sort_mode_) {
+            case SortMode::Created:
+                return notes[left].created_at > notes[right].created_at;
+            case SortMode::Title:
+                return Lower(notes[left].title) < Lower(notes[right].title);
+            case SortMode::Pinned:
+                if (notes[left].pinned != notes[right].pinned) return notes[left].pinned > notes[right].pinned;
+                return notes[left].updated_at > notes[right].updated_at;
+            case SortMode::Updated:
+                return notes[left].updated_at > notes[right].updated_at;
+        }
+        return false;
     });
     selected_card_ = std::clamp(selected_card_, 0, std::max(0, static_cast<int>(visible_notes_.size()) - 1));
 }
@@ -167,6 +163,138 @@ void NotesWorkspaceComponent::DeleteSelectedSection() {
     RebuildSidebar();
     RebuildVisibleNotes();
     Notify("Group deleted; its notes remain in Home");
+}
+
+void NotesWorkspaceComponent::DeleteSelectedNote() {
+    const bool has_target = editing_
+        ? session_.Note() && !session_.Note()->deleted_at
+        : !trash_selected_ && !visible_notes_.empty() && selected_card_ >= 0 &&
+            selected_card_ < static_cast<int>(visible_notes_.size());
+    if (!has_target) return;
+    if (confirm_action_ == ConfirmAction::None) {
+        RequestConfirmation(ConfirmAction::TrashNote, "Delete note", "Move this note to Trash?");
+        return;
+    }
+    if (editing_) {
+        DeleteOrRestoreActiveNote();
+        return;
+    }
+    if (trash_selected_ || visible_notes_.empty() ||
+        selected_card_ < 0 || selected_card_ >= static_cast<int>(visible_notes_.size())) {
+        return;
+    }
+    NoteDocument& note = repository_.Notes()[visible_notes_[selected_card_]];
+    std::string error;
+    if (!repository_.MoveToTrash(note, error)) {
+        Notify("Note delete failed: " + error);
+        return;
+    }
+    Notify("Note moved to Trash");
+    RebuildSidebar();
+    RebuildVisibleNotes();
+}
+
+void NotesWorkspaceComponent::RestoreSelectedNote() {
+    if (!trash_selected_ || visible_notes_.empty() ||
+        selected_card_ < 0 || selected_card_ >= static_cast<int>(visible_notes_.size())) return;
+    NoteDocument& note = repository_.Notes()[visible_notes_[selected_card_]];
+    std::string error;
+    if (!repository_.Restore(note, error)) Notify("Note restore failed: " + error);
+    else Notify("Note restored");
+    RebuildSidebar();
+    RebuildVisibleNotes();
+}
+
+void NotesWorkspaceComponent::PermanentlyDeleteSelectedNote() {
+    if (!trash_selected_ || visible_notes_.empty() || selected_card_ < 0 ||
+        selected_card_ >= static_cast<int>(visible_notes_.size())) return;
+    if (confirm_action_ == ConfirmAction::None) {
+        RequestConfirmation(ConfirmAction::DeletePermanently, "Delete permanently",
+            "Permanently delete this note? This cannot be undone.");
+        return;
+    }
+    if (!trash_selected_ || visible_notes_.empty() ||
+        selected_card_ < 0 || selected_card_ >= static_cast<int>(visible_notes_.size())) return;
+    const std::string id = repository_.Notes()[visible_notes_[selected_card_]].id;
+    std::string error;
+    if (!repository_.PermanentlyDelete(id, error)) Notify("Permanent delete failed: " + error);
+    else Notify("Note permanently deleted");
+    RebuildSidebar();
+    RebuildVisibleNotes();
+}
+
+void NotesWorkspaceComponent::EmptyTrash() {
+    if (!trash_selected_ || visible_notes_.empty()) return;
+    if (confirm_action_ == ConfirmAction::None) {
+        RequestConfirmation(ConfirmAction::EmptyTrash, "Empty Trash",
+            "Permanently delete every note in Trash? This cannot be undone.");
+        return;
+    }
+    std::string error;
+    if (!repository_.EmptyTrash(error)) Notify("Empty Trash failed: " + error);
+    else Notify("Trash emptied");
+    RebuildSidebar();
+    RebuildVisibleNotes();
+}
+
+void NotesWorkspaceComponent::RequestConfirmation(
+    ConfirmAction action, std::string title, std::string message) {
+    confirm_action_ = action;
+    confirm_title_ = std::move(title);
+    confirm_message_ = std::move(message);
+}
+
+void NotesWorkspaceComponent::AcceptConfirmation() {
+    const ConfirmAction action = confirm_action_;
+    if (action == ConfirmAction::None) return;
+    switch (action) {
+        case ConfirmAction::TrashNote: DeleteSelectedNote(); break;
+        case ConfirmAction::DeleteGroup: DeleteSelectedSection(); break;
+        case ConfirmAction::DeletePermanently: PermanentlyDeleteSelectedNote(); break;
+        case ConfirmAction::EmptyTrash: EmptyTrash(); break;
+        case ConfirmAction::None: break;
+    }
+    CloseConfirmation();
+}
+
+void NotesWorkspaceComponent::CloseConfirmation() {
+    confirm_action_ = ConfirmAction::None;
+    confirm_title_.clear();
+    confirm_message_.clear();
+    confirm_yes_box_ = {};
+    confirm_cancel_box_ = {};
+}
+
+void NotesWorkspaceComponent::OpenGroupPicker() {
+    if (session_.Note() && !session_.Note()->deleted_at) group_picker_open_ = true;
+}
+
+void NotesWorkspaceComponent::SelectGroupFromPicker(size_t index) {
+    if (!session_.Note()) return;
+    auto& note = *session_.Note();
+    if (index == 0) note.section_id.reset();
+    else {
+        size_t current = 1;
+        for (const NoteSection& section : repository_.Sections()) {
+            if (section.deleted_at) continue;
+            if (current++ == index) { note.section_id = section.id; break; }
+        }
+    }
+    note.updated_at = UtcNow();
+    ++note.revision;
+    std::string error;
+    if (!repository_.Save(note, error)) Notify("Move failed: " + error);
+    else Notify("Group: " + SectionName(note));
+    group_picker_open_ = false;
+    RebuildSidebar();
+}
+
+void NotesWorkspaceComponent::CycleSortMode() {
+    sort_mode_ = sort_mode_ == SortMode::Updated ? SortMode::Created :
+        sort_mode_ == SortMode::Created ? SortMode::Title :
+        sort_mode_ == SortMode::Title ? SortMode::Pinned : SortMode::Updated;
+    selected_card_ = 0;
+    RebuildVisibleNotes();
 }
 
 void NotesWorkspaceComponent::FinishCreateSection() {
@@ -285,9 +413,6 @@ bool NotesWorkspaceComponent::HandleOverviewEvent(ftxui::Event event) {
         if (event == ftxui::Event::ArrowUp) { selected_sidebar_ = std::max(0, selected_sidebar_ - 1); return true; }
         if (event == ftxui::Event::ArrowDown) { selected_sidebar_ = std::min(static_cast<int>(sidebar_entries_.size()) - 1, selected_sidebar_ + 1); return true; }
         if (event == ftxui::Event::Return) { SelectSidebarEntry(selected_sidebar_); return true; }
-        if (event.input() == "g" || event.input() == "G") { StartCreateSection(); return true; }
-        if (event.input() == "r" || event.input() == "R") { StartRenameSection(); return true; }
-        if (IsDelete(event)) { DeleteSelectedSection(); return true; }
     } else {
         if (event == ftxui::Event::ArrowLeft || event == ftxui::Event::ArrowUp) { selected_card_ = std::max(0, selected_card_ - 1); return true; }
         if (event == ftxui::Event::ArrowRight || event == ftxui::Event::ArrowDown) { selected_card_ = std::min(static_cast<int>(visible_notes_.size()) - 1, selected_card_ + 1); return true; }
@@ -298,14 +423,6 @@ bool NotesWorkspaceComponent::HandleOverviewEvent(ftxui::Event event) {
 
 bool NotesWorkspaceComponent::HandleEditorEvent(ftxui::Event event) {
     if (event == ftxui::Event::Escape) { CloseEditor(); return true; }
-    if (IsCtrl(event, 's')) { TouchAndSave(); return true; }
-    if (IsCtrl(event, 'b')) { ToggleMark(NoteMark::Bold); return true; }
-    if (IsCtrl(event, 'i')) { ToggleMark(NoteMark::Italic); return true; }
-    if (IsCtrl(event, 'u')) { ToggleMark(NoteMark::Underlined); return true; }
-    if (event.input() == "Ctrl+Shift+X" || event.input() == "\x1B[88;6u") {
-        ToggleMark(NoteMark::Strikethrough);
-        return true;
-    }
     if (IsCtrl(event, 'a') && focus_ == FocusArea::Body) { session_.SelectAll(); return true; }
     if (IsCtrl(event, 'c') && focus_ == FocusArea::Body) {
         if (write_clipboard_ && session_.HasSelection()) write_clipboard_(session_.SelectedText());
@@ -346,11 +463,6 @@ bool NotesWorkspaceComponent::HandleEditorEvent(ftxui::Event event) {
         TouchAndSave();
         return true;
     }
-    if ((event.input() == "Ctrl+Enter" || event.input() == "\x1B[13;5u") &&
-        focus_ == FocusArea::Body) {
-        if (session_.ToggleCheck()) TouchAndSave();
-        return true;
-    }
     if (focus_ == FocusArea::Title) {
         if (event == ftxui::Event::Return || event == ftxui::Event::ArrowDown) { focus_ = FocusArea::Body; return true; }
         auto* note = session_.Note(); if (!note) return false;
@@ -376,39 +488,74 @@ bool NotesWorkspaceComponent::HandleEditorEvent(ftxui::Event event) {
 }
 
 bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
-    ApplySyncCompletion();
-    if (sync_popup_open_) {
-        if (!sync_running_ &&
-            (event == ftxui::Event::Escape || event == ftxui::Event::Return)) {
-            CloseSyncPopup();
-            return true;
+    // Event::Custom is used by the app to request a redraw. It is never an
+    // input event, so it must not be reported as handled: the dispatcher
+    // posts another Event::Custom for every handled event, which would turn
+    // this into an endless redraw loop while a popup is open.
+    if (event == ftxui::Event::Custom) return false;
+    if (confirm_action_ != ConfirmAction::None) {
+        if (event == ftxui::Event::Escape) { CloseConfirmation(); return true; }
+        if (event == ftxui::Event::Return) { AcceptConfirmation(); return true; }
+        if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left &&
+            event.mouse().motion == ftxui::Mouse::Pressed) {
+            if (confirm_yes_box_.Contain(event.mouse().x, event.mouse().y)) { AcceptConfirmation(); return true; }
+            if (confirm_cancel_box_.Contain(event.mouse().x, event.mouse().y)) { CloseConfirmation(); return true; }
         }
-        if (!sync_running_ &&
-            event.is_mouse() &&
-            event.mouse().button == ftxui::Mouse::Left &&
-            event.mouse().motion == ftxui::Mouse::Pressed &&
-            sync_popup_close_box_.Contain(event.mouse().x, event.mouse().y)) {
-            CloseSyncPopup();
-            return true;
+        return true;
+    }
+    if (group_picker_open_) {
+        if (event == ftxui::Event::Escape) { group_picker_open_ = false; return true; }
+        if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left &&
+            event.mouse().motion == ftxui::Mouse::Pressed) {
+            for (size_t i = 0; i < group_picker_boxes_.size(); ++i) {
+                if (group_picker_boxes_[i].Contain(event.mouse().x, event.mouse().y)) {
+                    SelectGroupFromPicker(i);
+                    return true;
+                }
+            }
+            if (group_picker_cancel_box_.Contain(event.mouse().x, event.mouse().y)) {
+                group_picker_open_ = false;
+                return true;
+            }
         }
         return true;
     }
     if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left && event.mouse().motion == ftxui::Mouse::Pressed) {
         const auto& mouse = event.mouse();
         if (documents_tab_box_.Contain(mouse.x, mouse.y)) { if (on_documents_) on_documents_(); return true; }
-        if (sync_box_.Contain(mouse.x, mouse.y) && can_sync_ && can_sync_()) {
-            RunSync();
+        if (footer_new_note_box_.Contain(mouse.x, mouse.y)) { NewNote(); return true; }
+        if (footer_delete_note_box_.Contain(mouse.x, mouse.y)) { DeleteSelectedNote(); return true; }
+        if (footer_restore_note_box_.Contain(mouse.x, mouse.y)) { RestoreSelectedNote(); return true; }
+        if (footer_permanent_delete_box_.Contain(mouse.x, mouse.y)) { PermanentlyDeleteSelectedNote(); return true; }
+        if (footer_empty_trash_box_.Contain(mouse.x, mouse.y)) { EmptyTrash(); return true; }
+        if (footer_new_group_box_.Contain(mouse.x, mouse.y)) { StartCreateSection(); return true; }
+        if (footer_rename_group_box_.Contain(mouse.x, mouse.y)) { StartRenameSection(); return true; }
+        if (footer_delete_group_box_.Contain(mouse.x, mouse.y)) {
+            const bool custom_group_selected = selected_sidebar_ >= 0 &&
+                selected_sidebar_ < static_cast<int>(sidebar_entries_.size()) &&
+                sidebar_entries_[selected_sidebar_].kind == SidebarEntryKind::Section;
+            if (custom_group_selected) {
+                RequestConfirmation(ConfirmAction::DeleteGroup, "Delete group",
+                    "Delete this group? Its notes will remain in Home.");
+            }
             return true;
         }
         for (size_t i = 0; i < sidebar_row_boxes_.size(); ++i) if (sidebar_row_boxes_[i].Contain(mouse.x, mouse.y)) { focus_ = FocusArea::Sidebar; SelectSidebarEntry(static_cast<int>(i)); return true; }
-        if (new_note_box_.Contain(mouse.x, mouse.y)) { NewNote(); return true; }
-        if (search_box_.Contain(mouse.x, mouse.y)) { focus_ = FocusArea::Search; return true; }
-        if (!editing_) for (size_t i = 0; i < card_boxes_.size(); ++i) if (card_boxes_[i].Contain(mouse.x, mouse.y)) { selected_card_ = static_cast<int>(i); OpenSelectedNote(); return true; }
+        if (!editing_) {
+            if (sort_box_.Contain(mouse.x, mouse.y)) { CycleSortMode(); return true; }
+            if (new_note_box_.Contain(mouse.x, mouse.y)) { NewNote(); return true; }
+            if (search_box_.Contain(mouse.x, mouse.y)) { focus_ = FocusArea::Search; return true; }
+            for (size_t i = 0; i < card_boxes_.size(); ++i) if (card_boxes_[i].Contain(mouse.x, mouse.y)) { selected_card_ = static_cast<int>(i); OpenSelectedNote(); return true; }
+        }
         if (editing_) {
             if (back_box_.Contain(mouse.x, mouse.y)) { CloseEditor(); return true; }
             if (pin_box_.Contain(mouse.x, mouse.y)) { TogglePin(); return true; }
-            if (section_box_.Contain(mouse.x, mouse.y)) { MoveActiveNoteToNextSection(); return true; }
-            if (trash_box_.Contain(mouse.x, mouse.y)) { DeleteOrRestoreActiveNote(); return true; }
+            if (section_box_.Contain(mouse.x, mouse.y)) { OpenGroupPicker(); return true; }
+            if (trash_box_.Contain(mouse.x, mouse.y)) {
+                if (session_.Note() && session_.Note()->deleted_at) DeleteOrRestoreActiveNote();
+                else DeleteSelectedNote();
+                return true;
+            }
             if (bold_box_.Contain(mouse.x, mouse.y)) { ToggleMark(NoteMark::Bold); return true; }
             if (italic_box_.Contain(mouse.x, mouse.y)) { ToggleMark(NoteMark::Italic); return true; }
             if (underline_box_.Contain(mouse.x, mouse.y)) { ToggleMark(NoteMark::Underlined); return true; }
@@ -422,232 +569,52 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
     return editing_ ? HandleEditorEvent(std::move(event)) : HandleOverviewEvent(std::move(event));
 }
 
-void NotesWorkspaceComponent::RunSync() {
-    std::string error;
-    sync_popup_open_ = true;
-    if (!Save(error)) {
-        sync_popup_message_ = "Synchronization stopped: " + error;
-        sync_error_ = error;
-        sync_success_ = false;
-        return;
-    }
-    if (!sync_) {
-        sync_popup_message_ = "Synchronization failed: Notes sync is not available.";
-        sync_error_ = "Notes sync is not available.";
-        sync_success_ = false;
-        return;
-    }
-    if (sync_thread_.joinable()) {
-        sync_thread_.join();
-    }
-    sync_frame_ = 0;
-    {
-        std::lock_guard<std::mutex> lock(sync_mutex_);
-        sync_completed_ = false;
-        sync_success_ = false;
-        sync_error_.clear();
-        sync_popup_message_ = "Establishing connection...";
-    }
-    sync_running_ = true;
-    const std::filesystem::path root = repository_.Root();
-    RequestSyncRedraw();
-
-    try {
-        sync_thread_ = std::thread([this, root]() noexcept {
-            bool success = false;
-            std::string operation_error;
-            try {
-                auto future = std::async(std::launch::async, [this, root] {
-                    std::string error;
-                    bool result = false;
-                    try {
-                        result = sync_(
-                            root,
-                            [this](const std::string& message) {
-                                {
-                                    std::lock_guard<std::mutex> lock(sync_mutex_);
-                                    sync_popup_message_ = message;
-                                }
-                                RequestSyncRedraw();
-                            },
-                            error);
-                    } catch (const std::exception& exception) {
-                        error = exception.what();
-                    } catch (...) {
-                        error = "Unknown Notes synchronization error.";
-                    }
-                    return std::make_pair(result, std::move(error));
-                });
-
-                while (future.wait_for(std::chrono::milliseconds(100)) !=
-                       std::future_status::ready) {
-                    ++sync_frame_;
-                    RequestSyncRedraw();
-                }
-
-                auto result = future.get();
-                success = result.first;
-                operation_error = std::move(result.second);
-            } catch (const std::exception& exception) {
-                operation_error = exception.what();
-            } catch (...) {
-                operation_error = "Unknown Notes synchronization error.";
-            }
-            CompleteSyncWorker(success, std::move(operation_error));
-        });
-    } catch (const std::exception& exception) {
-        sync_running_ = false;
-        std::lock_guard<std::mutex> lock(sync_mutex_);
-        sync_success_ = false;
-        sync_error_ = exception.what();
-        sync_popup_message_ = "Synchronization could not start: " + sync_error_;
-    } catch (...) {
-        sync_running_ = false;
-        std::lock_guard<std::mutex> lock(sync_mutex_);
-        sync_success_ = false;
-        sync_error_ = "Unknown thread startup error.";
-        sync_popup_message_ = "Synchronization could not start: " + sync_error_;
-    }
-}
-
-void NotesWorkspaceComponent::RequestSyncRedraw() noexcept {
-    if (!request_redraw_) {
-        return;
-    }
-    try {
-        request_redraw_();
-    } catch (...) {
-        // A failed redraw request must not terminate the synchronization worker.
-    }
-}
-
-void NotesWorkspaceComponent::CompleteSyncWorker(
-    bool success,
-    std::string error) noexcept {
-    try {
-        {
-            std::lock_guard<std::mutex> lock(sync_mutex_);
-            sync_success_ = success;
-            sync_error_ = std::move(error);
-            sync_completed_ = true;
-        }
-    } catch (...) {
-        try {
-            std::lock_guard<std::mutex> lock(sync_mutex_);
-            sync_success_ = false;
-            sync_completed_ = true;
-        } catch (...) {
-            sync_running_ = false;
-        }
-    }
-    RequestSyncRedraw();
-}
-
-void NotesWorkspaceComponent::ApplySyncCompletion() {
-    bool completed = false;
-    bool success = false;
-    std::string error;
-    {
-        std::lock_guard<std::mutex> lock(sync_mutex_);
-        if (sync_completed_) {
-            completed = true;
-            success = sync_success_;
-            error = sync_error_;
-            sync_completed_ = false;
-        }
-    }
-    if (!completed) {
-        return;
-    }
-
-    sync_running_ = false;
-    if (sync_thread_.joinable()) {
-        sync_thread_.join();
-    }
-    if (!success) {
-        std::lock_guard<std::mutex> lock(sync_mutex_);
-        sync_popup_message_ = "Synchronization failed: " +
-            (error.empty() ? std::string("unknown error") : error);
-        Notify("Notes synchronization failed.");
-        return;
-    }
-
-    editing_ = false;
-    session_.SetNote(nullptr);
-    active_note_id_.reset();
-    std::string warning;
-    if (!repository_.Load(warning)) {
-        std::lock_guard<std::mutex> lock(sync_mutex_);
-        sync_success_ = false;
-        sync_popup_message_ =
-            "Notes synchronized, but local reload failed: " + warning;
-        Notify("Notes synchronized, but reload failed.");
-        return;
-    }
-    RebuildSidebar();
-    RebuildVisibleNotes();
-    focus_ = FocusArea::Cards;
-    {
-        std::lock_guard<std::mutex> lock(sync_mutex_);
-        sync_popup_message_ = "Notes synchronized successfully.";
-    }
-    Notify("Notes synchronized successfully.");
-}
-
-void NotesWorkspaceComponent::CloseSyncPopup() {
-    if (sync_running_) {
-        return;
-    }
-    sync_popup_open_ = false;
-    sync_popup_close_box_ = {};
-}
-
-ftxui::Element NotesWorkspaceComponent::RenderSyncPopup() {
+ftxui::Element NotesWorkspaceComponent::RenderConfirmationPopup() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    std::string message;
-    bool success = false;
-    {
-        std::lock_guard<std::mutex> lock(sync_mutex_);
-        message = sync_popup_message_;
-        success = sync_success_;
-    }
+    ButtonSpec yes = ButtonSpecFromLabel(
+        "Delete", ButtonRole::Danger, ButtonVariant::AccentEdges, ButtonSize::Compact);
+    ButtonSpec cancel = ButtonSpecFromLabel(
+        "Cancel", ButtonRole::Cancel, ButtonVariant::Minimal, ButtonSize::Compact);
+    return vbox({
+        text(" " + confirm_title_ + " ") | bold | color(theme.button_danger),
+        separator() | color(theme.modal_border),
+        paragraph(confirm_message_) | color(theme.modal_text_color),
+        hbox({
+            filler(),
+            RenderModalFlatButton(theme, cancel) | reflect(confirm_cancel_box_),
+            text("  "),
+            RenderModalFlatButton(theme, yes) | reflect(confirm_yes_box_),
+            filler(),
+        }),
+    }) | size(WIDTH, EQUAL, 54) | borderStyled(HEAVY, theme.modal_border) |
+        bgcolor(theme.modal_background) | clear_under;
+}
 
-    Elements rows;
-    rows.push_back(text(" Notes Sync ") | bold | color(theme.modal_accent));
-    rows.push_back(separator() | color(theme.modal_border));
-    if (sync_running_) {
-        rows.push_back(hbox({
-            spinner(0, sync_frame_.load()) | bold | color(theme.modal_accent),
-            text("  " + message) | color(theme.modal_text_color),
-        }));
-        rows.push_back(text("Please wait while notes are synchronized.") |
-            dim | color(theme.modal_text_color));
-    } else {
-        rows.push_back(hbox({
-            text(success ? "✓  " : "✗  ") |
-                bold |
-                color(success ? theme.modal_accent : Color::Red),
-            paragraph(message) | color(theme.modal_text_color),
-        }));
-        ButtonSpec close_spec = ButtonSpecFromLabel(
-            "OK",
-            ButtonRole::Primary,
-            ButtonVariant::AccentEdges,
-            ButtonSize::Compact);
-        rows.push_back(hbox({
-            filler(),
-            RenderModalFlatButton(theme, close_spec) |
-                reflect(sync_popup_close_box_),
-            filler(),
-        }));
+ftxui::Element NotesWorkspaceComponent::RenderGroupPicker() {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    Elements rows = {
+        text(" Select group ") | bold | color(theme.modal_accent),
+        separator() | color(theme.modal_border),
+    };
+    size_t count = 1;
+    for (const NoteSection& section : repository_.Sections()) if (!section.deleted_at) ++count;
+    group_picker_boxes_.assign(count, {});
+    rows.push_back(text(" Home ") | reflect(group_picker_boxes_[0]) | color(theme.modal_text_color));
+    size_t index = 1;
+    for (const NoteSection& section : repository_.Sections()) {
+        if (section.deleted_at) continue;
+        rows.push_back(text(" " + section.name + " ") |
+            reflect(group_picker_boxes_[index++]) | color(theme.modal_text_color));
     }
-    return vbox(std::move(rows)) |
-        size(WIDTH, EQUAL, 58) |
-        borderStyled(HEAVY, theme.modal_border) |
-        bgcolor(theme.modal_background) |
-        color(theme.modal_text_color) |
-        clear_under;
+    ButtonSpec cancel = ButtonSpecFromLabel(
+        "Cancel", ButtonRole::Cancel, ButtonVariant::Minimal, ButtonSize::Compact);
+    rows.push_back(separator() | color(theme.modal_border));
+    rows.push_back(hbox({filler(), RenderModalFlatButton(theme, cancel) |
+        reflect(group_picker_cancel_box_), filler()}));
+    return vbox(std::move(rows)) | size(WIDTH, EQUAL, 42) |
+        borderStyled(HEAVY, theme.modal_border) | bgcolor(theme.modal_background) | clear_under;
 }
 
 void NotesWorkspaceComponent::ToggleMark(NoteMark mark) { if (session_.ToggleMark(mark) && session_.Dirty()) TouchAndSave(); }
@@ -682,15 +649,52 @@ ftxui::Element NotesWorkspaceComponent::RenderSidebar() {
             borderStyled(LIGHT, theme.modal_accent));
     }
     rows.push_back(filler());
-    sync_box_ = {};
-    if (can_sync_ && can_sync_()) {
-        ButtonSpec sync_spec = ButtonSpecFromLabel(
-            "Sync", ButtonRole::Success, ButtonVariant::Minimal, ButtonSize::Compact, "↻");
-        rows.push_back(RenderModalFlatButton(theme, sync_spec) | reflect(sync_box_));
-        rows.push_back(separator() | color(theme.gutter));
+    footer_new_note_box_ = {};
+    footer_delete_note_box_ = {};
+    footer_restore_note_box_ = {};
+    footer_permanent_delete_box_ = {};
+    footer_empty_trash_box_ = {};
+    footer_new_group_box_ = {};
+    footer_rename_group_box_ = {};
+    footer_delete_group_box_ = {};
+    const bool can_delete_note = editing_
+        ? session_.Note() && !session_.Note()->deleted_at
+        : !trash_selected_ && !visible_notes_.empty();
+    const bool custom_group_selected = selected_sidebar_ >= 0 &&
+        selected_sidebar_ < static_cast<int>(sidebar_entries_.size()) &&
+        sidebar_entries_[selected_sidebar_].kind == SidebarEntryKind::Section;
+    auto footer_button = [&](const std::string& label, ButtonRole role, bool enabled, Box& box) {
+        ButtonSpec spec = ButtonSpecFromLabel(
+            label, role, ButtonVariant::Minimal, ButtonSize::Compact);
+        spec.enabled = enabled;
+        return RenderModalFlatButton(theme, spec) | reflect(box);
+    };
+    rows.push_back(text(" Notes:") | bold | color(theme.foreground));
+    if (trash_selected_ && !editing_) {
+        const bool has_trash = !visible_notes_.empty();
+        rows.push_back(hbox({
+            footer_button("Restore", ButtonRole::Success, has_trash, footer_restore_note_box_),
+            text(" "),
+            footer_button("Delete", ButtonRole::Danger, has_trash, footer_permanent_delete_box_),
+        }));
+        rows.push_back(footer_button(
+            "Empty Trash", ButtonRole::Danger, has_trash, footer_empty_trash_box_));
+    } else {
+        rows.push_back(hbox({
+            footer_button("New", ButtonRole::Primary, true, footer_new_note_box_),
+            text(" "),
+            footer_button("Delete", ButtonRole::Danger, can_delete_note, footer_delete_note_box_),
+        }));
     }
-    rows.push_back(text(" G New  R Rename  Del Delete") | dim);
-    rows.push_back(text(" Ctrl+N  Documents") | dim);
+    rows.push_back(text(" Group:") | bold | color(theme.foreground));
+    rows.push_back(hbox({
+        footer_button("New", ButtonRole::Primary, true, footer_new_group_box_),
+        text(" "),
+        footer_button("Rename", ButtonRole::Utility, custom_group_selected, footer_rename_group_box_),
+        text(" "),
+        footer_button("Delete", ButtonRole::Danger, custom_group_selected, footer_delete_group_box_),
+    }));
+    rows.push_back(separator() | color(theme.gutter));
     return vbox(std::move(rows)) | borderStyled(LIGHT, theme.gutter) | size(WIDTH, EQUAL, 28) | reflect(sidebar_box_) | bgcolor(theme.menu_background);
 }
 
@@ -712,6 +716,11 @@ ftxui::Element NotesWorkspaceComponent::RenderOverview() {
     using namespace ftxui; const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     std::string heading = trash_selected_ ? "Trash" : selected_section_id_.empty() ? "Home" : sidebar_entries_[selected_sidebar_].label;
     Element search = text(" Search: " + search_ + (focus_ == FocusArea::Search ? "▌" : "")) | borderStyled(LIGHT, focus_ == FocusArea::Search ? theme.modal_accent : theme.gutter) | reflect(search_box_) | xflex;
+    const std::string sort_name = sort_mode_ == SortMode::Updated ? "Updated" :
+        sort_mode_ == SortMode::Created ? "Created" :
+        sort_mode_ == SortMode::Title ? "Title" : "Pinned";
+    Element sort = text(" Sort: " + sort_name + " ↻ ") | reflect(sort_box_) |
+        color(theme.foreground) | borderStyled(LIGHT, theme.gutter);
     Element add = text(" + New Note ") | bold | color(theme.modal_selected_item_fg) | bgcolor(theme.modal_selected_item_bg) | reflect(new_note_box_);
     Elements rows;
     Elements current_row;
@@ -727,7 +736,7 @@ ftxui::Element NotesWorkspaceComponent::RenderOverview() {
     bool pinned_label = false, others_label = false;
     for (size_t i = 0; i < visible_notes_.size(); ++i) {
         auto& note = repository_.Notes()[visible_notes_[i]];
-        if (selected_section_id_.empty() && !trash_selected_) {
+        if (sort_mode_ == SortMode::Pinned && selected_section_id_.empty() && !trash_selected_) {
             if (note.pinned && !pinned_label) {
                 flush_cards();
                 rows.push_back(text(" PINNED") | bold | color(theme.modal_accent));
@@ -748,8 +757,8 @@ ftxui::Element NotesWorkspaceComponent::RenderOverview() {
         if (current_row.size() == columns) flush_cards();
     }
     flush_cards();
-    if (rows.empty()) rows.push_back(vbox({filler(), text(trash_selected_ ? "Trash is empty" : "No notes here. Press Ctrl+N to create one.") | center | dim, filler()}) | flex);
-    return vbox({hbox({text(" " + heading + " ") | bold | color(theme.modal_accent), text(std::to_string(visible_notes_.size()) + " notes ") | dim, search, text(" "), add}), separator() | color(theme.gutter), vbox(std::move(rows)) | frame | yflex}) | flex | bgcolor(theme.background) | reflect(overview_box_);
+    if (rows.empty()) rows.push_back(vbox({filler(), text(trash_selected_ ? "Trash is empty" : "No notes here. Use New to create one.") | center | dim, filler()}) | flex);
+    return vbox({hbox({text(" " + heading + " ") | bold | color(theme.modal_accent), text(std::to_string(visible_notes_.size()) + " notes ") | dim, search, text(" "), sort, text(" "), add}), separator() | color(theme.gutter), vbox(std::move(rows)) | frame | yflex}) | flex | bgcolor(theme.background) | reflect(overview_box_);
 }
 
 ftxui::Element NotesWorkspaceComponent::ToolbarItem(const std::string& label, bool active, ftxui::Box& box) {
@@ -778,7 +787,7 @@ ftxui::Element NotesWorkspaceComponent::RenderRichBlock(const NoteBlock& block, 
 ftxui::Element NotesWorkspaceComponent::RenderEditor() {
     using namespace ftxui; const Theme& theme = theme_ ? *theme_ : FallbackTheme(); auto* note = session_.Note(); if (!note) return text("No note");
     Element back = text(" < Notes ") | bold | reflect(back_box_); Element pin = text(note->pinned ? " ◆ Pinned " : " ◇ Pin ") | reflect(pin_box_);
-    Element group = text(" Group: " + SectionName(*note) + " ↻ ") | reflect(section_box_); Element trash = text(note->deleted_at ? " Restore " : " Trash ") | color(note->deleted_at ? theme.button_success : theme.button_danger) | reflect(trash_box_);
+    Element group = text(" Group: " + SectionName(*note) + " ▾ ") | reflect(section_box_); Element trash = text(note->deleted_at ? " Restore " : " Trash ") | color(note->deleted_at ? theme.button_success : theme.button_danger) | reflect(trash_box_);
     Element title = text(" " + note->title + (focus_ == FocusArea::Title ? "▌" : "")) | bold | borderStyled(LIGHT, focus_ == FocusArea::Title ? theme.modal_accent : theme.gutter);
     const uint8_t marks = session_.ActiveMarks(); auto type = note->blocks[session_.Cursor().block].type;
     Element toolbar = hbox({ToolbarItem("B", marks & MarkBit(NoteMark::Bold), bold_box_), ToolbarItem("I", marks & MarkBit(NoteMark::Italic), italic_box_), ToolbarItem("U", marks & MarkBit(NoteMark::Underlined), underline_box_), ToolbarItem("S", marks & MarkBit(NoteMark::Strikethrough), strike_box_), separator(), ToolbarItem("• List", type == NoteBlockType::BulletItem, bullet_box_), ToolbarItem("1. List", type == NoteBlockType::NumberedItem, numbered_box_), ToolbarItem("[ ] Check", type == NoteBlockType::CheckItem, check_box_), ToolbarItem("¶", type == NoteBlockType::Paragraph, paragraph_box_)}) | borderStyled(LIGHT, theme.gutter);
@@ -789,23 +798,18 @@ ftxui::Element NotesWorkspaceComponent::RenderEditor() {
 
 ftxui::Element NotesWorkspaceComponent::OnRender() {
     using namespace ftxui;
-    ApplySyncCompletion();
     Element body = hbox({
         RenderSidebar(),
         separator() | color((theme_ ? *theme_ : FallbackTheme()).gutter),
         editing_ ? RenderEditor() : RenderOverview(),
     }) | flex;
-    if (!sync_popup_open_) {
-        return body;
+    if (confirm_action_ != ConfirmAction::None) {
+        return dbox({body, vbox({filler(), hbox({filler(), RenderConfirmationPopup(), filler()}), filler()})});
     }
-    return dbox({
-        body,
-        vbox({
-            filler(),
-            hbox({filler(), RenderSyncPopup(), filler()}),
-            filler(),
-        }),
-    });
+    if (group_picker_open_) {
+        return dbox({body, vbox({filler(), hbox({filler(), RenderGroupPicker(), filler()}), filler()})});
+    }
+    return body;
 }
 
 std::string NotesWorkspaceComponent::StatusText() const { return save_status_; }

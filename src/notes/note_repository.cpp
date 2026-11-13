@@ -71,6 +71,38 @@ bool NoteRepository::SaveSections(std::string& error) const { return NoteSeriali
 bool NoteRepository::MoveToTrash(NoteDocument& note, std::string& error) { note.deleted_at = UtcNow(); note.updated_at = *note.deleted_at; ++note.revision; return Save(note, error); }
 bool NoteRepository::Restore(NoteDocument& note, std::string& error) { note.deleted_at.reset(); note.updated_at = UtcNow(); ++note.revision; return Save(note, error); }
 
+bool NoteRepository::PermanentlyDelete(const std::string& id, std::string& error) {
+    const auto found = std::find_if(notes_.begin(), notes_.end(),
+        [&](const NoteDocument& note) { return note.id == id; });
+    if (found == notes_.end() || !found->deleted_at) {
+        error = "Only notes in Trash can be permanently deleted.";
+        return false;
+    }
+    std::error_code remove_error;
+    const bool removed = std::filesystem::remove(NotePath(id), remove_error);
+    if (remove_error) {
+        error = remove_error.message();
+        return false;
+    }
+    if (!removed && std::filesystem::exists(NotePath(id))) {
+        error = "Could not remove the note file.";
+        return false;
+    }
+    notes_.erase(found);
+    return true;
+}
+
+bool NoteRepository::EmptyTrash(std::string& error) {
+    std::vector<std::string> ids;
+    for (const NoteDocument& note : notes_) {
+        if (note.deleted_at) ids.push_back(note.id);
+    }
+    for (const std::string& id : ids) {
+        if (!PermanentlyDelete(id, error)) return false;
+    }
+    return true;
+}
+
 NoteSection& NoteRepository::CreateSection(const std::string& name) {
     const std::string now = UtcNow();
     sections_.push_back({GenerateUuid(), name, now, now, std::nullopt});
