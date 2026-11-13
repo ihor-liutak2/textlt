@@ -529,7 +529,7 @@ std::string BuildCustomProcessorAiPrompt(const CustomProcessorPromptRequest& req
 
     std::ostringstream prompt;
     prompt
-        << "You are an expert Lua 5.4 developer for TextLT custom text processors.\n"
+        << "You are an expert Lua 5.5 developer for TextLT custom text processors.\n"
         << "The user does not write code. Convert the user's plain-language request into one safe TextLT processor JSON object.\n\n"
         << "ABSOLUTE OUTPUT RULES:\n"
         << "- Return ONLY one raw JSON object.\n"

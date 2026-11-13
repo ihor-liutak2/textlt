@@ -165,7 +165,7 @@ LuaParserRunResult TextParserLuaEngine::RunScript(
   LuaMemoryTracker memory_tracker;
   memory_tracker.max_bytes = limits.max_memory_bytes;
 
-  lua_State* state = lua_newstate(LimitedLuaAllocator, &memory_tracker);
+  lua_State* state = lua_newstate(LimitedLuaAllocator, &memory_tracker, luaL_makeseed(nullptr));
   if (state == nullptr) {
     result.error = "Cannot create Lua state.";
     return result;

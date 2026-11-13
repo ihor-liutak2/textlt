@@ -846,6 +846,7 @@ ftxui::Element NotesWorkspaceComponent::RenderSidebar() {
         spec.enabled = enabled;
         return RenderModalFlatButton(theme, spec) | reflect(box);
     };
+    rows.push_back(separator() | color(theme.gutter));
     rows.push_back(text(" Notes:") | bold | color(theme.foreground));
     if (trash_selected_ && !editing_) {
         const bool has_trash = !visible_notes_.empty();
@@ -889,7 +890,6 @@ ftxui::Element NotesWorkspaceComponent::RenderSidebar() {
             footer_button("Open Notes", ButtonRole::Primary, true, footer_project_notes_box_),
         }));
     }
-    rows.push_back(separator() | color(theme.gutter));
     return vbox(std::move(rows)) | borderStyled(LIGHT, theme.gutter) | size(WIDTH, EQUAL, 28) | reflect(sidebar_box_) | bgcolor(theme.menu_background);
 }
 

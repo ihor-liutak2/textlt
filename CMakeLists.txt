@@ -64,54 +64,56 @@ endif()
 
 # Portable Lua runtime for configurable text processors.
 # Keep Lua embedded in the build so users do not need system Lua dev packages.
-FetchContent_Declare(lua54
-  URL https://www.lua.org/ftp/lua-5.4.8.tar.gz
-  URL_HASH SHA256=4f18ddae154e793e46eeab727c59ef1c0c0c2b744e7b94219710d76f530629ae
+# Sourced from the vendored tarball: www.lua.org is intermittently unreachable,
+# which previously broke release builds at configure time.
+FetchContent_Declare(lua55
+  URL ${CMAKE_CURRENT_SOURCE_DIR}/third_party/lua-5.5.1.tar.gz
+  URL_HASH SHA256=1c4b4068d67061f2a2231ad2b5422e77acea1487ea9890f6320af614f4373dce
 )
 
-FetchContent_GetProperties(lua54)
-if(NOT lua54_POPULATED)
-  FetchContent_Populate(lua54)
+FetchContent_GetProperties(lua55)
+if(NOT lua55_POPULATED)
+  FetchContent_Populate(lua55)
 endif()
 
-set(LUA54_SRC_DIR ${lua54_SOURCE_DIR}/src)
+set(LUA55_SRC_DIR ${lua55_SOURCE_DIR}/src)
 
-add_library(lua54 STATIC
-  ${LUA54_SRC_DIR}/lapi.c
-  ${LUA54_SRC_DIR}/lauxlib.c
-  ${LUA54_SRC_DIR}/lbaselib.c
-  ${LUA54_SRC_DIR}/lcode.c
-  ${LUA54_SRC_DIR}/lctype.c
-  ${LUA54_SRC_DIR}/ldebug.c
-  ${LUA54_SRC_DIR}/ldo.c
-  ${LUA54_SRC_DIR}/ldump.c
-  ${LUA54_SRC_DIR}/lfunc.c
-  ${LUA54_SRC_DIR}/lgc.c
-  ${LUA54_SRC_DIR}/llex.c
-  ${LUA54_SRC_DIR}/lmathlib.c
-  ${LUA54_SRC_DIR}/lmem.c
-  ${LUA54_SRC_DIR}/lobject.c
-  ${LUA54_SRC_DIR}/lopcodes.c
-  ${LUA54_SRC_DIR}/lparser.c
-  ${LUA54_SRC_DIR}/lstate.c
-  ${LUA54_SRC_DIR}/lstring.c
-  ${LUA54_SRC_DIR}/lstrlib.c
-  ${LUA54_SRC_DIR}/ltable.c
-  ${LUA54_SRC_DIR}/ltablib.c
-  ${LUA54_SRC_DIR}/ltm.c
-  ${LUA54_SRC_DIR}/lundump.c
-  ${LUA54_SRC_DIR}/lutf8lib.c
-  ${LUA54_SRC_DIR}/lvm.c
-  ${LUA54_SRC_DIR}/lzio.c
+add_library(lua55 STATIC
+  ${LUA55_SRC_DIR}/lapi.c
+  ${LUA55_SRC_DIR}/lauxlib.c
+  ${LUA55_SRC_DIR}/lbaselib.c
+  ${LUA55_SRC_DIR}/lcode.c
+  ${LUA55_SRC_DIR}/lctype.c
+  ${LUA55_SRC_DIR}/ldebug.c
+  ${LUA55_SRC_DIR}/ldo.c
+  ${LUA55_SRC_DIR}/ldump.c
+  ${LUA55_SRC_DIR}/lfunc.c
+  ${LUA55_SRC_DIR}/lgc.c
+  ${LUA55_SRC_DIR}/llex.c
+  ${LUA55_SRC_DIR}/lmathlib.c
+  ${LUA55_SRC_DIR}/lmem.c
+  ${LUA55_SRC_DIR}/lobject.c
+  ${LUA55_SRC_DIR}/lopcodes.c
+  ${LUA55_SRC_DIR}/lparser.c
+  ${LUA55_SRC_DIR}/lstate.c
+  ${LUA55_SRC_DIR}/lstring.c
+  ${LUA55_SRC_DIR}/lstrlib.c
+  ${LUA55_SRC_DIR}/ltable.c
+  ${LUA55_SRC_DIR}/ltablib.c
+  ${LUA55_SRC_DIR}/ltm.c
+  ${LUA55_SRC_DIR}/lundump.c
+  ${LUA55_SRC_DIR}/lutf8lib.c
+  ${LUA55_SRC_DIR}/lvm.c
+  ${LUA55_SRC_DIR}/lzio.c
 )
 
-target_include_directories(lua54 PUBLIC ${LUA54_SRC_DIR})
+target_include_directories(lua55 PUBLIC ${LUA55_SRC_DIR})
 
 if(UNIX)
-  target_link_libraries(lua54 PUBLIC m)
+  target_link_libraries(lua55 PUBLIC m)
 endif()
 
-message(STATUS "TextLT: embedded Lua 5.4.8 enabled")
+message(STATUS "TextLT: embedded Lua 5.5.1 enabled")
 
 # Thread support.
 find_package(Threads QUIET)
@@ -320,7 +322,7 @@ target_link_libraries(textlt PRIVATE
   ftxui::component
   pugixml::pugixml
   ${LibArchive_LIBRARIES}
-  lua54
+  lua55
   Threads::Threads
 )
 
@@ -696,7 +698,7 @@ target_link_libraries(textlt_keyboard_shortcuts_test PRIVATE ftxui::component)
 target_link_libraries(textlt_terminal_alt_utf8_test PRIVATE ftxui::component)
 target_link_libraries(textlt_syntax_highlighter_test PRIVATE ftxui::dom)
 target_link_libraries(textlt_shortcut_registry_test PRIVATE ftxui::component)
-target_link_libraries(textlt_custom_processor_builder_test PRIVATE lua54)
+target_link_libraries(textlt_custom_processor_builder_test PRIVATE lua55)
 
 target_include_directories(textlt_text_importer_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
