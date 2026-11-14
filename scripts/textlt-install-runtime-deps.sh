@@ -4,11 +4,12 @@ set -eu
 SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 BINARY="${TEXTLT_BINARY:-$SELF_DIR/textlt-bin}"
 
-libarchive_is_missing() {
+shared_library_is_missing() {
+  library_pattern="$1"
   [ -x "$BINARY" ] || return 1
   command -v ldd >/dev/null 2>&1 || return 1
   ldd "$BINARY" 2>/dev/null |
-    grep -Eq 'libarchive[^[:space:]]*[[:space:]]+=>[[:space:]]+not found'
+    grep -Eq "${library_pattern}[^[:space:]]*[[:space:]]+=>[[:space:]]+not found"
 }
 
 missing=""
@@ -17,12 +18,15 @@ for tool in curl ssh sftp; do
     missing="$missing $tool"
   fi
 done
-if libarchive_is_missing; then
+if shared_library_is_missing 'libarchive'; then
   missing="$missing libarchive"
+fi
+if shared_library_is_missing 'libxml2'; then
+  missing="$missing libxml2"
 fi
 
 if [ -z "$missing" ]; then
-  echo "TextLT runtime dependencies are already installed: curl ssh sftp libarchive"
+  echo "TextLT runtime dependencies are already installed: curl ssh sftp libarchive libxml2"
   exit 0
 fi
 
@@ -61,21 +65,21 @@ if command -v apt-get >/dev/null 2>&1; then
   fi
   echo "Installing TextLT runtime dependencies with apt-get..."
   if ! run_as_root apt-get install -y --no-install-recommends \
-      curl openssh-client "$archive_package"; then
+      curl openssh-client "$archive_package" libxml2; then
     echo "apt-get could not download the current runtime packages." >&2
     echo "Check WSL DNS, run 'sudo apt-get update --fix-missing', and try again." >&2
     exit 1
   fi
 elif command -v dnf >/dev/null 2>&1; then
-  install_with dnf dnf install -y curl openssh-clients libarchive
+  install_with dnf dnf install -y curl openssh-clients libarchive libxml2
 elif command -v zypper >/dev/null 2>&1; then
-  install_with zypper zypper --non-interactive install curl openssh libarchive13
+  install_with zypper zypper --non-interactive install curl openssh libarchive13 libxml2-2
 elif command -v pacman >/dev/null 2>&1; then
-  install_with pacman pacman -Sy --needed --noconfirm curl openssh libarchive
+  install_with pacman pacman -Sy --needed --noconfirm curl openssh libarchive libxml2
 elif command -v apk >/dev/null 2>&1; then
-  install_with apk apk add --no-cache curl openssh-client libarchive
+  install_with apk apk add --no-cache curl openssh-client libarchive libxml2
 elif command -v brew >/dev/null 2>&1; then
-  install_with brew brew install curl openssh libarchive
+  install_with brew brew install curl openssh libarchive libxml2
 else
   cat >&2 <<'MSG'
 Cannot detect a supported package manager.
@@ -84,16 +88,17 @@ Install these runtime tools manually:
   ssh
   sftp
   libarchive
+  libxml2
 
 Debian/Ubuntu/MX:
-  sudo apt install curl openssh-client libarchive13t64
+  sudo apt install curl openssh-client libarchive13t64 libxml2
   (use libarchive13 on releases where libarchive13t64 is unavailable)
 Fedora:
-  sudo dnf install curl openssh-clients libarchive
+  sudo dnf install curl openssh-clients libarchive libxml2
 Arch:
-  sudo pacman -S curl openssh libarchive
+  sudo pacman -S curl openssh libarchive libxml2
 Alpine:
-  sudo apk add curl openssh-client libarchive
+  sudo apk add curl openssh-client libarchive libxml2
 MSG
   exit 1
 fi
@@ -104,9 +109,13 @@ for tool in curl ssh sftp; do
     exit 1
   fi
 done
-if libarchive_is_missing; then
+if shared_library_is_missing 'libarchive'; then
   echo "Runtime dependency still missing after install attempt: libarchive" >&2
   exit 1
 fi
+if shared_library_is_missing 'libxml2'; then
+  echo "Runtime dependency still missing after install attempt: libxml2" >&2
+  exit 1
+fi
 
-echo "TextLT runtime dependencies installed: curl ssh sftp libarchive"
+echo "TextLT runtime dependencies installed: curl ssh sftp libarchive libxml2"

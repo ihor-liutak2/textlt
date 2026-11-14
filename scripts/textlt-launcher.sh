@@ -6,18 +6,20 @@ INSTALLER="$SELF_DIR/textlt-install-runtime-deps.sh"
 BINARY="$SELF_DIR/textlt-bin"
 LIB_DIR="$SELF_DIR/lib"
 
-# Release tarballs carry the exact libarchive runtime used by the build. Keep
-# any caller-provided library path after it so explicit overrides still work.
+# Release tarballs carry the exact libarchive and libxml2 runtimes used by the
+# build. Keep any caller-provided library path after them so explicit overrides
+# still work.
 if [ -d "$LIB_DIR" ]; then
   LD_LIBRARY_PATH="$LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
   export LD_LIBRARY_PATH
 fi
 
-libarchive_is_missing() {
+shared_library_is_missing() {
+  library_pattern="$1"
   [ -x "$BINARY" ] || return 1
   command -v ldd >/dev/null 2>&1 || return 1
   ldd "$BINARY" 2>/dev/null |
-    grep -Eq 'libarchive[^[:space:]]*[[:space:]]+=>[[:space:]]+not found'
+    grep -Eq "${library_pattern}[^[:space:]]*[[:space:]]+=>[[:space:]]+not found"
 }
 
 missing=""
@@ -26,13 +28,16 @@ for tool in curl ssh sftp; do
     missing="$missing $tool"
   fi
 done
-if libarchive_is_missing; then
+if shared_library_is_missing 'libarchive'; then
   missing="$missing libarchive"
+fi
+if shared_library_is_missing 'libxml2'; then
+  missing="$missing libxml2"
 fi
 
 if [ "${TEXTLT_CHECK_RUNTIME_ONLY:-}" = "1" ]; then
   if [ -z "$missing" ]; then
-    echo "TextLT runtime dependencies are available: curl ssh sftp libarchive"
+    echo "TextLT runtime dependencies are available: curl ssh sftp libarchive libxml2"
     exit 0
   fi
   if [ -x "$INSTALLER" ]; then
@@ -48,7 +53,7 @@ if [ -n "$missing" ]; then
   else
     echo "TextLT missing runtime dependencies:$missing" >&2
     echo "Installer script was not found: $INSTALLER" >&2
-    echo "Install manually: curl, openssh-client, and libarchive" >&2
+    echo "Install manually: curl, openssh-client, libarchive, and libxml2" >&2
     exit 127
   fi
 fi
