@@ -40,7 +40,8 @@ inline bool WriteJsonAtomically(const std::filesystem::path& path, const Json& j
         }
     }
 
-    const std::filesystem::path temp_path = path.string() + ".tmp";
+    std::filesystem::path temp_path = path;
+    temp_path += ".tmp";
     {
         std::ofstream file(temp_path, std::ios::binary | std::ios::trunc);
         if (!file) {

@@ -4,6 +4,13 @@
 
 #include "ftxui/screen/terminal.hpp"
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 #include <exception>
 #include <iostream>
 #include <memory>
@@ -11,6 +18,13 @@
 #include <vector>
 
 int main(int argc, char* argv[]) {
+#ifdef _WIN32
+    // TextLT renders UTF-8. Do not inherit PowerShell 5.1's legacy console
+    // code page, which cannot represent all interface characters.
+    SetConsoleCP(CP_UTF8);
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+
     bool startup_check = false;
     if (argc == 2) {
         const std::string option = argv[1];

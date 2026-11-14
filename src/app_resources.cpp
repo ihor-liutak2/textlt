@@ -11,17 +11,14 @@
 #endif
 
 #include "editor_config.hpp"
+#include "path_utils.hpp"
 
 namespace textlt {
 namespace {
 
 std::filesystem::path UserHomeDirectory() {
 #ifdef _WIN32
-    const char* user_profile = std::getenv("USERPROFILE");
-    if (user_profile && !std::string(user_profile).empty()) {
-        return std::filesystem::path(user_profile);
-    }
-    return {};
+    return WindowsEnvironmentPath(L"USERPROFILE");
 #else
     const char* home = std::getenv("HOME");
     if (!home || std::string(home).empty()) {
@@ -33,9 +30,10 @@ std::filesystem::path UserHomeDirectory() {
 
 std::filesystem::path UserCacheDirectory() {
 #ifdef _WIN32
-    const char* local_app_data = std::getenv("LOCALAPPDATA");
-    if (local_app_data && !std::string(local_app_data).empty()) {
-        return std::filesystem::path(local_app_data) / "textlt" / "cache";
+    const std::filesystem::path local_app_data =
+        WindowsEnvironmentPath(L"LOCALAPPDATA");
+    if (!local_app_data.empty()) {
+        return local_app_data / "textlt" / "cache";
     }
 
     const std::filesystem::path home = UserHomeDirectory();
@@ -59,9 +57,10 @@ std::filesystem::path UserCacheDirectory() {
 
 std::filesystem::path UserDataDirectory() {
 #ifdef _WIN32
-    const char* local_app_data = std::getenv("LOCALAPPDATA");
-    if (local_app_data && !std::string(local_app_data).empty()) {
-        return std::filesystem::path(local_app_data) / "textlt";
+    const std::filesystem::path local_app_data =
+        WindowsEnvironmentPath(L"LOCALAPPDATA");
+    if (!local_app_data.empty()) {
+        return local_app_data / "textlt";
     }
 
     const std::filesystem::path home = UserHomeDirectory();

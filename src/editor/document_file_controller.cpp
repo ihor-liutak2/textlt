@@ -10,6 +10,7 @@
 
 #include "editor/document_session.hpp"
 #include "json_utils.hpp"
+#include "path_utils.hpp"
 
 namespace textlt {
 namespace {
@@ -23,9 +24,9 @@ std::string Lowercase(std::string value) {
 
 std::string PathComparisonKey(const std::filesystem::path& path) {
 #ifdef _WIN32
-    return Lowercase(path.string());
+    return Lowercase(Utf8FromPath(path));
 #else
-    return path.string();
+    return Utf8FromPath(path);
 #endif
 }
 
@@ -352,7 +353,7 @@ std::string DocumentFileController::ActiveSessionFavoritePath() const {
         return {};
     }
     const std::filesystem::path normalized_path = NormalizeDocumentPath(session->CurrentFilePath());
-    return normalized_path.string();
+    return Utf8FromPath(normalized_path);
 }
 
 bool DocumentFileController::IsActiveSessionFavorite() const {
@@ -451,13 +452,13 @@ bool DocumentFileController::SaveState() const {
 
     root["recent_files"] = Json::array();
     for (const RecentFileEntry& entry : recent_files_) {
-        root["recent_files"].push_back({{"path", entry.full_path.string()}});
+        root["recent_files"].push_back({{"path", Utf8FromPath(entry.full_path)}});
     }
 
     root["favorites"] = Json::array();
     for (const FavoriteFileEntry& favorite : favorite_files_) {
         root["favorites"].push_back({
-            {"path", favorite.path.string()},
+            {"path", Utf8FromPath(favorite.path)},
             {"row", favorite.row},
             {"column", favorite.column},
         });
@@ -468,7 +469,7 @@ bool DocumentFileController::SaveState() const {
     for (const OpenedFileState& entry : opened_config_.files) {
         Json file = {
             {"memory_only", entry.memory_only},
-            {"path", entry.path.string()},
+            {"path", Utf8FromPath(entry.path)},
             {"row", entry.row},
             {"column", entry.column},
         };
@@ -659,7 +660,8 @@ bool DocumentFileController::LoadUnifiedState() {
             if (!object.is_object()) {
                 continue;
             }
-            const std::filesystem::path normalized_path = NormalizeDocumentPath(JsonString(object, "path"));
+            const std::filesystem::path normalized_path = NormalizeDocumentPath(
+                textlt::PathFromUtf8(JsonString(object, "path")));
             if (normalized_path.empty() || IsFavorite(normalized_path)) {
                 continue;
             }
@@ -689,7 +691,8 @@ void DocumentFileController::LoadRecentFilesFromJson(const std::filesystem::path
         } else if (item.is_object()) {
             path_value = JsonString(item, "path");
         }
-        const std::filesystem::path normalized_path = NormalizeDocumentPath(path_value);
+        const std::filesystem::path normalized_path = NormalizeDocumentPath(
+            textlt::PathFromUtf8(path_value));
         if (normalized_path.empty()) {
             continue;
         }
@@ -724,7 +727,7 @@ void DocumentFileController::LoadOpenedFilesFromJson(const std::filesystem::path
         }
         OpenedFileState entry;
         entry.memory_only = JsonBool(object, "memory_only", false);
-        entry.path = JsonString(object, "path");
+        entry.path = textlt::PathFromUtf8(JsonString(object, "path"));
         entry.content = JsonString(object, "content");
         entry.row = JsonSize(object, "row", 0);
         entry.column = JsonSize(object, "column", 0);
@@ -770,14 +773,15 @@ std::filesystem::path DocumentFileController::DefaultStatePath() {
 
 std::filesystem::path DocumentFileController::UserConfigDirectory() {
 #ifdef _WIN32
-    const char* app_data = std::getenv("APPDATA");
-    if (app_data && !std::string(app_data).empty()) {
-        return std::filesystem::path(app_data) / "textlt";
+    const std::filesystem::path app_data = WindowsEnvironmentPath(L"APPDATA");
+    if (!app_data.empty()) {
+        return app_data / "textlt";
     }
 
-    const char* user_profile = std::getenv("USERPROFILE");
-    if (user_profile && !std::string(user_profile).empty()) {
-        return std::filesystem::path(user_profile) / "AppData" / "Roaming" / "textlt";
+    const std::filesystem::path user_profile =
+        WindowsEnvironmentPath(L"USERPROFILE");
+    if (!user_profile.empty()) {
+        return user_profile / "AppData" / "Roaming" / "textlt";
     }
     return {};
 #else
@@ -820,7 +824,7 @@ DocumentFileController::RecentFileEntry DocumentFileController::MakeRecentEntry(
     RecentFileEntry entry;
     entry.full_path = path;
     entry.folder_path = path.parent_path();
-    entry.file_name = path.filename().string();
+    entry.file_name = Utf8FromPath(path.filename());
     return entry;
 }
 
@@ -829,9 +833,9 @@ std::string DocumentFileController::DisplayName(const std::shared_ptr<DocumentSe
         return {};
     }
 
-    std::string name = document->path.filename().string();
+    std::string name = Utf8FromPath(document->path.filename());
     if (name.empty()) {
-        name = document->path.string();
+        name = Utf8FromPath(document->path);
     }
     return name;
 }

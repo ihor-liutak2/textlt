@@ -9,19 +9,21 @@
 #include <utility>
 
 #include "json_utils.hpp"
+#include "path_utils.hpp"
 
 namespace textlt {
 namespace {
 
 std::filesystem::path DefaultProjectStorePath() {
 #ifdef _WIN32
-    const char* app_data = std::getenv("APPDATA");
-    if (app_data && *app_data) {
-        return std::filesystem::path(app_data) / "textlt" / "projects.json";
+    const std::filesystem::path app_data = WindowsEnvironmentPath(L"APPDATA");
+    if (!app_data.empty()) {
+        return app_data / "textlt" / "projects.json";
     }
-    const char* user_profile = std::getenv("USERPROFILE");
-    if (user_profile && *user_profile) {
-        return std::filesystem::path(user_profile) / "AppData" / "Roaming" / "textlt" /
+    const std::filesystem::path user_profile =
+        WindowsEnvironmentPath(L"USERPROFILE");
+    if (!user_profile.empty()) {
+        return user_profile / "AppData" / "Roaming" / "textlt" /
             "projects.json";
     }
 #else
@@ -34,7 +36,7 @@ std::filesystem::path DefaultProjectStorePath() {
 }
 
 std::string PathKey(const std::filesystem::path& path) {
-    std::string key = path.generic_string();
+    std::string key = Utf8FromPath(path.lexically_normal());
 #ifdef _WIN32
     std::transform(key.begin(), key.end(), key.begin(), [](unsigned char value) {
         return static_cast<char>(std::tolower(value));
@@ -65,7 +67,7 @@ bool ProjectStore::Load(std::string& error) {
 
     const Json root = LoadJsonValue(path_);
     if (!root.is_object()) {
-        error = "Cannot read project registry: " + path_.string();
+        error = "Cannot read project registry: " + Utf8FromPath(path_);
         usable_ = false;
         load_error_ = error;
         return false;
@@ -81,13 +83,14 @@ bool ProjectStore::Load(std::string& error) {
             ProjectRecord project;
             project.id = JsonString(item, "id");
             project.name = JsonString(item, "name");
-            project.local_root = NormalizeRoot(JsonString(item, "local_root"));
+            project.local_root = NormalizeRoot(
+                textlt::PathFromUtf8(JsonString(item, "local_root")));
             project.remote_connection_id = JsonString(item, "remote_connection_id");
             if (project.id.empty() || project.local_root.empty()) {
                 continue;
             }
             if (project.name.empty()) {
-                project.name = project.local_root.filename().string();
+                project.name = Utf8FromPath(project.local_root.filename());
             }
             const std::string key = PathKey(project.local_root);
             const bool duplicate = std::any_of(projects_.begin(), projects_.end(), [&](const auto& existing) {
@@ -116,12 +119,12 @@ bool ProjectStore::Save(std::string& error) const {
         root["projects"].push_back({
             {"id", project.id},
             {"name", project.name},
-            {"local_root", project.local_root.string()},
+            {"local_root", Utf8FromPath(project.local_root)},
             {"remote_connection_id", project.remote_connection_id},
         });
     }
     if (!WriteJsonAtomically(path_, root)) {
-        error = "Cannot save project registry: " + path_.string();
+        error = "Cannot save project registry: " + Utf8FromPath(path_);
         return false;
     }
     error.clear();
@@ -176,10 +179,10 @@ ProjectRecord* ProjectStore::Add(
     project.local_root = std::move(root);
     project.name = std::move(name);
     if (project.name.empty()) {
-        project.name = project.local_root.filename().string();
+        project.name = Utf8FromPath(project.local_root.filename());
     }
     if (project.name.empty()) {
-        project.name = project.local_root.string();
+        project.name = Utf8FromPath(project.local_root);
     }
     projects_.push_back(std::move(project));
     active_project_id_ = projects_.back().id;

@@ -5,6 +5,7 @@
 #include <string>
 
 #include "project_store.hpp"
+#include "path_utils.hpp"
 
 namespace {
 
@@ -26,6 +27,9 @@ int main() {
     std::filesystem::remove_all(base, cleanup_error);
     std::filesystem::create_directories(base / "one");
     std::filesystem::create_directories(base / "two");
+    const std::filesystem::path unicode_directory =
+        base / PathFromUtf8("\xD0\xBF\xD1\x80\xD0\xBE\xD1\x94\xD0\xBA\xD1\x82-\xF0\x9F\x8C\xBB");
+    std::filesystem::create_directories(unicode_directory);
     const std::filesystem::path registry = base / "projects.json";
 
     std::string error;
@@ -44,6 +48,11 @@ int main() {
         second_id = second->id;
         Expect(store.Projects().size() == 2, "Unexpected project count.");
         Expect(store.SetRemoteConnection(second_id, "remote-two", error), error);
+
+        ProjectRecord* unicode = store.Add(unicode_directory, {}, error);
+        Expect(unicode != nullptr, "Could not add Unicode project: " + error);
+        Expect(unicode->name == Utf8FromPath(unicode_directory.filename()),
+               "Unicode project name was not preserved as UTF-8.");
         Expect(store.SetActive(first_id, error), error);
     }
 
@@ -65,7 +74,15 @@ int main() {
 
     {
         ProjectStore store(registry);
-        Expect(store.Projects().size() == 2, "Projects did not persist.");
+        Expect(store.Projects().size() == 3, "Projects did not persist.");
+        bool found_unicode_project = false;
+        for (const ProjectRecord& project : store.Projects()) {
+            if (project.local_root == unicode_directory) {
+                found_unicode_project = true;
+                break;
+            }
+        }
+        Expect(found_unicode_project, "Unicode project path did not round-trip through JSON.");
         Expect(store.ActiveProjectId() == first_id, "Active project did not persist.");
         const ProjectRecord* second = store.FindById(second_id);
         Expect(second && second->remote_connection_id == "remote-two",

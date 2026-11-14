@@ -7,20 +7,22 @@
 #include <utility>
 
 #include "json_utils.hpp"
+#include "path_utils.hpp"
 
 namespace textlt {
 namespace {
 
 std::filesystem::path UserConfigDirectory() {
 #ifdef _WIN32
-    const char* app_data = std::getenv("APPDATA");
-    if (app_data && !std::string(app_data).empty()) {
-        return std::filesystem::path(app_data) / "textlt";
+    const std::filesystem::path app_data = WindowsEnvironmentPath(L"APPDATA");
+    if (!app_data.empty()) {
+        return app_data / "textlt";
     }
 
-    const char* user_profile = std::getenv("USERPROFILE");
-    if (user_profile && !std::string(user_profile).empty()) {
-        return std::filesystem::path(user_profile) / "AppData" / "Roaming" / "textlt";
+    const std::filesystem::path user_profile =
+        WindowsEnvironmentPath(L"USERPROFILE");
+    if (!user_profile.empty()) {
+        return user_profile / "AppData" / "Roaming" / "textlt";
     }
     return {};
 #else
@@ -34,11 +36,7 @@ std::filesystem::path UserConfigDirectory() {
 
 std::filesystem::path UserHomeDirectory() {
 #ifdef _WIN32
-    const char* user_profile = std::getenv("USERPROFILE");
-    if (!user_profile || std::string(user_profile).empty()) {
-        return {};
-    }
-    return std::filesystem::path(user_profile);
+    return WindowsEnvironmentPath(L"USERPROFILE");
 #else
     const char* home = std::getenv("HOME");
     if (!home || std::string(home).empty()) {
@@ -212,7 +210,7 @@ std::string EditorConfig::NormalizeDirectoryPath(const std::string& path) {
     if (error) {
         normalized_path = normalized_path.lexically_normal();
     }
-    return normalized_path.string();
+    return Utf8FromPath(normalized_path);
 }
 
 } // namespace textlt

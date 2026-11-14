@@ -10,6 +10,7 @@
 #include <sstream>
 
 #include "json_utils.hpp"
+#include "path_utils.hpp"
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -273,14 +274,15 @@ namespace textlt {
 
         std::filesystem::path UserThemeDirectory() {
 #ifdef _WIN32
-            const char* app_data = std::getenv("APPDATA");
-            if (app_data && !std::string(app_data).empty()) {
-                return std::filesystem::path(app_data) / "textlt" / "themes";
+            const std::filesystem::path app_data = WindowsEnvironmentPath(L"APPDATA");
+            if (!app_data.empty()) {
+                return app_data / "textlt" / "themes";
             }
 
-            const char* user_profile = std::getenv("USERPROFILE");
-            if (user_profile && !std::string(user_profile).empty()) {
-                return std::filesystem::path(user_profile) / "AppData" / "Roaming" /
+            const std::filesystem::path user_profile =
+                WindowsEnvironmentPath(L"USERPROFILE");
+            if (!user_profile.empty()) {
+                return user_profile / "AppData" / "Roaming" /
                        "textlt" / "themes";
             }
             return {};
@@ -295,11 +297,11 @@ namespace textlt {
 
         std::vector<std::filesystem::path> ExecutableThemeDirectories() {
 #ifdef _WIN32
-            std::string buffer(MAX_PATH, '\0');
-            DWORD length = GetModuleFileNameA(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+            std::wstring buffer(MAX_PATH, L'\0');
+            DWORD length = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
             while (length == buffer.size()) {
                 buffer.resize(buffer.size() * 2);
-                length = GetModuleFileNameA(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+                length = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
             }
 
             if (length == 0) {
