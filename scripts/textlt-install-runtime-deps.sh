@@ -53,19 +53,49 @@ install_with() {
 if command -v apt-get >/dev/null 2>&1; then
   run_as_root apt-get update || true
   archive_package=""
-  if apt-cache show libarchive13t64 >/dev/null 2>&1; then
-    archive_package="libarchive13t64"
-  elif apt-cache show libarchive13 >/dev/null 2>&1; then
-    archive_package="libarchive13"
-  fi
+  xml_package=""
+  distro_id="$(sed -n 's/^ID=//p' /etc/os-release 2>/dev/null | tr -d '"' | head -n 1)"
+  distro_version="$(sed -n 's/^VERSION_ID=//p' /etc/os-release 2>/dev/null | tr -d '"' | head -n 1)"
+  case "$distro_id:$distro_version" in
+    ubuntu:22.04)
+      archive_package="libarchive13"
+      xml_package="libxml2"
+      ;;
+    ubuntu:24.04)
+      archive_package="libarchive13t64"
+      xml_package="libxml2"
+      ;;
+    ubuntu:26.04)
+      archive_package="libarchive13t64"
+      xml_package="libxml2-16"
+      ;;
+  esac
   if [ -z "$archive_package" ]; then
-    echo "Could not find a libarchive runtime package in the apt cache." >&2
+    if apt-cache show libarchive13t64 >/dev/null 2>&1; then
+      archive_package="libarchive13t64"
+    elif apt-cache show libarchive13 >/dev/null 2>&1; then
+      archive_package="libarchive13"
+    fi
+  fi
+  if [ -z "$xml_package" ]; then
+    if apt-cache show libxml2-16 >/dev/null 2>&1; then
+      xml_package="libxml2-16"
+    elif apt-cache show libxml2 >/dev/null 2>&1; then
+      xml_package="libxml2"
+    fi
+  fi
+  if [ -z "$archive_package" ] || [ -z "$xml_package" ]; then
+    echo "Could not find compatible libarchive and libxml2 runtime packages in the apt cache." >&2
     echo "Check WSL networking, run 'sudo apt-get update', and try again." >&2
     exit 1
   fi
-  echo "Installing TextLT runtime dependencies with apt-get..."
+  if [ "$distro_id" = "ubuntu" ]; then
+    echo "Installing TextLT runtime dependencies for Ubuntu $distro_version with apt-get..."
+  else
+    echo "Installing TextLT runtime dependencies with apt-get..."
+  fi
   if ! run_as_root apt-get install -y --no-install-recommends \
-      curl openssh-client "$archive_package" libxml2; then
+      curl openssh-client "$archive_package" "$xml_package"; then
     echo "apt-get could not download the current runtime packages." >&2
     echo "Check WSL DNS, run 'sudo apt-get update --fix-missing', and try again." >&2
     exit 1
@@ -93,6 +123,8 @@ Install these runtime tools manually:
 Debian/Ubuntu/MX:
   sudo apt install curl openssh-client libarchive13t64 libxml2
   (use libarchive13 on releases where libarchive13t64 is unavailable)
+Ubuntu 26.04:
+  sudo apt install curl openssh-client libarchive13t64 libxml2-16
 Fedora:
   sudo dnf install curl openssh-clients libarchive libxml2
 Arch:

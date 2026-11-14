@@ -90,6 +90,11 @@ mkdir -p "$APP_DIR"
 cp -a "$EXE_DIR"/. "$APP_DIR"/
 chmod +x "$APP_DIR/textlt"
 
+# Linux distributions ship libarchive, libxml2, and ICU as a compatible set.
+# Older archives bundled only part of that set from Ubuntu 22.04, which caused
+# missing libicuuc.so.70 errors on Ubuntu 24.04. Always use native libraries.
+rm -rf "$APP_DIR/lib"
+
 cat > "$BIN_DIR/textlt" <<TEXTLT_WRAPPER
 #!/usr/bin/env bash
 exec "$APP_DIR/textlt" "\$@"

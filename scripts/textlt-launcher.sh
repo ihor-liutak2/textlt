@@ -4,15 +4,6 @@ set -eu
 SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 INSTALLER="$SELF_DIR/textlt-install-runtime-deps.sh"
 BINARY="$SELF_DIR/textlt-bin"
-LIB_DIR="$SELF_DIR/lib"
-
-# Release tarballs carry the exact libarchive and libxml2 runtimes used by the
-# build. Keep any caller-provided library path after them so explicit overrides
-# still work.
-if [ -d "$LIB_DIR" ]; then
-  LD_LIBRARY_PATH="$LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-  export LD_LIBRARY_PATH
-fi
 
 shared_library_is_missing() {
   library_pattern="$1"
