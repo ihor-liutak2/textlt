@@ -21,7 +21,7 @@ if (-not $Version.StartsWith("v")) {
 $Repo = if ($env:TEXTLT_REPO) { $env:TEXTLT_REPO } else { "ihor-liutak2/textlt" }
 $Asset = if ($env:TEXTLT_ASSET) { $env:TEXTLT_ASSET } else { "textlt-windows-x64.zip" }
 $InstallRoot = if ($env:TEXTLT_INSTALL_ROOT) { $env:TEXTLT_INSTALL_ROOT } else { Join-Path $env:LOCALAPPDATA "Programs\textlt" }
-$AppDir = Join-Path $InstallRoot "app"
+$LegacyAppDir = Join-Path $InstallRoot "app"
 $ConfigDir = Join-Path $env:APPDATA "textlt"
 $LegacyConfigFile = Join-Path $env:USERPROFILE ".textlt_config.json"
 $Archive = Join-Path $env:TEMP $Asset
@@ -69,15 +69,26 @@ try {
         Remove-Item (Join-Path $InstallRoot $_) -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    Remove-Item $AppDir -Recurse -Force -ErrorAction SilentlyContinue
-    New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
-    Copy-Item -Path (Join-Path $ExeDir "*") -Destination $AppDir -Recurse -Force
+    # Install the native console executable directly on PATH so PowerShell
+    # invokes TextLT without an additional cmd.exe process.
+    Remove-Item $LegacyAppDir -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $InstallRoot "textlt.cmd") -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $InstallRoot "textlt.exe") -Force -ErrorAction SilentlyContinue
+    Copy-Item -Path (Join-Path $ExeDir "*") -Destination $InstallRoot -Recurse -Force
 
-    $CmdPath = Join-Path $InstallRoot "textlt.cmd"
-    @"
-@echo off
-"%~dp0app\textlt.exe" %*
-"@ | Set-Content -Encoding ASCII $CmdPath
+    $InstalledExe = Join-Path $InstallRoot "textlt.exe"
+    $VersionOutput = & $InstalledExe --version
+    if ($LASTEXITCODE -ne 0) {
+        throw "Installed textlt.exe failed its version check with exit code $LASTEXITCODE."
+    }
+    $ExpectedVersion = $Version -replace '^v', ''
+    if ($VersionOutput -notmatch [regex]::Escape($ExpectedVersion)) {
+        throw "Installed executable version mismatch: $VersionOutput"
+    }
+    $StartupOutput = & $InstalledExe --startup-check
+    if ($LASTEXITCODE -ne 0 -or $StartupOutput -ne "TextLT startup check passed.") {
+        throw "Installed textlt.exe failed its application startup check: $StartupOutput"
+    }
 
     $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
     $PathParts = @()
@@ -90,8 +101,10 @@ try {
     }
 
     Write-Host ""
-    Write-Host "TextLT $Version installed to: $AppDir"
-    Write-Host "Open a new PowerShell window and run: textlt"
+    Write-Host "TextLT $Version installed to: $InstallRoot"
+    Write-Host "Verified executable: $VersionOutput"
+    Write-Host "Run now: $InstalledExe"
+    Write-Host "In a new PowerShell window: textlt"
 } finally {
     Remove-Item $ExtractDir -Recurse -Force -ErrorAction SilentlyContinue
 }

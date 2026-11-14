@@ -4,6 +4,14 @@ set -eu
 SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 INSTALLER="$SELF_DIR/textlt-install-runtime-deps.sh"
 BINARY="$SELF_DIR/textlt-bin"
+LIB_DIR="$SELF_DIR/lib"
+
+# Release tarballs carry the exact libarchive runtime used by the build. Keep
+# any caller-provided library path after it so explicit overrides still work.
+if [ -d "$LIB_DIR" ]; then
+  LD_LIBRARY_PATH="$LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  export LD_LIBRARY_PATH
+fi
 
 libarchive_is_missing() {
   [ -x "$BINARY" ] || return 1
@@ -35,10 +43,10 @@ if [ "${TEXTLT_CHECK_RUNTIME_ONLY:-}" = "1" ]; then
 fi
 
 if [ -n "$missing" ]; then
-  echo "TextLT missing runtime dependencies:$missing" >&2
   if [ -x "$INSTALLER" ]; then
     "$INSTALLER"
   else
+    echo "TextLT missing runtime dependencies:$missing" >&2
     echo "Installer script was not found: $INSTALLER" >&2
     echo "Install manually: curl, openssh-client, and libarchive" >&2
     exit 127

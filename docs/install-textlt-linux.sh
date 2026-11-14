@@ -107,7 +107,13 @@ export PATH="$BIN_DIR:$PATH"
 export COLORTERM=truecolor
 export TERM=xterm-256color
 
+if ! TEXTLT_CHECK_RUNTIME_ONLY=1 "$APP_DIR/textlt"; then
+  echo "TextLT was copied, but its runtime dependency check failed." >&2
+  echo "After fixing the reported package or network issue, run: textlt" >&2
+  exit 1
+fi
+
 echo ""
 echo "TextLT $VERSION installed to: $APP_DIR"
-echo "Run: textlt"
-textlt --help || true
+echo "Run now: $BIN_DIR/textlt"
+echo "In a new shell: textlt"

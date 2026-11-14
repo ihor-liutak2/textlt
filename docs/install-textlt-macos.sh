@@ -107,7 +107,12 @@ grep -qxF "$PATH_LINE" "$ZSHRC" || echo "$PATH_LINE" >> "$ZSHRC"
 
 export PATH="$BIN_DIR:$PATH"
 
+if ! TEXTLT_CHECK_RUNTIME_ONLY=1 "$APP_DIR/textlt"; then
+  echo "TextLT was copied, but its runtime dependency check failed." >&2
+  exit 1
+fi
+
 echo ""
 echo "TextLT $VERSION installed to: $APP_DIR"
-echo "Run: textlt"
-textlt --help || true
+echo "Run now: $BIN_DIR/textlt"
+echo "In a new shell: textlt"

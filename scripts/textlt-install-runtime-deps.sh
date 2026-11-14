@@ -47,8 +47,25 @@ install_with() {
 }
 
 if command -v apt-get >/dev/null 2>&1; then
-  run_as_root apt-get update
-  install_with apt-get apt-get install -y curl openssh-client libarchive-dev
+  run_as_root apt-get update || true
+  archive_package=""
+  if apt-cache show libarchive13t64 >/dev/null 2>&1; then
+    archive_package="libarchive13t64"
+  elif apt-cache show libarchive13 >/dev/null 2>&1; then
+    archive_package="libarchive13"
+  fi
+  if [ -z "$archive_package" ]; then
+    echo "Could not find a libarchive runtime package in the apt cache." >&2
+    echo "Check WSL networking, run 'sudo apt-get update', and try again." >&2
+    exit 1
+  fi
+  echo "Installing TextLT runtime dependencies with apt-get..."
+  if ! run_as_root apt-get install -y --no-install-recommends \
+      curl openssh-client "$archive_package"; then
+    echo "apt-get could not download the current runtime packages." >&2
+    echo "Check WSL DNS, run 'sudo apt-get update --fix-missing', and try again." >&2
+    exit 1
+  fi
 elif command -v dnf >/dev/null 2>&1; then
   install_with dnf dnf install -y curl openssh-clients libarchive
 elif command -v zypper >/dev/null 2>&1; then
@@ -69,7 +86,8 @@ Install these runtime tools manually:
   libarchive
 
 Debian/Ubuntu/MX:
-  sudo apt install curl openssh-client libarchive-dev
+  sudo apt install curl openssh-client libarchive13t64
+  (use libarchive13 on releases where libarchive13t64 is unavailable)
 Fedora:
   sudo dnf install curl openssh-clients libarchive
 Arch:

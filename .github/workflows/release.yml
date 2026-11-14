@@ -96,10 +96,20 @@ jobs:
         run: |
           mkdir -p package/textlt
           cp build/textlt package/textlt/textlt-bin
+          mkdir -p package/textlt/lib
+          archive_library="$(ldd build/textlt | awk '/libarchive[^ ]* =>/ { print $3; exit }')"
+          test -f "$archive_library"
+          cp -L "$archive_library" package/textlt/lib/libarchive.so.13
+          archive_license="$(find /usr/share/doc -maxdepth 2 -path '*/libarchive13*/copyright' -print -quit)"
+          test -f "$archive_license"
+          mkdir -p package/textlt/licenses
+          cp "$archive_license" package/textlt/licenses/libarchive-copyright
           cp scripts/textlt-launcher.sh package/textlt/textlt
           cp scripts/textlt-install-runtime-deps.sh package/textlt/textlt-install-runtime-deps.sh
           chmod +x package/textlt/textlt package/textlt/textlt-bin package/textlt/textlt-install-runtime-deps.sh
           TEXTLT_CHECK_RUNTIME_ONLY=1 package/textlt/textlt
+          package_lib_dir="$PWD/package/textlt/lib"
+          LD_LIBRARY_PATH="$package_lib_dir" ldd package/textlt/textlt-bin | grep -q "$package_lib_dir/libarchive.so.13"
           cp -R themes package/textlt/themes
           cp -R text_processors package/textlt/text_processors
           test -f package/textlt/text_processors/default_text_parsers.json
@@ -214,6 +224,15 @@ jobs:
         shell: pwsh
         run: |
           cmake --build build --config Release --parallel 2
+          $versionOutput = & build/Release/textlt.exe --version
+          $expectedVersion = $env:GITHUB_REF_NAME -replace '^v', ''
+          if ($LASTEXITCODE -ne 0 -or $versionOutput -ne "textlt $expectedVersion") {
+            throw "Windows executable smoke check failed: $versionOutput"
+          }
+          $startupOutput = & build/Release/textlt.exe --startup-check
+          if ($LASTEXITCODE -ne 0 -or $startupOutput -ne "TextLT startup check passed.") {
+            throw "Windows application startup check failed: $startupOutput"
+          }
 
       - name: Run tests
         shell: pwsh
