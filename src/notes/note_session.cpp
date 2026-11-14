@@ -147,6 +147,14 @@ bool NoteSession::DeleteSelection() {
     PushUndo(); const auto range = Selection(); DeleteRange(range.first, range.second); Changed(); return true;
 }
 
+void NoteSession::SetCursor(const NotePosition& position, bool selecting) {
+    if (!note_) return;
+    BeginSelection(selecting);
+    cursor_ = position;
+    ClampCursor();
+    UpdateActiveMarks();
+}
+
 bool NoteSession::Insert(const std::string& text) {
     if (!note_ || text.empty()) return false;
     if (HasSelection()) { PushUndo(); auto range = Selection(); DeleteRange(range.first, range.second); }

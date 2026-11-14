@@ -66,6 +66,17 @@ private:
         bool orphaned = false;
     };
 
+    // One rendered row of the note document. A block may occupy several rows
+    // when its text has to wrap, so the editor scrolls over visual rows rather
+    // than over model blocks.
+    struct EditorRow {
+        size_t block = 0;
+        size_t start = 0;
+        size_t end = 0;
+        std::string prefix;
+        bool last = true;
+    };
+
     void RebuildSidebar();
     void RebuildVisibleNotes();
     bool NoteMatchesFilter(const NoteDocument& note) const;
@@ -105,8 +116,17 @@ private:
     ftxui::Element RenderEditor();
     ftxui::Element RenderConfirmationPopup();
     ftxui::Element RenderGroupPicker();
-    ftxui::Element RenderCard(NoteDocument& note, bool selected, size_t visible_index);
-    ftxui::Element RenderRichBlock(const NoteBlock& block, size_t block_index, size_t number);
+    ftxui::Element RenderCard(NoteDocument& note, bool selected,
+        size_t visible_index, int card_width);
+    ftxui::Element RenderEditorRow(const EditorRow& row);
+    ftxui::Element RenderEditorScrollbar(size_t visible_rows, size_t total_rows,
+        size_t scroll, size_t max_scroll, const Theme& theme);
+    void BuildEditorRows(size_t width);
+    std::optional<size_t> EditorRowForPosition(const NotePosition& position) const;
+    std::optional<NotePosition> NotePositionAt(int x, int y) const;
+    void ScrollEditor(int delta);
+    void EnsureEditorCursorVisible(size_t visible_rows);
+    void ResetEditorViewport();
     ftxui::Element ToolbarItem(const std::string& text, bool active, ftxui::Box& box);
     std::string SectionName(const NoteDocument& note) const;
     std::optional<size_t> ActiveNoteIndex() const;
@@ -131,6 +151,17 @@ private:
     int selected_card_ = 0;
     std::optional<std::string> active_note_id_;
     FocusArea focus_ = FocusArea::Cards;
+    std::vector<EditorRow> editor_rows_;
+    int editor_scroll_ = 0;
+    size_t editor_visible_rows_ = 0;
+    size_t editor_content_width_ = 0;
+    bool editor_view_known_ = false;
+    bool editor_scrollbar_dragging_ = false;
+    bool editor_mouse_selecting_ = false;
+    int editor_scrollbar_drag_y_ = 0;
+    int editor_scrollbar_drag_scroll_ = 0;
+    NotePosition last_editor_cursor_{};
+    bool has_last_editor_cursor_ = false;
     std::string search_;
     size_t search_cursor_ = 0;
     size_t title_cursor_ = 0;
@@ -164,6 +195,8 @@ private:
     ftxui::Box sort_box_;
     ftxui::Box search_box_;
     ftxui::Box overview_box_;
+    ftxui::Box editor_view_box_;
+    ftxui::Box editor_scrollbar_box_;
     ftxui::Box new_note_box_;
     ftxui::Box back_box_;
     ftxui::Box pin_box_;

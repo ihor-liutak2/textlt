@@ -8,6 +8,8 @@
 
 #include "ftxui/component/event.hpp"
 #include "ftxui/component/mouse.hpp"
+#include "ftxui/dom/node.hpp"
+#include "ftxui/screen/screen.hpp"
 #include "notes/notes_workspace_component.hpp"
 
 namespace textlt::notes {
@@ -103,6 +105,81 @@ public:
         mouse.x = x;
         mouse.y = y;
         return component.OnEvent(ftxui::Event::Mouse("", mouse));
+    }
+    static void SeedEditorDocument(NotesWorkspaceComponent& component, size_t lines) {
+        auto& note = component.repository_.Notes().front();
+        note.blocks.clear();
+        for (size_t index = 0; index < lines; ++index) {
+            NoteBlock block;
+            block.id = GenerateUuid();
+            block.runs.push_back({
+                "Line " + std::to_string(index) +
+                    " with plenty of text that must wrap across several visual "
+                    "rows inside the note editor viewport.",
+                0});
+            note.blocks.push_back(std::move(block));
+        }
+        component.session_.SetNote(&note);
+        for (size_t index = 1; index < lines; ++index) component.session_.MoveDown();
+    }
+    static void RenderWorkspace(NotesWorkspaceComponent& component) {
+        RenderWorkspace(component, 100, 28);
+    }
+    static void RenderWorkspace(NotesWorkspaceComponent& component,
+        int width, int height) {
+        auto screen = ftxui::Screen::Create(
+            ftxui::Dimension::Fixed(width), ftxui::Dimension::Fixed(height));
+        ftxui::Render(screen, component.Render());
+    }
+    static size_t EditorRowCount(const NotesWorkspaceComponent& component) {
+        return component.editor_rows_.size();
+    }
+    static size_t NoteBlockCount(const NotesWorkspaceComponent& component) {
+        return component.repository_.Notes().front().blocks.size();
+    }
+    static int EditorScroll(const NotesWorkspaceComponent& component) {
+        return component.editor_scroll_;
+    }
+    static bool Wheel(NotesWorkspaceComponent& component, ftxui::Mouse::Button button) {
+        ftxui::Mouse mouse;
+        mouse.button = button;
+        mouse.motion = ftxui::Mouse::Pressed;
+        mouse.x = 60;
+        mouse.y = 14;
+        return component.OnEvent(ftxui::Event::Mouse("", mouse));
+    }
+    static ftxui::Box EditorViewBox(const NotesWorkspaceComponent& component) {
+        return component.editor_view_box_;
+    }
+    static ftxui::Box CardBox(const NotesWorkspaceComponent& component, size_t index) {
+        return index < component.card_boxes_.size()
+            ? component.card_boxes_[index] : ftxui::Box{};
+    }
+    static size_t CardBoxCount(const NotesWorkspaceComponent& component) {
+        return component.card_boxes_.size();
+    }
+    static void NewNoteWithTitle(NotesWorkspaceComponent& component,
+        const std::string& title) {
+        component.NewNote();
+        for (char character : title) {
+            component.OnEvent(ftxui::Event::Character(std::string(1, character)));
+        }
+        component.OnEvent(ftxui::Event::Escape);
+    }
+    static bool MouseAt(NotesWorkspaceComponent& component,
+        ftxui::Mouse::Button button, ftxui::Mouse::Motion motion, int x, int y) {
+        ftxui::Mouse mouse;
+        mouse.button = button;
+        mouse.motion = motion;
+        mouse.x = x;
+        mouse.y = y;
+        return component.OnEvent(ftxui::Event::Mouse("", mouse));
+    }
+    static bool HasSelection(const NotesWorkspaceComponent& component) {
+        return component.session_.HasSelection();
+    }
+    static std::string SelectedText(const NotesWorkspaceComponent& component) {
+        return component.session_.SelectedText();
     }
     static bool SearchFocused(const NotesWorkspaceComponent& component) {
         return component.focus_ == NotesWorkspaceComponent::FocusArea::Search;
@@ -361,6 +438,118 @@ int main() {
     NotesWorkspaceActionsTestAccess::OpenProjectNotes(component);
     Expect(NotesWorkspaceActionsTestAccess::SectionCount(component) == count_without_project,
         "Open Project Notes without an active project must not create a group.");
+
+    // The note editor scrolls over wrapped visual rows and keeps the cursor
+    // visible when it moves.
+    const fs::path scroll_root =
+        fs::temp_directory_path() / "textlt_notes_workspace_scroll_test";
+    fs::remove_all(scroll_root, cleanup_error);
+    NotesWorkspaceComponent scroll_component(
+        nullptr, [](const std::string&) {}, [] {}, [] { return std::string{}; },
+        [](const std::string&) {}, scroll_root);
+    NotesWorkspaceActionsTestAccess::NewNote(scroll_component);
+    NotesWorkspaceActionsTestAccess::SeedEditorDocument(scroll_component, 80);
+    NotesWorkspaceActionsTestAccess::RenderWorkspace(scroll_component);
+    NotesWorkspaceActionsTestAccess::RenderWorkspace(scroll_component);
+    Expect(NotesWorkspaceActionsTestAccess::EditorRowCount(scroll_component) >
+            NotesWorkspaceActionsTestAccess::NoteBlockCount(scroll_component),
+        "Note blocks should wrap into multiple editor rows.");
+    const int bottom_scroll = NotesWorkspaceActionsTestAccess::EditorScroll(scroll_component);
+    Expect(bottom_scroll > 0,
+        "The note editor should follow the cursor to the bottom of a long note.");
+    Expect(NotesWorkspaceActionsTestAccess::Wheel(
+            scroll_component, ftxui::Mouse::WheelUp),
+        "Wheel up should be handled inside the note editor.");
+    NotesWorkspaceActionsTestAccess::RenderWorkspace(scroll_component);
+    const int wheel_up_scroll =
+        NotesWorkspaceActionsTestAccess::EditorScroll(scroll_component);
+    Expect(wheel_up_scroll < bottom_scroll,
+        "Wheel up should scroll the note editor upward.");
+    Expect(NotesWorkspaceActionsTestAccess::Wheel(
+            scroll_component, ftxui::Mouse::WheelDown),
+        "Wheel down should be handled inside the note editor.");
+    NotesWorkspaceActionsTestAccess::RenderWorkspace(scroll_component);
+    const int before_page_up =
+        NotesWorkspaceActionsTestAccess::EditorScroll(scroll_component);
+    Expect(before_page_up > wheel_up_scroll,
+        "Wheel down should scroll the note editor downward.");
+    Expect(scroll_component.OnEvent(ftxui::Event::PageUp),
+        "Page Up should scroll the note editor.");
+    NotesWorkspaceActionsTestAccess::RenderWorkspace(scroll_component);
+    const int page_up_scroll =
+        NotesWorkspaceActionsTestAccess::EditorScroll(scroll_component);
+    Expect(page_up_scroll < before_page_up,
+        "Page Up should move the note editor viewport upward.");
+    Expect(scroll_component.OnEvent(ftxui::Event::PageDown),
+        "Page Down should scroll the note editor.");
+    NotesWorkspaceActionsTestAccess::RenderWorkspace(scroll_component);
+    Expect(NotesWorkspaceActionsTestAccess::EditorScroll(scroll_component) >
+            page_up_scroll,
+        "Page Down should move the note editor viewport downward.");
+
+    // Mouse selection: click places the cursor, dragging extends a selection,
+    // and releasing keeps it.
+    const ftxui::Box view =
+        NotesWorkspaceActionsTestAccess::EditorViewBox(scroll_component);
+    const int drag_y = view.y_min + 2;
+    const int drag_x = view.x_min + 4;
+    Expect(NotesWorkspaceActionsTestAccess::MouseAt(
+            scroll_component, ftxui::Mouse::Left,
+            ftxui::Mouse::Pressed, drag_x, drag_y),
+        "Clicking the note body should be handled.");
+    Expect(!NotesWorkspaceActionsTestAccess::HasSelection(scroll_component),
+        "A click should not select text.");
+    Expect(NotesWorkspaceActionsTestAccess::MouseAt(
+            scroll_component, ftxui::Mouse::Left,
+            ftxui::Mouse::Moved, drag_x + 18, drag_y),
+        "Dragging inside the note body should be handled.");
+    Expect(NotesWorkspaceActionsTestAccess::HasSelection(scroll_component),
+        "Dragging with the left button should select note text.");
+    Expect(!NotesWorkspaceActionsTestAccess::SelectedText(scroll_component).empty(),
+        "Mouse selection should produce selected text.");
+    NotesWorkspaceActionsTestAccess::MouseAt(
+        scroll_component, ftxui::Mouse::Left,
+        ftxui::Mouse::Released, drag_x + 18, drag_y);
+    Expect(NotesWorkspaceActionsTestAccess::HasSelection(scroll_component),
+        "Selection should remain after the mouse button is released.");
+
+    NotesWorkspaceActionsTestAccess::MouseAt(
+        scroll_component, ftxui::Mouse::Left,
+        ftxui::Mouse::Pressed, drag_x, drag_y);
+    Expect(!NotesWorkspaceActionsTestAccess::HasSelection(scroll_component),
+        "A new click should clear the previous mouse selection.");
+    fs::remove_all(scroll_root, cleanup_error);
+
+    // Cards in one overview row must have identical widths. Otherwise long
+    // titles/previews make one card wider, overflow the row, and interrupt the
+    // neighboring cards' vertical borders.
+    const fs::path cards_root =
+        fs::temp_directory_path() / "textlt_notes_workspace_cards_test";
+    fs::remove_all(cards_root, cleanup_error);
+    NotesWorkspaceComponent cards_component(
+        nullptr, [](const std::string&) {}, [] {}, [] { return std::string{}; },
+        [](const std::string&) {}, cards_root);
+    NotesWorkspaceActionsTestAccess::NewNoteWithTitle(cards_component,
+        "First card with a title long enough to overflow its preview box");
+    NotesWorkspaceActionsTestAccess::NewNoteWithTitle(cards_component,
+        "Second card with another long title that used to stretch the layout");
+    NotesWorkspaceActionsTestAccess::NewNoteWithTitle(cards_component,
+        "Third card with a long title as well so all previews are constrained");
+    NotesWorkspaceActionsTestAccess::RenderWorkspace(cards_component, 160, 30);
+    NotesWorkspaceActionsTestAccess::RenderWorkspace(cards_component, 160, 30);
+    Expect(NotesWorkspaceActionsTestAccess::CardBoxCount(cards_component) == 3,
+        "Three notes should produce three overview cards.");
+    const ftxui::Box first_card =
+        NotesWorkspaceActionsTestAccess::CardBox(cards_component, 0);
+    const int first_width = first_card.x_max - first_card.x_min + 1;
+    Expect(first_width > 2, "Overview cards should have a visible width.");
+    for (size_t index = 1; index < 3; ++index) {
+        const ftxui::Box card =
+            NotesWorkspaceActionsTestAccess::CardBox(cards_component, index);
+        Expect(card.x_max - card.x_min + 1 == first_width,
+            "Overview cards in the same row should have equal widths.");
+    }
+    fs::remove_all(cards_root, cleanup_error);
 
     fs::remove_all(root, cleanup_error);
     return 0;

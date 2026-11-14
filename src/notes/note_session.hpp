@@ -33,6 +33,10 @@ public:
     bool Dirty() const { return dirty_; }
     void MarkSaved() { dirty_ = false; }
 
+    // Moves the cursor to an absolute note position. When `selecting` is true,
+    // the current position becomes the selection anchor on the first move so
+    // callers can implement click-and-drag selection.
+    void SetCursor(const NotePosition& position, bool selecting = false);
     bool Insert(const std::string& text);
     bool Backspace();
     bool DeleteForward();
