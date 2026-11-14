@@ -77,7 +77,10 @@ int main() {
         Expect(store.Projects().size() == 3, "Projects did not persist.");
         bool found_unicode_project = false;
         for (const ProjectRecord& project : store.Projects()) {
-            if (project.local_root == unicode_directory) {
+            std::error_code equivalent_error;
+            if (std::filesystem::equivalent(
+                    project.local_root, unicode_directory, equivalent_error) &&
+                !equivalent_error) {
                 found_unicode_project = true;
                 break;
             }
