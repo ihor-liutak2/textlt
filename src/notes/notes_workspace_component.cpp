@@ -9,6 +9,7 @@
 #include "ftxui/component/mouse.hpp"
 #include "keyboard_shortcuts.hpp"
 #include "ui_button.hpp"
+#include "workspace_tabs.hpp"
 
 namespace textlt::notes {
 namespace {
@@ -65,12 +66,14 @@ NotesWorkspaceComponent::NotesWorkspaceComponent(
     const Theme* theme,
     StatusCallback on_status,
     DocumentsCallback on_documents,
+    ActionsCallback on_actions,
     ClipboardReadCallback read_clipboard,
     ClipboardWriteCallback write_clipboard,
     std::filesystem::path root)
     : theme_(theme),
       on_status_(std::move(on_status)),
       on_documents_(std::move(on_documents)),
+      on_actions_(std::move(on_actions)),
       read_clipboard_(std::move(read_clipboard)),
       write_clipboard_(std::move(write_clipboard)),
       repository_(std::move(root)),
@@ -833,6 +836,7 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
     if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left && event.mouse().motion == ftxui::Mouse::Pressed) {
         const auto& mouse = event.mouse();
         if (documents_tab_box_.Contain(mouse.x, mouse.y)) { if (on_documents_) on_documents_(); return true; }
+        if (actions_tab_box_.Contain(mouse.x, mouse.y)) { if (on_actions_) on_actions_(); return true; }
         if (footer_new_note_box_.Contain(mouse.x, mouse.y)) { NewNote(); return true; }
         if (footer_delete_note_box_.Contain(mouse.x, mouse.y)) { DeleteSelectedNote(); return true; }
         if (footer_restore_note_box_.Contain(mouse.x, mouse.y)) { RestoreSelectedNote(); return true; }
@@ -944,10 +948,8 @@ void NotesWorkspaceComponent::ClearFormatting() { if (session_.ClearFormatting()
 
 ftxui::Element NotesWorkspaceComponent::RenderSidebar() {
     using namespace ftxui; const Theme& theme = theme_ ? *theme_ : FallbackTheme(); sidebar_row_boxes_.resize(sidebar_entries_.size()); Elements rows;
-    rows.push_back(hbox({
-        text(" Documents ") | color(theme.foreground) | reflect(documents_tab_box_),
-        text(" Notes ") | bold | bgcolor(theme.modal_selected_item_bg) | color(theme.modal_selected_item_fg),
-    }));
+    rows.push_back(RenderWorkspaceTabs(theme, WorkspaceTab::Notes,
+        documents_tab_box_, notes_tab_box_, actions_tab_box_));
     rows.push_back(separator() | color(theme.gutter));
     rows.push_back(text(" NOTES") | bold | color(theme.modal_accent));
     for (size_t i = 0; i < sidebar_entries_.size(); ++i) {

@@ -52,6 +52,7 @@
 #include "file_manager.hpp"
 #include "layout_controller.hpp"
 #include "notes/notes_workspace_component.hpp"
+#include "actions/actions_workspace_component.hpp"
 #include "project_store.hpp"
 
 namespace textlt {
@@ -68,6 +69,7 @@ private:
     enum class WorkspaceMode {
         Documents,
         Notes,
+        Actions,
     };
 
     enum class SearchMode {
@@ -286,7 +288,10 @@ private:
     void ShowFavoritesSidebar();
     void ToggleNotesWorkspace();
     void ShowNotesWorkspace();
+    void ShowActionsWorkspace();
     void ShowDocumentsWorkspace();
+    void RefreshActionsSidebar();
+    void SyncActionsProjectContext();
     void ToggleSidebarOpenedProject();
     void CopySidebarSelectedPath();
     void InitializeProjects();
@@ -378,6 +383,19 @@ private:
     void CommandNotesBulletList();
     void CommandNotesNumberedList();
     void CommandNotesChecklist();
+    void CommandActionsNewGroup();
+    void CommandActionsRenameGroup();
+    void CommandActionsDeleteGroup();
+    void CommandActionsNewPage();
+    void CommandActionsRenamePage();
+    void CommandActionsDeletePage();
+    void CommandActionsMovePage(int delta);
+    void CommandActionsAdd();
+    void CommandActionsEdit();
+    void CommandActionsDelete();
+    void CommandActionsMove(int delta);
+    void CommandActionsCopy();
+    void CommandActionsCopyAll();
 
     void CommandTtsPlay();
     void CommandTtsPause();
@@ -412,6 +430,7 @@ private:
     ftxui::Component editor_workspace_container_;
     ftxui::Component sidebar_panel_;
     ftxui::Component notes_workspace_component_;
+    ftxui::Component actions_workspace_component_;
     HelpDialog help_dialog_;
     KeyboardShortcutsModal keyboard_shortcuts_modal_;
     SidebarShortcutModal sidebar_shortcuts_modal_;

@@ -23,6 +23,7 @@ private:
         Folder,
         Projects,
         Favorites,
+        Actions,
     };
 
     enum class EntryKind {
@@ -32,6 +33,7 @@ private:
         FavoriteFile,
         Project,
         Placeholder,
+        ActionGroup,
     };
 
 public:
@@ -51,6 +53,11 @@ public:
         bool has_remote = false;
         bool remote_missing = false;
     };
+    struct ActionGroupEntry {
+        std::string id;
+        std::string name;
+        bool project = false;
+    };
 
     using FileOpenCallback = std::function<void(const std::filesystem::path&)>;
     using OpenedFileSelectCallback = std::function<void(size_t index)>;
@@ -63,6 +70,8 @@ public:
     using CopyPathCallback = std::function<void(const std::filesystem::path&)>;
     using ShortcutLabelProvider = std::function<std::string(const std::string& command_id)>;
     using OpenNotesCallback = std::function<void()>;
+    using OpenActionsCallback = std::function<void()>;
+    using OpenDocumentsCallback = std::function<void()>;
     using ProjectsProvider = std::function<std::vector<ProjectEntry>()>;
     using ProjectIdCallback = std::function<void(const std::string&)>;
     using AddProjectCallback = std::function<void(const std::filesystem::path&)>;
@@ -81,6 +90,9 @@ public:
         CopyPathCallback on_copy_path,
         ShortcutLabelProvider shortcut_label_provider,
         OpenNotesCallback on_open_notes,
+        OpenActionsCallback on_open_actions,
+        OpenDocumentsCallback on_open_documents,
+        ProjectIdCallback on_action_group_select,
         ProjectsProvider projects_provider,
         ProjectIdCallback on_project_select,
         AddProjectCallback on_project_add,
@@ -100,11 +112,15 @@ public:
     void ShowProject();
     void ShowProjects();
     void ShowFavorites();
+    void ShowActions();
+    void SetActionGroups(std::vector<ActionGroupEntry> groups,
+        const std::string& selected_id);
     void ToggleOpenedProject();
     bool IsOpenedMode() const { return mode_ == SidebarMode::Opened; }
     bool IsProjectMode() const { return mode_ == SidebarMode::Folder; }
     bool IsProjectsMode() const { return mode_ == SidebarMode::Projects; }
     bool IsFavoritesMode() const { return mode_ == SidebarMode::Favorites; }
+    bool IsActionsMode() const { return mode_ == SidebarMode::Actions; }
 
     std::filesystem::path CurrentPath() const { return current_path_; }
     std::filesystem::path ProjectRoot() const { return project_root_; }
@@ -176,6 +192,7 @@ private:
     void RebuildProjectEntries();
     void RebuildProjectsEntries();
     void RebuildFavoriteEntries();
+    void RebuildActionEntries();
     void AddEntry(std::filesystem::path path, std::string label, EntryKind kind);
     std::string ShortcutLabelForMode(SidebarMode mode) const;
     std::string ActiveShortcutLabel() const;
@@ -183,7 +200,6 @@ private:
         const std::string& label,
         SidebarMode mode,
         ftxui::Box& box) const;
-    ftxui::Element RenderNotesButton(ftxui::Box& box) const;
     ftxui::Element RenderFlatActionButton(
         const std::string& label,
         ButtonRole role,
@@ -209,6 +225,9 @@ private:
     CopyPathCallback on_copy_path_;
     ShortcutLabelProvider shortcut_label_provider_;
     OpenNotesCallback on_open_notes_;
+    OpenActionsCallback on_open_actions_;
+    OpenDocumentsCallback on_open_documents_;
+    ProjectIdCallback on_action_group_select_;
     ProjectsProvider projects_provider_;
     ProjectIdCallback on_project_select_;
     AddProjectCallback on_project_add_;
@@ -226,6 +245,8 @@ private:
     std::vector<EntryKind> entry_kinds_;
     std::vector<std::string> entry_ids_;
     std::vector<ProjectEntry> project_entries_;
+    std::vector<ActionGroupEntry> action_group_entries_;
+    std::string selected_action_group_id_;
     int selected_entry_ = 0;
     size_t list_scroll_offset_ = 0;
     int last_clicked_entry_ = -1;
@@ -236,6 +257,8 @@ private:
     ftxui::Box projects_tab_box_;
     ftxui::Box favorites_tab_box_;
     ftxui::Box notes_tab_box_;
+    ftxui::Box actions_tab_box_;
+    ftxui::Box documents_tab_box_;
     ftxui::Box action_primary_box_;
     ftxui::Box action_secondary_box_;
     ftxui::Box action_tertiary_box_;

@@ -197,6 +197,7 @@ add_executable(textlt
   src/app_projects.cpp
   src/app_view.cpp
   src/app_notes_actions.cpp
+  src/app_actions_actions.cpp
   src/shortcut_key.cpp
   src/shortcut_registry.cpp
   src/shortcut_store.cpp
@@ -235,6 +236,10 @@ add_executable(textlt
   src/notes/note_repository.cpp
   src/notes/note_session.cpp
   src/notes/notes_workspace_component.cpp
+  src/actions/action_model.cpp
+  src/actions/action_serializer.cpp
+  src/actions/action_repository.cpp
+  src/actions/actions_workspace_component.cpp
   src/file_utils.cpp
   src/git_manager.cpp
   src/history_manager.cpp
@@ -250,6 +255,7 @@ add_executable(textlt
   src/modals/assistant_modals_server.cpp
   src/modals/help_dialog.cpp
   src/modals/modal_ai.cpp
+  src/modals/modal_action_editor.cpp
   src/modals/modal_ai_quick_actions.cpp
   src/modals/modal_ai_settings.cpp
   src/modals/modal_git.cpp
@@ -448,6 +454,23 @@ add_executable(textlt_note_storage_test
   src/notes/note_document.cpp
   src/notes/note_serializer.cpp
   src/notes/note_repository.cpp
+)
+
+add_executable(textlt_action_repository_test
+  tests/action_repository_test.cpp
+  src/actions/action_model.cpp
+  src/actions/action_serializer.cpp
+  src/actions/action_repository.cpp
+)
+add_executable(textlt_actions_workspace_test
+  tests/actions_workspace_test.cpp
+  src/actions/action_model.cpp
+  src/actions/action_serializer.cpp
+  src/actions/action_repository.cpp
+  src/actions/actions_workspace_component.cpp
+  src/modals/modal_action_editor.cpp
+  src/modals/modal_window.cpp
+  src/theme.cpp
 )
 
 add_executable(textlt_note_session_test
@@ -747,6 +770,14 @@ target_include_directories(textlt_note_storage_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
+target_include_directories(textlt_action_repository_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+)
+target_include_directories(textlt_actions_workspace_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+)
 
 target_include_directories(textlt_note_session_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -773,6 +804,10 @@ target_link_libraries(textlt_theme_customization_test PRIVATE
   ftxui::component
 )
 target_link_libraries(textlt_notes_workspace_actions_test PRIVATE
+  ftxui::component
+  Threads::Threads
+)
+target_link_libraries(textlt_actions_workspace_test PRIVATE
   ftxui::component
   Threads::Threads
 )
@@ -806,6 +841,8 @@ add_test(NAME textlt_syntax_highlighter_test COMMAND textlt_syntax_highlighter_t
 add_test(NAME textlt_builtin_text_processors_test COMMAND textlt_builtin_text_processors_test)
 add_test(NAME textlt_app_command_registry_test COMMAND textlt_app_command_registry_test)
 add_test(NAME textlt_note_storage_test COMMAND textlt_note_storage_test)
+add_test(NAME textlt_action_repository_test COMMAND textlt_action_repository_test)
+add_test(NAME textlt_actions_workspace_test COMMAND textlt_actions_workspace_test)
 add_test(NAME textlt_note_session_test COMMAND textlt_note_session_test)
 add_test(NAME textlt_notes_workspace_actions_test COMMAND textlt_notes_workspace_actions_test)
 add_test(NAME textlt_menu_bar_notes_test COMMAND textlt_menu_bar_notes_test)

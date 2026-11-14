@@ -49,6 +49,14 @@ int main() {
         "The Format menu must no longer be part of the menu bar.");
     Expect(MenuBarTestAccess::MenuIndex(menu_bar, " Notes ") < 0,
         "The Notes menu should be hidden outside the notes workspace.");
+    Expect(MenuBarTestAccess::MenuIndex(menu_bar, " Actions ") < 0,
+        "The Actions menu should be hidden outside the actions workspace.");
+    menu_bar.SetActionsMenuVisible(true);
+    const int actions_index = MenuBarTestAccess::MenuIndex(menu_bar, " Actions ");
+    Expect(actions_index >= 0, "The Actions menu was not inserted.");
+    Expect(menu_bar.CommandIdAt(actions_index, 0) == "actions.new_group",
+        "The Actions menu should expose New Group first.");
+    menu_bar.SetActionsMenuVisible(false);
 
     menu_bar.SetNotesMenuVisible(true);
     const int notes_index = MenuBarTestAccess::MenuIndex(menu_bar, " Notes ");

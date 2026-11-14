@@ -308,7 +308,7 @@ int main() {
     fs::remove_all(root, cleanup_error);
 
     NotesWorkspaceComponent component(
-        nullptr, [](const std::string&) {}, [] {}, [] { return std::string{}; },
+        nullptr, [](const std::string&) {}, [] {}, [] {}, [] { return std::string{}; },
         [](const std::string&) {}, root);
 
     NotesWorkspaceActionsTestAccess::NewNote(component);
@@ -369,7 +369,7 @@ int main() {
         fs::temp_directory_path() / "textlt_notes_menu_actions_test";
     fs::remove_all(menu_root, cleanup_error);
     NotesWorkspaceComponent menu_component(
-        nullptr, [](const std::string&) {}, [] {}, [] { return std::string{}; },
+        nullptr, [](const std::string&) {}, [] {}, [] {}, [] { return std::string{}; },
         [](const std::string&) {}, menu_root);
     NotesWorkspaceActionsTestAccess::NewNote(menu_component);
     Expect(menu_component.IsEditing(), "New Note should open the note editor.");
@@ -482,7 +482,7 @@ int main() {
         fs::temp_directory_path() / "textlt_notes_workspace_scroll_test";
     fs::remove_all(scroll_root, cleanup_error);
     NotesWorkspaceComponent scroll_component(
-        nullptr, [](const std::string&) {}, [] {}, [] { return std::string{}; },
+        nullptr, [](const std::string&) {}, [] {}, [] {}, [] { return std::string{}; },
         [](const std::string&) {}, scroll_root);
     NotesWorkspaceActionsTestAccess::NewNote(scroll_component);
     NotesWorkspaceActionsTestAccess::SeedEditorDocument(scroll_component, 80);
@@ -564,7 +564,7 @@ int main() {
         fs::temp_directory_path() / "textlt_notes_workspace_cards_test";
     fs::remove_all(cards_root, cleanup_error);
     NotesWorkspaceComponent cards_component(
-        nullptr, [](const std::string&) {}, [] {}, [] { return std::string{}; },
+        nullptr, [](const std::string&) {}, [] {}, [] {}, [] { return std::string{}; },
         [](const std::string&) {}, cards_root);
     NotesWorkspaceActionsTestAccess::NewNoteWithTitle(cards_component,
         "First card with a title long enough to overflow its preview box");

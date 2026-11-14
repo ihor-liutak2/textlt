@@ -142,6 +142,22 @@ void TextltApp::InitializeCommands() {
     add("notes.bullet_list", "Bulleted List", "Notes", "", [this] { CommandNotesBulletList(); });
     add("notes.numbered_list", "Numbered List", "Notes", "", [this] { CommandNotesNumberedList(); });
     add("notes.checklist", "Checklist", "Notes", "", [this] { CommandNotesChecklist(); });
+    add("actions.open", "Actions", "Options", "", [this] { ShowActionsWorkspace(); });
+    add("actions.new_group", "New Group", "Actions", "", [this] { CommandActionsNewGroup(); });
+    add("actions.rename_group", "Rename Group", "Actions", "", [this] { CommandActionsRenameGroup(); });
+    add("actions.delete_group", "Delete Group", "Actions", "", [this] { CommandActionsDeleteGroup(); });
+    add("actions.new_page", "New Page", "Actions", "", [this] { CommandActionsNewPage(); });
+    add("actions.rename_page", "Rename Page", "Actions", "", [this] { CommandActionsRenamePage(); });
+    add("actions.delete_page", "Delete Page", "Actions", "", [this] { CommandActionsDeletePage(); });
+    add("actions.move_page_up", "Move Page Up", "Actions", "", [this] { CommandActionsMovePage(-1); });
+    add("actions.move_page_down", "Move Page Down", "Actions", "", [this] { CommandActionsMovePage(1); });
+    add("actions.add", "Add Action", "Actions", "", [this] { CommandActionsAdd(); });
+    add("actions.edit", "Edit Action", "Actions", "", [this] { CommandActionsEdit(); });
+    add("actions.delete", "Delete Action", "Actions", "", [this] { CommandActionsDelete(); });
+    add("actions.move_up", "Move Action Up", "Actions", "", [this] { CommandActionsMove(-1); });
+    add("actions.move_down", "Move Action Down", "Actions", "", [this] { CommandActionsMove(1); });
+    add("actions.copy", "Copy Selected Action", "Actions", "", [this] { CommandActionsCopy(); });
+    add("actions.copy_all", "Copy All Actions", "Actions", "", [this] { CommandActionsCopyAll(); });
     add("editor.toggle_smart_word_wrap", "Toggle Smart Word Wrap", "Options", "", [this] { CommandEditorToggleSmartWordWrap(); });
     add("editor.toggle_syntax_highlighting", "Toggle Syntax Highlighting", "Options", "", [this] { CommandEditorToggleSyntaxHighlighting(); });
     add("editor.toggle_auto_pairing", "Toggle Auto Pairing", "Options", "", [this] { CommandEditorToggleAutoPairing(); });
@@ -260,6 +276,16 @@ bool TextltApp::RunCommand(const std::string& command_id) {
             CloseDropdown();
             screen_.PostEvent(ftxui::Event::Custom);
             return true;
+        }
+    }
+    if (workspace_mode_ == WorkspaceMode::Actions) {
+        const bool allowed = command_id.rfind("actions.", 0) == 0 ||
+            command_id.rfind("app.", 0) == 0 || command_id == "notes.toggle" ||
+            command_id == "file.save" || command_id == "theme.open" ||
+            command_id == "theme.colors";
+        if (!allowed) {
+            active_action_ = "This command is unavailable in Actions view";
+            CloseDropdown(); screen_.PostEvent(ftxui::Event::Custom); return true;
         }
     }
 

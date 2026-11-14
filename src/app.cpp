@@ -143,6 +143,12 @@ TextltApp::TextltApp()
               return shortcut_registry_.EffectiveShortcut(ShortcutContext::Menu, command_id);
           },
           [this] { ShowNotesWorkspace(); },
+          [this] { ShowActionsWorkspace(); },
+          [this] { ShowDocumentsWorkspace(); },
+          [this](const std::string& id) {
+              if (actions_workspace_component_)
+                  std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_)->SelectGroup(id);
+          },
           [this] { return SidebarProjects(); },
           [this](const std::string& id) { ActivateProject(id); },
           [this](const std::filesystem::path&) { OpenFilesModal(FilesModalMode::SelectDirectory); },
@@ -453,9 +459,17 @@ TextltApp::TextltApp()
             screen_.PostEvent(ftxui::Event::Custom);
         },
         [this] { ShowDocumentsWorkspace(); },
+        [this] { ShowActionsWorkspace(); },
         [this] { return clipboard_controller_.ReadText(); },
         [this](const std::string& text) { clipboard_controller_.WriteText(text); });
     SyncNotesProjectContext();
+
+    actions_workspace_component_ = ftxui::Make<actions::ActionsWorkspaceComponent>(
+        &current_theme_,
+        [this](const std::string& message) { active_action_ = message; screen_.PostEvent(ftxui::Event::Custom); },
+        [this](const std::string& text) { return clipboard_controller_.WriteText(text); },
+        [this] { RefreshActionsSidebar(); });
+    SyncActionsProjectContext();
 
     top_bar_row_ = ftxui::Make<TopBarRowComponent>(
         &current_theme_,
@@ -506,14 +520,12 @@ TextltApp::TextltApp()
     UpdateFileMenuLabels();
     UpdateOptionsMenuLabels();
 
-    auto documents_body = ftxui::Container::Horizontal({
-        sidebar_panel_,
+    auto workspace_content = ftxui::Container::Tab({
         editor_workspace_container_,
-    });
-    auto body_content = ftxui::Container::Tab({
-        documents_body,
         notes_workspace_component_,
+        actions_workspace_component_,
     }, &workspace_mode_index_);
+    auto body_content = ftxui::Container::Horizontal({sidebar_panel_, workspace_content});
     body_container_ = ftxui::CatchEvent(body_content, [this](ftxui::Event event) {
         return app_event_dispatcher_.HandleBodyEvent(event);
     });
@@ -715,6 +727,10 @@ void TextltApp::Run() {
     if (notes_workspace_component_) {
         std::string error;
         std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_)->Save(error);
+    }
+    if (actions_workspace_component_) {
+        std::string error;
+        std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_)->Save(error);
     }
     PersistOpenedSessions();
 }

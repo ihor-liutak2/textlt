@@ -142,6 +142,13 @@ void TextltApp::CommandFileSave() {
         screen_.PostEvent(ftxui::Event::Custom);
         return;
     }
+    if (workspace_mode_ == WorkspaceMode::Actions) {
+        std::string error;
+        auto actions = std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_);
+        active_action_ = actions->Save(error) ? "Actions saved" : "Actions save failed: " + error;
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
     SaveCurrentFile();
     screen_.PostEvent(ftxui::Event::Custom);
 }

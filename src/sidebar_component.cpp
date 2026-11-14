@@ -9,6 +9,7 @@
 
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/event.hpp"
+#include "workspace_tabs.hpp"
 
 namespace textlt {
 namespace {
@@ -57,6 +58,9 @@ SidebarPanel::SidebarPanel(
     CopyPathCallback on_copy_path,
     ShortcutLabelProvider shortcut_label_provider,
     OpenNotesCallback on_open_notes,
+    OpenActionsCallback on_open_actions,
+    OpenDocumentsCallback on_open_documents,
+    ProjectIdCallback on_action_group_select,
     ProjectsProvider projects_provider,
     ProjectIdCallback on_project_select,
     AddProjectCallback on_project_add,
@@ -78,6 +82,9 @@ SidebarPanel::SidebarPanel(
       on_copy_path_(std::move(on_copy_path)),
       shortcut_label_provider_(std::move(shortcut_label_provider)),
       on_open_notes_(std::move(on_open_notes)),
+      on_open_actions_(std::move(on_open_actions)),
+      on_open_documents_(std::move(on_open_documents)),
+      on_action_group_select_(std::move(on_action_group_select)),
       projects_provider_(std::move(projects_provider)),
       on_project_select_(std::move(on_project_select)),
       on_project_add_(std::move(on_project_add)),
@@ -134,23 +141,35 @@ ftxui::Element SidebarPanel::OnRender() {
     }
 
     return vbox({
-        hbox({
-            RenderModeButton("Folder", SidebarMode::Folder, project_tab_box_),
-            text(" "),
-            RenderModeButton("Projects", SidebarMode::Projects, projects_tab_box_),
-        }),
-        hbox({
-            RenderModeButton("Opened", SidebarMode::Opened, opened_tab_box_),
-            text(" "),
-            RenderModeButton("Favorites", SidebarMode::Favorites, favorites_tab_box_),
-        }),
-        hbox({ RenderNotesButton(notes_tab_box_) }),
+        RenderWorkspaceTabs(
+            theme,
+            mode_ == SidebarMode::Actions
+                ? WorkspaceTab::Actions
+                : WorkspaceTab::Documents,
+            documents_tab_box_, notes_tab_box_, actions_tab_box_),
+        separator() | color(SidebarBorderColor(theme)),
+        mode_ == SidebarMode::Actions
+            ? emptyElement()
+            : hbox({
+                  RenderModeButton("Folder", SidebarMode::Folder, project_tab_box_),
+                  text(" "),
+                  RenderModeButton("Projects", SidebarMode::Projects, projects_tab_box_),
+              }),
+        mode_ == SidebarMode::Actions
+            ? emptyElement()
+            : hbox({
+                  RenderModeButton("Opened", SidebarMode::Opened, opened_tab_box_),
+                  text(" "),
+                  RenderModeButton("Favorites", SidebarMode::Favorites, favorites_tab_box_),
+              }),
         mode_ == SidebarMode::Folder
             ? text(" " + DisplayName(project_root_) + "/") | bold | color(sidebar_text)
             : emptyElement(),
         separator() | color(SidebarBorderColor(theme)),
-        RenderActionRow(),
-        separator() | color(SidebarBorderColor(theme)),
+        mode_ == SidebarMode::Actions ? emptyElement() : RenderActionRow(),
+        mode_ == SidebarMode::Actions
+            ? emptyElement()
+            : separator() | color(SidebarBorderColor(theme)),
         vbox(std::move(rows)) | reflect(menu_box_) | frame | yflex,
     }) |
         borderStyled(ftxui::LIGHT, SidebarBorderColor(theme)) |
@@ -158,6 +177,23 @@ ftxui::Element SidebarPanel::OnRender() {
 }
 
 bool SidebarPanel::OnEvent(ftxui::Event event) {
+    if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left &&
+        event.mouse().motion == ftxui::Mouse::Pressed &&
+        documents_tab_box_.Contain(event.mouse().x, event.mouse().y)) {
+        if (mode_ != SidebarMode::Actions) {
+            // Documents is already active in every non-Actions Sidebar mode.
+            return true;
+        }
+        if (on_open_documents_) on_open_documents_();
+        return true;
+    }
+    if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left &&
+        event.mouse().motion == ftxui::Mouse::Pressed &&
+        actions_tab_box_.Contain(event.mouse().x, event.mouse().y)) {
+        if (mode_ == SidebarMode::Actions) return true;
+        if (on_open_actions_) on_open_actions_();
+        return true;
+    }
     if (event.is_mouse() &&
         event.mouse().button == ftxui::Mouse::Left &&
         event.mouse().motion == ftxui::Mouse::Pressed &&
@@ -260,7 +296,7 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
             EnsureSelectedEntryVisible();
             FocusMenu();
             if (mode_ == SidebarMode::Opened || mode_ == SidebarMode::Favorites ||
-                mode_ == SidebarMode::Projects) {
+                mode_ == SidebarMode::Projects || mode_ == SidebarMode::Actions) {
                 OpenSelectedEntry();
                 last_clicked_entry_ = -1;
                 last_click_time_ = {};
@@ -323,6 +359,15 @@ void SidebarPanel::ShowFavorites() {
     SetMode(SidebarMode::Favorites);
 }
 
+void SidebarPanel::ShowActions() { SetMode(SidebarMode::Actions); }
+
+void SidebarPanel::SetActionGroups(std::vector<ActionGroupEntry> groups,
+    const std::string& selected_id) {
+    action_group_entries_ = std::move(groups);
+    selected_action_group_id_ = selected_id;
+    if (mode_ == SidebarMode::Actions) RebuildEntries();
+}
+
 void SidebarPanel::ToggleOpenedProject() {
     SetMode(mode_ == SidebarMode::Opened ? SidebarMode::Folder : SidebarMode::Opened);
 }
@@ -349,6 +394,13 @@ void SidebarPanel::OpenSelectedEntry() {
 
     const std::filesystem::path selected_path = entry_paths_[selected_entry_];
     const EntryKind selected_kind = entry_kinds_[selected_entry_];
+    if (selected_kind == EntryKind::ActionGroup) {
+        if (on_action_group_select_ && selected_entry_ < static_cast<int>(entry_ids_.size())) {
+            selected_action_group_id_ = entry_ids_[selected_entry_];
+            on_action_group_select_(selected_action_group_id_);
+        }
+        return;
+    }
     std::error_code error;
     if (selected_kind == EntryKind::OpenedFile) {
         if (on_opened_file_select_) {
@@ -509,6 +561,9 @@ std::string SidebarPanel::ShortcutLabelForMode(SidebarMode mode) const {
             command_id = "sidebar.show_opened_files";
             fallback = "O";
             break;
+        case SidebarMode::Actions:
+            fallback = "";
+            break;
     }
 
     if (shortcut_label_provider_) {
@@ -531,12 +586,6 @@ ftxui::Element SidebarPanel::RenderModeButton(
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     ButtonSpec spec = TabButtonSpec(label, mode_ == mode, "", ButtonSize::Compact);
     return RenderModalFlatButton(theme, spec, mode_ == mode) | reflect(box);
-}
-
-ftxui::Element SidebarPanel::RenderNotesButton(ftxui::Box& box) const {
-    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    ButtonSpec spec = TabButtonSpec("Notes", false, "", ButtonSize::Compact);
-    return RenderModalFlatButton(theme, spec) | reflect(box);
 }
 
 ftxui::Element SidebarPanel::RenderFlatActionButton(
@@ -610,6 +659,10 @@ ftxui::Element SidebarPanel::RenderActionRow() {
             text(" "),
             RenderFlatActionButton("Close All", ButtonRole::Danger, action_secondary_box_),
         });
+    }
+
+    if (mode_ == SidebarMode::Actions) {
+        return text(" Use the Actions menu to manage groups") | dim;
     }
 
     return hbox({
@@ -822,6 +875,9 @@ void SidebarPanel::RebuildEntries() {
         case SidebarMode::Favorites:
             RebuildFavoriteEntries();
             break;
+        case SidebarMode::Actions:
+            RebuildActionEntries();
+            break;
     }
 
     if (entry_labels_.empty()) {
@@ -829,11 +885,25 @@ void SidebarPanel::RebuildEntries() {
             mode_ == SidebarMode::Opened ? " No opened files" :
             mode_ == SidebarMode::Favorites ? " No favorites" :
             mode_ == SidebarMode::Projects ? " No projects" :
+            mode_ == SidebarMode::Actions ? " No action groups" :
             " <empty>";
         AddEntry({}, placeholder, EntryKind::Placeholder);
     }
     selected_entry_ = std::min(selected_entry_, static_cast<int>(entry_labels_.size()) - 1);
     EnsureSelectedEntryVisible();
+}
+
+void SidebarPanel::RebuildActionEntries() {
+    for (const auto& group : action_group_entries_) {
+        AddEntry({}, std::string(group.project ? "◆ " : "  ") + group.name,
+            EntryKind::ActionGroup);
+        entry_ids_.back() = group.id;
+    }
+    const auto selected = std::find(entry_ids_.begin(), entry_ids_.end(),
+        selected_action_group_id_);
+    if (selected != entry_ids_.end()) {
+        selected_entry_ = static_cast<int>(std::distance(entry_ids_.begin(), selected));
+    }
 }
 
 void SidebarPanel::RebuildOpenedEntries() {

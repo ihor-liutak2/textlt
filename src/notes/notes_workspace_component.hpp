@@ -24,12 +24,14 @@ class NotesWorkspaceComponent : public ftxui::ComponentBase {
 public:
     using StatusCallback = std::function<void(const std::string&)>;
     using DocumentsCallback = std::function<void()>;
+    using ActionsCallback = std::function<void()>;
     using ClipboardReadCallback = std::function<std::string()>;
     using ClipboardWriteCallback = std::function<void(const std::string&)>;
     NotesWorkspaceComponent(
         const Theme* theme,
         StatusCallback on_status,
         DocumentsCallback on_documents,
+        ActionsCallback on_actions,
         ClipboardReadCallback read_clipboard,
         ClipboardWriteCallback write_clipboard,
         std::filesystem::path root = {});
@@ -141,6 +143,7 @@ private:
     const Theme* theme_ = nullptr;
     StatusCallback on_status_;
     DocumentsCallback on_documents_;
+    ActionsCallback on_actions_;
     ClipboardReadCallback read_clipboard_;
     ClipboardWriteCallback write_clipboard_;
     NoteRepository repository_;
@@ -184,6 +187,8 @@ private:
     bool group_picker_open_ = false;
     ftxui::Box sidebar_box_;
     ftxui::Box documents_tab_box_;
+    ftxui::Box notes_tab_box_;
+    ftxui::Box actions_tab_box_;
     ftxui::Box footer_new_note_box_;
     ftxui::Box footer_delete_note_box_;
     ftxui::Box footer_restore_note_box_;

@@ -26,6 +26,7 @@ public:
 
     void SetTheme(const Theme* theme) { theme_ = theme; }
     void SetNotesMenuVisible(bool visible);
+    void SetActionsMenuVisible(bool visible);
     void SetNotesTrashSelected(bool trash_selected);
     void SetFileFavoriteLabel(bool is_favorite);
     void SetOptionLabels(
@@ -63,6 +64,7 @@ private:
     std::vector<std::string> menu_entries_;
     std::vector<std::vector<DropdownItem>> dropdown_items_;
     std::vector<DropdownItem> notes_dropdown_items_;
+    std::vector<DropdownItem> actions_dropdown_items_;
     std::vector<std::string> current_dropdown_entries_;
     std::vector<std::string> current_dropdown_command_ids_;
     std::vector<bool> current_dropdown_separators_;
@@ -73,6 +75,7 @@ private:
     int active_dropdown_ = -1;
     int selected_dropdown_item_ = 0;
     bool notes_menu_visible_ = true;
+    bool actions_menu_visible_ = true;
     bool notes_trash_selected_ = false;
 
     std::vector<ftxui::Box> menu_boxes_;

@@ -246,6 +246,12 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
             return true;
         }
     }
+    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Actions &&
+        !app_.sidebar_has_focus_ && app_.actions_workspace_component_ &&
+        app_.actions_workspace_component_->OnEvent(event)) {
+        if (event != ftxui::Event::Custom) app_.screen_.PostEvent(ftxui::Event::Custom);
+        return true;
+    }
 
     // Mouse input on the main screen is routed exclusively by FTXUI through
     // root_container_. Manual dispatch here competes with Container hit-testing
@@ -295,6 +301,11 @@ bool AppEventDispatcher::HandleSidebarEvent(const ftxui::Event& event) {
     }
 
     if (event == ftxui::Event::Escape) {
+        if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Actions) {
+            app_.sidebar_has_focus_ = false;
+            app_.actions_workspace_component_->TakeFocus();
+            return true;
+        }
         app_.FocusEditor();
         return true;
     }
@@ -310,6 +321,7 @@ bool AppEventDispatcher::HandleSidebarEvent(const ftxui::Event& event) {
 }
 
 bool AppEventDispatcher::HandleEditorEvent(const ftxui::Event& event) {
+    if (app_.workspace_mode_ != TextltApp::WorkspaceMode::Documents) return false;
     const bool editor_is_focused = app_.ActiveLayer() == TextltApp::UiLayer::Main && !app_.sidebar_has_focus_;
     if (!editor_is_focused) {
         return false;

@@ -43,6 +43,7 @@ MenuBarComponent::MenuBarComponent(
           " Edit ",
           " Options ",
           " Notes ",
+          " Actions ",
           " Tools ",
           " Help ",
           " Exit ",
@@ -97,6 +98,7 @@ MenuBarComponent::MenuBarComponent(
               {" Toggle Line Numbers ", "view.toggle_line_numbers"},
               {" Sidebar                 (Ctrl+B) ", "sidebar.ctrl_b_file_explorer"},
               {" Notes                   (Ctrl+N) ", "notes.toggle"},
+              {" Actions ", "actions.open"},
               {" Smart Word Wrap [ ] ", "editor.toggle_smart_word_wrap"},
               {" Syntax Highlighting [X] ", "editor.toggle_syntax_highlighting"},
               {" Auto Pairing [X] ", "editor.toggle_auto_pairing"},
@@ -122,6 +124,25 @@ MenuBarComponent::MenuBarComponent(
               {" Bulleted List ", "notes.bullet_list"},
               {" Numbered List ", "notes.numbered_list"},
               {" Checklist ", "notes.checklist"},
+          },
+          {
+              {" New Group ", "actions.new_group"},
+              {" Rename Group ", "actions.rename_group"},
+              {" Delete Group ", "actions.delete_group"},
+              {" ───────────────────────── ", "", true},
+              {" New Page ", "actions.new_page"},
+              {" Rename Page ", "actions.rename_page"},
+              {" Delete Page ", "actions.delete_page"},
+              {" Move Page Up ", "actions.move_page_up"},
+              {" Move Page Down ", "actions.move_page_down"},
+              {" ───────────────────────── ", "", true},
+              {" Add Action ", "actions.add"},
+              {" Edit Action ", "actions.edit"},
+              {" Delete Action ", "actions.delete"},
+              {" Move Action Up ", "actions.move_up"},
+              {" Move Action Down ", "actions.move_down"},
+              {" Copy Selected Action ", "actions.copy"},
+              {" Copy All Actions ", "actions.copy_all"},
           },
           {
               {" TTS                 (Alt+H) ", "tts.open_modal"},
@@ -181,6 +202,9 @@ MenuBarComponent::MenuBarComponent(
     if (notes_index >= 0) {
         notes_dropdown_items_ = dropdown_items_[static_cast<size_t>(notes_index)];
     }
+    const int actions_index = MenuIndex(" Actions ");
+    if (actions_index >= 0) actions_dropdown_items_ = dropdown_items_[static_cast<size_t>(actions_index)];
+    SetActionsMenuVisible(false);
     SetNotesMenuVisible(false);
 }
 
@@ -397,6 +421,26 @@ void MenuBarComponent::SetNotesMenuVisible(bool visible) {
     selected_menu_item_ = std::clamp(
         selected_menu_item_,
         0,
+        std::max(0, static_cast<int>(menu_entries_.size()) - 1));
+    selected_dropdown_item_ = 0;
+    RefreshCurrentDropdownEntries();
+}
+
+void MenuBarComponent::SetActionsMenuVisible(bool visible) {
+    if (actions_menu_visible_ == visible) return;
+    CloseDropdown();
+    const int current_index = MenuIndex(" Actions ");
+    if (visible && current_index < 0) {
+        const int tools_index = MenuIndex(" Tools ");
+        const size_t insertion = tools_index < 0 ? menu_entries_.size() : static_cast<size_t>(tools_index);
+        menu_entries_.insert(menu_entries_.begin() + static_cast<std::ptrdiff_t>(insertion), " Actions ");
+        dropdown_items_.insert(dropdown_items_.begin() + static_cast<std::ptrdiff_t>(insertion), actions_dropdown_items_);
+    } else if (!visible && current_index >= 0) {
+        menu_entries_.erase(menu_entries_.begin() + current_index);
+        dropdown_items_.erase(dropdown_items_.begin() + current_index);
+    }
+    actions_menu_visible_ = visible;
+    selected_menu_item_ = std::clamp(selected_menu_item_, 0,
         std::max(0, static_cast<int>(menu_entries_.size()) - 1));
     selected_dropdown_item_ = 0;
     RefreshCurrentDropdownEntries();

@@ -111,6 +111,7 @@ void TextltApp::ActivateProject(const std::string& id) {
     workspace_project_id_ = project->id;
     sidebar->Refresh();
     SyncNotesProjectContext();
+    SyncActionsProjectContext();
     active_action_ = "Switched project: " + project->name;
     screen_.PostEvent(ftxui::Event::Custom);
 }
@@ -141,6 +142,7 @@ void TextltApp::RemoveProject(const std::string& id) {
         workspace_project_id_.clear();
     }
     SyncNotesProjectContext();
+    SyncActionsProjectContext();
     active_action_ = "Removed project registration: " + name;
     screen_.PostEvent(ftxui::Event::Custom);
 }
@@ -188,6 +190,7 @@ bool TextltApp::OpenWorkspaceFolder(
     git_manager_.Invalidate();
     workspace_project_id_.clear();
     SyncNotesProjectContext();
+    SyncActionsProjectContext();
     active_action_ = "Opened folder: " + root.string();
     error.clear();
     return true;
