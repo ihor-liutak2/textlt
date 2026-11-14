@@ -56,6 +56,8 @@ int main() {
     Expect(actions_index >= 0, "The Actions menu was not inserted.");
     Expect(menu_bar.CommandIdAt(actions_index, 0) == "actions.new_group",
         "The Actions menu should expose New Group first.");
+    Expect(menu_bar.CommandIdAt(actions_index, 11) == "actions.import",
+        "The Actions menu should expose file import after Add Action.");
     menu_bar.SetActionsMenuVisible(false);
 
     menu_bar.SetNotesMenuVisible(true);

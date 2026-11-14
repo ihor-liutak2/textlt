@@ -1041,7 +1041,9 @@ ftxui::Element NotesWorkspaceComponent::RenderSidebar() {
             footer_button("Open Notes", ButtonRole::Primary, true, footer_project_notes_box_),
         }));
     }
-    return vbox(std::move(rows)) | borderStyled(LIGHT, theme.gutter) | size(WIDTH, EQUAL, 28) | reflect(sidebar_box_) | bgcolor(theme.menu_background);
+    return vbox(std::move(rows)) | borderStyled(LIGHT, theme.gutter) |
+        size(WIDTH, EQUAL, 28) | reflect(sidebar_box_) |
+        bgcolor(theme.background);
 }
 
 ftxui::Element NotesWorkspaceComponent::RenderCard(
@@ -1089,7 +1091,7 @@ ftxui::Element NotesWorkspaceComponent::RenderCard(
     Element card = vbox(std::move(lines)) |
         borderStyled(selected ? HEAVY : LIGHT,
             selected ? theme.modal_accent : theme.gutter) |
-        bgcolor(selected ? theme.menu_background : theme.background) |
+        bgcolor(theme.background) |
         size(WIDTH, EQUAL, card_width);
     if (visible_index < card_boxes_.size()) {
         card = card | reflect(card_boxes_[visible_index]);

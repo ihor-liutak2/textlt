@@ -23,7 +23,7 @@ public:
     ftxui::Component GetMainComponent() override { return container_; }
     std::string GetTitle() override;
     ftxui::Element RenderTitle() override;
-    ModalSizePreference GetModalSizePreference() const override { return {82, 27}; }
+    ModalSizePreference GetModalSizePreference() const override { return {82, 29}; }
     ModalFrameStyle GetModalFrameStyle() const override {
         return ModalFrameStyle::TitleInBorder;
     }
@@ -31,7 +31,7 @@ public:
     bool FooterTextAboveButtons() const override { return !status_.empty(); }
 
     void Begin(std::string id, std::string title, std::string description,
-        std::string content);
+        std::string content, bool hide_text = false);
     bool EditingExisting() const { return !id_.empty(); }
     bool Submit();
     void FocusFirstField() { title_input_->TakeFocus(); }
@@ -45,6 +45,7 @@ private:
     std::string title_;
     std::string description_;
     std::string content_;
+    bool hide_text_ = false;
     std::string status_;
     int title_cursor_ = 0;
     int description_cursor_ = 0;
@@ -52,6 +53,7 @@ private:
     ftxui::Component title_input_;
     ftxui::Component description_input_;
     ftxui::Component content_input_;
+    ftxui::Component hide_text_checkbox_;
     ftxui::Component container_;
 };
 

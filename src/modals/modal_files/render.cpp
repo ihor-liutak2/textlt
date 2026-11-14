@@ -330,6 +330,8 @@ std::string FilesModalContent::ModeTitle() const {
             return "Save As";
         case FilesModalMode::Import:
             return "Import";
+        case FilesModalMode::ImportActions:
+            return "Import Actions";
         case FilesModalMode::OpenFolder:
             return "Open Folder";
         case FilesModalMode::SelectDirectory:
@@ -349,6 +351,8 @@ std::string FilesModalContent::FooterActionLabel() const {
         case FilesModalMode::SaveAs:
             return "Save As";
         case FilesModalMode::Import:
+            return "Import";
+        case FilesModalMode::ImportActions:
             return "Import";
         case FilesModalMode::OpenFolder:
             return "Open Folder";

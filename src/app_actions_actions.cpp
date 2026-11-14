@@ -82,6 +82,18 @@ void TextltApp::CommandActionsAdd() {
     auto workspace = std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_);
     workspace->TakeFocus(); workspace->AddAction();
 }
+void TextltApp::CommandActionsImport() {
+    if (workspace_mode_ != WorkspaceMode::Actions) ShowActionsWorkspace();
+    auto workspace = std::static_pointer_cast<actions::ActionsWorkspaceComponent>(
+        actions_workspace_component_);
+    if (!workspace || !workspace->HasSelectedPage()) {
+        active_action_ = "Select an Actions page before importing";
+        CloseDropdown();
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+    OpenFilesModal(FilesModalMode::ImportActions);
+}
 void TextltApp::CommandActionsEdit() {
     sidebar_has_focus_ = false;
     auto workspace = std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_);

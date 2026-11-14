@@ -28,10 +28,16 @@ public:
         const std::string& name, std::string& error);
     bool DeletePage(const std::string& group_id, const std::string& id,
         std::string& error);
+    // Soft delete: moves the page to the trash group ("Deleted"). Pages that
+    // already live in the trash group are deleted permanently.
+    bool SoftDeletePage(const std::string& group_id, const std::string& id,
+        std::string& error);
     bool MovePage(const std::string& group_id, const std::string& id,
         int delta, std::string& error);
     bool CreateItem(const std::string& group_id, const std::string& page_id,
         ActionItem item, std::string& id, std::string& error);
+    bool AppendItems(const std::string& group_id, const std::string& page_id,
+        std::vector<ActionItem> items, std::string& error);
     bool UpdateItem(const std::string& group_id, const std::string& page_id,
         const ActionItem& item, std::string& error);
     bool DeleteItem(const std::string& group_id, const std::string& page_id,

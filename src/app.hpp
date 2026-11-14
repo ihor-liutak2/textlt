@@ -391,6 +391,7 @@ private:
     void CommandActionsDeletePage();
     void CommandActionsMovePage(int delta);
     void CommandActionsAdd();
+    void CommandActionsImport();
     void CommandActionsEdit();
     void CommandActionsDelete();
     void CommandActionsMove(int delta);

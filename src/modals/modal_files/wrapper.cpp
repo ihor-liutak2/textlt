@@ -92,7 +92,8 @@ void FilesModal::RebuildFooterButtons() {
         {content_->Mode() == FilesModalMode::SaveAs ? "Save As" :
             content_->Mode() == FilesModalMode::OpenFolder ? "Open Folder" :
             content_->Mode() == FilesModalMode::SelectDirectory ? "Add Project" :
-            content_->Mode() == FilesModalMode::Import ? "Import" : "Open",
+            (content_->Mode() == FilesModalMode::Import ||
+             content_->Mode() == FilesModalMode::ImportActions) ? "Import" : "Open",
             [this] {
                 if (content_) {
                     content_->ConfirmSelected();

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "editor/document_session.hpp"
+#include "actions/action_config_importer.hpp"
 #include "text_importer.hpp"
 #include "ftxui/component/event.hpp"
 
@@ -148,6 +149,33 @@ bool TextltApp::ConfirmFilesModalAction(
             return false;
         }
         success = InsertImportedText(path, result.text, error);
+    } else if (mode == FilesModalMode::ImportActions) {
+        actions::ActionConfigImportResult result =
+            actions::ActionConfigImporter::ImportFile(path);
+        if (!result.success) {
+            error = result.error.empty() ? "Actions import failed." : result.error;
+            active_action_ = error;
+            return false;
+        }
+        std::vector<actions::ActionItem> items;
+        items.reserve(result.values.size());
+        for (auto& value : result.values) {
+            actions::ActionItem item;
+            item.title = std::move(value.name);
+            item.content = std::move(value.value);
+            items.push_back(std::move(item));
+        }
+        auto workspace = std::static_pointer_cast<actions::ActionsWorkspaceComponent>(
+            actions_workspace_component_);
+        if (!workspace) {
+            error = "Actions workspace is not available.";
+            return false;
+        }
+        success = workspace->ImportActions(std::move(items), error);
+        if (success) {
+            active_action_ = "Imported " + std::to_string(result.values.size()) +
+                " actions from " + path.filename().string();
+        }
     } else if (mode == FilesModalMode::OpenFolder) {
         success = OpenWorkspaceFolder(path, error);
     } else if (mode == FilesModalMode::SelectDirectory) {

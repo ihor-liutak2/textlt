@@ -57,6 +57,7 @@ bool ActionSerializer::Load(const std::filesystem::path& path,
                 group.project_id = group_json["project_id"].get<std::string>();
             }
             group.auto_named = group_json.value("auto_named", false);
+            group.trash = group_json.value("trash", false);
             for (const Json& page_json : group_json["pages"]) {
                 ActionPage page;
                 if (!page_json.is_object() || !ReadString(page_json, "id", page.id) ||
@@ -72,6 +73,7 @@ bool ActionSerializer::Load(const std::filesystem::path& path,
                         !ReadString(item_json, "content", item.content) || !AddId(item.id, ids)) {
                         error = "Invalid action item."; return false;
                     }
+                    item.hide_text = item_json.value("hide_text", false);
                     page.items.push_back(std::move(item));
                 }
                 group.pages.push_back(std::move(page));
@@ -93,13 +95,15 @@ bool ActionSerializer::Save(const std::filesystem::path& path,
     for (const auto& group : document.groups) {
         Json group_json = {{"id", group.id}, {"name", group.name},
             {"project_id", group.project_id ? Json(*group.project_id) : Json(nullptr)},
-            {"auto_named", group.auto_named}, {"pages", Json::array()}};
+            {"auto_named", group.auto_named}, {"trash", group.trash},
+            {"pages", Json::array()}};
         for (const auto& page : group.pages) {
             Json page_json = {{"id", page.id}, {"name", page.name},
                 {"items", Json::array()}};
             for (const auto& item : page.items) {
                 page_json["items"].push_back({{"id", item.id}, {"title", item.title},
-                    {"description", item.description}, {"content", item.content}});
+                    {"description", item.description}, {"content", item.content},
+                    {"hide_text", item.hide_text}});
             }
             group_json["pages"].push_back(std::move(page_json));
         }

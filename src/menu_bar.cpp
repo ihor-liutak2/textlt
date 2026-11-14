@@ -137,6 +137,7 @@ MenuBarComponent::MenuBarComponent(
               {" Move Page Down ", "actions.move_page_down"},
               {" ───────────────────────── ", "", true},
               {" Add Action ", "actions.add"},
+              {" Import Actions... ", "actions.import"},
               {" Edit Action ", "actions.edit"},
               {" Delete Action ", "actions.delete"},
               {" Move Action Up ", "actions.move_up"},

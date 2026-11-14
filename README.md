@@ -62,7 +62,7 @@ curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-linux.sh | bash
 Or install a specific version:
 
 ```bash
-curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-linux.sh | bash -s -- v0.9.8
+curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-linux.sh | bash -s -- v0.9.9
 ```
 
 After installing, start the editor from any terminal with:
@@ -89,7 +89,7 @@ irm https://ihor-liutak2.github.io/textlt/install-textlt-windows.ps1 | iex
 Or install a specific version:
 
 ```powershell
-$env:TEXTLT_VERSION = "v0.9.8"; irm https://ihor-liutak2.github.io/textlt/install-textlt-windows.ps1 | iex
+$env:TEXTLT_VERSION = "v0.9.9"; irm https://ihor-liutak2.github.io/textlt/install-textlt-windows.ps1 | iex
 ```
 
 Open a new PowerShell window after installing so Windows reloads `PATH`, then start the editor with:
@@ -116,7 +116,7 @@ curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-macos.sh | bash
 Or install a specific version:
 
 ```bash
-curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-macos.sh | bash -s -- v0.9.8
+curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-macos.sh | bash -s -- v0.9.9
 ```
 
 After installing, start the editor from any terminal with:

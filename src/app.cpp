@@ -149,6 +149,28 @@ TextltApp::TextltApp()
               if (actions_workspace_component_)
                   std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_)->SelectGroup(id);
           },
+          [this](SidebarPanel::ActionCommand command) {
+              switch (command) {
+                  case SidebarPanel::ActionCommand::NewGroup:
+                      CommandActionsNewGroup();
+                      break;
+                  case SidebarPanel::ActionCommand::RenameGroup:
+                      CommandActionsRenameGroup();
+                      break;
+                  case SidebarPanel::ActionCommand::DeleteGroup:
+                      CommandActionsDeleteGroup();
+                      break;
+                  case SidebarPanel::ActionCommand::NewPage:
+                      CommandActionsNewPage();
+                      break;
+                  case SidebarPanel::ActionCommand::RenamePage:
+                      CommandActionsRenamePage();
+                      break;
+                  case SidebarPanel::ActionCommand::DeletePage:
+                      CommandActionsDeletePage();
+                      break;
+              }
+          },
           [this] { return SidebarProjects(); },
           [this](const std::string& id) { ActivateProject(id); },
           [this](const std::filesystem::path&) { OpenFilesModal(FilesModalMode::SelectDirectory); },

@@ -61,6 +61,7 @@ SidebarPanel::SidebarPanel(
     OpenActionsCallback on_open_actions,
     OpenDocumentsCallback on_open_documents,
     ProjectIdCallback on_action_group_select,
+    ActionCommandCallback on_action_command,
     ProjectsProvider projects_provider,
     ProjectIdCallback on_project_select,
     AddProjectCallback on_project_add,
@@ -85,6 +86,7 @@ SidebarPanel::SidebarPanel(
       on_open_actions_(std::move(on_open_actions)),
       on_open_documents_(std::move(on_open_documents)),
       on_action_group_select_(std::move(on_action_group_select)),
+      on_action_command_(std::move(on_action_command)),
       projects_provider_(std::move(projects_provider)),
       on_project_select_(std::move(on_project_select)),
       on_project_add_(std::move(on_project_add)),
@@ -165,11 +167,11 @@ ftxui::Element SidebarPanel::OnRender() {
         mode_ == SidebarMode::Folder
             ? text(" " + DisplayName(project_root_) + "/") | bold | color(sidebar_text)
             : emptyElement(),
-        separator() | color(SidebarBorderColor(theme)),
-        mode_ == SidebarMode::Actions ? emptyElement() : RenderActionRow(),
         mode_ == SidebarMode::Actions
             ? emptyElement()
             : separator() | color(SidebarBorderColor(theme)),
+        RenderActionRow(),
+        separator() | color(SidebarBorderColor(theme)),
         vbox(std::move(rows)) | reflect(menu_box_) | frame | yflex,
     }) |
         borderStyled(ftxui::LIGHT, SidebarBorderColor(theme)) |
@@ -607,6 +609,12 @@ ftxui::Element SidebarPanel::RenderActionRow() {
     action_tertiary_box_ = {};
     action_quaternary_box_ = {};
     action_quinary_box_ = {};
+    group_new_box_ = {};
+    group_rename_box_ = {};
+    group_delete_box_ = {};
+    page_new_box_ = {};
+    page_rename_box_ = {};
+    page_delete_box_ = {};
 
     if (mode_ == SidebarMode::Projects) {
         const bool selected = selected_entry_ >= 0 &&
@@ -662,7 +670,24 @@ ftxui::Element SidebarPanel::RenderActionRow() {
     }
 
     if (mode_ == SidebarMode::Actions) {
-        return text(" Use the Actions menu to manage groups") | dim;
+        return vbox({
+            text(" Group:") | bold | color(label_color),
+            hbox({
+                RenderFlatActionButton("New", ButtonRole::Primary, group_new_box_),
+                text(" "),
+                RenderFlatActionButton("Rename", ButtonRole::Utility, group_rename_box_),
+                text(" "),
+                RenderFlatActionButton("Delete", ButtonRole::Danger, group_delete_box_),
+            }),
+            text(" Pages:") | bold | color(label_color),
+            hbox({
+                RenderFlatActionButton("New", ButtonRole::Primary, page_new_box_),
+                text(" "),
+                RenderFlatActionButton("Rename", ButtonRole::Utility, page_rename_box_),
+                text(" "),
+                RenderFlatActionButton("Delete", ButtonRole::Danger, page_delete_box_),
+            }),
+        });
     }
 
     return hbox({
@@ -673,6 +698,35 @@ ftxui::Element SidebarPanel::RenderActionRow() {
 }
 
 bool SidebarPanel::HandleActionButtonMouse(const ftxui::Mouse& mouse) {
+    if (mode_ == SidebarMode::Actions) {
+        if (on_action_command_) {
+            if (group_new_box_.Contain(mouse.x, mouse.y)) {
+                on_action_command_(ActionCommand::NewGroup);
+                return true;
+            }
+            if (group_rename_box_.Contain(mouse.x, mouse.y)) {
+                on_action_command_(ActionCommand::RenameGroup);
+                return true;
+            }
+            if (group_delete_box_.Contain(mouse.x, mouse.y)) {
+                on_action_command_(ActionCommand::DeleteGroup);
+                return true;
+            }
+            if (page_new_box_.Contain(mouse.x, mouse.y)) {
+                on_action_command_(ActionCommand::NewPage);
+                return true;
+            }
+            if (page_rename_box_.Contain(mouse.x, mouse.y)) {
+                on_action_command_(ActionCommand::RenamePage);
+                return true;
+            }
+            if (page_delete_box_.Contain(mouse.x, mouse.y)) {
+                on_action_command_(ActionCommand::DeletePage);
+                return true;
+            }
+        }
+        return false;
+    }
     if (action_primary_box_.Contain(mouse.x, mouse.y)) {
         switch (mode_) {
             case SidebarMode::Favorites:

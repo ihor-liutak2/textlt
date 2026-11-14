@@ -46,18 +46,34 @@ ActionEditorModalContent::ActionEditorModalContent(
     content_input_ = ftxui::Input(
         &content_, "Exact text copied to the clipboard",
         make_options(&content_cursor_, true));
+
+    ftxui::CheckboxOption checkbox_option = ftxui::CheckboxOption::Simple();
+    checkbox_option.transform = [this](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        ftxui::Element element = ftxui::text(
+            std::string(state.state ? "[X] " : "[ ] ") + state.label);
+        if (state.focused || state.active) {
+            return element |
+                ftxui::bgcolor(theme.modal_selected_item_bg) |
+                ftxui::color(theme.modal_selected_item_fg);
+        }
+        return element | ftxui::color(theme.modal_text_color);
+    };
+    hide_text_checkbox_ = ftxui::Checkbox("Hide text", &hide_text_, checkbox_option);
+
     container_ = ftxui::Container::Vertical({
-        title_input_, description_input_, content_input_,
+        title_input_, description_input_, content_input_, hide_text_checkbox_,
     });
 }
 
 void ActionEditorModalContent::Begin(
     std::string id, std::string title, std::string description,
-    std::string content) {
+    std::string content, bool hide_text) {
     id_ = std::move(id);
     title_ = std::move(title);
     description_ = std::move(description);
     content_ = std::move(content);
+    hide_text_ = hide_text;
     status_.clear();
     title_cursor_ = static_cast<int>(title_.size());
     description_cursor_ = static_cast<int>(description_.size());
@@ -86,6 +102,7 @@ ftxui::Element ActionEditorModalContent::Render() {
         InputField("Description", description_input_, theme),
         text(""),
         InputField("Content", content_input_, theme, 10) | flex,
+        hide_text_checkbox_->Render(),
     }) | size(WIDTH, EQUAL, 78) | color(theme.modal_text_color);
 }
 
@@ -95,7 +112,7 @@ bool ActionEditorModalContent::Submit() {
         title_input_->TakeFocus();
         return false;
     }
-    actions::ActionItem item{id_, title_, description_, content_};
+    actions::ActionItem item{id_, title_, description_, content_, hide_text_};
     std::string error;
     if (!on_submit_ || !on_submit_(item, error)) {
         status_ = error.empty() ? "Could not save the action." : error;
@@ -126,9 +143,9 @@ void ActionEditorModal::ConfigureFooter() {
 
 void ActionEditorModal::Open(const actions::ActionItem* item) {
     if (item) {
-        content_->Begin(item->id, item->title, item->description, item->content);
+        content_->Begin(item->id, item->title, item->description, item->content, item->hide_text);
     } else {
-        content_->Begin({}, {}, {}, {});
+        content_->Begin({}, {}, {}, {}, false);
     }
     ConfigureFooter();
     open_ = true;

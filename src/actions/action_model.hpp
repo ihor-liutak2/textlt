@@ -11,6 +11,7 @@ struct ActionItem {
     std::string title;
     std::string description;
     std::string content;
+    bool hide_text = false;
 };
 
 struct ActionPage {
@@ -25,6 +26,7 @@ struct ActionGroup {
     std::optional<std::string> project_id;
     bool auto_named = false;
     std::vector<ActionPage> pages;
+    bool trash = false;
 };
 
 struct ActionsDocument {

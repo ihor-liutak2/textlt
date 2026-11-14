@@ -148,7 +148,8 @@ void FilesModalContent::ActivateSelected(bool double_click) {
         return;
     }
 
-    if (double_click || mode_ == FilesModalMode::Open || mode_ == FilesModalMode::Import) {
+    if (double_click || mode_ == FilesModalMode::Open ||
+        mode_ == FilesModalMode::Import || mode_ == FilesModalMode::ImportActions) {
         ConfirmSelected();
     }
 }
@@ -275,6 +276,9 @@ FileFilter FilesModalContent::FilterForMode() const {
         case FilesModalMode::Import:
             filter.extensions = {".docx", ".fb2", ".fb2.zip", ".rtf", ".odt", ".ott", ".gdoc"};
             break;
+        case FilesModalMode::ImportActions:
+            filter.extensions = {".env", ".env.*", ".properties", ".yaml", ".yml"};
+            break;
         case FilesModalMode::SelectDirectory:
         case FilesModalMode::OpenFolder:
         case FilesModalMode::None:
@@ -294,6 +298,7 @@ bool FilesModalContent::IsFileActionMode() const {
     return mode_ == FilesModalMode::Open ||
         mode_ == FilesModalMode::SaveAs ||
         mode_ == FilesModalMode::Import ||
+        mode_ == FilesModalMode::ImportActions ||
         mode_ == FilesModalMode::OpenFolder ||
         mode_ == FilesModalMode::SelectDirectory;
 }

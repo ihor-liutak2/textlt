@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(textlt VERSION 0.9.8 LANGUAGES C CXX)
+project(textlt VERSION 0.9.9 LANGUAGES C CXX)
 
 include(GNUInstallDirs)
 
@@ -237,6 +237,7 @@ add_executable(textlt
   src/notes/note_session.cpp
   src/notes/notes_workspace_component.cpp
   src/actions/action_model.cpp
+  src/actions/action_config_importer.cpp
   src/actions/action_serializer.cpp
   src/actions/action_repository.cpp
   src/actions/actions_workspace_component.cpp
@@ -461,6 +462,10 @@ add_executable(textlt_action_repository_test
   src/actions/action_model.cpp
   src/actions/action_serializer.cpp
   src/actions/action_repository.cpp
+)
+add_executable(textlt_action_config_importer_test
+  tests/action_config_importer_test.cpp
+  src/actions/action_config_importer.cpp
 )
 add_executable(textlt_actions_workspace_test
   tests/actions_workspace_test.cpp
@@ -774,6 +779,9 @@ target_include_directories(textlt_action_repository_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
+target_include_directories(textlt_action_config_importer_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
 target_include_directories(textlt_actions_workspace_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party
@@ -842,6 +850,7 @@ add_test(NAME textlt_builtin_text_processors_test COMMAND textlt_builtin_text_pr
 add_test(NAME textlt_app_command_registry_test COMMAND textlt_app_command_registry_test)
 add_test(NAME textlt_note_storage_test COMMAND textlt_note_storage_test)
 add_test(NAME textlt_action_repository_test COMMAND textlt_action_repository_test)
+add_test(NAME textlt_action_config_importer_test COMMAND textlt_action_config_importer_test)
 add_test(NAME textlt_actions_workspace_test COMMAND textlt_actions_workspace_test)
 add_test(NAME textlt_note_session_test COMMAND textlt_note_session_test)
 add_test(NAME textlt_notes_workspace_actions_test COMMAND textlt_notes_workspace_actions_test)

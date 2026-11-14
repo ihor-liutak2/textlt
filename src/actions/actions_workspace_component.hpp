@@ -48,6 +48,8 @@ public:
     void MoveAction(int delta);
     void CopySelectedAction();
     void CopyAllActions();
+    bool HasSelectedPage() const;
+    bool ImportActions(std::vector<ActionItem> items, std::string& error);
 
 private:
     friend class ActionsWorkspaceModalTestAccess;
@@ -65,6 +67,9 @@ private:
     void AfterMutation(const std::string& status);
     ftxui::Element RenderPages();
     ftxui::Element RenderItems();
+    ftxui::Element RenderItemsScrollbar(size_t visible_rows, size_t total_items,
+        size_t visible_items, size_t scroll, size_t max_scroll, const Theme& theme);
+    void ScrollItems(int delta);
     ftxui::Element RenderDialog();
     ftxui::Component ActiveChild() override;
 
@@ -87,9 +92,21 @@ private:
     std::unique_ptr<textlt::ActionEditorModal> action_editor_modal_;
     ftxui::Box pages_box_;
     ftxui::Box items_box_;
+    ftxui::Box add_action_box_;
+    ftxui::Box pages_view_box_;
+    ftxui::Box items_view_box_;
+    ftxui::Box items_scrollbar_box_;
     std::vector<ftxui::Box> page_boxes_;
     std::vector<ftxui::Box> item_boxes_;
     std::vector<ftxui::Box> copy_boxes_;
+    bool pages_view_known_ = false;
+    bool items_view_known_ = false;
+    size_t pages_visible_count_ = 0;
+    size_t items_visible_rows_ = 0;
+    size_t items_visible_count_ = 0;
+    bool items_scrollbar_dragging_ = false;
+    int items_scrollbar_drag_y_ = 0;
+    size_t items_scrollbar_drag_scroll_ = 0;
 };
 
 } // namespace textlt::actions

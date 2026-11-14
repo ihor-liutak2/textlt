@@ -317,6 +317,7 @@ void TextltApp::OpenFilesModal(FilesModalMode mode) {
         std::string(mode == FilesModalMode::Open ? "Open" :
             mode == FilesModalMode::SaveAs ? "Save As" :
             mode == FilesModalMode::Import ? "Import" :
+            mode == FilesModalMode::ImportActions ? "Import Actions" :
             mode == FilesModalMode::OpenFolder ? "Open Folder" :
             mode == FilesModalMode::SelectDirectory ? "Add Project" :
             "Files") +

@@ -10,6 +10,35 @@
 namespace textlt {
 namespace {
 
+bool IsWorkspaceModalCommand(const std::string& command_id) {
+    // Notes and Actions are full workspaces, but the application-level dialogs
+    // still belong to the shared menu bar. Keep document mutations guarded in
+    // those workspaces while allowing dialogs to be opened on top of them.
+    return command_id == "file.files" ||
+        command_id == "file.open" ||
+        command_id == "file.open_folder" ||
+        command_id == "file.save_as" ||
+        command_id == "file.import" ||
+        command_id == "file.recent" ||
+        command_id == "project.add" ||
+        command_id == "project.remote_files" ||
+        command_id == "project.assign_connection" ||
+        command_id == "project.edit_connection" ||
+        command_id == "search.files" ||
+        command_id == "text_processors.open" ||
+        command_id == "custom_processor_builder.open" ||
+        command_id == "sidebar.ctrl_b_file_explorer" ||
+        command_id == "theme.open" ||
+        command_id == "theme.colors" ||
+        command_id == "view.layout" ||
+        command_id == "distraction.open_options" ||
+        command_id == "tts.open_modal" ||
+        command_id == "assistant.open_settings" ||
+        command_id.rfind("ai.", 0) == 0 ||
+        command_id.rfind("remote.", 0) == 0 ||
+        command_id.rfind("git.", 0) == 0;
+}
+
 AppCommand MakeCommand(
     const std::string& id,
     const std::string& title,
@@ -152,6 +181,7 @@ void TextltApp::InitializeCommands() {
     add("actions.move_page_up", "Move Page Up", "Actions", "", [this] { CommandActionsMovePage(-1); });
     add("actions.move_page_down", "Move Page Down", "Actions", "", [this] { CommandActionsMovePage(1); });
     add("actions.add", "Add Action", "Actions", "", [this] { CommandActionsAdd(); });
+    add("actions.import", "Import Actions", "Actions", "", [this] { CommandActionsImport(); });
     add("actions.edit", "Edit Action", "Actions", "", [this] { CommandActionsEdit(); });
     add("actions.delete", "Delete Action", "Actions", "", [this] { CommandActionsDelete(); });
     add("actions.move_up", "Move Action Up", "Actions", "", [this] { CommandActionsMove(-1); });
@@ -269,8 +299,7 @@ bool TextltApp::RunCommand(const std::string& command_id) {
         const bool allowed = command_id.rfind("notes.", 0) == 0 ||
             command_id.rfind("app.", 0) == 0 ||
             command_id == "file.save" ||
-            command_id == "theme.open" ||
-            command_id == "theme.colors";
+            IsWorkspaceModalCommand(command_id);
         if (!allowed) {
             active_action_ = "This command is unavailable in Notes view";
             CloseDropdown();
@@ -281,8 +310,7 @@ bool TextltApp::RunCommand(const std::string& command_id) {
     if (workspace_mode_ == WorkspaceMode::Actions) {
         const bool allowed = command_id.rfind("actions.", 0) == 0 ||
             command_id.rfind("app.", 0) == 0 || command_id == "notes.toggle" ||
-            command_id == "file.save" || command_id == "theme.open" ||
-            command_id == "theme.colors";
+            command_id == "file.save" || IsWorkspaceModalCommand(command_id);
         if (!allowed) {
             active_action_ = "This command is unavailable in Actions view";
             CloseDropdown(); screen_.PostEvent(ftxui::Event::Custom); return true;

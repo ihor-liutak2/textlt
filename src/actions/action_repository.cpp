@@ -114,6 +114,22 @@ bool ActionRepository::DeletePage(const std::string& group_id, const std::string
     group->pages.erase(found); return Commit(std::move(next), error);
 }
 
+bool ActionRepository::SoftDeletePage(const std::string& group_id, const std::string& id, std::string& error) {
+    ActionsDocument next = data_; ActionGroup* group = FindGroup(next, group_id);
+    if (!group) { error = "Group was not found."; return false; }
+    const auto found = std::find_if(group->pages.begin(), group->pages.end(), [&](const auto& p) { return p.id == id; });
+    if (found == group->pages.end()) { error = "Page was not found."; return false; }
+    if (group->trash) { group->pages.erase(found); return Commit(std::move(next), error); }
+    ActionPage page = std::move(*found); group->pages.erase(found);
+    ActionGroup* trash = nullptr;
+    for (auto& candidate : next.groups) if (candidate.trash) { trash = &candidate; break; }
+    if (!trash) {
+        ActionGroup created; created.id = GenerateActionId(); created.name = "Deleted"; created.trash = true;
+        next.groups.push_back(std::move(created)); trash = &next.groups.back();
+    }
+    trash->pages.push_back(std::move(page)); return Commit(std::move(next), error);
+}
+
 bool ActionRepository::MovePage(const std::string& group_id, const std::string& id, int delta, std::string& error) {
     ActionsDocument next = data_; ActionGroup* group = FindGroup(next, group_id);
     if (!group || !MoveById(group->pages, id, delta)) { error = "Page was not found."; return false; }
@@ -125,6 +141,22 @@ bool ActionRepository::CreateItem(const std::string& group_id, const std::string
     ActionsDocument next = data_; ActionGroup* group = FindGroup(next, group_id); ActionPage* page = group ? FindPage(*group, page_id) : nullptr;
     if (!page) { error = "Page was not found."; return false; }
     id = GenerateActionId(); item.id = id; page->items.push_back(std::move(item)); return Commit(std::move(next), error);
+}
+
+bool ActionRepository::AppendItems(const std::string& group_id,
+    const std::string& page_id, std::vector<ActionItem> items,
+    std::string& error) {
+    if (items.empty()) { error = "No actions were provided."; return false; }
+    ActionsDocument next = data_;
+    ActionGroup* group = FindGroup(next, group_id);
+    ActionPage* page = group ? FindPage(*group, page_id) : nullptr;
+    if (!page) { error = "Select an Actions page before importing."; return false; }
+    for (ActionItem& item : items) {
+        if (item.title.empty()) { error = "Imported action title is empty."; return false; }
+        item.id = GenerateActionId();
+        page->items.push_back(std::move(item));
+    }
+    return Commit(std::move(next), error);
 }
 
 bool ActionRepository::UpdateItem(const std::string& group_id, const std::string& page_id, const ActionItem& item, std::string& error) {

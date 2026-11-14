@@ -27,6 +27,27 @@ void TextltApp::SwitchEditorFocus() {
 void TextltApp::FocusEditor() {
     sidebar_has_focus_ = false;
     SetActiveLayer(UiLayer::Main);
+
+    // Closing an application-level modal must return focus to the workspace
+    // it was opened from. Taking focus on an editor child while Notes or
+    // Actions is active makes Container::Tab select the Documents child even
+    // though workspace_mode_ still renders the other workspace.
+    if (workspace_mode_ == WorkspaceMode::Notes) {
+        workspace_mode_index_ = static_cast<int>(workspace_mode_);
+        if (notes_workspace_component_) {
+            notes_workspace_component_->TakeFocus();
+        }
+        return;
+    }
+    if (workspace_mode_ == WorkspaceMode::Actions) {
+        workspace_mode_index_ = static_cast<int>(workspace_mode_);
+        if (actions_workspace_component_) {
+            actions_workspace_component_->TakeFocus();
+        }
+        return;
+    }
+
+    workspace_mode_index_ = static_cast<int>(WorkspaceMode::Documents);
     document_workspace_.ClampActiveEditorPaneIndex(editor_pane_components_.size());
     if (!editor_pane_components_.empty()) {
         text_editor_ = editor_pane_components_[document_workspace_.ActiveEditorPaneIndex()];

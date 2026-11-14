@@ -75,6 +75,10 @@ public:
     using ProjectsProvider = std::function<std::vector<ProjectEntry>()>;
     using ProjectIdCallback = std::function<void(const std::string&)>;
     using AddProjectCallback = std::function<void(const std::filesystem::path&)>;
+    enum class ActionCommand {
+        NewGroup, RenameGroup, DeleteGroup, NewPage, RenamePage, DeletePage,
+    };
+    using ActionCommandCallback = std::function<void(ActionCommand)>;
 
     SidebarPanel(
         FileOpenCallback on_file_open,
@@ -93,6 +97,7 @@ public:
         OpenActionsCallback on_open_actions,
         OpenDocumentsCallback on_open_documents,
         ProjectIdCallback on_action_group_select,
+        ActionCommandCallback on_action_command,
         ProjectsProvider projects_provider,
         ProjectIdCallback on_project_select,
         AddProjectCallback on_project_add,
@@ -228,6 +233,7 @@ private:
     OpenActionsCallback on_open_actions_;
     OpenDocumentsCallback on_open_documents_;
     ProjectIdCallback on_action_group_select_;
+    ActionCommandCallback on_action_command_;
     ProjectsProvider projects_provider_;
     ProjectIdCallback on_project_select_;
     AddProjectCallback on_project_add_;
@@ -264,6 +270,12 @@ private:
     ftxui::Box action_tertiary_box_;
     ftxui::Box action_quaternary_box_;
     ftxui::Box action_quinary_box_;
+    ftxui::Box group_new_box_;
+    ftxui::Box group_rename_box_;
+    ftxui::Box group_delete_box_;
+    ftxui::Box page_new_box_;
+    ftxui::Box page_rename_box_;
+    ftxui::Box page_delete_box_;
     ftxui::Box panel_box_;
     ftxui::Box menu_box_;
     ftxui::Component menu_;
