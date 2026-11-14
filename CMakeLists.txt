@@ -467,6 +467,12 @@ add_executable(textlt_notes_workspace_actions_test
   src/theme.cpp
 )
 
+add_executable(textlt_menu_bar_notes_test
+  tests/menu_bar_notes_test.cpp
+  src/menu_bar.cpp
+  src/theme.cpp
+)
+
 add_executable(textlt_shortcut_registry_test
   tests/shortcut_registry_test.cpp
   src/shortcut_key.cpp
@@ -751,6 +757,11 @@ target_include_directories(textlt_notes_workspace_actions_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
 
+target_include_directories(textlt_menu_bar_notes_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+)
+
 target_include_directories(textlt_document_ai_transform_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -764,6 +775,11 @@ target_link_libraries(textlt_theme_customization_test PRIVATE
 target_link_libraries(textlt_notes_workspace_actions_test PRIVATE
   ftxui::component
   Threads::Threads
+)
+target_link_libraries(textlt_menu_bar_notes_test PRIVATE
+  ftxui::screen
+  ftxui::dom
+  ftxui::component
 )
 
 target_link_libraries(textlt_ai_backend_utils_test PRIVATE Threads::Threads)
@@ -792,6 +808,7 @@ add_test(NAME textlt_app_command_registry_test COMMAND textlt_app_command_regist
 add_test(NAME textlt_note_storage_test COMMAND textlt_note_storage_test)
 add_test(NAME textlt_note_session_test COMMAND textlt_note_session_test)
 add_test(NAME textlt_notes_workspace_actions_test COMMAND textlt_notes_workspace_actions_test)
+add_test(NAME textlt_menu_bar_notes_test COMMAND textlt_menu_bar_notes_test)
 add_test(NAME textlt_shortcut_registry_test COMMAND textlt_shortcut_registry_test)
 add_test(NAME textlt_custom_processor_builder_test COMMAND textlt_custom_processor_builder_test)
 add_test(NAME textlt_tts_pipeline_test COMMAND textlt_tts_pipeline_test)

@@ -44,11 +44,18 @@ public:
         std::vector<std::string> known_project_ids);
     bool Save(std::string& error);
     bool IsEditing() const { return editing_; }
+    bool IsTrashSelected() const { return trash_selected_ && !editing_; }
     std::string StatusText() const;
     void ToggleMark(NoteMark mark);
     void SetBlockType(NoteBlockType type);
     void ClearFormatting();
     void NewNote();
+    // Opens the card selected in the overview. Does nothing (with a status
+    // message) when there is no editable note selection.
+    void EditSelectedNote();
+    // Trash-aware delete used by the Notes menu: trashed notes are deleted
+    // permanently, everything else is moved to Trash.
+    void DeleteSelection();
 
 private:
     friend class NotesWorkspaceActionsTestAccess;

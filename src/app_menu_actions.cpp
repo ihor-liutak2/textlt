@@ -55,6 +55,21 @@ void TextltApp::UpdateOptionsMenuLabels() {
 }
 
 
+void TextltApp::UpdateNotesMenuLabels() {
+    if (!menu_bar_) {
+        return;
+    }
+
+    bool trash_selected = false;
+    if (workspace_mode_ == WorkspaceMode::Notes && notes_workspace_component_) {
+        auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(
+            notes_workspace_component_);
+        trash_selected = notes->IsTrashSelected();
+    }
+    menu_bar_->SetNotesTrashSelected(trash_selected);
+}
+
+
 void TextltApp::RunDropdownAction(int menu_index, int item_index) {
     const std::string command_id = menu_bar_ ? menu_bar_->CommandIdAt(menu_index, item_index) : "";
     if (command_id.empty()) {

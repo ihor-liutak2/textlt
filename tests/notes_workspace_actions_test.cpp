@@ -46,6 +46,16 @@ public:
         component.PermanentlyDeleteSelectedNote();
         component.AcceptConfirmation();
     }
+    static void DeleteSelection(NotesWorkspaceComponent& component) {
+        component.DeleteSelection();
+        component.AcceptConfirmation();
+    }
+    static void EditSelected(NotesWorkspaceComponent& component) {
+        component.EditSelectedNote();
+    }
+    static bool TrashSelected(const NotesWorkspaceComponent& component) {
+        return component.IsTrashSelected();
+    }
     static void EmptyTrash(NotesWorkspaceComponent& component) {
         component.EmptyTrash();
         component.AcceptConfirmation();
@@ -352,6 +362,33 @@ int main() {
     NotesWorkspaceActionsTestAccess::EmptyTrash(component);
     Expect(NotesWorkspaceActionsTestAccess::NoteCount(component) == 0,
         "Empty Trash did not remove all trashed notes.");
+
+    // The Notes menu edits the selected overview card and deletes the
+    // selection via a single trash-aware action.
+    const fs::path menu_root =
+        fs::temp_directory_path() / "textlt_notes_menu_actions_test";
+    fs::remove_all(menu_root, cleanup_error);
+    NotesWorkspaceComponent menu_component(
+        nullptr, [](const std::string&) {}, [] {}, [] { return std::string{}; },
+        [](const std::string&) {}, menu_root);
+    NotesWorkspaceActionsTestAccess::NewNote(menu_component);
+    Expect(menu_component.IsEditing(), "New Note should open the note editor.");
+    menu_component.OnEvent(ftxui::Event::Escape);
+    Expect(!menu_component.IsEditing(), "Escape should return to the note overview.");
+    NotesWorkspaceActionsTestAccess::EditSelected(menu_component);
+    Expect(menu_component.IsEditing(),
+        "Edit Note should open the card selected in the overview.");
+    menu_component.OnEvent(ftxui::Event::Escape);
+    NotesWorkspaceActionsTestAccess::DeleteSelection(menu_component);
+    Expect(NotesWorkspaceActionsTestAccess::FirstNoteDeleted(menu_component),
+        "Delete Note should move a selected overview note to Trash.");
+    NotesWorkspaceActionsTestAccess::SelectTrash(menu_component);
+    Expect(NotesWorkspaceActionsTestAccess::TrashSelected(menu_component),
+        "Selecting Trash should report the trash selection to the Notes menu.");
+    NotesWorkspaceActionsTestAccess::DeleteSelection(menu_component);
+    Expect(NotesWorkspaceActionsTestAccess::NoteCount(menu_component) == 0,
+        "Delete in Trash should permanently remove the selected note.");
+    fs::remove_all(menu_root, cleanup_error);
 
     // Project-linked groups.
     const std::vector<std::string> known_ab = {"project-a", "project-b"};

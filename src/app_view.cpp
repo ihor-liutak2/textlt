@@ -72,6 +72,7 @@ ftxui::Element TextltApp::Render() {
     const auto editor = std::static_pointer_cast<EditorComponent>(text_editor_);
     const bool distraction_mode = layout_controller_.IsDistractionModeActive();
     UpdateFileMenuLabels();
+    UpdateNotesMenuLabels();
     RefreshOpenedDocumentsSidebar();
 
     Element top_menu_element = distraction_mode ? emptyElement() : menu_bar_->Render();

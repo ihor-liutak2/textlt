@@ -42,7 +42,7 @@ MenuBarComponent::MenuBarComponent(
           " Project ",
           " Edit ",
           " Options ",
-          " Format ",
+          " Notes ",
           " Tools ",
           " Help ",
           " Exit ",
@@ -109,6 +109,9 @@ MenuBarComponent::MenuBarComponent(
           },
           {
               {" New Note ", "notes.new"},
+              {" Edit Note ", "notes.edit_selected"},
+              {" Delete Note ", "notes.delete_selected"},
+              {" ───────────────────────── ", "", true},
               {" Bold                 (Ctrl+B) ", "notes.bold"},
               {" Italic               (Ctrl+I) ", "notes.italic"},
               {" Underline            (Ctrl+U) ", "notes.underline"},
@@ -174,11 +177,11 @@ MenuBarComponent::MenuBarComponent(
         dropdown_menu_,
     });
     Add(menu_container_);
-    const int format_index = MenuIndex(" Format ");
-    if (format_index >= 0) {
-        format_dropdown_items_ = dropdown_items_[static_cast<size_t>(format_index)];
+    const int notes_index = MenuIndex(" Notes ");
+    if (notes_index >= 0) {
+        notes_dropdown_items_ = dropdown_items_[static_cast<size_t>(notes_index)];
     }
-    SetFormatMenuVisible(false);
+    SetNotesMenuVisible(false);
 }
 
 void MenuBarComponent::RebuildDropdownComponents() {
@@ -370,32 +373,43 @@ void MenuBarComponent::SetFileFavoriteLabel(bool is_favorite) {
     RefreshCurrentDropdownEntries();
 }
 
-void MenuBarComponent::SetFormatMenuVisible(bool visible) {
-    if (format_menu_visible_ == visible) {
+void MenuBarComponent::SetNotesMenuVisible(bool visible) {
+    if (notes_menu_visible_ == visible) {
         return;
     }
 
     CloseDropdown();
-    const int current_format_index = MenuIndex(" Format ");
-    if (visible && current_format_index < 0) {
+    const int current_notes_index = MenuIndex(" Notes ");
+    if (visible && current_notes_index < 0) {
         const int tools_index = MenuIndex(" Tools ");
         const size_t insertion = tools_index < 0
             ? menu_entries_.size()
             : static_cast<size_t>(tools_index);
-        menu_entries_.insert(menu_entries_.begin() + static_cast<std::ptrdiff_t>(insertion), " Format ");
+        menu_entries_.insert(menu_entries_.begin() + static_cast<std::ptrdiff_t>(insertion), " Notes ");
         dropdown_items_.insert(
             dropdown_items_.begin() + static_cast<std::ptrdiff_t>(insertion),
-            format_dropdown_items_);
-    } else if (!visible && current_format_index >= 0) {
-        menu_entries_.erase(menu_entries_.begin() + current_format_index);
-        dropdown_items_.erase(dropdown_items_.begin() + current_format_index);
+            notes_dropdown_items_);
+    } else if (!visible && current_notes_index >= 0) {
+        menu_entries_.erase(menu_entries_.begin() + current_notes_index);
+        dropdown_items_.erase(dropdown_items_.begin() + current_notes_index);
     }
-    format_menu_visible_ = visible;
+    notes_menu_visible_ = visible;
     selected_menu_item_ = std::clamp(
         selected_menu_item_,
         0,
         std::max(0, static_cast<int>(menu_entries_.size()) - 1));
     selected_dropdown_item_ = 0;
+    RefreshCurrentDropdownEntries();
+}
+
+void MenuBarComponent::SetNotesTrashSelected(bool trash_selected) {
+    if (notes_trash_selected_ == trash_selected) {
+        return;
+    }
+    notes_trash_selected_ = trash_selected;
+    SetItemLabel("notes.delete_selected", trash_selected
+        ? " Delete Permanently "
+        : " Delete Note ");
     RefreshCurrentDropdownEntries();
 }
 
@@ -422,15 +436,25 @@ void MenuBarComponent::SetOptionLabels(
 }
 
 bool MenuBarComponent::SetItemLabel(const std::string& command_id, std::string label) {
+    bool updated = false;
     for (auto& menu : dropdown_items_) {
         for (DropdownItem& item : menu) {
             if (item.command_id == command_id) {
-                item.label = std::move(label);
-                return true;
+                item.label = label;
+                updated = true;
             }
         }
     }
-    return false;
+    // The Notes menu is stored separately so it can be removed from the menu
+    // bar outside the notes workspace. Keep its labels current even while the
+    // menu is hidden.
+    for (DropdownItem& item : notes_dropdown_items_) {
+        if (item.command_id == command_id) {
+            item.label = std::move(label);
+            updated = true;
+        }
+    }
+    return updated;
 }
 
 int MenuBarComponent::MenuIndex(const std::string& label) const {

@@ -512,6 +512,29 @@ void NotesWorkspaceComponent::NewNote() {
     RebuildSidebar(); RebuildVisibleNotes();
 }
 
+void NotesWorkspaceComponent::EditSelectedNote() {
+    if (editing_) return;
+    if (trash_selected_) {
+        Notify("Restore the note before editing");
+        return;
+    }
+    if (visible_notes_.empty() || selected_card_ < 0 ||
+        selected_card_ >= static_cast<int>(visible_notes_.size())) {
+        Notify("Select a note to edit");
+        return;
+    }
+    OpenSelectedNote();
+    Notify("Editing note");
+}
+
+void NotesWorkspaceComponent::DeleteSelection() {
+    if (trash_selected_ && !editing_) {
+        PermanentlyDeleteSelectedNote();
+    } else {
+        DeleteSelectedNote();
+    }
+}
+
 void NotesWorkspaceComponent::OpenNote(size_t note_index) {
     if (note_index >= repository_.Notes().size()) return;
     active_note_id_ = repository_.Notes()[note_index].id;

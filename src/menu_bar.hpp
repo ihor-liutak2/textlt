@@ -25,7 +25,8 @@ public:
     bool Focusable() const override { return true; }
 
     void SetTheme(const Theme* theme) { theme_ = theme; }
-    void SetFormatMenuVisible(bool visible);
+    void SetNotesMenuVisible(bool visible);
+    void SetNotesTrashSelected(bool trash_selected);
     void SetFileFavoriteLabel(bool is_favorite);
     void SetOptionLabels(
         bool smart_word_wrap,
@@ -42,6 +43,8 @@ public:
     std::string CommandIdAt(int menu_index, int item_index) const;
 
 private:
+    friend class MenuBarTestAccess;
+
     struct DropdownItem {
         std::string label;
         std::string command_id;
@@ -59,7 +62,7 @@ private:
 
     std::vector<std::string> menu_entries_;
     std::vector<std::vector<DropdownItem>> dropdown_items_;
-    std::vector<DropdownItem> format_dropdown_items_;
+    std::vector<DropdownItem> notes_dropdown_items_;
     std::vector<std::string> current_dropdown_entries_;
     std::vector<std::string> current_dropdown_command_ids_;
     std::vector<bool> current_dropdown_separators_;
@@ -69,7 +72,8 @@ private:
     int selected_menu_item_ = 0;
     int active_dropdown_ = -1;
     int selected_dropdown_item_ = 0;
-    bool format_menu_visible_ = true;
+    bool notes_menu_visible_ = true;
+    bool notes_trash_selected_ = false;
 
     std::vector<ftxui::Box> menu_boxes_;
     std::vector<ftxui::Box> dropdown_boxes_;

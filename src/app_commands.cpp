@@ -131,6 +131,8 @@ void TextltApp::InitializeCommands() {
     add("sidebar.copy_selected_path", "Copy Selected Project Path", "Options", "", [this] { CopySidebarSelectedPath(); });
     add("notes.toggle", "Notes", "Options", "", [this] { CommandNotesToggle(); });
     add("notes.new", "New Note", "Notes", "", [this] { CommandNotesNew(); });
+    add("notes.edit_selected", "Edit Note", "Notes", "", [this] { CommandNotesEditSelected(); });
+    add("notes.delete_selected", "Delete Note", "Notes", "", [this] { CommandNotesDeleteSelected(); });
     add("notes.bold", "Bold", "Notes", "", [this] { CommandNotesBold(); });
     add("notes.italic", "Italic", "Notes", "", [this] { CommandNotesItalic(); });
     add("notes.underline", "Underline", "Notes", "", [this] { CommandNotesUnderline(); });

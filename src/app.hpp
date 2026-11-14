@@ -257,6 +257,7 @@ private:
     void AddActiveFavoriteFromSidebar();
     void UpdateFileMenuLabels();
     void UpdateOptionsMenuLabels();
+    void UpdateNotesMenuLabels();
     void InitializeCommands();
     void InitializeMenuShortcuts();
     void InitializeTextShortcuts();
@@ -366,6 +367,8 @@ private:
 
     void CommandNotesToggle();
     void CommandNotesNew();
+    void CommandNotesEditSelected();
+    void CommandNotesDeleteSelected();
     void CommandNotesBold();
     void CommandNotesItalic();
     void CommandNotesUnderline();
