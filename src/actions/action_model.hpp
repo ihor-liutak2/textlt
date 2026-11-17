@@ -1,10 +1,19 @@
 #pragma once
 
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace textlt::actions {
+
+constexpr std::size_t kActionMetadataCharacterLimit = 30;
+
+std::string LimitUtf8Characters(
+    const std::string& value, std::size_t max_characters);
+inline std::string LimitActionMetadata(const std::string& value) {
+    return LimitUtf8Characters(value, kActionMetadataCharacterLimit);
+}
 
 struct ActionItem {
     std::string id;

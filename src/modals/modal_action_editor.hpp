@@ -34,6 +34,7 @@ public:
         std::string content, bool hide_text = false);
     bool EditingExisting() const { return !id_.empty(); }
     bool Submit();
+    bool HandleEvent(ftxui::Event event);
     void FocusFirstField() { title_input_->TakeFocus(); }
     void ClearStatus() { status_.clear(); }
 
@@ -55,6 +56,9 @@ private:
     ftxui::Component content_input_;
     ftxui::Component hide_text_checkbox_;
     ftxui::Component container_;
+    ftxui::Box title_clear_box_;
+    ftxui::Box description_clear_box_;
+    ftxui::Box content_clear_box_;
 };
 
 class ActionEditorModal {

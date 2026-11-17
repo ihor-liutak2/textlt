@@ -1,8 +1,11 @@
 #include "modals/modal_action_editor.hpp"
 
+#include <algorithm>
 #include <utility>
 
 #include "ftxui/component/component_options.hpp"
+#include "ftxui/component/mouse.hpp"
+#include "ui_button.hpp"
 
 namespace textlt {
 namespace {
@@ -11,10 +14,16 @@ ftxui::Element InputField(
     const std::string& label,
     const ftxui::Component& input,
     const Theme& theme,
+    ftxui::Box& clear_box,
     int height = 3) {
     using namespace ftxui;
+    ButtonSpec clear_spec = ButtonSpecFromLabel(
+        "Clear", ButtonRole::Warning, ButtonVariant::Minimal, ButtonSize::Compact);
     return vbox({
-        text(label) | bold | color(theme.modal_accent),
+        hbox({
+            text(label) | bold | color(theme.modal_accent) | xflex,
+            RenderModalFlatButton(theme, clear_spec) | reflect(clear_box),
+        }),
         input->Render() |
             color(theme.modal_input_fg) |
             bgcolor(theme.modal_input_bg) |
@@ -28,10 +37,23 @@ ftxui::Element InputField(
 ActionEditorModalContent::ActionEditorModalContent(
     const Theme* theme, SubmitCallback on_submit)
     : theme_(theme), on_submit_(std::move(on_submit)) {
-    auto make_options = [this](int* cursor, bool multiline) {
+    auto make_options = [this](
+                            std::string* value,
+                            int* cursor,
+                            bool multiline,
+                            bool limit_metadata) {
         ftxui::InputOption option;
         option.cursor_position = cursor;
         option.multiline = multiline;
+        if (limit_metadata) {
+            option.on_change = [value, cursor] {
+                std::string limited = actions::LimitActionMetadata(*value);
+                if (limited.size() != value->size()) {
+                    *value = std::move(limited);
+                    *cursor = std::min(*cursor, static_cast<int>(value->size()));
+                }
+            };
+        }
         option.transform = [this](ftxui::InputState state) {
             const Theme& resolved = theme_ ? *theme_ : FallbackTheme();
             return resolved.InputTransform(std::move(state));
@@ -39,13 +61,14 @@ ActionEditorModalContent::ActionEditorModalContent(
         return option;
     };
     title_input_ = ftxui::Input(
-        &title_, "Short descriptive title", make_options(&title_cursor_, false));
+        &title_, "Short descriptive title",
+        make_options(&title_, &title_cursor_, false, true));
     description_input_ = ftxui::Input(
         &description_, "Optional explanation",
-        make_options(&description_cursor_, false));
+        make_options(&description_, &description_cursor_, false, true));
     content_input_ = ftxui::Input(
         &content_, "Exact text copied to the clipboard",
-        make_options(&content_cursor_, true));
+        make_options(&content_, &content_cursor_, true, false));
 
     ftxui::CheckboxOption checkbox_option = ftxui::CheckboxOption::Simple();
     checkbox_option.transform = [this](const ftxui::EntryState& state) {
@@ -70,8 +93,8 @@ void ActionEditorModalContent::Begin(
     std::string id, std::string title, std::string description,
     std::string content, bool hide_text) {
     id_ = std::move(id);
-    title_ = std::move(title);
-    description_ = std::move(description);
+    title_ = actions::LimitActionMetadata(title);
+    description_ = actions::LimitActionMetadata(description);
     content_ = std::move(content);
     hide_text_ = hide_text;
     status_.clear();
@@ -94,16 +117,47 @@ ftxui::Element ActionEditorModalContent::RenderTitle() {
 ftxui::Element ActionEditorModalContent::Render() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    title_clear_box_ = {1, 0, 1, 0};
+    description_clear_box_ = {1, 0, 1, 0};
+    content_clear_box_ = {1, 0, 1, 0};
     return vbox({
         text("Action details") | bold | color(theme.modal_text_color),
         separator() | color(theme.modal_border),
-        InputField("Title", title_input_, theme),
+        InputField("Title", title_input_, theme, title_clear_box_),
         text(""),
-        InputField("Description", description_input_, theme),
+        InputField("Description", description_input_, theme, description_clear_box_),
         text(""),
-        InputField("Content", content_input_, theme, 10) | flex,
+        InputField("Content", content_input_, theme, content_clear_box_, 10) | flex,
         hide_text_checkbox_->Render(),
     }) | size(WIDTH, EQUAL, 78) | color(theme.modal_text_color);
+}
+
+bool ActionEditorModalContent::HandleEvent(ftxui::Event event) {
+    if (!event.is_mouse()) return false;
+    const ftxui::Mouse mouse = event.mouse();
+    if (mouse.button != ftxui::Mouse::Left ||
+        mouse.motion != ftxui::Mouse::Pressed) {
+        return false;
+    }
+    if (title_clear_box_.Contain(mouse.x, mouse.y)) {
+        title_.clear();
+        title_cursor_ = 0;
+        title_input_->TakeFocus();
+        return true;
+    }
+    if (description_clear_box_.Contain(mouse.x, mouse.y)) {
+        description_.clear();
+        description_cursor_ = 0;
+        description_input_->TakeFocus();
+        return true;
+    }
+    if (content_clear_box_.Contain(mouse.x, mouse.y)) {
+        content_.clear();
+        content_cursor_ = 0;
+        content_input_->TakeFocus();
+        return true;
+    }
+    return false;
 }
 
 bool ActionEditorModalContent::Submit() {
@@ -161,6 +215,7 @@ void ActionEditorModal::Close() {
 
 bool ActionEditorModal::OnEvent(ftxui::Event event) {
     if (!open_) return false;
+    if (event.is_mouse() && content_->HandleEvent(event)) return true;
     // Keep text editing independent from ModalWindow's remembered action
     // focus. Rebuilding a modal can otherwise leave a footer button active.
     if (!event.is_mouse() && event != ftxui::Event::Escape) {

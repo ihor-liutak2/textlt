@@ -169,6 +169,21 @@ TextltApp::TextltApp()
                   case SidebarPanel::ActionCommand::DeletePage:
                       CommandActionsDeletePage();
                       break;
+                  case SidebarPanel::ActionCommand::AddAction:
+                      CommandActionsAdd();
+                      break;
+                  case SidebarPanel::ActionCommand::EditAction:
+                      CommandActionsEdit();
+                      break;
+                  case SidebarPanel::ActionCommand::DeleteAction:
+                      CommandActionsDelete();
+                      break;
+                  case SidebarPanel::ActionCommand::MoveActionUp:
+                      CommandActionsMove(-1);
+                      break;
+                  case SidebarPanel::ActionCommand::MoveActionDown:
+                      CommandActionsMove(1);
+                      break;
               }
           },
           [this] { return SidebarProjects(); },

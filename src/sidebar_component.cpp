@@ -615,6 +615,11 @@ ftxui::Element SidebarPanel::RenderActionRow() {
     page_new_box_ = {};
     page_rename_box_ = {};
     page_delete_box_ = {};
+    item_add_box_ = {};
+    item_edit_box_ = {};
+    item_delete_box_ = {};
+    item_move_up_box_ = {};
+    item_move_down_box_ = {};
 
     if (mode_ == SidebarMode::Projects) {
         const bool selected = selected_entry_ >= 0 &&
@@ -687,6 +692,19 @@ ftxui::Element SidebarPanel::RenderActionRow() {
                 text(" "),
                 RenderFlatActionButton("Delete", ButtonRole::Danger, page_delete_box_),
             }),
+            text(" Actions:") | bold | color(label_color),
+            hbox({
+                RenderFlatActionButton("Add", ButtonRole::Primary, item_add_box_),
+                text(" "),
+                RenderFlatActionButton("Edit", ButtonRole::Utility, item_edit_box_),
+                text(" "),
+                RenderFlatActionButton("Delete", ButtonRole::Danger, item_delete_box_),
+            }),
+            hbox({
+                RenderFlatActionButton("Move Up", ButtonRole::Navigation, item_move_up_box_),
+                text(" "),
+                RenderFlatActionButton("Move Down", ButtonRole::Navigation, item_move_down_box_),
+            }),
         });
     }
 
@@ -722,6 +740,26 @@ bool SidebarPanel::HandleActionButtonMouse(const ftxui::Mouse& mouse) {
             }
             if (page_delete_box_.Contain(mouse.x, mouse.y)) {
                 on_action_command_(ActionCommand::DeletePage);
+                return true;
+            }
+            if (item_add_box_.Contain(mouse.x, mouse.y)) {
+                on_action_command_(ActionCommand::AddAction);
+                return true;
+            }
+            if (item_edit_box_.Contain(mouse.x, mouse.y)) {
+                on_action_command_(ActionCommand::EditAction);
+                return true;
+            }
+            if (item_delete_box_.Contain(mouse.x, mouse.y)) {
+                on_action_command_(ActionCommand::DeleteAction);
+                return true;
+            }
+            if (item_move_up_box_.Contain(mouse.x, mouse.y)) {
+                on_action_command_(ActionCommand::MoveActionUp);
+                return true;
+            }
+            if (item_move_down_box_.Contain(mouse.x, mouse.y)) {
+                on_action_command_(ActionCommand::MoveActionDown);
                 return true;
             }
         }

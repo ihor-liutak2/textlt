@@ -6,6 +6,7 @@
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/event.hpp"
 #include "ftxui/component/mouse.hpp"
+#include "ui_button.hpp"
 
 namespace textlt::actions {
 namespace {
@@ -17,7 +18,11 @@ ftxui::Color BorderColor(const Theme& theme) {
 }
 
 constexpr int kMouseWheelScrollItems = 3;
+constexpr int kMouseWheelScrollNavigator = 3;
 constexpr size_t kItemsScrollbarColumns = 2;
+constexpr int kActionContentPreviewRows = 5;
+constexpr int kActionMetadataColumnWidth = 30;
+constexpr size_t kActionMetadataFirstRowCharacters = 25;
 // Mask for items with "hide text": a solid large circle, shown 8 times in tiles.
 const std::string kHiddenContentMask = "⬤⬤⬤⬤⬤⬤⬤⬤";
 
@@ -43,6 +48,17 @@ ScrollThumb ComputeScrollThumb(
     thumb.thumb_top = thumb.needed && max_scroll > 0 && thumb.track_space > 0
         ? (scroll * thumb.track_space) / max_scroll : 0;
     return thumb;
+}
+
+ftxui::Element RenderActionMetadataColumn(const std::string& value) {
+    using namespace ftxui;
+    const std::string limited = LimitActionMetadata(value);
+    const std::string first = LimitUtf8Characters(
+        limited, kActionMetadataFirstRowCharacters);
+    const std::string second = limited.substr(first.size());
+    Elements rows = {text(" " + first)};
+    if (!second.empty()) rows.push_back(text(" " + second));
+    return vbox(std::move(rows)) | size(WIDTH, EQUAL, kActionMetadataColumnWidth);
 }
 
 template <typename T>
@@ -129,7 +145,7 @@ void ActionsWorkspaceComponent::NormalizeSelection() {
 void ActionsWorkspaceComponent::SelectGroup(const std::string& id) {
     if (IndexById(repository_.Data().groups, id) < 0) return;
     selected_group_id_ = id; selected_page_id_.clear(); selected_item_id_.clear();
-    page_scroll_ = item_scroll_ = 0; NormalizeSelection(); focus_ = FocusArea::Pages;
+    page_scroll_ = item_scroll_ = 0; NormalizeSelection(); focus_ = FocusArea::Navigator;
 }
 
 void ActionsWorkspaceComponent::Notify(const std::string& message) { if (status_) status_(message); }
@@ -141,12 +157,36 @@ void ActionsWorkspaceComponent::AfterMutation(const std::string& message) {
     NormalizeSelection(); if (groups_changed_) groups_changed_(); Notify(message); CloseDialog();
 }
 
-void ActionsWorkspaceComponent::NewGroup() { OpenNameDialog(Dialog::NewGroup); }
-void ActionsWorkspaceComponent::RenameGroup() { if (const auto* g = SelectedGroup()) OpenNameDialog(Dialog::RenameGroup, g->name); }
-void ActionsWorkspaceComponent::DeleteGroup() { if (SelectedGroup()) dialog_ = Dialog::DeleteGroup; }
-void ActionsWorkspaceComponent::NewPage() { if (SelectedGroup()) OpenNameDialog(Dialog::NewPage); }
-void ActionsWorkspaceComponent::RenamePage() { if (const auto* p = SelectedPage()) OpenNameDialog(Dialog::RenamePage, p->name); }
-void ActionsWorkspaceComponent::DeletePage() { if (SelectedPage()) dialog_ = Dialog::DeletePage; }
+void ActionsWorkspaceComponent::NewGroup() {
+    navigator_tab_ = NavigatorTab::Groups;
+    focus_ = FocusArea::Navigator;
+    OpenNameDialog(Dialog::NewGroup);
+}
+void ActionsWorkspaceComponent::RenameGroup() {
+    navigator_tab_ = NavigatorTab::Groups;
+    focus_ = FocusArea::Navigator;
+    if (const auto* g = SelectedGroup()) OpenNameDialog(Dialog::RenameGroup, g->name);
+}
+void ActionsWorkspaceComponent::DeleteGroup() {
+    navigator_tab_ = NavigatorTab::Groups;
+    focus_ = FocusArea::Navigator;
+    if (SelectedGroup()) dialog_ = Dialog::DeleteGroup;
+}
+void ActionsWorkspaceComponent::NewPage() {
+    navigator_tab_ = NavigatorTab::Pages;
+    focus_ = FocusArea::Navigator;
+    if (SelectedGroup()) OpenNameDialog(Dialog::NewPage);
+}
+void ActionsWorkspaceComponent::RenamePage() {
+    navigator_tab_ = NavigatorTab::Pages;
+    focus_ = FocusArea::Navigator;
+    if (const auto* p = SelectedPage()) OpenNameDialog(Dialog::RenamePage, p->name);
+}
+void ActionsWorkspaceComponent::DeletePage() {
+    navigator_tab_ = NavigatorTab::Pages;
+    focus_ = FocusArea::Navigator;
+    if (SelectedPage()) dialog_ = Dialog::DeletePage;
+}
 void ActionsWorkspaceComponent::AddAction() {
     if (SelectedPage() && action_editor_modal_) action_editor_modal_->Open();
 }
@@ -226,49 +266,144 @@ void ActionsWorkspaceComponent::AcceptDialog() {
     if (!error.empty()) Notify(error);
 }
 
-ftxui::Element ActionsWorkspaceComponent::RenderPages() {
-    using namespace ftxui; const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+ftxui::Element ActionsWorkspaceComponent::RenderNavigator() {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    const bool show_groups = navigator_tab_ == NavigatorTab::Groups;
+
     if (pages_view_box_.x_max > pages_view_box_.x_min ||
         pages_view_box_.y_max > pages_view_box_.y_min) {
         pages_view_known_ = true;
     }
     if (pages_view_known_) {
         size_t visible_count = 0;
-        for (const auto& box : page_boxes_) {
+        const auto& boxes = show_groups ? group_boxes_ : page_boxes_;
+        for (const auto& box : boxes) {
             if (box.y_max < pages_view_box_.y_min || box.y_min > pages_view_box_.y_max) break;
             ++visible_count;
         }
-        if (visible_count > 0) pages_visible_count_ = std::max<size_t>(1, visible_count);
+        if (visible_count > 0) {
+            if (show_groups) groups_visible_count_ = visible_count;
+            else pages_visible_count_ = visible_count;
+        }
     }
-    Elements rows; page_boxes_.clear(); const ActionGroup* group = SelectedGroup();
-    const size_t total_pages = group ? group->pages.size() : 0;
-    const size_t visible_pages = pages_visible_count_ ? pages_visible_count_ : total_pages;
-    const size_t max_scroll = total_pages > visible_pages ? total_pages - visible_pages : 0;
-    if (page_scroll_ > max_scroll) page_scroll_ = max_scroll;
-    if (!group) rows.push_back(paragraph("Create or select an Actions group in the Sidebar.") | dim | color(theme.foreground));
-    else if (group->pages.empty()) rows.push_back(paragraph("No pages. Use Actions > New Page.") | dim | color(theme.foreground));
-    else {
+
+    groups_tab_box_ = {};
+    pages_tab_box_ = {};
+    navigator_new_box_ = {};
+    navigator_rename_box_ = {};
+    navigator_delete_box_ = {};
+    group_boxes_.clear();
+    page_boxes_.clear();
+
+    const ActionGroup* group = SelectedGroup();
+    const ActionPage* page = SelectedPage();
+    const bool can_modify_group = group && !group->project_id.has_value();
+    const bool can_modify_page = page != nullptr;
+    auto action_button = [&](const std::string& label, ButtonRole role,
+                             bool enabled, Box& box) {
+        ButtonSpec spec = ButtonSpecFromLabel(
+            label, role, ButtonVariant::Minimal, ButtonSize::Compact);
+        spec.enabled = enabled;
+        return RenderModalFlatButton(theme, spec) | reflect(box);
+    };
+
+    Element tabs = hbox({
+        RenderModalTabButton(theme, "Groups", show_groups) | reflect(groups_tab_box_),
+        text(" "),
+        RenderModalTabButton(theme, "Pages", !show_groups) | reflect(pages_tab_box_),
+    });
+    const bool can_create = show_groups || group != nullptr;
+    const bool can_rename = show_groups ? can_modify_group : can_modify_page;
+    const bool can_delete = show_groups ? can_modify_group : can_modify_page;
+    Element actions = hbox({
+        action_button("New", ButtonRole::Primary, can_create, navigator_new_box_),
+        action_button("Rename", ButtonRole::Utility, can_rename, navigator_rename_box_),
+        action_button("Delete", ButtonRole::Danger, can_delete, navigator_delete_box_),
+    });
+
+    Elements rows;
+    if (show_groups) {
+        const auto& groups = repository_.Data().groups;
+        const size_t visible_groups = groups_visible_count_ ? groups_visible_count_ : groups.size();
+        const size_t max_scroll = groups.size() > visible_groups
+            ? groups.size() - visible_groups : 0;
+        if (group_scroll_ > max_scroll) group_scroll_ = max_scroll;
+        if (groups.empty()) {
+            rows.push_back(paragraph("No groups. Use New to create one.") |
+                dim | color(theme.foreground));
+        } else {
+            const int selected = IndexById(groups, selected_group_id_);
+            const size_t start = std::min(group_scroll_, groups.size() - 1);
+            // reflect() retains Box references through layout, so reserve stable
+            // storage before binding each visible row.
+            group_boxes_.assign(groups.size() - start, {});
+            for (size_t i = start; i < groups.size(); ++i) {
+                const bool is_selected = static_cast<int>(i) == selected;
+                std::string label = groups[i].project_id ? "◆ " : "  ";
+                label += groups[i].name;
+                Element row = paragraph(label) |
+                    color(is_selected ? theme.modal_selected_item_fg : theme.foreground) |
+                    reflect(group_boxes_[i - start]);
+                if (is_selected) row = row | bgcolor(theme.modal_selected_item_bg);
+                rows.push_back(row);
+                rows.push_back(separator() | color(BorderColor(theme)));
+            }
+        }
+    } else if (!group) {
+        rows.push_back(paragraph("Select a group on the Groups tab.") |
+            dim | color(theme.foreground));
+    } else if (group->pages.empty()) {
+        rows.push_back(paragraph("No pages. Use New to create one.") |
+            dim | color(theme.foreground));
+    } else {
+        const size_t visible_pages = pages_visible_count_ ? pages_visible_count_ : group->pages.size();
+        const size_t max_scroll = group->pages.size() > visible_pages
+            ? group->pages.size() - visible_pages : 0;
+        if (page_scroll_ > max_scroll) page_scroll_ = max_scroll;
         const int selected = IndexById(group->pages, selected_page_id_);
         const size_t start = std::min(page_scroll_, group->pages.size() - 1);
-        // reflect() holds a Box& across layout: size the storage before binding
-        // so later growth cannot move the boxes out from under the references.
         page_boxes_.assign(group->pages.size() - start, {});
         for (size_t i = start; i < group->pages.size(); ++i) {
             const bool is_selected = static_cast<int>(i) == selected;
-            Element row = paragraph(group->pages[i].name) |
+            Element row = paragraph("  " + group->pages[i].name) |
                 color(is_selected ? theme.modal_selected_item_fg : theme.foreground) |
                 reflect(page_boxes_[i - start]);
             if (is_selected) row = row | bgcolor(theme.modal_selected_item_bg);
-            rows.push_back(row); rows.push_back(separator() | color(BorderColor(theme)));
+            rows.push_back(row);
+            rows.push_back(separator() | color(BorderColor(theme)));
         }
     }
-    return vbox({text(" Pages ") | bold | color(theme.foreground), separator() | color(BorderColor(theme)),
-        vbox(std::move(rows)) | frame | yflex | reflect(pages_view_box_)}) |
-        size(WIDTH, EQUAL, 26) | borderStyled(ftxui::LIGHT, BorderColor(theme)) | reflect(pages_box_);
+
+    Elements content = {
+        tabs,
+        separator() | color(BorderColor(theme)),
+        actions,
+        separator() | color(BorderColor(theme)),
+    };
+    if (!show_groups) {
+        content.push_back(
+            text(" Group: " + (group ? group->name : std::string("None"))) |
+            bold | color(theme.foreground));
+        content.push_back(separator() | color(BorderColor(theme)));
+    }
+    content.push_back(vbox(std::move(rows)) | frame | yflex | reflect(pages_view_box_));
+    return vbox(std::move(content)) |
+        size(WIDTH, EQUAL, 32) |
+        borderStyled(ftxui::LIGHT, BorderColor(theme)) |
+        reflect(pages_box_);
 }
 
 ftxui::Element ActionsWorkspaceComponent::RenderItems() {
     using namespace ftxui; const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    const ActionPage* page = SelectedPage();
+    const bool page_changed = selected_page_id_ != items_layout_page_id_;
+    if (page_changed) {
+        items_layout_page_id_ = selected_page_id_;
+        // Use a conservative first-frame estimate so a newly selected page is
+        // scrollable before its variable-height cards have been laid out.
+        items_visible_count_ = page && !page->items.empty() ? 1 : 0;
+    }
     if (items_view_box_.x_max > items_view_box_.x_min ||
         items_view_box_.y_max > items_view_box_.y_min) {
         items_view_known_ = true;
@@ -277,16 +412,11 @@ ftxui::Element ActionsWorkspaceComponent::RenderItems() {
     if (items_view_known_) {
         visible_rows = static_cast<size_t>(
             std::max(0, items_view_box_.y_max - items_view_box_.y_min + 1));
-        size_t visible_count = 0;
-        for (const auto& box : item_boxes_) {
-            if (box.y_max < items_view_box_.y_min || box.y_min > items_view_box_.y_max) break;
-            ++visible_count;
-        }
-        if (visible_count > 0) items_visible_count_ = std::max<size_t>(1, visible_count);
+        if (!page_changed) UpdateItemsVisibleCountFromLayout();
     }
     items_visible_rows_ = visible_rows;
 
-    Elements cards; item_boxes_.clear(); copy_boxes_.clear(); const ActionPage* page = SelectedPage();
+    Elements cards; item_boxes_.clear(); copy_boxes_.clear();
     std::string header = page ? page->name : "Actions";
     const size_t total_items = page ? page->items.size() : 0;
     const size_t visible_items = items_visible_count_ ? items_visible_count_ : total_items;
@@ -303,24 +433,32 @@ ftxui::Element ActionsWorkspaceComponent::RenderItems() {
         for (size_t i = start; i < page->items.size(); ++i) {
             const auto& item = page->items[i];
             const bool is_selected = static_cast<int>(i) == selected;
-            Elements body = {hbox({
-                text(" " + item.title) | bold | xflex,
-                item.description.empty()
-                    ? emptyElement()
-                    : text(" " + item.description) | dim | align_right,
-                text("          "),
-                hbox({
+            const std::string title = LimitActionMetadata(item.title);
+            const std::string description = LimitActionMetadata(item.description);
+            Element copy_button = hbox({
                     separator() | color(BorderColor(theme)),
                     text(" Copy "),
-                }) | reflect(copy_boxes_[i - start])}) |
+                }) | reflect(copy_boxes_[i - start]) | notflex;
+            Elements body = {dbox({
+                hbox({
+                    RenderActionMetadataColumn(title) | bold,
+                    RenderActionMetadataColumn(description) | dim,
+                }) | xframe,
+                hbox({filler(), std::move(copy_button)}),
+            }) |
                 bgcolor(theme.modal_selected_item_bg) |
                 color(theme.modal_selected_item_fg)};
-            body.push_back(item.hide_text
+            Element content = item.hide_text
                 ? hbox({text("     "), text(kHiddenContentMask) |
                     color(is_selected ? theme.modal_accent : theme.foreground)})
                 : hbox({text("     "),
                     paragraph(item.content) |
-                        color(is_selected ? theme.modal_accent : theme.foreground) | xflex}));
+                        color(is_selected ? theme.modal_accent : theme.foreground) |
+                        yframe |
+                        size(HEIGHT, LESS_THAN, kActionContentPreviewRows) | xflex}) |
+                    yframe |
+                    size(HEIGHT, LESS_THAN, kActionContentPreviewRows);
+            body.push_back(std::move(content));
             Element card = vbox(std::move(body)) | reflect(item_boxes_[i - start]);
             cards.push_back(card);
             if (i + 1 < page->items.size()) cards.push_back(text(""));
@@ -335,12 +473,31 @@ ftxui::Element ActionsWorkspaceComponent::RenderItems() {
         }) | reflect(add_action_box_),
     });
     Element list = hbox({
-        vbox(std::move(cards)) | frame | xflex,
+        vbox(std::move(cards)) | yframe | xflex,
         RenderItemsScrollbar(
             visible_rows, total_items, visible_items, item_scroll_, max_scroll, theme),
     }) | yflex | reflect(items_view_box_);
     return vbox({title_row, separator() | color(BorderColor(theme)), list}) |
-        xflex | borderStyled(ftxui::LIGHT, BorderColor(theme)) | reflect(items_box_);
+        borderStyled(ftxui::LIGHT, BorderColor(theme)) |
+        reflect(items_box_) | xflex;
+}
+
+void ActionsWorkspaceComponent::UpdateItemsVisibleCountFromLayout() {
+    if (!items_view_known_) return;
+    size_t visible_count = 0;
+    for (const auto& box : item_boxes_) {
+        if (box.IsEmpty()) continue;
+        if (box.y_max < items_view_box_.y_min) continue;
+        if (box.y_min > items_view_box_.y_max) break;
+        // reflect() clips a partially visible card to the viewport. A card
+        // touching the lower boundary may therefore have additional rows
+        // below the screen, so do not count it as fully visible.
+        if (box.y_max >= items_view_box_.y_max) break;
+        ++visible_count;
+    }
+    if (visible_count > 0) {
+        items_visible_count_ = visible_count;
+    }
 }
 
 ftxui::Element ActionsWorkspaceComponent::RenderItemsScrollbar(
@@ -398,7 +555,7 @@ ftxui::Element ActionsWorkspaceComponent::RenderDialog() {
 }
 
 ftxui::Element ActionsWorkspaceComponent::OnRender() {
-    using namespace ftxui; Element base = hbox({RenderPages(), RenderItems()}) | flex;
+    using namespace ftxui; Element base = hbox({RenderNavigator(), RenderItems()}) | flex;
     if (action_editor_modal_ && action_editor_modal_->IsOpen())
         return dbox({base, action_editor_modal_->View()->Render() | clear_under | center});
     return dialog_ == Dialog::None ? base : dbox({base, RenderDialog()});
@@ -422,10 +579,32 @@ bool ActionsWorkspaceComponent::OnEvent(ftxui::Event event) {
         return name_component_->OnEvent(event);
     }
     const ActionGroup* group = SelectedGroup(); const ActionPage* page = SelectedPage();
-    if (event == ftxui::Event::Tab) { focus_ = focus_ == FocusArea::Pages ? FocusArea::Items : FocusArea::Pages; return true; }
+    if (event == ftxui::Event::Tab) {
+        focus_ = focus_ == FocusArea::Navigator ? FocusArea::Items : FocusArea::Navigator;
+        return true;
+    }
+    if (focus_ == FocusArea::Navigator &&
+        (event == ftxui::Event::ArrowLeft || event == ftxui::Event::ArrowRight)) {
+        navigator_tab_ = event == ftxui::Event::ArrowLeft
+            ? NavigatorTab::Groups : NavigatorTab::Pages;
+        return true;
+    }
     if (event == ftxui::Event::ArrowDown || event == ftxui::Event::ArrowUp) {
         const int delta = event == ftxui::Event::ArrowDown ? 1 : -1;
-        if (focus_ == FocusArea::Pages && group && !group->pages.empty()) {
+        if (focus_ == FocusArea::Navigator && navigator_tab_ == NavigatorTab::Groups &&
+            !repository_.Data().groups.empty()) {
+            const auto& groups = repository_.Data().groups;
+            int index = std::max(0, IndexById(groups, selected_group_id_));
+            index = std::clamp(index + delta, 0, static_cast<int>(groups.size()) - 1);
+            SelectGroup(groups[static_cast<size_t>(index)].id);
+            const size_t selected_index = static_cast<size_t>(index);
+            if (selected_index < group_scroll_) group_scroll_ = selected_index;
+            else if (groups_visible_count_ > 0 &&
+                     selected_index >= group_scroll_ + groups_visible_count_) {
+                group_scroll_ = selected_index - groups_visible_count_ + 1;
+            }
+        } else if (focus_ == FocusArea::Navigator &&
+                   navigator_tab_ == NavigatorTab::Pages && group && !group->pages.empty()) {
             int index = std::max(0, IndexById(group->pages, selected_page_id_)); index = std::clamp(index + delta, 0, static_cast<int>(group->pages.size()) - 1);
             selected_page_id_ = group->pages[index].id; selected_item_id_.clear(); NormalizeSelection();
             const size_t selected_index = static_cast<size_t>(index);
@@ -446,9 +625,29 @@ bool ActionsWorkspaceComponent::OnEvent(ftxui::Event event) {
     if (event == ftxui::Event::Return && focus_ == FocusArea::Items) { CopySelectedAction(); return true; }
     if (event.is_mouse()) {
         const ftxui::Mouse mouse = event.mouse();
+        UpdateItemsVisibleCountFromLayout();
         const size_t total_items = page ? page->items.size() : 0;
         const size_t visible_items = items_visible_count_ ? items_visible_count_ : total_items;
         const size_t max_scroll = total_items > visible_items ? total_items - visible_items : 0;
+        if ((mouse.button == ftxui::Mouse::WheelUp ||
+             mouse.button == ftxui::Mouse::WheelDown) &&
+            pages_view_box_.Contain(mouse.x, mouse.y)) {
+            const int delta = mouse.button == ftxui::Mouse::WheelUp
+                ? -kMouseWheelScrollNavigator : kMouseWheelScrollNavigator;
+            size_t* scroll = &page_scroll_;
+            size_t total = group ? group->pages.size() : 0;
+            size_t visible = pages_visible_count_ ? pages_visible_count_ : total;
+            if (navigator_tab_ == NavigatorTab::Groups) {
+                scroll = &group_scroll_;
+                total = repository_.Data().groups.size();
+                visible = groups_visible_count_ ? groups_visible_count_ : total;
+            }
+            const size_t navigator_max_scroll = total > visible ? total - visible : 0;
+            *scroll = static_cast<size_t>(std::clamp<long long>(
+                static_cast<long long>(*scroll) + delta, 0,
+                static_cast<long long>(navigator_max_scroll)));
+            return true;
+        }
         if (mouse.button == ftxui::Mouse::WheelUp && items_view_box_.Contain(mouse.x, mouse.y)) { ScrollItems(-kMouseWheelScrollItems); return true; }
         if (mouse.button == ftxui::Mouse::WheelDown && items_view_box_.Contain(mouse.x, mouse.y)) { ScrollItems(kMouseWheelScrollItems); return true; }
         if (items_scrollbar_dragging_ && mouse.motion == ftxui::Mouse::Released) { items_scrollbar_dragging_ = false; return true; }
@@ -466,6 +665,37 @@ bool ActionsWorkspaceComponent::OnEvent(ftxui::Event event) {
             return true;
         }
         if (mouse.button == ftxui::Mouse::Left && mouse.motion == ftxui::Mouse::Pressed) {
+            if (groups_tab_box_.Contain(mouse.x, mouse.y)) {
+                navigator_tab_ = NavigatorTab::Groups;
+                focus_ = FocusArea::Navigator;
+                return true;
+            }
+            if (pages_tab_box_.Contain(mouse.x, mouse.y)) {
+                navigator_tab_ = NavigatorTab::Pages;
+                focus_ = FocusArea::Navigator;
+                return true;
+            }
+            if (navigator_new_box_.Contain(mouse.x, mouse.y)) {
+                if (navigator_tab_ == NavigatorTab::Groups) NewGroup();
+                else if (group) NewPage();
+                return true;
+            }
+            if (navigator_rename_box_.Contain(mouse.x, mouse.y)) {
+                if (navigator_tab_ == NavigatorTab::Groups) {
+                    if (group && !group->project_id) RenameGroup();
+                } else if (page) {
+                    RenamePage();
+                }
+                return true;
+            }
+            if (navigator_delete_box_.Contain(mouse.x, mouse.y)) {
+                if (navigator_tab_ == NavigatorTab::Groups) {
+                    if (group && !group->project_id) DeleteGroup();
+                } else if (page) {
+                    DeletePage();
+                }
+                return true;
+            }
             if (add_action_box_.Contain(mouse.x, mouse.y)) { AddAction(); return true; }
             if (items_scrollbar_box_.Contain(mouse.x, mouse.y)) {
                 if (total_items > visible_items && items_visible_rows_ > 0) {
@@ -484,7 +714,9 @@ bool ActionsWorkspaceComponent::OnEvent(ftxui::Event event) {
                 }
                 return true;
             }
-            for (size_t i = 0; i < page_boxes_.size(); ++i) if (page_boxes_[i].Contain(mouse.x, mouse.y) && group && !group->pages.empty()) { selected_page_id_ = group->pages[std::min(page_scroll_, group->pages.size() - 1) + i].id; selected_item_id_.clear(); NormalizeSelection(); focus_ = FocusArea::Pages; return true; }
+            const auto& groups = repository_.Data().groups;
+            for (size_t i = 0; i < group_boxes_.size(); ++i) if (group_boxes_[i].Contain(mouse.x, mouse.y) && !groups.empty()) { SelectGroup(groups[std::min(group_scroll_, groups.size() - 1) + i].id); return true; }
+            for (size_t i = 0; i < page_boxes_.size(); ++i) if (page_boxes_[i].Contain(mouse.x, mouse.y) && group && !group->pages.empty()) { selected_page_id_ = group->pages[std::min(page_scroll_, group->pages.size() - 1) + i].id; selected_item_id_.clear(); NormalizeSelection(); focus_ = FocusArea::Navigator; return true; }
             for (size_t i = 0; i < item_boxes_.size(); ++i) if (item_boxes_[i].Contain(mouse.x, mouse.y) && page && !page->items.empty()) { selected_item_id_ = page->items[std::min(item_scroll_, page->items.size() - 1) + i].id; focus_ = FocusArea::Items; if (copy_boxes_[i].Contain(mouse.x, mouse.y)) CopySelectedAction(); return true; }
         }
     }

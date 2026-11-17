@@ -53,7 +53,8 @@ public:
 
 private:
     friend class ActionsWorkspaceModalTestAccess;
-    enum class FocusArea { Pages, Items };
+    enum class NavigatorTab { Groups, Pages };
+    enum class FocusArea { Navigator, Items };
     enum class Dialog { None, NewGroup, RenameGroup, NewPage, RenamePage,
         DeleteGroup, DeletePage, DeleteAction };
     const ActionGroup* SelectedGroup() const;
@@ -65,10 +66,11 @@ private:
     void AcceptDialog();
     void CloseDialog();
     void AfterMutation(const std::string& status);
-    ftxui::Element RenderPages();
+    ftxui::Element RenderNavigator();
     ftxui::Element RenderItems();
     ftxui::Element RenderItemsScrollbar(size_t visible_rows, size_t total_items,
         size_t visible_items, size_t scroll, size_t max_scroll, const Theme& theme);
+    void UpdateItemsVisibleCountFromLayout();
     void ScrollItems(int delta);
     ftxui::Element RenderDialog();
     ftxui::Component ActiveChild() override;
@@ -82,7 +84,9 @@ private:
     std::string selected_group_id_;
     std::string selected_page_id_;
     std::string selected_item_id_;
-    FocusArea focus_ = FocusArea::Pages;
+    NavigatorTab navigator_tab_ = NavigatorTab::Pages;
+    FocusArea focus_ = FocusArea::Navigator;
+    size_t group_scroll_ = 0;
     size_t page_scroll_ = 0;
     size_t item_scroll_ = 0;
     Dialog dialog_ = Dialog::None;
@@ -93,17 +97,25 @@ private:
     ftxui::Box pages_box_;
     ftxui::Box items_box_;
     ftxui::Box add_action_box_;
+    ftxui::Box groups_tab_box_;
+    ftxui::Box pages_tab_box_;
+    ftxui::Box navigator_new_box_;
+    ftxui::Box navigator_rename_box_;
+    ftxui::Box navigator_delete_box_;
     ftxui::Box pages_view_box_;
     ftxui::Box items_view_box_;
     ftxui::Box items_scrollbar_box_;
+    std::vector<ftxui::Box> group_boxes_;
     std::vector<ftxui::Box> page_boxes_;
     std::vector<ftxui::Box> item_boxes_;
     std::vector<ftxui::Box> copy_boxes_;
     bool pages_view_known_ = false;
     bool items_view_known_ = false;
+    size_t groups_visible_count_ = 0;
     size_t pages_visible_count_ = 0;
     size_t items_visible_rows_ = 0;
     size_t items_visible_count_ = 0;
+    std::string items_layout_page_id_;
     bool items_scrollbar_dragging_ = false;
     int items_scrollbar_drag_y_ = 0;
     size_t items_scrollbar_drag_scroll_ = 0;

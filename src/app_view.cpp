@@ -45,11 +45,11 @@ BottomBarRowState TextltApp::CurrentBottomBarRowState() {
             (cursor_row_index * 100) / static_cast<int>(state.total_lines - 1);
     }
     state.line_ending = editor ? editor->ActiveLineEndingLabel() : "LF";
+    state.git_branch = git_manager_.GetCurrentBranch();
     state.theme_name = current_theme_.name;
 
     if (workspace_mode_ == WorkspaceMode::Notes) {
         state.line_ending = "NOTE";
-        state.git_branch = "Notes";
         if (const ProjectRecord* project = ActiveWorkspaceProject()) {
             state.project_name = project->name;
         }
@@ -57,12 +57,10 @@ BottomBarRowState TextltApp::CurrentBottomBarRowState() {
     }
     if (workspace_mode_ == WorkspaceMode::Actions) {
         state.line_ending = "ACTION";
-        state.git_branch = "Actions";
         if (const ProjectRecord* project = ActiveWorkspaceProject()) state.project_name = project->name;
         return state;
     }
 
-    state.git_branch = git_manager_.GetCurrentBranch();
     if (const ProjectRecord* project = ActiveWorkspaceProject()) {
         state.project_name = project->name;
     }
