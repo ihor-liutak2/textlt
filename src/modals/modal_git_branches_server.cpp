@@ -373,6 +373,19 @@ void GitModalContent::ForcePushWithLease() {
         "PUSH");
 }
 
+void GitModalContent::CopyServerOutput() {
+    if (!write_clipboard_) {
+        status_ = "Clipboard write is not configured.";
+        return;
+    }
+    if (server_output_.empty()) {
+        status_ = "No server output to copy.";
+        return;
+    }
+    write_clipboard_(server_output_);
+    status_ = "Server output copied.";
+}
+
 void GitModalContent::RebuildBranchLabels() {
     branch_labels_.clear();
     branch_labels_.reserve(branches_.size());

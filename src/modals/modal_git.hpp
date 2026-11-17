@@ -99,6 +99,7 @@ private:
     void CopyStatusPaths();
 
     void CopyDiff();
+    void CopyCommitOutput();
     void CommitStagedFiles();
     void OpenCompareSideBySide();
     void OpenCompareUnifiedDiff();
@@ -118,6 +119,7 @@ private:
 
     void RefreshTags();
     void CreateTag();
+    void MoveSelectedTag();
     void DeleteSelectedTag();
     void PushSelectedTag();
     void PushAllTags();
@@ -127,6 +129,7 @@ private:
     void FetchServer();
     void PushServer();
     void ForcePushWithLease();
+    void CopyServerOutput();
 
     void RequestConfirm(
         const std::string& title,
@@ -254,6 +257,7 @@ private:
     std::vector<std::string> commit_labels_;
     int selected_commit_file_ = 0;
     std::string commit_message_;
+    std::string commit_output_;
 
     std::vector<std::string> branches_;
     std::vector<std::string> branch_labels_;
@@ -332,6 +336,7 @@ private:
     ftxui::Component commit_file_menu_;
     ftxui::Component commit_message_input_;
     ftxui::Component commit_button_;
+    ftxui::Component copy_commit_output_button_;
 
     ftxui::Component branch_menu_;
     ftxui::Component new_branch_button_;
@@ -357,6 +362,7 @@ private:
     ftxui::Component tag_name_input_component_;
     ftxui::Component tag_message_input_component_;
     ftxui::Component create_tag_button_;
+    ftxui::Component move_tag_button_;
     ftxui::Component delete_tag_button_;
     ftxui::Component push_tag_button_;
     ftxui::Component push_all_tags_button_;
@@ -371,6 +377,7 @@ private:
     ftxui::Component fetch_button_;
     ftxui::Component push_button_;
     ftxui::Component force_push_button_;
+    ftxui::Component copy_server_output_button_;
 
     ftxui::Component compare_left_ref_menu_;
     ftxui::Component compare_right_ref_menu_;

@@ -30,6 +30,7 @@ ButtonSpec GitButtonSpec(std::string label) {
     }
     if (caption.find("Merge") != std::string::npos ||
         caption.find("Rebase") != std::string::npos ||
+        caption.find("Move") != std::string::npos ||
         caption.find("Delete") != std::string::npos ||
         caption.find("Update") != std::string::npos ||
         caption.find("Rename") != std::string::npos ||
@@ -156,6 +157,7 @@ GitModalContent::GitModalContent(
     };
     commit_message_input_ = ftxui::Input(&commit_message_, "commit message", commit_message_option);
     commit_button_ = MakeTextButton("Commit", [this] { CommitStagedFiles(); });
+    copy_commit_output_button_ = MakeTextButton("Copy output", [this] { CopyCommitOutput(); });
 
     ftxui::MenuOption branch_menu_option = ftxui::MenuOption::Vertical();
     branch_menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
@@ -291,6 +293,7 @@ GitModalContent::GitModalContent(
     tag_message_input_component_ = ftxui::Input(&tag_message_input_, "optional message", tag_message_option);
 
     create_tag_button_ = MakeTextButton("Create tag", [this] { CreateTag(); });
+    move_tag_button_ = MakeTextButton("Move to HEAD", [this] { MoveSelectedTag(); });
     delete_tag_button_ = MakeTextButton("Delete tag", [this] { DeleteSelectedTag(); });
     push_tag_button_ = MakeTextButton("Push tag", [this] { PushSelectedTag(); });
     push_all_tags_button_ = MakeTextButton("Push all tags", [this] { PushAllTags(); });
@@ -370,6 +373,7 @@ GitModalContent::GitModalContent(
     fetch_button_ = MakeTextButton("Fetch", [this] { FetchServer(); });
     push_button_ = MakeTextButton("Push", [this] { PushServer(); });
     force_push_button_ = MakeTextButton("Force push lease", [this] { ForcePushWithLease(); });
+    copy_server_output_button_ = MakeTextButton("Copy output", [this] { CopyServerOutput(); });
 
     status_tab_container_ = ftxui::Container::Vertical({
         ftxui::Container::Horizontal({
@@ -394,7 +398,10 @@ GitModalContent::GitModalContent(
     commit_tab_container_ = ftxui::Container::Vertical({
         commit_file_menu_,
         commit_message_input_,
-        commit_button_,
+        ftxui::Container::Horizontal({
+            commit_button_,
+            copy_commit_output_button_,
+        }),
     });
 
     branches_tab_container_ = ftxui::Container::Vertical({
@@ -427,6 +434,7 @@ GitModalContent::GitModalContent(
         tag_message_input_component_,
         ftxui::Container::Horizontal({
             create_tag_button_,
+            move_tag_button_,
             delete_tag_button_,
             push_tag_button_,
             push_all_tags_button_,
@@ -440,6 +448,7 @@ GitModalContent::GitModalContent(
             fetch_button_,
             push_button_,
             force_push_button_,
+            copy_server_output_button_,
         }),
     });
 
@@ -642,6 +651,7 @@ void GitModalContent::ApplyBackgroundOperationCompletion() {
     }
 
     if (background_operation_ == BackgroundOperation::Commit) {
+        commit_output_ = result.output;
         RunAndRefresh(operation_action_, result);
         if (result.success()) {
             commit_message_.clear();
@@ -737,6 +747,7 @@ void GitModalContent::Open() {
     status_ = "Ready";
     server_output_.clear();
     server_output_lines_.clear();
+    commit_output_.clear();
     RefreshAll();
     RefreshRemoteBranches();
     RefreshTags();
@@ -864,17 +875,18 @@ ftxui::Element GitModalContent::RenderCustomFooter() {
         add(working_diff_button_); add(staged_diff_button_);
         add(refresh_diff_button_); add(copy_diff_button_);
     } else if (tab == Tab::Commit) {
-        add(commit_button_);
+        add(commit_button_); add(copy_commit_output_button_);
     } else if (tab == Tab::Branches) {
         // Branch action buttons are rendered in the tab body (branches_tab_container_)
         // so they are proper clickable components. Footer shows status only.
     } else if (tab == Tab::Remote) {
         add(refresh_remote_button_); add(checkout_remote_button_); add(delete_remote_button_);
     } else if (tab == Tab::Tags) {
-        add(create_tag_button_); add(delete_tag_button_); add(push_tag_button_);
-        add(push_all_tags_button_); add(fetch_tags_button_);
+        add(create_tag_button_); add(move_tag_button_); add(delete_tag_button_);
+        add(push_tag_button_); add(push_all_tags_button_); add(fetch_tags_button_);
     } else if (tab == Tab::Server) {
         add(check_connection_button_); add(fetch_button_); add(push_button_); add(force_push_button_);
+        add(copy_server_output_button_);
     } else if (tab == Tab::Compare) {
         add(refresh_compare_refs_button_); add(refresh_compare_files_button_);
         add(open_compare_side_button_); add(open_compare_diff_button_); add(copy_compare_diff_button_);

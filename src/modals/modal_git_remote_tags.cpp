@@ -117,6 +117,26 @@ void GitModalContent::CreateTag() {
         });
 }
 
+void GitModalContent::MoveSelectedTag() {
+    if (!git_manager_) {
+        return;
+    }
+    if (selected_tag_ < 0 || selected_tag_ >= static_cast<int>(filtered_tags_.size())) {
+        status_ = "No tag selected.";
+        return;
+    }
+    const std::string tag = filtered_tags_[static_cast<size_t>(selected_tag_)];
+    RequestConfirm(
+        "Confirm tag move",
+        "Move tag \"" + TrimForDisplay(tag, 40) +
+            "\" to the latest commit (HEAD). Remote tag is not updated.",
+        "git tag -f " + tag + " HEAD",
+        [this, tag] {
+            RunAndRefresh("Move tag", git_manager_->MoveTag(tag));
+            RefreshTags();
+        });
+}
+
 void GitModalContent::DeleteSelectedTag() {
     if (!git_manager_) {
         return;

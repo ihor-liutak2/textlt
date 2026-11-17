@@ -219,6 +219,19 @@ void GitModalContent::CopyDiff() {
     status_ = "Diff copied.";
 }
 
+void GitModalContent::CopyCommitOutput() {
+    if (!write_clipboard_) {
+        status_ = "Clipboard write is not configured.";
+        return;
+    }
+    if (commit_output_.empty()) {
+        status_ = "No commit output to copy.";
+        return;
+    }
+    write_clipboard_(commit_output_);
+    status_ = "Commit output copied.";
+}
+
 void GitModalContent::CommitStagedFiles() {
     if (!git_manager_) {
         status_ = "Git manager is not configured.";

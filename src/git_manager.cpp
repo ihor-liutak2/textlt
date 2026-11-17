@@ -351,6 +351,10 @@ GitManager::CommandResult GitManager::CreateTag(
     return RunGitCommand({"tag", "-a", tag_name, "-m", message});
 }
 
+GitManager::CommandResult GitManager::MoveTag(const std::string& tag_name) {
+    return RunGitCommand({"tag", "-f", tag_name, "HEAD"});
+}
+
 GitManager::CommandResult GitManager::DeleteTag(const std::string& tag_name) {
     return RunGitCommand({"tag", "-d", tag_name});
 }
