@@ -66,6 +66,11 @@ void TextltApp::CommandActionsDeleteGroup() {
     auto workspace = std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_);
     workspace->TakeFocus(); workspace->DeleteGroup();
 }
+void TextltApp::CommandActionsMergeGroup() {
+    sidebar_has_focus_ = false;
+    auto workspace = std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_);
+    workspace->TakeFocus(); workspace->MergeGroup();
+}
 void TextltApp::CommandActionsNewPage() {
     sidebar_has_focus_ = false;
     auto workspace = std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_);

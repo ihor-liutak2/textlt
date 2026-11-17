@@ -346,10 +346,13 @@ GitModalContent::GitModalContent(
         return theme.InputTransform(std::move(state));
     };
     confirm_input_component_ = ftxui::Input(&confirm_typed_text_, "confirmation", confirm_input_option);
+    confirm_force_tag_checkbox_ = ftxui::Checkbox(
+        "Force push (overwrite remote tag)", &confirm_force_tag_push_);
     confirm_confirm_button_ = MakeTextButton("Confirm", [this] { ConfirmPendingAction(); });
     confirm_cancel_button_ = MakeTextButton("Cancel", [this] { CancelPendingAction(); });
     auto confirm_controls = ftxui::Container::Vertical({
         confirm_input_component_,
+        confirm_force_tag_checkbox_,
         ftxui::Container::Horizontal({
             confirm_confirm_button_,
             confirm_cancel_button_,

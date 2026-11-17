@@ -68,6 +68,26 @@ int IndexById(const std::vector<T>& values, const std::string& id) {
     return found == values.end() ? -1 : static_cast<int>(std::distance(values.begin(), found));
 }
 
+std::string BaseGroupName(const std::string& name) {
+    // Strip a trailing " (N)" suffix so "Foo" and "Foo (1)" share base "Foo".
+    const size_t paren = name.rfind(" (");
+    if (paren == std::string::npos) return name;
+    const size_t end = name.size();
+    if (end > 0 && name[end - 1] == ')') {
+        const std::string inner = name.substr(paren + 2, end - paren - 3);
+        if (!inner.empty() &&
+            std::all_of(inner.begin(), inner.end(),
+                [](char c) { return std::isdigit(static_cast<unsigned char>(c)); })) {
+            return name.substr(0, paren);
+        }
+    }
+    return name;
+}
+
+bool HasNumberedSuffix(const std::string& name) {
+    return BaseGroupName(name) != name;
+}
+
 } // namespace
 
 ActionsWorkspaceComponent::ActionsWorkspaceComponent(const Theme* theme,
@@ -172,6 +192,48 @@ void ActionsWorkspaceComponent::DeleteGroup() {
     focus_ = FocusArea::Navigator;
     if (SelectedGroup()) dialog_ = Dialog::DeleteGroup;
 }
+void ActionsWorkspaceComponent::MergeGroup() {
+    navigator_tab_ = NavigatorTab::Groups;
+    focus_ = FocusArea::Navigator;
+    const ActionGroup* selected = SelectedGroup();
+    if (!selected) { Notify("No group selected."); return; }
+    const auto& groups = repository_.Data().groups;
+    const std::string base = BaseGroupName(selected->name);
+
+    // Other groups sharing the same base name (e.g. "Foo" and "Foo (1)").
+    std::vector<const ActionGroup*> candidates;
+    for (const auto& g : groups) {
+        if (g.id == selected->id) continue;
+        if (BaseGroupName(g.name) == base) candidates.push_back(&g);
+    }
+    if (candidates.empty()) {
+        Notify("No similar group to merge into.");
+        return;
+    }
+
+    // The group to keep: prefer the one whose name matches the active project,
+    // otherwise the non-numbered ("clean") name, otherwise the first candidate.
+    const ActionGroup* target = nullptr;
+    if (project_) {
+        for (const auto& g : groups)
+            if (BaseGroupName(g.name) == base && g.name == project_->second) {
+                target = &g;
+                break;
+            }
+    }
+    if (!target) {
+        for (const auto* c : candidates)
+            if (!HasNumberedSuffix(c->name)) { target = c; break; }
+    }
+    if (!target) target = candidates.front();
+
+    // The group merged away: the selected one, unless the selected one is the target.
+    const ActionGroup* source = (selected->id == target->id) ? candidates.front() : selected;
+
+    merge_target_id_ = target->id;
+    dialog_ = Dialog::MergeGroup;
+    name_component_->TakeFocus();
+}
 void ActionsWorkspaceComponent::NewPage() {
     navigator_tab_ = NavigatorTab::Pages;
     focus_ = FocusArea::Navigator;
@@ -251,6 +313,12 @@ void ActionsWorkspaceComponent::AcceptDialog() {
             if (repository_.RenamePage(selected_group_id_, selected_page_id_, name_input_, error)) AfterMutation("Page renamed"); break;
         case Dialog::DeleteGroup:
             if (repository_.DeleteGroup(selected_group_id_, error)) { selected_group_id_.clear(); AfterMutation("Group deleted"); } break;
+        case Dialog::MergeGroup:
+            if (repository_.MergeGroups(selected_group_id_, merge_target_id_, error)) {
+                merge_target_id_.clear();
+                AfterMutation("Groups merged");
+            }
+            break;
         case Dialog::DeletePage: {
             const bool permanent = SelectedGroup() && SelectedGroup()->trash;
             if (repository_.SoftDeletePage(selected_group_id_, selected_page_id_, error)) {
@@ -548,6 +616,21 @@ ftxui::Element ActionsWorkspaceComponent::RenderDialog() {
         }
         body = vbox({text(question) | bold | color(theme.modal_text_color),
             text(" Enter: delete   Esc: cancel ") | color(theme.modal_text_color)});
+    }
+    else if (dialog_ == Dialog::MergeGroup) {
+        const ActionGroup* source = SelectedGroup();
+        const ActionGroup* target = nullptr;
+        for (const auto& g : repository_.Data().groups)
+            if (g.id == merge_target_id_) { target = &g; break; }
+        body = vbox({
+            text(" Merge '" + (source ? source->name : std::string{}) + "' into '" +
+                (target ? target->name : std::string{}) + "'? ") |
+                bold | color(theme.modal_text_color),
+            text(" Pages with duplicate names are renumbered (1), (2), ... ") |
+                color(theme.modal_text_color),
+            text(" The source group is removed.") | color(theme.modal_text_color),
+            text(" Enter: merge   Esc: cancel ") | dim | color(theme.modal_text_color),
+        });
     }
     else body = vbox({text(" Name ") | bold | color(theme.modal_text_color), name_component_->Render(),
         text(" Enter: save   Esc: cancel ") | dim | color(theme.modal_text_color)});

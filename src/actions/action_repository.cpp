@@ -93,6 +93,62 @@ bool ActionRepository::MoveGroup(const std::string& id, int delta, std::string& 
     return Commit(std::move(next), error);
 }
 
+namespace {
+
+std::string BaseGroupName(const std::string& name) {
+    const size_t paren = name.rfind(" (");
+    if (paren == std::string::npos) return name;
+    const size_t end = name.size();
+    if (end > 0 && name[end - 1] == ')') {
+        const std::string inner = name.substr(paren + 2, end - paren - 3);
+        if (!inner.empty() &&
+            std::all_of(inner.begin(), inner.end(),
+                [](char c) { return std::isdigit(static_cast<unsigned char>(c)); })) {
+            return name.substr(0, paren);
+        }
+    }
+    return name;
+}
+
+bool PageNameTaken(const ActionGroup& group, const std::string& name) {
+    return std::any_of(group.pages.begin(), group.pages.end(),
+        [&](const ActionPage& page) { return page.name == name; });
+}
+
+std::string UniquePageName(ActionGroup& group, const std::string& base) {
+    std::string name = base;
+    int suffix = 1;
+    while (PageNameTaken(group, name)) {
+        name = base + " (" + std::to_string(suffix) + ")";
+        ++suffix;
+    }
+    return name;
+}
+
+} // namespace
+
+bool ActionRepository::MergeGroups(const std::string& source_id,
+    const std::string& target_id, std::string& error) {
+    ActionsDocument next = data_;
+    ActionGroup* source = FindGroup(next, source_id);
+    ActionGroup* target = FindGroup(next, target_id);
+    if (!source || !target) { error = "Group was not found."; return false; }
+    if (source == target) { error = "Cannot merge a group into itself."; return false; }
+
+    // Rebase every source page onto the target, numbering clashing names.
+    for (ActionPage& page : source->pages) {
+        page.name = UniquePageName(*target, page.name);
+        target->pages.push_back(std::move(page));
+    }
+    source->pages.clear();
+
+    const auto found = std::find_if(next.groups.begin(), next.groups.end(),
+        [&](const ActionGroup& g) { return g.id == source_id; });
+    if (found == next.groups.end()) { error = "Source group was not found."; return false; }
+    next.groups.erase(found);
+    return Commit(std::move(next), error);
+}
+
 bool ActionRepository::CreatePage(const std::string& group_id, const std::string& name, std::string& id, std::string& error) {
     if (name.empty()) { error = "Page name is required."; return false; }
     ActionsDocument next = data_; ActionGroup* group = FindGroup(next, group_id);

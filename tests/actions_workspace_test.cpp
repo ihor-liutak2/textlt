@@ -81,6 +81,15 @@ public:
     static bool NewGroupDialogOpen(const ActionsWorkspaceComponent& workspace) {
         return workspace.dialog_ == ActionsWorkspaceComponent::Dialog::NewGroup;
     }
+    static bool MergeGroupDialogOpen(const ActionsWorkspaceComponent& workspace) {
+        return workspace.dialog_ == ActionsWorkspaceComponent::Dialog::MergeGroup;
+    }
+    static bool DialogIsNone(const ActionsWorkspaceComponent& workspace) {
+        return workspace.dialog_ == ActionsWorkspaceComponent::Dialog::None;
+    }
+    static std::string MergeTargetId(const ActionsWorkspaceComponent& workspace) {
+        return workspace.merge_target_id_;
+    }
     static int FirstItemHeight(const ActionsWorkspaceComponent& workspace) {
         if (workspace.item_boxes_.empty()) return 0;
         const ftxui::Box& box = workspace.item_boxes_.front();
@@ -262,4 +271,65 @@ int main() {
     Check(ActionsWorkspaceModalTestAccess::NewGroupDialogOpen(workspace));
     Check(workspace.OnEvent(ftxui::Event::Escape));
     std::filesystem::remove_all(root);
+
+    // Merge group: similar-named groups are merged, clashing pages renumbered.
+    {
+        const auto merge_root =
+            std::filesystem::temp_directory_path() / ("textlt-actions-merge-ui-" + GenerateActionId());
+        const auto merge_path = merge_root / "actions.json";
+        std::string merge_error;
+        ActionsDocument merge_data;
+        merge_data.groups.push_back({"g-deploy", "Deploy", std::nullopt, false, {
+            {"p-main", "Main", {{"i-one", "one", "", "content one"}}}
+        }});
+        merge_data.groups.push_back({"g-deploy-1", "Deploy (1)", std::nullopt, false, {
+            {"p-main-1", "Main", {{"i-two", "two", "", "content two"}}},
+            {"p-extra", "Extra", {{"i-three", "three", "", "content three"}}}
+        }});
+        Check(ActionSerializer::Save(merge_path, merge_data, merge_error));
+        ActionsWorkspaceComponent merge_workspace(nullptr, [](const std::string&) {},
+            [&](const std::string& text) { copied = text; return true; }, [] {}, merge_path);
+        merge_workspace.SelectGroup("g-deploy-1");
+        merge_workspace.MergeGroup();
+        Check(ActionsWorkspaceModalTestAccess::MergeGroupDialogOpen(merge_workspace));
+        Check(ActionsWorkspaceModalTestAccess::MergeTargetId(merge_workspace) == "g-deploy");
+        // Confirm the merge (Enter).
+        Check(merge_workspace.OnEvent(ftxui::Event::Return));
+        Check(ActionsWorkspaceModalTestAccess::DialogIsNone(merge_workspace));
+        Check(merge_workspace.Groups().size() == 1);
+        const auto& merged = merge_workspace.Groups().front();
+        Check(merged.name == "Deploy");
+        std::vector<std::string> page_names;
+        for (const auto& pg : merged.pages) page_names.push_back(pg.name);
+        std::vector<std::string> expected_pages = {"Main", "Main (1)", "Extra"};
+        Check(page_names == expected_pages);
+        bool has_one = false, has_two = false;
+        for (const auto& pg : merged.pages) {
+            for (const auto& item : pg.items) {
+                if (pg.name == "Main" && item.content == "content one") has_one = true;
+                if (pg.name == "Main (1)" && item.content == "content two") has_two = true;
+            }
+        }
+        Check(has_one && has_two);
+        std::filesystem::remove_all(merge_root);
+    }
+
+    // Merge group with no similar group: notifies, no dialog.
+    {
+        const auto merge_root =
+            std::filesystem::temp_directory_path() / ("textlt-actions-merge-none-ui-" + GenerateActionId());
+        const auto merge_path = merge_root / "actions.json";
+        std::string merge_error;
+        ActionsDocument merge_data;
+        merge_data.groups.push_back({"g-alpha", "Alpha", std::nullopt, false, {}});
+        merge_data.groups.push_back({"g-beta", "Beta", std::nullopt, false, {}});
+        Check(ActionSerializer::Save(merge_path, merge_data, merge_error));
+        ActionsWorkspaceComponent merge_workspace(nullptr, [](const std::string&) {},
+            [](const std::string&) { return true; }, [] {}, merge_path);
+        merge_workspace.SelectGroup("g-alpha");
+        merge_workspace.MergeGroup();
+        Check(ActionsWorkspaceModalTestAccess::DialogIsNone(merge_workspace));
+        Check(merge_workspace.Groups().size() == 2);
+        std::filesystem::remove_all(merge_root);
+    }
 }

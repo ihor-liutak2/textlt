@@ -173,14 +173,18 @@ void GitModalContent::PushSelectedTag() {
     }
     RequestConfirm(
         "Confirm tag push",
-        "Push selected tag to origin.",
+        "Push selected tag to origin. Force push overwrites the remote tag.",
         "git push origin " + tag,
         [this, tag] {
+            const bool force = confirm_force_tag_push_;
             StartBackgroundOperation(
                 BackgroundOperation::PushTag,
                 "Push tag",
-                [this, tag] { return git_manager_->PushTag(tag); });
-        });
+                [this, tag, force] { return git_manager_->PushTag(tag, force); });
+        },
+        "",
+        true,
+        "git push --force origin " + tag);
 }
 
 void GitModalContent::PushAllTags() {

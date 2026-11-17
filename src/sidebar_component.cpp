@@ -179,11 +179,22 @@ ftxui::Element SidebarPanel::OnRender() {
 }
 
 bool SidebarPanel::OnEvent(ftxui::Event event) {
+    // Action-view controls share the sidebar with the workspace tabs. Handle
+    // their hitboxes first so a stale/overlapping tab box cannot turn a Delete
+    // click into a Documents workspace switch.
+    if (mode_ == SidebarMode::Actions &&
+        event.is_mouse() &&
+        event.mouse().button == ftxui::Mouse::Left &&
+        event.mouse().motion == ftxui::Mouse::Pressed &&
+        HandleActionButtonMouse(event.mouse())) {
+        return true;
+    }
+
     if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left &&
         event.mouse().motion == ftxui::Mouse::Pressed &&
         documents_tab_box_.Contain(event.mouse().x, event.mouse().y)) {
-        if (mode_ != SidebarMode::Actions) {
-            // Documents is already active in every non-Actions Sidebar mode.
+        if (mode_ == SidebarMode::Actions) {
+            // Stay in the Actions workspace; do not open Documents from here.
             return true;
         }
         if (on_open_documents_) on_open_documents_();
@@ -200,6 +211,10 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
         event.mouse().button == ftxui::Mouse::Left &&
         event.mouse().motion == ftxui::Mouse::Pressed &&
         notes_tab_box_.Contain(event.mouse().x, event.mouse().y)) {
+        if (mode_ == SidebarMode::Actions) {
+            // Stay in the Actions workspace; do not open Notes from here.
+            return true;
+        }
         if (on_open_notes_) {
             on_open_notes_();
         }
@@ -612,6 +627,7 @@ ftxui::Element SidebarPanel::RenderActionRow() {
     group_new_box_ = {};
     group_rename_box_ = {};
     group_delete_box_ = {};
+    group_merge_box_ = {};
     page_new_box_ = {};
     page_rename_box_ = {};
     page_delete_box_ = {};
@@ -684,6 +700,9 @@ ftxui::Element SidebarPanel::RenderActionRow() {
                 text(" "),
                 RenderFlatActionButton("Delete", ButtonRole::Danger, group_delete_box_),
             }),
+            hbox({
+                RenderFlatActionButton("Merge", ButtonRole::Warning, group_merge_box_),
+            }),
             text(" Pages:") | bold | color(label_color),
             hbox({
                 RenderFlatActionButton("New", ButtonRole::Primary, page_new_box_),
@@ -728,6 +747,10 @@ bool SidebarPanel::HandleActionButtonMouse(const ftxui::Mouse& mouse) {
             }
             if (group_delete_box_.Contain(mouse.x, mouse.y)) {
                 on_action_command_(ActionCommand::DeleteGroup);
+                return true;
+            }
+            if (group_merge_box_.Contain(mouse.x, mouse.y)) {
+                on_action_command_(ActionCommand::MergeGroup);
                 return true;
             }
             if (page_new_box_.Contain(mouse.x, mouse.y)) {

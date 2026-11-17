@@ -386,6 +386,7 @@ private:
     void CommandActionsNewGroup();
     void CommandActionsRenameGroup();
     void CommandActionsDeleteGroup();
+    void CommandActionsMergeGroup();
     void CommandActionsNewPage();
     void CommandActionsRenamePage();
     void CommandActionsDeletePage();

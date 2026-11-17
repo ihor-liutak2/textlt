@@ -102,7 +102,7 @@ public:
     CommandResult CreateTag(const std::string& tag_name, const std::string& message);
     CommandResult MoveTag(const std::string& tag_name);
     CommandResult DeleteTag(const std::string& tag_name);
-    CommandResult PushTag(const std::string& tag_name);
+    CommandResult PushTag(const std::string& tag_name, bool force = false);
     CommandResult PushAllTags();
     CommandResult FetchTags();
 

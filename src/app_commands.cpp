@@ -176,6 +176,7 @@ void TextltApp::InitializeCommands() {
     add("actions.new_group", "New Group", "Actions", "", [this] { CommandActionsNewGroup(); });
     add("actions.rename_group", "Rename Group", "Actions", "", [this] { CommandActionsRenameGroup(); });
     add("actions.delete_group", "Delete Group", "Actions", "", [this] { CommandActionsDeleteGroup(); });
+    add("actions.merge_group", "Merge Group", "Actions", "", [this] { CommandActionsMergeGroup(); });
     add("actions.new_page", "New Page", "Actions", "", [this] { CommandActionsNewPage(); });
     add("actions.rename_page", "Rename Page", "Actions", "", [this] { CommandActionsRenamePage(); });
     add("actions.delete_page", "Delete Page", "Actions", "", [this] { CommandActionsDeletePage(); });

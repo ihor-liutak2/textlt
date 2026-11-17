@@ -76,7 +76,7 @@ public:
     using ProjectIdCallback = std::function<void(const std::string&)>;
     using AddProjectCallback = std::function<void(const std::filesystem::path&)>;
     enum class ActionCommand {
-        NewGroup, RenameGroup, DeleteGroup, NewPage, RenamePage, DeletePage,
+        NewGroup, RenameGroup, DeleteGroup, MergeGroup, NewPage, RenamePage, DeletePage,
         AddAction, EditAction, DeleteAction, MoveActionUp, MoveActionDown,
     };
     using ActionCommandCallback = std::function<void(ActionCommand)>;
@@ -274,6 +274,7 @@ private:
     ftxui::Box group_new_box_;
     ftxui::Box group_rename_box_;
     ftxui::Box group_delete_box_;
+    ftxui::Box group_merge_box_;
     ftxui::Box page_new_box_;
     ftxui::Box page_rename_box_;
     ftxui::Box page_delete_box_;

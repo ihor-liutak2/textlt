@@ -160,6 +160,9 @@ TextltApp::TextltApp()
                   case SidebarPanel::ActionCommand::DeleteGroup:
                       CommandActionsDeleteGroup();
                       break;
+                  case SidebarPanel::ActionCommand::MergeGroup:
+                      CommandActionsMergeGroup();
+                      break;
                   case SidebarPanel::ActionCommand::NewPage:
                       CommandActionsNewPage();
                       break;

@@ -22,6 +22,11 @@ public:
     bool RenameGroup(const std::string& id, const std::string& name, std::string& error);
     bool DeleteGroup(const std::string& id, std::string& error);
     bool MoveGroup(const std::string& id, int delta, std::string& error);
+    // Merge all pages of source into target, renaming pages that clash with
+    // existing target page names (appends " (1)", " (2)", ...), then removes
+    // the source group. Project groups can be removed when they are the source.
+    bool MergeGroups(const std::string& source_id,
+        const std::string& target_id, std::string& error);
     bool CreatePage(const std::string& group_id, const std::string& name,
         std::string& id, std::string& error);
     bool RenamePage(const std::string& group_id, const std::string& id,

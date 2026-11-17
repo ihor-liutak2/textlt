@@ -38,6 +38,7 @@ public:
     void NewGroup();
     void RenameGroup();
     void DeleteGroup();
+    void MergeGroup();
     void NewPage();
     void RenamePage();
     void DeletePage();
@@ -56,7 +57,7 @@ private:
     enum class NavigatorTab { Groups, Pages };
     enum class FocusArea { Navigator, Items };
     enum class Dialog { None, NewGroup, RenameGroup, NewPage, RenamePage,
-        DeleteGroup, DeletePage, DeleteAction };
+        DeleteGroup, DeletePage, DeleteAction, MergeGroup };
     const ActionGroup* SelectedGroup() const;
     const ActionPage* SelectedPage() const;
     const ActionItem* SelectedItem() const;
@@ -84,6 +85,7 @@ private:
     std::string selected_group_id_;
     std::string selected_page_id_;
     std::string selected_item_id_;
+    std::string merge_target_id_;
     NavigatorTab navigator_tab_ = NavigatorTab::Pages;
     FocusArea focus_ = FocusArea::Navigator;
     size_t group_scroll_ = 0;

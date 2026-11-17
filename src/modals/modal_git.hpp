@@ -136,7 +136,9 @@ private:
         const std::string& message,
         const std::string& command_preview,
         std::function<void()> on_confirm,
-        const std::string& required_text = "");
+        const std::string& required_text = "",
+        bool show_force_tag_checkbox = false,
+        const std::string& force_command_preview = "");
     void ConfirmPendingAction();
     void CancelPendingAction();
     bool HandleConfirmEvent(ftxui::Event event);
@@ -296,8 +298,11 @@ private:
     std::string confirm_title_;
     std::string confirm_message_;
     std::string confirm_command_preview_;
+    std::string confirm_force_command_preview_;
     std::string confirm_required_text_;
     std::string confirm_typed_text_;
+    bool confirm_force_tag_checkbox_visible_ = false;
+    bool confirm_force_tag_push_ = false;
     std::function<void()> confirm_action_;
 
     // Branches-tab action popup state.
@@ -369,6 +374,7 @@ private:
     ftxui::Component fetch_tags_button_;
 
     ftxui::Component confirm_input_component_;
+    ftxui::Component confirm_force_tag_checkbox_;
     ftxui::Component confirm_confirm_button_;
     ftxui::Component confirm_cancel_button_;
     ftxui::Component confirm_container_;

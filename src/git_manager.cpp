@@ -359,7 +359,10 @@ GitManager::CommandResult GitManager::DeleteTag(const std::string& tag_name) {
     return RunGitCommand({"tag", "-d", tag_name});
 }
 
-GitManager::CommandResult GitManager::PushTag(const std::string& tag_name) {
+GitManager::CommandResult GitManager::PushTag(const std::string& tag_name, bool force) {
+    if (force) {
+        return RunGitCommand({"push", "--force", "origin", tag_name});
+    }
     return RunGitCommand({"push", "origin", tag_name});
 }
 

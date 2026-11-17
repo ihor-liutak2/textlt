@@ -11,14 +11,19 @@ void GitModalContent::RequestConfirm(
     const std::string& message,
     const std::string& command_preview,
     std::function<void()> on_confirm,
-    const std::string& required_text) {
+    const std::string& required_text,
+    bool show_force_tag_checkbox,
+    const std::string& force_command_preview) {
     confirm_active_ = true;
     confirm_layer_index_ = 1;
     confirm_title_ = title;
     confirm_message_ = message;
     confirm_command_preview_ = command_preview;
+    confirm_force_command_preview_ = force_command_preview;
     confirm_required_text_ = required_text;
     confirm_typed_text_.clear();
+    confirm_force_tag_checkbox_visible_ = show_force_tag_checkbox;
+    confirm_force_tag_push_ = false;
     confirm_action_ = std::move(on_confirm);
 
     if (!confirm_required_text_.empty() && confirm_input_component_) {
@@ -43,6 +48,8 @@ void GitModalContent::ConfirmPendingAction() {
     confirm_title_.clear();
     confirm_message_.clear();
     confirm_command_preview_.clear();
+    confirm_force_command_preview_.clear();
+    confirm_force_tag_checkbox_visible_ = false;
     confirm_required_text_.clear();
     confirm_typed_text_.clear();
 
@@ -58,6 +65,9 @@ void GitModalContent::CancelPendingAction() {
     confirm_title_.clear();
     confirm_message_.clear();
     confirm_command_preview_.clear();
+    confirm_force_command_preview_.clear();
+    confirm_force_tag_checkbox_visible_ = false;
+    confirm_force_tag_push_ = false;
     confirm_required_text_.clear();
     confirm_typed_text_.clear();
     status_ = "Git action cancelled.";
@@ -85,7 +95,16 @@ ftxui::Element GitModalContent::RenderConfirmOverlay() {
     rows.push_back(ftxui::text(confirm_message_) | ftxui::color(theme.modal_text_color));
     rows.push_back(ftxui::text(""));
     rows.push_back(ftxui::text("Command:") | ftxui::bold | ftxui::color(theme.modal_text_color));
-    rows.push_back(ftxui::text(confirm_command_preview_) | ftxui::color(theme.modal_text_color));
+    const std::string& command_preview =
+        confirm_force_tag_push_ && !confirm_force_command_preview_.empty()
+            ? confirm_force_command_preview_
+            : confirm_command_preview_;
+    rows.push_back(ftxui::text(command_preview) | ftxui::color(theme.modal_text_color));
+
+    if (confirm_force_tag_checkbox_visible_) {
+        rows.push_back(ftxui::text(""));
+        rows.push_back(confirm_force_tag_checkbox_->Render());
+    }
 
     if (!confirm_required_text_.empty()) {
         rows.push_back(ftxui::text(""));
