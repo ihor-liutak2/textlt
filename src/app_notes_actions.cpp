@@ -22,6 +22,10 @@ void TextltApp::ShowNotesWorkspace() {
     sidebar_has_focus_ = false;
     if (notes_workspace_component_) {
         auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_);
+        notes->SetSidebarVisible(editor_config_.show_notes_sidebar);
+        if (!editor_config_.show_notes_sidebar) {
+            notes->FocusMainArea();
+        }
         notes->Open();
     }
     active_action_ = "Notes";
@@ -51,9 +55,7 @@ void TextltApp::ShowDocumentsWorkspace() {
     if (returning_from_actions && sidebar_panel_) {
         // The Actions workspace temporarily owns the shared Sidebar's list.
         // Restore a document collection before rendering Documents again.
-        editor_config_.show_file_explorer = true;
         std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->ShowProject();
-        SaveConfig();
     }
     FocusEditor();
     screen_.PostEvent(ftxui::Event::Custom);

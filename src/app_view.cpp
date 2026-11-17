@@ -90,9 +90,11 @@ ftxui::Element TextltApp::Render() {
     Element workspace = workspace_mode_ == WorkspaceMode::Notes && notes_workspace_component_
         ? notes_workspace_component_->Render() | flex
         : workspace_mode_ == WorkspaceMode::Actions && actions_workspace_component_
-        ? hbox({sidebar_panel_->Render() | size(WIDTH, EQUAL, 28),
-                separator() | color(MainWindowSeparatorColor(current_theme_)),
-                actions_workspace_component_->Render() | xflex})
+        ? (!distraction_mode && editor_config_.show_actions_sidebar
+              ? hbox({sidebar_panel_->Render() | size(WIDTH, EQUAL, 28),
+                      separator() | color(MainWindowSeparatorColor(current_theme_)),
+                      actions_workspace_component_->Render() | xflex})
+              : hbox({actions_workspace_component_->Render() | xflex}))
         : !distraction_mode && editor_config_.show_file_explorer
         ? hbox({
               sidebar_panel_->Render() | size(WIDTH, EQUAL, 28),

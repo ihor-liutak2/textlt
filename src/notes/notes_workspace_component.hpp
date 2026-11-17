@@ -47,6 +47,10 @@ public:
     bool Save(std::string& error);
     bool IsEditing() const { return editing_; }
     bool IsTrashSelected() const { return trash_selected_ && !editing_; }
+    void SetSidebarVisible(bool visible);
+    bool IsSidebarVisible() const { return sidebar_visible_; }
+    void FocusSidebar();
+    void FocusMainArea();
     std::string StatusText() const;
     void ToggleMark(NoteMark mark);
     void SetBlockType(NoteBlockType type);
@@ -157,6 +161,7 @@ private:
     bool trash_selected_ = false;
     SortMode sort_mode_ = SortMode::Updated;
     bool editing_ = false;
+    bool sidebar_visible_ = true;
     int selected_sidebar_ = 0;
     int selected_card_ = 0;
     std::optional<std::string> active_note_id_;

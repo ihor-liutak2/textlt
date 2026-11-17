@@ -97,6 +97,7 @@ MenuBarComponent::MenuBarComponent(
           {
               {" Toggle Line Numbers ", "view.toggle_line_numbers"},
               {" Sidebar                 (Ctrl+B) ", "sidebar.ctrl_b_file_explorer"},
+              {" Docs ", "docs.open"},
               {" Notes                   (Ctrl+N) ", "notes.toggle"},
               {" Actions ", "actions.open"},
               {" Smart Word Wrap [ ] ", "editor.toggle_smart_word_wrap"},

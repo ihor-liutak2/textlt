@@ -51,6 +51,14 @@ int main() {
         "The Notes menu should be hidden outside the notes workspace.");
     Expect(MenuBarTestAccess::MenuIndex(menu_bar, " Actions ") < 0,
         "The Actions menu should be hidden outside the actions workspace.");
+    const int options_index = MenuBarTestAccess::MenuIndex(menu_bar, " Options ");
+    Expect(options_index >= 0, "The Options menu should always be present.");
+    Expect(menu_bar.CommandIdAt(options_index, 2) == "docs.open",
+        "The Options menu should expose the Docs view above Notes.");
+    Expect(menu_bar.CommandIdAt(options_index, 3) == "notes.toggle",
+        "The Options menu should keep Notes right after Docs.");
+    Expect(menu_bar.CommandIdAt(options_index, 4) == "actions.open",
+        "The Options menu should expose the Actions view after Notes.");
     menu_bar.SetActionsMenuVisible(true);
     const int actions_index = MenuBarTestAccess::MenuIndex(menu_bar, " Actions ");
     Expect(actions_index >= 0, "The Actions menu was not inserted.");

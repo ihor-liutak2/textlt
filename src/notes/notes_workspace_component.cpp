@@ -83,6 +83,47 @@ NotesWorkspaceComponent::NotesWorkspaceComponent(
 
 void NotesWorkspaceComponent::Open() { TakeFocus(); if (!load_warning_.empty()) Notify("Notes warning: " + load_warning_); }
 
+void NotesWorkspaceComponent::SetSidebarVisible(bool visible) {
+    if (sidebar_visible_ == visible) return;
+    sidebar_visible_ = visible;
+    if (visible) return;
+
+    if (focus_ == FocusArea::Sidebar || focus_ == FocusArea::GroupName) {
+        focus_ = editing_ ? FocusArea::Body : FocusArea::Cards;
+    }
+
+    // Clear hitboxes from the previous render so clicks in the space where the
+    // hidden sidebar used to be do not trigger stale sidebar controls.
+    const ftxui::Box empty_box{1, 0, 1, 0};
+    sidebar_box_ = empty_box;
+    documents_tab_box_ = empty_box;
+    notes_tab_box_ = empty_box;
+    actions_tab_box_ = empty_box;
+    footer_new_note_box_ = empty_box;
+    footer_delete_note_box_ = empty_box;
+    footer_restore_note_box_ = empty_box;
+    footer_permanent_delete_box_ = empty_box;
+    footer_empty_trash_box_ = empty_box;
+    footer_new_group_box_ = empty_box;
+    footer_rename_group_box_ = empty_box;
+    footer_delete_group_box_ = empty_box;
+    footer_project_notes_box_ = empty_box;
+    footer_orphan_general_box_ = empty_box;
+    footer_orphan_relink_box_ = empty_box;
+    sidebar_row_boxes_.clear();
+}
+
+void NotesWorkspaceComponent::FocusSidebar() {
+    if (!sidebar_visible_) return;
+    focus_ = FocusArea::Sidebar;
+}
+
+void NotesWorkspaceComponent::FocusMainArea() {
+    if (focus_ == FocusArea::Sidebar || focus_ == FocusArea::GroupName) {
+        focus_ = editing_ ? FocusArea::Body : FocusArea::Cards;
+    }
+}
+
 void NotesWorkspaceComponent::SetProjectContext(
     std::optional<ProjectContext> project,
     std::vector<std::string> known_project_ids) {
@@ -605,12 +646,23 @@ bool NotesWorkspaceComponent::HandleTextFieldEvent(std::string& value, size_t& c
 }
 
 bool NotesWorkspaceComponent::HandleOverviewEvent(ftxui::Event event) {
+    if (!sidebar_visible_ &&
+        (focus_ == FocusArea::Sidebar || focus_ == FocusArea::GroupName)) {
+        focus_ = FocusArea::Cards;
+    }
     if (focus_ == FocusArea::GroupName) {
         if (event == ftxui::Event::Return) { FinishCreateSection(); return true; }
         if (event == ftxui::Event::Escape) { focus_ = FocusArea::Sidebar; group_name_input_.clear(); editing_section_id_.reset(); return true; }
         return HandleTextFieldEvent(group_name_input_, group_name_cursor_, event, [] {});
     }
-    if (event == ftxui::Event::Tab) { focus_ = focus_ == FocusArea::Sidebar ? FocusArea::Search : focus_ == FocusArea::Search ? FocusArea::Cards : FocusArea::Sidebar; return true; }
+    if (event == ftxui::Event::Tab) {
+        if (!sidebar_visible_) {
+            focus_ = focus_ == FocusArea::Search ? FocusArea::Cards : FocusArea::Search;
+            return true;
+        }
+        focus_ = focus_ == FocusArea::Sidebar ? FocusArea::Search : focus_ == FocusArea::Search ? FocusArea::Cards : FocusArea::Sidebar;
+        return true;
+    }
     if (focus_ == FocusArea::Search) {
         if (event == ftxui::Event::Escape) { search_.clear(); search_cursor_ = 0; RebuildVisibleNotes(); focus_ = FocusArea::Cards; return true; }
         return HandleTextFieldEvent(search_, search_cursor_, event, [this] { RebuildVisibleNotes(); });
@@ -835,30 +887,32 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
     }
     if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left && event.mouse().motion == ftxui::Mouse::Pressed) {
         const auto& mouse = event.mouse();
-        if (documents_tab_box_.Contain(mouse.x, mouse.y)) { if (on_documents_) on_documents_(); return true; }
-        if (actions_tab_box_.Contain(mouse.x, mouse.y)) { if (on_actions_) on_actions_(); return true; }
-        if (footer_new_note_box_.Contain(mouse.x, mouse.y)) { NewNote(); return true; }
-        if (footer_delete_note_box_.Contain(mouse.x, mouse.y)) { DeleteSelectedNote(); return true; }
-        if (footer_restore_note_box_.Contain(mouse.x, mouse.y)) { RestoreSelectedNote(); return true; }
-        if (footer_permanent_delete_box_.Contain(mouse.x, mouse.y)) { PermanentlyDeleteSelectedNote(); return true; }
-        if (footer_empty_trash_box_.Contain(mouse.x, mouse.y)) { EmptyTrash(); return true; }
-        if (footer_new_group_box_.Contain(mouse.x, mouse.y)) { StartCreateSection(); return true; }
-        if (footer_rename_group_box_.Contain(mouse.x, mouse.y)) { StartRenameSection(); return true; }
-        if (footer_delete_group_box_.Contain(mouse.x, mouse.y)) {
-            const bool custom_group_selected = selected_sidebar_ >= 0 &&
-                selected_sidebar_ < static_cast<int>(sidebar_entries_.size()) &&
-                sidebar_entries_[selected_sidebar_].kind == SidebarEntryKind::Section &&
-                !sidebar_entries_[selected_sidebar_].project;
-            if (custom_group_selected) {
-                RequestConfirmation(ConfirmAction::DeleteGroup, "Delete group",
-                    "Delete this group? Its notes will remain in Home.");
+        if (sidebar_visible_) {
+            if (documents_tab_box_.Contain(mouse.x, mouse.y)) { if (on_documents_) on_documents_(); return true; }
+            if (actions_tab_box_.Contain(mouse.x, mouse.y)) { if (on_actions_) on_actions_(); return true; }
+            if (footer_new_note_box_.Contain(mouse.x, mouse.y)) { NewNote(); return true; }
+            if (footer_delete_note_box_.Contain(mouse.x, mouse.y)) { DeleteSelectedNote(); return true; }
+            if (footer_restore_note_box_.Contain(mouse.x, mouse.y)) { RestoreSelectedNote(); return true; }
+            if (footer_permanent_delete_box_.Contain(mouse.x, mouse.y)) { PermanentlyDeleteSelectedNote(); return true; }
+            if (footer_empty_trash_box_.Contain(mouse.x, mouse.y)) { EmptyTrash(); return true; }
+            if (footer_new_group_box_.Contain(mouse.x, mouse.y)) { StartCreateSection(); return true; }
+            if (footer_rename_group_box_.Contain(mouse.x, mouse.y)) { StartRenameSection(); return true; }
+            if (footer_delete_group_box_.Contain(mouse.x, mouse.y)) {
+                const bool custom_group_selected = selected_sidebar_ >= 0 &&
+                    selected_sidebar_ < static_cast<int>(sidebar_entries_.size()) &&
+                    sidebar_entries_[selected_sidebar_].kind == SidebarEntryKind::Section &&
+                    !sidebar_entries_[selected_sidebar_].project;
+                if (custom_group_selected) {
+                    RequestConfirmation(ConfirmAction::DeleteGroup, "Delete group",
+                        "Delete this group? Its notes will remain in Home.");
+                }
+                return true;
             }
-            return true;
+            if (footer_project_notes_box_.Contain(mouse.x, mouse.y)) { OpenProjectNotes(); return true; }
+            if (footer_orphan_general_box_.Contain(mouse.x, mouse.y)) { ConvertSelectedGroupToGeneral(); return true; }
+            if (footer_orphan_relink_box_.Contain(mouse.x, mouse.y)) { RelinkSelectedGroupToActiveProject(); return true; }
+            for (size_t i = 0; i < sidebar_row_boxes_.size(); ++i) if (sidebar_row_boxes_[i].Contain(mouse.x, mouse.y)) { focus_ = FocusArea::Sidebar; SelectSidebarEntry(static_cast<int>(i)); return true; }
         }
-        if (footer_project_notes_box_.Contain(mouse.x, mouse.y)) { OpenProjectNotes(); return true; }
-        if (footer_orphan_general_box_.Contain(mouse.x, mouse.y)) { ConvertSelectedGroupToGeneral(); return true; }
-        if (footer_orphan_relink_box_.Contain(mouse.x, mouse.y)) { RelinkSelectedGroupToActiveProject(); return true; }
-        for (size_t i = 0; i < sidebar_row_boxes_.size(); ++i) if (sidebar_row_boxes_[i].Contain(mouse.x, mouse.y)) { focus_ = FocusArea::Sidebar; SelectSidebarEntry(static_cast<int>(i)); return true; }
         if (!editing_) {
             if (sort_box_.Contain(mouse.x, mouse.y)) { CycleSortMode(); return true; }
             if (new_note_box_.Contain(mouse.x, mouse.y)) { NewNote(); return true; }
@@ -1425,11 +1479,14 @@ ftxui::Element NotesWorkspaceComponent::RenderEditor() {
 
 ftxui::Element NotesWorkspaceComponent::OnRender() {
     using namespace ftxui;
-    Element body = hbox({
-        RenderSidebar(),
-        separator() | color((theme_ ? *theme_ : FallbackTheme()).gutter),
-        editing_ ? RenderEditor() : RenderOverview(),
-    }) | flex;
+    Element content = editing_ ? RenderEditor() : RenderOverview();
+    Element body = sidebar_visible_
+        ? hbox({
+              RenderSidebar(),
+              separator() | color((theme_ ? *theme_ : FallbackTheme()).gutter),
+              std::move(content),
+          }) | flex
+        : hbox({std::move(content)}) | flex;
     if (confirm_action_ != ConfirmAction::None) {
         return dbox({body, vbox({filler(), hbox({filler(), RenderConfirmationPopup(), filler()}), filler()})});
     }

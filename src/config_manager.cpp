@@ -54,6 +54,10 @@ EditorConfig ConfigManager::Load() const {
     config.show_line_numbers = JsonBool(root, "show_line_numbers", config.show_line_numbers);
     config.show_file_explorer = JsonBool(
         root, "show_file_explorer", config.show_file_explorer);
+    config.show_notes_sidebar = JsonBool(
+        root, "show_notes_sidebar", config.show_notes_sidebar);
+    config.show_actions_sidebar = JsonBool(
+        root, "show_actions_sidebar", config.show_actions_sidebar);
     config.smart_word_wrap = JsonBool(root, "smart_word_wrap", config.smart_word_wrap);
     config.syntax_highlighting = JsonBool(
         root, "syntax_highlighting", config.syntax_highlighting);

@@ -69,6 +69,8 @@ bool WriteConfigAtomically(const std::filesystem::path& path, const EditorConfig
     Json root = {
         {"show_line_numbers", config.show_line_numbers},
         {"show_file_explorer", config.show_file_explorer},
+        {"show_notes_sidebar", config.show_notes_sidebar},
+        {"show_actions_sidebar", config.show_actions_sidebar},
         {"smart_word_wrap", config.smart_word_wrap},
         {"syntax_highlighting", config.syntax_highlighting},
         {"auto_pairing", config.auto_pairing},

@@ -159,6 +159,7 @@ void TextltApp::InitializeCommands() {
     add("sidebar.toggle_opened_project", "Toggle File Explorer Tab", "Options", "", [this] { ToggleSidebarOpenedProject(); });
     add("sidebar.copy_selected_path", "Copy Selected Project Path", "Options", "", [this] { CopySidebarSelectedPath(); });
     add("notes.toggle", "Notes", "Options", "", [this] { CommandNotesToggle(); });
+    add("docs.open", "Docs", "Options", "", [this] { ShowDocumentsWorkspace(); });
     add("notes.new", "New Note", "Notes", "", [this] { CommandNotesNew(); });
     add("notes.edit_selected", "Edit Note", "Notes", "", [this] { CommandNotesEditSelected(); });
     add("notes.delete_selected", "Delete Note", "Notes", "", [this] { CommandNotesDeleteSelected(); });
@@ -299,6 +300,9 @@ bool TextltApp::RunCommand(const std::string& command_id) {
         const bool allowed = command_id.rfind("notes.", 0) == 0 ||
             command_id.rfind("app.", 0) == 0 ||
             command_id == "file.save" ||
+            command_id == "docs.open" ||
+            command_id == "actions.open" ||
+            command_id == "sidebar.toggle_file_explorer" ||
             IsWorkspaceModalCommand(command_id);
         if (!allowed) {
             active_action_ = "This command is unavailable in Notes view";
@@ -310,7 +314,10 @@ bool TextltApp::RunCommand(const std::string& command_id) {
     if (workspace_mode_ == WorkspaceMode::Actions) {
         const bool allowed = command_id.rfind("actions.", 0) == 0 ||
             command_id.rfind("app.", 0) == 0 || command_id == "notes.toggle" ||
-            command_id == "file.save" || IsWorkspaceModalCommand(command_id);
+            command_id == "file.save" ||
+            command_id == "docs.open" ||
+            command_id == "sidebar.toggle_file_explorer" ||
+            IsWorkspaceModalCommand(command_id);
         if (!allowed) {
             active_action_ = "This command is unavailable in Actions view";
             CloseDropdown(); screen_.PostEvent(ftxui::Event::Custom); return true;

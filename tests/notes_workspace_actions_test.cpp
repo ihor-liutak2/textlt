@@ -108,6 +108,12 @@ public:
         component.search_box_ = stale;
         component.sort_box_ = stale;
     }
+    static void SetStaleSidebarHotspot(NotesWorkspaceComponent& component) {
+        component.footer_new_note_box_ = ftxui::Box{10, 20, 10, 10};
+    }
+    static void ClearStaleSidebarHotspot(NotesWorkspaceComponent& component) {
+        component.footer_new_note_box_ = ftxui::Box{1, 0, 1, 0};
+    }
     static bool Click(NotesWorkspaceComponent& component, int x, int y) {
         ftxui::Mouse mouse;
         mouse.button = ftxui::Mouse::Left;
@@ -193,6 +199,9 @@ public:
     }
     static bool SearchFocused(const NotesWorkspaceComponent& component) {
         return component.focus_ == NotesWorkspaceComponent::FocusArea::Search;
+    }
+    static bool SidebarFocused(const NotesWorkspaceComponent& component) {
+        return component.focus_ == NotesWorkspaceComponent::FocusArea::Sidebar;
     }
     static void SetProject(NotesWorkspaceComponent& component,
         const std::string& id,
@@ -318,6 +327,29 @@ int main() {
         "Confirmation popup consumed a redraw event and caused an endless redraw loop.");
     Expect(!NotesWorkspaceActionsTestAccess::CustomEventHandledDuringGroupPicker(component),
         "Group picker consumed a redraw event and caused an endless redraw loop.");
+    component.FocusSidebar();
+    Expect(NotesWorkspaceActionsTestAccess::SidebarFocused(component),
+        "FocusSidebar should focus the visible Notes sidebar.");
+    component.SetSidebarVisible(false);
+    Expect(!component.IsSidebarVisible(),
+        "SetSidebarVisible(false) should hide the Notes sidebar.");
+    Expect(!NotesWorkspaceActionsTestAccess::SidebarFocused(component),
+        "Hiding the Notes sidebar should move focus out of it.");
+    const size_t notes_before_hidden_sidebar_click =
+        NotesWorkspaceActionsTestAccess::NoteCount(component);
+    NotesWorkspaceActionsTestAccess::SetStaleSidebarHotspot(component);
+    NotesWorkspaceActionsTestAccess::Click(component, 15, 10);
+    Expect(NotesWorkspaceActionsTestAccess::NoteCount(component) ==
+            notes_before_hidden_sidebar_click,
+        "A stale sidebar hotspot created a note while the sidebar was hidden.");
+    NotesWorkspaceActionsTestAccess::ClearStaleSidebarHotspot(component);
+    component.SetSidebarVisible(true);
+    Expect(component.IsSidebarVisible(),
+        "SetSidebarVisible(true) should show the Notes sidebar again.");
+    component.FocusSidebar();
+    Expect(NotesWorkspaceActionsTestAccess::SidebarFocused(component),
+        "The Notes sidebar should be focusable after being shown again.");
+    component.FocusMainArea();
     NotesWorkspaceActionsTestAccess::SetStaleOverviewHotspots(component);
     NotesWorkspaceActionsTestAccess::Click(component, 15, 10);
     Expect(NotesWorkspaceActionsTestAccess::NoteCount(component) == 1,

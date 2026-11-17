@@ -40,8 +40,13 @@ void TextltApp::ShowActionsWorkspace() {
     menu_bar_->SetNotesMenuVisible(false); menu_bar_->SetActionsMenuVisible(true);
     SyncActionsProjectContext(); RefreshActionsSidebar();
     auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_); sidebar->ShowActions();
-    sidebar_has_focus_ = true; sidebar->FocusMenu();
-    std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_)->Open();
+    auto actions_workspace = std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_);
+    actions_workspace->Open();
+    if (editor_config_.show_actions_sidebar) {
+        sidebar_has_focus_ = true; sidebar->FocusMenu();
+    } else {
+        sidebar_has_focus_ = false; actions_workspace->TakeFocus();
+    }
     active_action_ = "Actions"; screen_.PostEvent(ftxui::Event::Custom);
 }
 

@@ -66,6 +66,46 @@ void TextltApp::FocusSidebar() {
 
 
 void TextltApp::ToggleFileExplorer() {
+    if (workspace_mode_ == WorkspaceMode::Notes && notes_workspace_component_) {
+        const bool visible = !editor_config_.show_notes_sidebar;
+        editor_config_.show_notes_sidebar = visible;
+
+        auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(
+            notes_workspace_component_);
+        notes->SetSidebarVisible(visible);
+        if (visible) {
+            notes->FocusSidebar();
+        } else {
+            notes->FocusMainArea();
+        }
+        sidebar_has_focus_ = false;
+        workspace_mode_index_ = static_cast<int>(workspace_mode_);
+        notes->TakeFocus();
+        SetActiveLayer(UiLayer::Main);
+        active_action_ = visible ? "Notes sidebar enabled" : "Notes sidebar disabled";
+        SaveConfig();
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+
+    if (workspace_mode_ == WorkspaceMode::Actions) {
+        const bool visible = !editor_config_.show_actions_sidebar;
+        editor_config_.show_actions_sidebar = visible;
+
+        if (visible) {
+            auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
+            sidebar->ShowActions();
+            FocusSidebar();
+            active_action_ = "Actions sidebar enabled";
+        } else {
+            FocusEditor();
+            active_action_ = "Actions sidebar disabled";
+        }
+        SaveConfig();
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+
     editor_config_.show_file_explorer = !editor_config_.show_file_explorer;
     if (editor_config_.show_file_explorer) {
         active_action_ = "File Explorer enabled";

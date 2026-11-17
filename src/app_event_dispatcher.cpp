@@ -71,12 +71,17 @@ bool AppEventDispatcher::HandleBodyEvent(ftxui::Event event) {
     if (IsPrimaryMousePress(event) && app_.ActiveLayer() == TextltApp::UiLayer::Main) {
         auto sidebar = std::static_pointer_cast<SidebarPanel>(app_.sidebar_panel_);
         const bool distraction_mode = app_.layout_controller_.IsDistractionModeActive();
+        const bool sidebar_visible =
+            app_.workspace_mode_ == TextltApp::WorkspaceMode::Actions
+                ? app_.editor_config_.show_actions_sidebar
+                : app_.editor_config_.show_file_explorer;
         const bool inside_sidebar = !distraction_mode &&
+            sidebar_visible &&
             sidebar &&
             sidebar->ContainsPoint(event.mouse().x, event.mouse().y);
-        if (!distraction_mode && app_.editor_config_.show_file_explorer && inside_sidebar) {
+        if (!distraction_mode && inside_sidebar) {
             app_.FocusSidebar();
-        } else if (!inside_sidebar) {
+        } else {
             app_.FocusEditor();
         }
     }
@@ -292,9 +297,16 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
 }
 
 bool AppEventDispatcher::HandleSidebarEvent(const ftxui::Event& event) {
+    const bool sidebar_visible =
+        app_.workspace_mode_ == TextltApp::WorkspaceMode::Actions
+            ? app_.editor_config_.show_actions_sidebar
+            : app_.workspace_mode_ == TextltApp::WorkspaceMode::Documents
+            ? app_.editor_config_.show_file_explorer
+            : false;
     const bool sidebar_is_focused =
         app_.ActiveLayer() == TextltApp::UiLayer::Main &&
         app_.sidebar_has_focus_ &&
+        sidebar_visible &&
         !app_.layout_controller_.IsDistractionModeActive();
     if (!sidebar_is_focused) {
         return false;
