@@ -386,6 +386,27 @@ void GitModalContent::CopyServerOutput() {
     status_ = "Server output copied.";
 }
 
+void GitModalContent::CopyBranchOutput() {
+    if (!write_clipboard_) {
+        status_ = "Clipboard write is not configured.";
+        return;
+    }
+    if (branch_labels_.empty()) {
+        status_ = "No branch output to copy.";
+        return;
+    }
+
+    std::string output;
+    for (size_t index = 0; index < branch_labels_.size(); ++index) {
+        if (index > 0) {
+            output += '\n';
+        }
+        output += branch_labels_[index];
+    }
+    write_clipboard_(output);
+    status_ = "Branch output copied.";
+}
+
 void GitModalContent::RebuildBranchLabels() {
     branch_labels_.clear();
     branch_labels_.reserve(branches_.size());

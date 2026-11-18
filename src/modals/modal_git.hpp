@@ -91,6 +91,7 @@ private:
     void SelectLogCommit();
     std::string SelectedLogBranch() const;
     std::string SelectedLogCommitHash() const;
+    void CopyLogCommitDetails();
 
     void ToggleSelectedFileStaged();
     void StageAllShownFiles();
@@ -112,6 +113,7 @@ private:
     void UpdateSelectedBranch();
     void RebaseSelectedBranch();
     void DeleteSelectedBranch();
+    void CopyBranchOutput();
 
     void RefreshRemoteBranches();
     void CheckoutSelectedRemoteBranch();
@@ -355,6 +357,7 @@ private:
     ftxui::Component branch_input_confirm_button_;
     ftxui::Component branch_input_cancel_button_;
     ftxui::Component branch_input_container_;
+    ftxui::Component copy_branch_output_button_;
 
     ftxui::Component remote_filter_input_component_;
     ftxui::Component remote_branch_menu_;
@@ -402,6 +405,7 @@ private:
     ftxui::Component log_local_button_;
     ftxui::Component log_remote_button_;
     ftxui::Component log_refresh_button_;
+    ftxui::Component log_copy_details_button_;
 
     ftxui::Component status_tab_container_;
     ftxui::Component diff_tab_container_;

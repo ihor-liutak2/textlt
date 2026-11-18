@@ -179,6 +179,7 @@ GitModalContent::GitModalContent(
     delete_branch_button_ = MakeTextButton("Delete", [this] { DeleteSelectedBranch(); });
     new_branch_button_ = MakeTextButton("New", [this] { CreateNewBranch(); });
     update_button_ = MakeTextButton("Update", [this] { UpdateSelectedBranch(); });
+    copy_branch_output_button_ = MakeTextButton("Copy output", [this] { CopyBranchOutput(); });
 
     ftxui::InputOption branch_input_option;
     branch_input_option.multiline = false;
@@ -417,6 +418,7 @@ GitModalContent::GitModalContent(
             delete_branch_button_,
             update_button_,
             new_branch_button_,
+            copy_branch_output_button_,
         }),
     });
 
@@ -537,6 +539,9 @@ GitModalContent::GitModalContent(
     log_refresh_button_ = MakeTextButton("Refresh", [this] {
         RefreshLogs();
     });
+    log_copy_details_button_ = MakeTextButton("Copy details", [this] {
+        CopyLogCommitDetails();
+    });
 
     logs_tab_container_ = ftxui::Container::Horizontal({
         ftxui::Container::Vertical({
@@ -552,6 +557,7 @@ GitModalContent::GitModalContent(
             log_local_button_,
             log_remote_button_,
             log_refresh_button_,
+            log_copy_details_button_,
         }),
     });
 
@@ -881,7 +887,8 @@ ftxui::Element GitModalContent::RenderCustomFooter() {
         add(commit_button_); add(copy_commit_output_button_);
     } else if (tab == Tab::Branches) {
         // Branch action buttons are rendered in the tab body (branches_tab_container_)
-        // so they are proper clickable components. Footer shows status only.
+        // so they are proper clickable components. Footer keeps the copy action.
+        add(copy_branch_output_button_);
     } else if (tab == Tab::Remote) {
         add(refresh_remote_button_); add(checkout_remote_button_); add(delete_remote_button_);
     } else if (tab == Tab::Tags) {
@@ -895,6 +902,7 @@ ftxui::Element GitModalContent::RenderCustomFooter() {
         add(open_compare_side_button_); add(open_compare_diff_button_); add(copy_compare_diff_button_);
     } else if (tab == Tab::Logs) {
         add(log_local_button_); add(log_remote_button_); add(log_refresh_button_);
+        add(log_copy_details_button_);
     }
 
     return ftxui::vbox({
@@ -949,6 +957,32 @@ void GitModalContent::SelectLogCommit() {
     log_commit_detail_ = git_manager_->GetCommitDetail(hash);
     log_has_commit_detail_ = true;
     log_status_ = "Commit " + log_commit_detail_.full_hash.substr(0, 7);
+}
+
+void GitModalContent::CopyLogCommitDetails() {
+    if (!write_clipboard_) {
+        status_ = "Clipboard write is not configured.";
+        return;
+    }
+    if (!log_has_commit_detail_) {
+        status_ = "No commit details to copy.";
+        return;
+    }
+
+    const GitManager::CommitDetail& detail = log_commit_detail_;
+    std::string text = "Commit: " + detail.full_hash + "\n";
+    text += "Author: " + detail.author_name + " <" + detail.author_email + ">\n";
+    text += "Date: " + detail.date + "\n\n";
+    text += "Message:\n" + detail.full_message;
+    if (!detail.changed_files.empty()) {
+        text += "\n\nChanged files:";
+        for (const std::string& file : detail.changed_files) {
+            text += "\n  " + file;
+        }
+    }
+
+    write_clipboard_(text);
+    status_ = "Commit details copied.";
 }
 
 void GitModalContent::RebuildLogBranchLabels() {
