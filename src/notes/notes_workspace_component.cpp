@@ -7,6 +7,8 @@
 #include "editor_utils.hpp"
 #include "ftxui/component/event.hpp"
 #include "ftxui/component/mouse.hpp"
+#include "ftxui/screen/string.hpp"
+#include "ftxui/screen/terminal.hpp"
 #include "keyboard_shortcuts.hpp"
 #include "ui_button.hpp"
 #include "workspace_tabs.hpp"
@@ -16,6 +18,18 @@ namespace {
 
 constexpr int kMouseWheelScrollRows = 3;
 constexpr size_t kEditorScrollbarColumns = 2;
+// Breathing room between the editor border and the note text.
+constexpr size_t kEditorTopPadding = 1;
+constexpr size_t kEditorLeftPadding = 3;
+// Total gap between the text and the right border; the scrollbar occupies the
+// last kEditorScrollbarColumns of it.
+constexpr size_t kEditorRightPadding = 6;
+// Note titles are clamped to this many display columns.
+constexpr size_t kNoteTitleMaxChars = 20;
+
+int ToolbarItemWidth(const std::string& label) {
+    return ftxui::string_width(" " + label + " ");
+}
 
 bool IsCtrl(const ftxui::Event& event, char key) {
     return MatchesShortcut(event, ShortcutModifier::Ctrl, key);
@@ -551,7 +565,7 @@ void NotesWorkspaceComponent::NewNote() {
     NoteDocument note = MakeNewNote(repository_.DeviceId());
     if (!selected_section_id_.empty() && !trash_selected_) note.section_id = selected_section_id_;
     repository_.Notes().insert(repository_.Notes().begin(), std::move(note)); active_note_id_ = repository_.Notes().front().id;
-    editing_ = true; session_.SetNote(&repository_.Notes().front()); ResetEditorViewport(); title_cursor_ = 0; focus_ = FocusArea::Title;
+    editing_ = true; session_.SetNote(&repository_.Notes().front()); ResetEditorViewport(); focus_ = FocusArea::Body;
     std::string error; if (!repository_.Save(repository_.Notes().front(), error)) Notify("Note save failed: " + error); else Notify("New note");
     RebuildSidebar(); RebuildVisibleNotes();
 }
@@ -585,7 +599,6 @@ void NotesWorkspaceComponent::OpenNote(size_t note_index) {
     editing_ = true;
     session_.SetNote(&repository_.Notes()[note_index]);
     ResetEditorViewport();
-    title_cursor_ = repository_.Notes()[note_index].title.size();
     focus_ = FocusArea::Body;
 }
 
@@ -715,12 +728,10 @@ bool NotesWorkspaceComponent::HandleEditorEvent(ftxui::Event event) {
     if (IsCtrl(event, 'z')) { session_.Undo(); TouchAndSave(); return true; }
     if (IsCtrl(event, 'y')) { session_.Redo(); TouchAndSave(); return true; }
     if (event == ftxui::Event::Tab) {
-        if (focus_ == FocusArea::Body && session_.Note() &&
+        if (session_.Note() &&
             session_.Note()->blocks[session_.Cursor().block].type != NoteBlockType::Paragraph) {
             session_.Indent(1);
             TouchAndSave();
-        } else {
-            focus_ = focus_ == FocusArea::Title ? FocusArea::Body : FocusArea::Title;
         }
         return true;
     }
@@ -728,11 +739,6 @@ bool NotesWorkspaceComponent::HandleEditorEvent(ftxui::Event event) {
         session_.Indent(-1);
         TouchAndSave();
         return true;
-    }
-    if (focus_ == FocusArea::Title) {
-        if (event == ftxui::Event::Return || event == ftxui::Event::ArrowDown) { focus_ = FocusArea::Body; return true; }
-        auto* note = session_.Note(); if (!note) return false;
-        return HandleTextFieldEvent(note->title, title_cursor_, event, [this, note] { note->updated_at = UtcNow(); ++note->revision; std::string error; if (!repository_.Save(*note, error)) Notify("Title save failed: " + error); });
     }
     bool changed = false;
     if (event == ftxui::Event::ArrowLeft) return session_.MoveLeft();
@@ -769,6 +775,34 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
         }
         return true;
     }
+    if (title_editor_open_) {
+        if (event == ftxui::Event::Escape) { CloseTitleEditor(); return true; }
+        if (event == ftxui::Event::Return) { CommitTitleEditor(); return true; }
+        if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left &&
+            event.mouse().motion == ftxui::Mouse::Pressed) {
+            if (title_editor_save_box_.Contain(event.mouse().x, event.mouse().y)) {
+                CommitTitleEditor();
+            } else if (title_editor_cancel_box_.Contain(event.mouse().x, event.mouse().y)) {
+                CloseTitleEditor();
+            }
+            return true;
+        }
+        if (IsCtrl(event, 'v')) {
+            if (read_clipboard_) {
+                std::string value = read_clipboard_();
+                for (char& character : value) {
+                    if (character == '\r' || character == '\n') character = ' ';
+                }
+                title_editor_input_.insert(title_editor_cursor_, value);
+                title_editor_cursor_ += value.size();
+                LimitTitleEditorInput();
+            }
+            return true;
+        }
+        HandleTextFieldEvent(title_editor_input_, title_editor_cursor_, event,
+            [this] { LimitTitleEditorInput(); });
+        return true;
+    }
     if (group_picker_open_) {
         if (event == ftxui::Event::Escape) { group_picker_open_ = false; return true; }
         if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left &&
@@ -788,11 +822,13 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
     }
     if (editing_ && event.is_mouse()) {
         const auto& mouse = event.mouse();
-        if (mouse.button == ftxui::Mouse::WheelUp && editor_view_box_.Contain(mouse.x, mouse.y)) {
+        const bool over_editor = editor_view_box_.Contain(mouse.x, mouse.y) ||
+            editor_scrollbar_box_.Contain(mouse.x, mouse.y);
+        if (mouse.button == ftxui::Mouse::WheelUp && over_editor) {
             ScrollEditor(-kMouseWheelScrollRows);
             return true;
         }
-        if (mouse.button == ftxui::Mouse::WheelDown && editor_view_box_.Contain(mouse.x, mouse.y)) {
+        if (mouse.button == ftxui::Mouse::WheelDown && over_editor) {
             ScrollEditor(kMouseWheelScrollRows);
             return true;
         }
@@ -872,10 +908,8 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
             }
             return true;
         }
-        const int content_x_max = editor_view_box_.x_max -
-            static_cast<int>(kEditorScrollbarColumns);
         if (mouse.button == ftxui::Mouse::Left && mouse.motion == ftxui::Mouse::Pressed &&
-            editor_view_box_.Contain(mouse.x, mouse.y) && mouse.x <= content_x_max) {
+            editor_view_box_.Contain(mouse.x, mouse.y)) {
             if (const auto position = NotePositionAt(mouse.x, mouse.y)) {
                 focus_ = FocusArea::Body;
                 session_.SetCursor(
@@ -921,6 +955,7 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
         }
         if (editing_) {
             if (back_box_.Contain(mouse.x, mouse.y)) { CloseEditor(); return true; }
+            if (title_box_.Contain(mouse.x, mouse.y)) { OpenTitleEditor(); return true; }
             if (pin_box_.Contain(mouse.x, mouse.y)) { TogglePin(); return true; }
             if (section_box_.Contain(mouse.x, mouse.y)) { OpenGroupPicker(); return true; }
             if (trash_box_.Contain(mouse.x, mouse.y)) {
@@ -987,6 +1022,81 @@ ftxui::Element NotesWorkspaceComponent::RenderGroupPicker() {
         reflect(group_picker_cancel_box_), filler()}));
     return vbox(std::move(rows)) | size(WIDTH, EQUAL, 42) |
         borderStyled(HEAVY, theme.modal_border) | bgcolor(theme.modal_background) | clear_under;
+}
+
+void NotesWorkspaceComponent::LimitTitleEditorInput() {
+    const size_t end = textlt::utils::Utf8ByteIndexAtDisplayColumn(
+        title_editor_input_, 0, kNoteTitleMaxChars);
+    if (end < title_editor_input_.size()) {
+        title_editor_input_.erase(end);
+    }
+    if (title_editor_cursor_ > title_editor_input_.size()) {
+        title_editor_cursor_ = title_editor_input_.size();
+    }
+}
+
+void NotesWorkspaceComponent::OpenTitleEditor() {
+    auto* note = session_.Note();
+    if (!note) return;
+    title_editor_input_ = note->title;
+    LimitTitleEditorInput();
+    title_editor_cursor_ = title_editor_input_.size();
+    title_editor_open_ = true;
+}
+
+void NotesWorkspaceComponent::CloseTitleEditor() {
+    title_editor_open_ = false;
+    title_editor_input_.clear();
+    title_editor_cursor_ = 0;
+}
+
+void NotesWorkspaceComponent::CommitTitleEditor() {
+    auto* note = session_.Note();
+    if (note && note->title != title_editor_input_) {
+        note->title = title_editor_input_;
+        note->updated_at = UtcNow();
+        ++note->revision;
+        std::string error;
+        if (!repository_.Save(*note, error)) {
+            Notify("Title save failed: " + error);
+        } else {
+            RebuildSidebar();
+            RebuildVisibleNotes();
+        }
+    }
+    CloseTitleEditor();
+}
+
+ftxui::Element NotesWorkspaceComponent::RenderTitleEditor() {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    ButtonSpec save = ButtonSpecFromLabel(
+        "Save", ButtonRole::Primary, ButtonVariant::AccentEdges, ButtonSize::Compact);
+    ButtonSpec cancel = ButtonSpecFromLabel(
+        "Cancel", ButtonRole::Cancel, ButtonVariant::Minimal, ButtonSize::Compact);
+    const size_t cursor = std::min(title_editor_cursor_, title_editor_input_.size());
+    std::string field = " " + title_editor_input_.substr(0, cursor) + "▌" +
+        title_editor_input_.substr(cursor);
+    const size_t field_width = static_cast<size_t>(std::max(0, string_width(field)));
+    const size_t target_width = kNoteTitleMaxChars + 2;
+    if (field_width < target_width) field.append(target_width - field_width, ' ');
+    return vbox({
+        text(" Note title ") | bold | color(theme.modal_accent),
+        separator() | color(theme.modal_border),
+        text(" Title ") | color(theme.modal_text_color),
+        text(field) | borderStyled(LIGHT, theme.modal_accent),
+        text(" Up to " + std::to_string(kNoteTitleMaxChars) +
+            " characters ") | dim | color(theme.modal_text_color),
+        separator() | color(theme.modal_border),
+        hbox({
+            filler(),
+            RenderModalFlatButton(theme, cancel) | reflect(title_editor_cancel_box_),
+            text("  "),
+            RenderModalFlatButton(theme, save) | reflect(title_editor_save_box_),
+            filler(),
+        }),
+    }) | size(WIDTH, EQUAL, 42) | borderStyled(HEAVY, theme.modal_border) |
+        bgcolor(theme.modal_background) | clear_under;
 }
 
 void NotesWorkspaceComponent::ToggleMark(NoteMark mark) { if (session_.ToggleMark(mark) && session_.Dirty()) TouchAndSave(); }
@@ -1282,10 +1392,12 @@ std::optional<NotePosition> NotesWorkspaceComponent::NotePositionAt(int x, int y
         return std::nullopt;
     }
 
-    const int visible_height = std::max(
-        1, editor_view_box_.y_max - editor_view_box_.y_min + 1);
+    const int rows_height = std::max(
+        1, editor_view_box_.y_max - editor_view_box_.y_min + 1 -
+            static_cast<int>(kEditorTopPadding));
     const size_t offset = static_cast<size_t>(std::clamp(
-        y - editor_view_box_.y_min, 0, visible_height - 1));
+        y - editor_view_box_.y_min - static_cast<int>(kEditorTopPadding),
+        0, rows_height - 1));
     const size_t row_index = std::min(
         static_cast<size_t>(std::max(0, editor_scroll_)) + offset,
         editor_rows_.size() - 1);
@@ -1294,7 +1406,8 @@ std::optional<NotePosition> NotesWorkspaceComponent::NotePositionAt(int x, int y
 
     const int prefix_width = static_cast<int>(
         textlt::utils::Utf8DisplayWidth(row.prefix));
-    const int content_x_min = editor_view_box_.x_min + prefix_width;
+    const int content_x_min = editor_view_box_.x_min +
+        static_cast<int>(kEditorLeftPadding) + prefix_width;
     if (x <= content_x_min) return NotePosition{row.block, row.start};
 
     const std::string text = BlockText(note->blocks[row.block]);
@@ -1431,19 +1544,35 @@ ftxui::Element NotesWorkspaceComponent::RenderEditor() {
     }
     size_t content_width = 78;
     if (editor_view_known_) {
+        // The reflected text area excludes the scrollbar, so subtract only the
+        // left padding and the part of the right padding before the scrollbar.
+        const size_t text_right_gap = kEditorRightPadding > kEditorScrollbarColumns
+            ? kEditorRightPadding - kEditorScrollbarColumns : 0;
         const size_t inner_width = static_cast<size_t>(std::max(
             0, editor_view_box_.x_max - editor_view_box_.x_min + 1));
-        content_width = inner_width > kEditorScrollbarColumns
-            ? inner_width - kEditorScrollbarColumns : 1;
+        const size_t horizontal_padding = kEditorLeftPadding + text_right_gap;
+        content_width = inner_width > horizontal_padding
+            ? inner_width - horizontal_padding : 1;
+    } else {
+        // Estimate from the terminal before the editor reflects its first box,
+        // so the header layout does not have to wait a frame to settle.
+        const int sidebar_width = sidebar_visible_ ? 29 : 0;
+        const int editor_border = 2;
+        const int estimate = ftxui::Terminal::Size().dimx - sidebar_width -
+            editor_border - static_cast<int>(kEditorLeftPadding + kEditorRightPadding);
+        if (estimate > 0) content_width = static_cast<size_t>(estimate);
     }
     if (content_width != editor_content_width_) has_last_editor_cursor_ = false;
     BuildEditorRows(content_width);
     editor_content_width_ = content_width;
 
-    size_t visible_rows = editor_view_known_
-        ? static_cast<size_t>(std::max(
-            0, editor_view_box_.y_max - editor_view_box_.y_min + 1))
-        : 0;
+    size_t visible_rows = 0;
+    if (editor_view_known_) {
+        const size_t view_height = static_cast<size_t>(std::max(
+            0, editor_view_box_.y_max - editor_view_box_.y_min + 1));
+        visible_rows = view_height > kEditorTopPadding
+            ? view_height - kEditorTopPadding : 0;
+    }
     const size_t total_rows = editor_rows_.size();
     if (visible_rows == 0) visible_rows = std::max<size_t>(1, total_rows);
     const size_t max_scroll = total_rows > visible_rows
@@ -1461,20 +1590,58 @@ ftxui::Element NotesWorkspaceComponent::RenderEditor() {
     }
     while (rows.size() < visible_rows) rows.push_back(text(""));
 
-    Element view = hbox({
-        vbox(std::move(rows)) | xflex,
+    const size_t text_right_gap = kEditorRightPadding > kEditorScrollbarColumns
+        ? kEditorRightPadding - kEditorScrollbarColumns : 0;
+    const Elements top_padding(kEditorTopPadding, text(""));
+    Element text_area = hbox({
+        text(std::string(kEditorLeftPadding, ' ')),
+        vbox({
+            vbox(top_padding),
+            vbox(std::move(rows)) | xflex,
+        }) | xflex,
+        text(std::string(text_right_gap, ' ')),
+    }) | yflex | reflect(editor_view_box_);
+    Element scrollbar = vbox({
+        vbox(top_padding),
         RenderEditorScrollbar(
             visible_rows, total_rows, static_cast<size_t>(editor_scroll_),
             max_scroll, theme),
-    }) | yflex | reflect(editor_view_box_);
+    });
+    Element view = hbox({std::move(text_area) | xflex, std::move(scrollbar)}) | yflex;
 
-    Element back = text(" < Notes ") | bold | reflect(back_box_); Element pin = text(note->pinned ? " ◆ Pinned " : " ◇ Pin ") | reflect(pin_box_);
-    Element group = text(" Group: " + SectionName(*note) + " ▾ ") | reflect(section_box_); Element trash = text(note->deleted_at ? " Restore " : " Trash ") | color(note->deleted_at ? theme.button_success : theme.button_danger) | reflect(trash_box_);
-    Element title = text(" " + note->title + (focus_ == FocusArea::Title ? "▌" : "")) | bold | borderStyled(LIGHT, focus_ == FocusArea::Title ? theme.modal_accent : theme.gutter);
+    const std::string back_label = " < Notes ";
+    const std::string pin_label = note->pinned ? " ◆ Pinned " : " ◇ Pin ";
+    const std::string group_label = " Group: " + SectionName(*note) + " ▾ ";
+    const std::string trash_label = note->deleted_at ? " Restore " : " Trash ";
+    const size_t title_end = textlt::utils::Utf8ByteIndexAtDisplayColumn(
+        note->title, 0, kNoteTitleMaxChars);
+    std::string shown_title = note->title.substr(0, title_end);
+    const size_t shown_title_width = textlt::utils::Utf8DisplayWidth(shown_title);
+    if (shown_title_width < kNoteTitleMaxChars) {
+        shown_title.append(kNoteTitleMaxChars - shown_title_width, ' ');
+    }
+    const std::string title_label = " " + shown_title + " ";
+    Element back = text(back_label) | bold | reflect(back_box_); Element title = text(title_label) | bold | reflect(title_box_);
+    Element pin = text(pin_label) | reflect(pin_box_);
+    Element group = text(group_label) | reflect(section_box_); Element trash = text(trash_label) | color(note->deleted_at ? theme.button_success : theme.button_danger) | reflect(trash_box_);
     const uint8_t marks = session_.ActiveMarks(); auto type = note->blocks[session_.Cursor().block].type;
-    Element toolbar = hbox({ToolbarItem("B", marks & MarkBit(NoteMark::Bold), bold_box_), ToolbarItem("I", marks & MarkBit(NoteMark::Italic), italic_box_), ToolbarItem("U", marks & MarkBit(NoteMark::Underlined), underline_box_), ToolbarItem("S", marks & MarkBit(NoteMark::Strikethrough), strike_box_), separator(), ToolbarItem("• List", type == NoteBlockType::BulletItem, bullet_box_), ToolbarItem("1. List", type == NoteBlockType::NumberedItem, numbered_box_), ToolbarItem("[ ] Check", type == NoteBlockType::CheckItem, check_box_), ToolbarItem("¶", type == NoteBlockType::Paragraph, paragraph_box_)}) | borderStyled(LIGHT, theme.gutter);
+    Element toolbar = hbox({ToolbarItem("B", marks & MarkBit(NoteMark::Bold), bold_box_), ToolbarItem("I", marks & MarkBit(NoteMark::Italic), italic_box_), ToolbarItem("U", marks & MarkBit(NoteMark::Underlined), underline_box_), ToolbarItem("S", marks & MarkBit(NoteMark::Strikethrough), strike_box_), separator(), ToolbarItem("• List", type == NoteBlockType::BulletItem, bullet_box_), ToolbarItem("1. List", type == NoteBlockType::NumberedItem, numbered_box_), ToolbarItem("[ ] Check", type == NoteBlockType::CheckItem, check_box_), ToolbarItem("¶", type == NoteBlockType::Paragraph, paragraph_box_)});
+    // Keep the formatting buttons on the title/Group row when the content area
+    // is wide enough for them; otherwise fall back to a dedicated toolbar row.
+    const int toolbar_width = ToolbarItemWidth("B") + ToolbarItemWidth("I") + ToolbarItemWidth("U") + ToolbarItemWidth("S") + 1 +
+        ToolbarItemWidth("• List") + ToolbarItemWidth("1. List") + ToolbarItemWidth("[ ] Check") + ToolbarItemWidth("¶");
+    const int header_width = string_width(back_label) + string_width(title_label) +
+        string_width(pin_label) + string_width(group_label) + string_width(trash_label) + 4;
+    const bool inline_toolbar = header_width + toolbar_width <= static_cast<int>(content_width) + 4;
+    Element header = inline_toolbar
+        ? hbox({back, separator(), title, separator(), group, separator(), toolbar, filler(), pin, separator(), trash})
+        : hbox({back, separator(), title, separator(), group, filler(), pin, separator(), trash});
     Element status = hbox({text(" Created " + note->created_at + "  Updated " + note->updated_at) | dim, filler(), text(" " + save_status_ + " ") | color(theme.modal_accent)});
-    return vbox({hbox({back, separator(), pin, separator(), group, filler(), trash}), title, toolbar, std::move(view) | borderStyled(focus_ == FocusArea::Body ? HEAVY : LIGHT, focus_ == FocusArea::Body ? theme.modal_accent : theme.gutter) | yflex, status}) | flex | bgcolor(theme.background);
+    Elements layout = {header};
+    if (!inline_toolbar) layout.push_back(toolbar | borderStyled(LIGHT, theme.gutter));
+    layout.push_back(std::move(view) | borderStyled(focus_ == FocusArea::Body ? HEAVY : LIGHT, focus_ == FocusArea::Body ? theme.modal_accent : theme.gutter) | yflex);
+    layout.push_back(status);
+    return vbox(std::move(layout)) | flex | bgcolor(theme.background);
 }
 
 ftxui::Element NotesWorkspaceComponent::OnRender() {
@@ -1492,6 +1659,9 @@ ftxui::Element NotesWorkspaceComponent::OnRender() {
     }
     if (group_picker_open_) {
         return dbox({body, vbox({filler(), hbox({filler(), RenderGroupPicker(), filler()}), filler()})});
+    }
+    if (title_editor_open_) {
+        return dbox({body, vbox({filler(), hbox({filler(), RenderTitleEditor(), filler()}), filler()})});
     }
     return body;
 }

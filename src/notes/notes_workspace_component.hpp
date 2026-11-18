@@ -66,7 +66,7 @@ public:
 private:
     friend class NotesWorkspaceActionsTestAccess;
 
-    enum class FocusArea { Sidebar, Search, Cards, Title, Body, GroupName };
+    enum class FocusArea { Sidebar, Search, Cards, Body, GroupName };
     enum class SidebarEntryKind { Home, Section, NewSection, Trash };
     enum class SortMode { Updated, Created, Title, Pinned };
     enum class ConfirmAction { None, TrashNote, DeleteGroup, DeletePermanently, EmptyTrash };
@@ -129,6 +129,11 @@ private:
     ftxui::Element RenderEditor();
     ftxui::Element RenderConfirmationPopup();
     ftxui::Element RenderGroupPicker();
+    void OpenTitleEditor();
+    void CloseTitleEditor();
+    void CommitTitleEditor();
+    void LimitTitleEditorInput();
+    ftxui::Element RenderTitleEditor();
     ftxui::Element RenderCard(NoteDocument& note, bool selected,
         size_t visible_index, int card_width);
     ftxui::Element RenderEditorRow(const EditorRow& row);
@@ -179,7 +184,6 @@ private:
     bool has_last_editor_cursor_ = false;
     std::string search_;
     size_t search_cursor_ = 0;
-    size_t title_cursor_ = 0;
     std::string group_name_input_;
     std::optional<std::string> editing_section_id_;
     size_t group_name_cursor_ = 0;
@@ -190,6 +194,9 @@ private:
     std::string confirm_title_;
     std::string confirm_message_;
     bool group_picker_open_ = false;
+    bool title_editor_open_ = false;
+    std::string title_editor_input_;
+    size_t title_editor_cursor_ = 0;
     ftxui::Box sidebar_box_;
     ftxui::Box documents_tab_box_;
     ftxui::Box notes_tab_box_;
@@ -209,6 +216,8 @@ private:
     ftxui::Box confirm_cancel_box_;
     std::vector<ftxui::Box> group_picker_boxes_;
     ftxui::Box group_picker_cancel_box_;
+    ftxui::Box title_editor_save_box_;
+    ftxui::Box title_editor_cancel_box_;
     ftxui::Box sort_box_;
     ftxui::Box search_box_;
     ftxui::Box overview_box_;
@@ -216,6 +225,7 @@ private:
     ftxui::Box editor_scrollbar_box_;
     ftxui::Box new_note_box_;
     ftxui::Box back_box_;
+    ftxui::Box title_box_;
     ftxui::Box pin_box_;
     ftxui::Box section_box_;
     ftxui::Box trash_box_;

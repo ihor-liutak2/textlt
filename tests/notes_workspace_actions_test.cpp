@@ -177,8 +177,11 @@ public:
     static void NewNoteWithTitle(NotesWorkspaceComponent& component,
         const std::string& title) {
         component.NewNote();
-        for (char character : title) {
-            component.OnEvent(ftxui::Event::Character(std::string(1, character)));
+        if (!component.repository_.Notes().empty()) {
+            NoteDocument& note = component.repository_.Notes().front();
+            note.title = title;
+            std::string error;
+            component.repository_.Save(note, error);
         }
         component.OnEvent(ftxui::Event::Escape);
     }
