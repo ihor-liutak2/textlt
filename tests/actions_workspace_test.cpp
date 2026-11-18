@@ -296,8 +296,9 @@ int main() {
         // Confirm the merge (Enter).
         Check(merge_workspace.OnEvent(ftxui::Event::Return));
         Check(ActionsWorkspaceModalTestAccess::DialogIsNone(merge_workspace));
-        Check(merge_workspace.Groups().size() == 1);
-        const auto& merged = merge_workspace.Groups().front();
+        const auto merged_groups = merge_workspace.Groups();
+        Check(merged_groups.size() == 1);
+        const auto& merged = merged_groups.front();
         Check(merged.name == "Deploy");
         std::vector<std::string> page_names;
         for (const auto& pg : merged.pages) page_names.push_back(pg.name);
