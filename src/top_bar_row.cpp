@@ -81,6 +81,26 @@ TopBarRowComponent::TopBarRowComponent(const Theme* theme, Callbacks callbacks)
         distraction_exit_button_,
     });
     Add(distraction_button_container_);
+
+    actions_add_button_ = ftxui::Button(MakeCommandButtonOption(
+        "Add", "actions.add", ButtonRole::Primary));
+    actions_edit_button_ = ftxui::Button(MakeCommandButtonOption(
+        "Edit", "actions.edit", ButtonRole::Utility));
+    actions_delete_button_ = ftxui::Button(MakeCommandButtonOption(
+        "Delete", "actions.delete", ButtonRole::Danger));
+    actions_move_up_button_ = ftxui::Button(MakeCommandButtonOption(
+        "Move Up", "actions.move_up", ButtonRole::Navigation));
+    actions_move_down_button_ = ftxui::Button(MakeCommandButtonOption(
+        "Move Down", "actions.move_down", ButtonRole::Navigation));
+
+    actions_button_container_ = ftxui::Container::Horizontal({
+        actions_add_button_,
+        actions_edit_button_,
+        actions_delete_button_,
+        actions_move_up_button_,
+        actions_move_down_button_,
+    });
+    Add(actions_button_container_);
 }
 
 ftxui::ButtonOption TopBarRowComponent::MakeTtsButtonOption(
@@ -153,12 +173,18 @@ TopBarRowComponent::Mode TopBarRowComponent::CurrentMode() const {
     if (callbacks_.is_distraction_mode && callbacks_.is_distraction_mode()) {
         return Mode::Distraction;
     }
+    if (callbacks_.is_actions_mode && callbacks_.is_actions_mode()) {
+        return Mode::Actions;
+    }
     return Mode::Normal;
 }
 
 ftxui::Component TopBarRowComponent::ActiveButtonContainer() const {
     if (CurrentMode() == Mode::Distraction) {
         return distraction_button_container_;
+    }
+    if (CurrentMode() == Mode::Actions) {
+        return actions_button_container_;
     }
     return tts_button_container_;
 }
@@ -241,6 +267,24 @@ ftxui::Element TopBarRowComponent::RenderDistractionControls() {
     });
 }
 
+ftxui::Element TopBarRowComponent::RenderActionControls() {
+    using namespace ftxui;
+
+    const Theme& theme = ResolveTheme(theme_);
+    return hbox({
+        text(" Actions: ") | bold | color(theme.menu_foreground),
+        actions_add_button_ ? actions_add_button_->Render() : text("[Add]"),
+        text(" "),
+        actions_edit_button_ ? actions_edit_button_->Render() : text("[Edit]"),
+        text(" "),
+        actions_delete_button_ ? actions_delete_button_->Render() : text("[Delete]"),
+        text(" "),
+        actions_move_up_button_ ? actions_move_up_button_->Render() : text("[Move Up]"),
+        text(" "),
+        actions_move_down_button_ ? actions_move_down_button_->Render() : text("[Move Down]"),
+    });
+}
+
 ftxui::Element TopBarRowComponent::OnRender() {
     using namespace ftxui;
 
@@ -258,12 +302,14 @@ ftxui::Element TopBarRowComponent::OnRender() {
             bold |
             color(theme.menu_foreground),
         filler(),
-        RenderTtsControls(),
+        CurrentMode() == Mode::Actions ? RenderActionControls() : RenderTtsControls(),
     }) | reflect(box_);
 }
 
 bool TopBarRowComponent::Focusable() const {
-    return CurrentMode() == Mode::Distraction || ShouldShowTtsControls();
+    return CurrentMode() == Mode::Distraction ||
+        CurrentMode() == Mode::Actions ||
+        ShouldShowTtsControls();
 }
 
 bool TopBarRowComponent::OnEvent(ftxui::Event event) {

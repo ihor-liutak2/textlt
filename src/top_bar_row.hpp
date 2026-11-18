@@ -18,6 +18,7 @@ public:
     enum class Mode {
         Normal,
         Distraction,
+        Actions,
     };
 
     struct Callbacks {
@@ -28,6 +29,7 @@ public:
         std::function<bool()> is_distraction_mode;
         std::function<DistractionTopBarState()> distraction_state;
         std::function<void()> open_distraction_page_popup;
+        std::function<bool()> is_actions_mode;
     };
 
     TopBarRowComponent(const Theme* theme, Callbacks callbacks);
@@ -65,16 +67,23 @@ private:
     DistractionTopBarState CurrentDistractionState() const;
     ftxui::Element RenderTtsControls();
     ftxui::Element RenderDistractionControls();
+    ftxui::Element RenderActionControls();
 
     const Theme* theme_ = nullptr;
     Callbacks callbacks_;
     ftxui::Component tts_button_container_;
     ftxui::Component distraction_button_container_;
+    ftxui::Component actions_button_container_;
     ftxui::Component open_tts_button_;
     ftxui::Component tts_play_button_;
     ftxui::Component tts_pause_button_;
     ftxui::Component tts_stop_button_;
     ftxui::Component tts_next_button_;
+    ftxui::Component actions_add_button_;
+    ftxui::Component actions_edit_button_;
+    ftxui::Component actions_delete_button_;
+    ftxui::Component actions_move_up_button_;
+    ftxui::Component actions_move_down_button_;
     ftxui::Component distraction_prev_button_;
     ftxui::Component distraction_next_button_;
     ftxui::Component distraction_page_button_;

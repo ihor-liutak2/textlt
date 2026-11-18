@@ -193,17 +193,12 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
     if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left &&
         event.mouse().motion == ftxui::Mouse::Pressed &&
         documents_tab_box_.Contain(event.mouse().x, event.mouse().y)) {
-        if (mode_ == SidebarMode::Actions) {
-            // Stay in the Actions workspace; do not open Documents from here.
-            return true;
-        }
         if (on_open_documents_) on_open_documents_();
         return true;
     }
     if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left &&
         event.mouse().motion == ftxui::Mouse::Pressed &&
         actions_tab_box_.Contain(event.mouse().x, event.mouse().y)) {
-        if (mode_ == SidebarMode::Actions) return true;
         if (on_open_actions_) on_open_actions_();
         return true;
     }
@@ -211,10 +206,6 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
         event.mouse().button == ftxui::Mouse::Left &&
         event.mouse().motion == ftxui::Mouse::Pressed &&
         notes_tab_box_.Contain(event.mouse().x, event.mouse().y)) {
-        if (mode_ == SidebarMode::Actions) {
-            // Stay in the Actions workspace; do not open Notes from here.
-            return true;
-        }
         if (on_open_notes_) {
             on_open_notes_();
         }

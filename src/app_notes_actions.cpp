@@ -33,7 +33,6 @@ void TextltApp::ShowNotesWorkspace() {
 }
 
 void TextltApp::ShowDocumentsWorkspace() {
-    const bool returning_from_actions = workspace_mode_ == WorkspaceMode::Actions;
     if (notes_workspace_component_) {
         std::string error;
         auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_);
@@ -52,10 +51,13 @@ void TextltApp::ShowDocumentsWorkspace() {
         menu_bar_->SetNotesMenuVisible(false);
         menu_bar_->SetActionsMenuVisible(false);
     }
-    if (returning_from_actions && sidebar_panel_) {
+    if (sidebar_panel_) {
         // The Actions workspace temporarily owns the shared Sidebar's list.
-        // Restore a document collection before rendering Documents again.
-        std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->ShowProject();
+        // Restore a document collection before rendering Documents again. This
+        // also covers a detour through Notes, where the sidebar is not shown
+        // and would otherwise stay in its previous Actions mode.
+        auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
+        if (sidebar->IsActionsMode()) sidebar->ShowProject();
     }
     FocusEditor();
     screen_.PostEvent(ftxui::Event::Custom);

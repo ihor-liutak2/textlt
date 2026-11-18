@@ -521,6 +521,7 @@ TextltApp::TextltApp()
             [this] { return distraction_controller_.Enabled(); },
             [this] { return CurrentDistractionTopBarState(); },
             [this] { OpenDistractionPagePanel(); },
+            [this] { return workspace_mode_ == WorkspaceMode::Actions; },
         });
 
     bottom_bar_row_ = ftxui::Make<BottomBarRowComponent>(
