@@ -16,6 +16,8 @@ struct BottomBarRowState {
     int cursor_col = 1;
     std::size_t total_lines = 1;
     int document_percent = 100;
+    bool show_cursor_position = true;
+    std::string workspace_label;
     std::string line_ending;
     std::string git_branch;
     std::string project_name;
@@ -40,6 +42,7 @@ public:
 private:
     enum class Segment {
         Line,
+        Workspace,
         Branch,
         Theme,
     };

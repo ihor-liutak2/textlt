@@ -35,6 +35,7 @@ BottomBarRowState TextltApp::CurrentBottomBarRowState() {
     const auto editor = std::static_pointer_cast<EditorComponent>(text_editor_);
 
     BottomBarRowState state;
+    state.show_cursor_position = workspace_mode_ == WorkspaceMode::Documents;
     const int cursor_row_index = editor ? editor->GetCursorRow() : 0;
     state.cursor_row = cursor_row_index + 1;
     state.cursor_col = editor ? editor->GetCursorCol() + 1 : 1;
@@ -44,21 +45,16 @@ BottomBarRowState TextltApp::CurrentBottomBarRowState() {
         state.document_percent =
             (cursor_row_index * 100) / static_cast<int>(state.total_lines - 1);
     }
-    state.line_ending = editor ? editor->ActiveLineEndingLabel() : "LF";
     state.git_branch = git_manager_.GetCurrentBranch();
     state.theme_name = current_theme_.name;
 
     if (workspace_mode_ == WorkspaceMode::Notes) {
-        state.line_ending = "NOTE";
-        if (const ProjectRecord* project = ActiveWorkspaceProject()) {
-            state.project_name = project->name;
-        }
-        return state;
-    }
-    if (workspace_mode_ == WorkspaceMode::Actions) {
-        state.line_ending = "ACTION";
-        if (const ProjectRecord* project = ActiveWorkspaceProject()) state.project_name = project->name;
-        return state;
+        state.workspace_label = "Notes";
+    } else if (workspace_mode_ == WorkspaceMode::Actions) {
+        state.workspace_label = "Action";
+    } else {
+        state.workspace_label = "Docs";
+        state.line_ending = editor ? editor->ActiveLineEndingLabel() : "LF";
     }
 
     if (const ProjectRecord* project = ActiveWorkspaceProject()) {
@@ -90,13 +86,13 @@ ftxui::Element TextltApp::Render() {
         : workspace_mode_ == WorkspaceMode::Actions && actions_workspace_component_
         ? (!distraction_mode && editor_config_.show_actions_sidebar
               ? hbox({sidebar_panel_->Render() | size(WIDTH, EQUAL, 28),
-                      separator() | color(MainWindowSeparatorColor(current_theme_)),
+                      text("  "),
                       actions_workspace_component_->Render() | xflex})
               : hbox({actions_workspace_component_->Render() | xflex}))
         : !distraction_mode && editor_config_.show_file_explorer
         ? hbox({
               sidebar_panel_->Render() | size(WIDTH, EQUAL, 28),
-              separator() | color(MainWindowSeparatorColor(current_theme_)),
+              text("  "),
               editor_workspace | xflex,
           })
         : hbox({
@@ -125,7 +121,7 @@ ftxui::Element TextltApp::Render() {
         base_rows.push_back(
             bottom_bar_row_
                 ? bottom_bar_row_->Render()
-                : text(" Ln 1, Col 1 | LF | 100% | Theme: " + current_theme_.name) |
+                : text(" Ln 1, Col 1 | Docs | LF | 100% | Theme: " + current_theme_.name) |
                       color(current_theme_.menu_foreground));
     }
 

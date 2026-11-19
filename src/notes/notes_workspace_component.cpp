@@ -19,6 +19,9 @@ namespace {
 
 constexpr int kMouseWheelScrollRows = 3;
 constexpr size_t kEditorScrollbarColumns = 2;
+constexpr int kSidebarWidth = 28;
+constexpr int kSidebarGap = 2;
+
 // Breathing room between the editor border and the note text.
 constexpr size_t kEditorTopPadding = 1;
 constexpr size_t kEditorLeftPadding = 3;
@@ -1257,7 +1260,7 @@ ftxui::Element NotesWorkspaceComponent::RenderSidebar() {
         }));
     }
     return vbox(std::move(rows)) | borderStyled(LIGHT, theme.gutter) |
-        size(WIDTH, EQUAL, 28) | reflect(sidebar_box_) |
+        size(WIDTH, EQUAL, kSidebarWidth) | reflect(sidebar_box_) |
         bgcolor(theme.background);
 }
 
@@ -1361,7 +1364,15 @@ ftxui::Element NotesWorkspaceComponent::RenderOverview() {
     }
     flush_cards();
     if (rows.empty()) rows.push_back(vbox({filler(), text(trash_selected_ ? "Trash is empty" : "No notes here. Use New to create one.") | center | dim, filler()}) | flex);
-    return vbox({hbox({text(" " + heading + " ") | bold | color(theme.modal_accent), text(std::to_string(visible_notes_.size()) + " notes ") | dim, search, text(" "), sort, text(" "), add}), separator() | color(theme.gutter), vbox(std::move(rows)) | frame | yflex}) | flex | bgcolor(theme.background) | reflect(overview_box_);
+    return vbox({
+        hbox({
+            text(" " + heading + " ") | bold | color(theme.modal_accent),
+            text(std::to_string(visible_notes_.size()) + " notes ") | dim,
+            search, text(" "), sort, text(" "), add,
+        }),
+        text(""),
+        vbox(std::move(rows)) | frame | yflex,
+    }) | flex | bgcolor(theme.background) | reflect(overview_box_);
 }
 
 ftxui::Element NotesWorkspaceComponent::ToolbarItem(const std::string& label, bool active, ftxui::Box& box) {
@@ -1659,7 +1670,7 @@ ftxui::Element NotesWorkspaceComponent::RenderEditor() {
     } else {
         // Estimate from the terminal before the editor reflects its first box,
         // so the header layout does not have to wait a frame to settle.
-        const int sidebar_width = sidebar_visible_ ? 29 : 0;
+        const int sidebar_width = sidebar_visible_ ? kSidebarWidth + kSidebarGap : 0;
         const int editor_border = 2;
         const int estimate = ftxui::Terminal::Size().dimx - sidebar_width -
             editor_border - static_cast<int>(kEditorLeftPadding + kEditorRightPadding);
@@ -1797,7 +1808,7 @@ ftxui::Element NotesWorkspaceComponent::OnRender() {
     Element body = sidebar_visible_
         ? hbox({
               RenderSidebar(),
-              separator() | color((theme_ ? *theme_ : FallbackTheme()).gutter),
+              emptyElement() | size(WIDTH, EQUAL, kSidebarGap),
               std::move(content),
           }) | flex
         : hbox({std::move(content)}) | flex;

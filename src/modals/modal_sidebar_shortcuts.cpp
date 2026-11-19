@@ -1,9 +1,11 @@
 #include "modal_sidebar_shortcuts.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <utility>
 
 #include "ftxui/component/component_options.hpp"
+#include "ftxui/component/mouse.hpp"
 #include "ftxui/dom/elements.hpp"
 
 #include "keyboard_shortcuts.hpp"
@@ -42,12 +44,14 @@ SidebarShortcutModalContent::SidebarShortcutModalContent(
     for (const Entry& entry : entries_) {
         entry_labels_.push_back(EntryLabel(entry.key, entry.label));
     }
+    entry_boxes_.resize(entries_.size());
 
     ftxui::MenuOption option = ftxui::MenuOption::Vertical();
     option.on_enter = [this] { TriggerEntry(static_cast<size_t>(selected_entry_)); };
     option.entries_option.transform = [this](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        ftxui::Element item = ftxui::text(state.label);
+        ftxui::Element item = ftxui::text(state.label) | ftxui::xflex |
+            ftxui::reflect(entry_boxes_[static_cast<size_t>(state.index)]);
         if (state.focused || state.active) {
             return item |
                 ftxui::bgcolor(theme.modal_selected_item_bg) |
@@ -64,6 +68,7 @@ SidebarShortcutModalContent::SidebarShortcutModalContent(
 
 void SidebarShortcutModalContent::Open() {
     selected_entry_ = 0;
+    last_clicked_entry_ = -1;
     if (container_) {
         container_->TakeFocus();
     }
@@ -95,6 +100,9 @@ void SidebarShortcutModalContent::TriggerEntry(size_t index) {
 }
 
 bool SidebarShortcutModalContent::HandleEvent(ftxui::Event event) {
+    if (event.is_mouse()) {
+        return HandleMouseEvent(std::move(event));
+    }
     if (event == ftxui::Event::Escape) {
         if (close_callback_) {
             close_callback_();
@@ -109,6 +117,31 @@ bool SidebarShortcutModalContent::HandleEvent(ftxui::Event event) {
         }
     }
 
+    return false;
+}
+
+bool SidebarShortcutModalContent::HandleMouseEvent(ftxui::Event event) {
+    const auto& mouse = event.mouse();
+    if (mouse.button != ftxui::Mouse::Left || mouse.motion != ftxui::Mouse::Pressed) {
+        return false;
+    }
+
+    const auto row = std::find_if(entry_boxes_.begin(), entry_boxes_.end(),
+        [&mouse](const auto& box) { return box.Contain(mouse.x, mouse.y); });
+    if (row == entry_boxes_.end()) {
+        last_clicked_entry_ = -1;
+        return false;
+    }
+
+    const int index = static_cast<int>(row - entry_boxes_.begin());
+    const auto now = std::chrono::steady_clock::now();
+    if (index == last_clicked_entry_ && now - last_click_time_ <= std::chrono::milliseconds(500)) {
+        TriggerEntry(static_cast<size_t>(index));
+        return true;
+    }
+
+    last_clicked_entry_ = index;
+    last_click_time_ = now;
     return false;
 }
 
@@ -148,7 +181,6 @@ void SidebarShortcutModal::Open() {
     }
     if (modal_) {
         modal_->SetTheme(theme_);
-        modal_->SetHeaderCloseVisible(false);
         modal_->SetFooterVisible(false);
     }
 }

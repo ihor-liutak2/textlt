@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <string>
@@ -8,6 +9,7 @@
 #include "ftxui/component/component.hpp"
 #include "ftxui/component/event.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "ftxui/screen/box.hpp"
 
 #include "modal_interface.hpp"
 #include "modal_window.hpp"
@@ -45,6 +47,7 @@ private:
     };
 
     void TriggerEntry(size_t index);
+    bool HandleMouseEvent(ftxui::Event event);
     bool IsEntryKey(ftxui::Event event, char key) const;
 
     const Theme* theme_ = nullptr;
@@ -52,7 +55,10 @@ private:
     CloseCallback close_callback_;
     std::vector<Entry> entries_;
     std::vector<std::string> entry_labels_;
+    std::vector<ftxui::Box> entry_boxes_;
     int selected_entry_ = 0;
+    int last_clicked_entry_ = -1;
+    std::chrono::steady_clock::time_point last_click_time_{};
     ftxui::Component menu_;
     ftxui::Component container_;
 };

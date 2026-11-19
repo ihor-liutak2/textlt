@@ -112,9 +112,17 @@ ftxui::Element BottomBarRowComponent::OnRender() {
     };
 
     ftxui::Elements parts;
-    parts.push_back(clickable_text(" Ln " + std::to_string(state.cursor_row) +
-        ", Col " + std::to_string(state.cursor_col), Segment::Line, true));
-    parts.push_back(static_text(" | " + state.line_ending));
+    if (state.show_cursor_position) {
+        parts.push_back(clickable_text(" Ln " + std::to_string(state.cursor_row) +
+            ", Col " + std::to_string(state.cursor_col), Segment::Line, true));
+    }
+    if (!state.workspace_label.empty()) {
+        parts.push_back(static_text(parts.empty() ? " " : " | "));
+        parts.push_back(clickable_text(state.workspace_label, Segment::Workspace, true));
+    }
+    if (!state.line_ending.empty()) {
+        parts.push_back(static_text(" | " + state.line_ending));
+    }
     if (has_branch) {
         parts.push_back(static_text(" | branch: "));
         parts.push_back(clickable_text(branch, Segment::Branch, true));
@@ -139,6 +147,10 @@ void BottomBarRowComponent::ActivateSegment(Segment segment) {
     }
     if (segment == Segment::Line) {
         callbacks_.run_command("editor.go_to_line");
+        return;
+    }
+    if (segment == Segment::Workspace) {
+        callbacks_.run_command("sidebar.ctrl_b_file_explorer");
         return;
     }
     if (segment == Segment::Branch) {
