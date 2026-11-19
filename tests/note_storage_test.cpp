@@ -51,10 +51,11 @@ int main() {
     note.pinned_at = notes::UtcNow();
     note.blocks = {
         {notes::GenerateUuid(), notes::NoteBlockType::Paragraph, 0, false,
-            {{"Important", notes::MarkBit(notes::NoteMark::Bold)}, {" text", 0}}},
+            {{"Important text"}}},
         {notes::GenerateUuid(), notes::NoteBlockType::CheckItem, 1, true,
-            {{"Run tests", notes::MarkBit(notes::NoteMark::Italic)}},},
+            {{"Run tests"}}},
     };
+    note.blocks[0].heading = 1;
     repository.Notes().push_back(note);
     assert(repository.Save(repository.Notes().back(), error));
 
@@ -69,7 +70,8 @@ int main() {
     assert(loaded.pinned);
     assert(loaded.section_id && *loaded.section_id == work_id);
     assert(loaded.blocks.size() == 2);
-    assert(loaded.blocks[0].runs[0].marks == notes::MarkBit(notes::NoteMark::Bold));
+    assert(notes::BlockText(loaded.blocks[0]) == "Important text");
+    assert(loaded.blocks[0].heading == 1);
     assert(loaded.blocks[1].type == notes::NoteBlockType::CheckItem);
     assert(loaded.blocks[1].checked);
 

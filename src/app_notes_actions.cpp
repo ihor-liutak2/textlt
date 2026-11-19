@@ -100,20 +100,14 @@ void TextltApp::CommandNotesDeleteSelected() {
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
-void TextltApp::CommandNotesBold() {
-    if (workspace_mode_ == WorkspaceMode::Notes) std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_)->ToggleMark(notes::NoteMark::Bold);
+void TextltApp::CommandNotesHeading1() {
+    if (workspace_mode_ == WorkspaceMode::Notes) std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_)->ToggleHeading(1);
 }
-void TextltApp::CommandNotesItalic() {
-    if (workspace_mode_ == WorkspaceMode::Notes) std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_)->ToggleMark(notes::NoteMark::Italic);
+void TextltApp::CommandNotesHeading2() {
+    if (workspace_mode_ == WorkspaceMode::Notes) std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_)->ToggleHeading(2);
 }
-void TextltApp::CommandNotesUnderline() {
-    if (workspace_mode_ == WorkspaceMode::Notes) std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_)->ToggleMark(notes::NoteMark::Underlined);
-}
-void TextltApp::CommandNotesStrikethrough() {
-    if (workspace_mode_ == WorkspaceMode::Notes) std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_)->ToggleMark(notes::NoteMark::Strikethrough);
-}
-void TextltApp::CommandNotesClearFormatting() {
-    if (workspace_mode_ == WorkspaceMode::Notes) std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_)->ClearFormatting();
+void TextltApp::CommandNotesHeading3() {
+    if (workspace_mode_ == WorkspaceMode::Notes) std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_)->ToggleHeading(3);
 }
 void TextltApp::CommandNotesParagraph() {
     if (workspace_mode_ == WorkspaceMode::Notes) std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_)->SetBlockType(notes::NoteBlockType::Paragraph);

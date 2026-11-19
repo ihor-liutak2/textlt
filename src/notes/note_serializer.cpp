@@ -1,5 +1,6 @@
 #include "notes/note_serializer.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <system_error>
 
@@ -9,28 +10,6 @@ namespace textlt::notes {
 namespace {
 
 using Json = nlohmann::ordered_json;
-
-Json MarksToJson(uint8_t marks) {
-    Json result = Json::array();
-    for (NoteMark mark : {NoteMark::Bold, NoteMark::Italic, NoteMark::Underlined, NoteMark::Strikethrough}) {
-        if ((marks & MarkBit(mark)) != 0) result.push_back(MarkName(mark));
-    }
-    return result;
-}
-
-uint8_t MarksFromJson(const Json& json) {
-    uint8_t marks = 0;
-    if (!json.is_array()) return marks;
-    for (const auto& value : json) {
-        if (!value.is_string()) continue;
-        const std::string name = value.get<std::string>();
-        if (name == "bold") marks |= MarkBit(NoteMark::Bold);
-        else if (name == "italic") marks |= MarkBit(NoteMark::Italic);
-        else if (name == "underlined") marks |= MarkBit(NoteMark::Underlined);
-        else if (name == "strikethrough") marks |= MarkBit(NoteMark::Strikethrough);
-    }
-    return marks;
-}
 
 Json NoteToJson(const NoteDocument& note) {
     Json json;
@@ -54,9 +33,10 @@ Json NoteToJson(const NoteDocument& note) {
         item["type"] = BlockTypeName(block.type);
         item["indent"] = block.indent;
         if (block.type == NoteBlockType::CheckItem) item["checked"] = block.checked;
+        if (block.heading > 0) item["heading"] = block.heading;
         item["runs"] = Json::array();
         for (const auto& run : block.runs) {
-            item["runs"].push_back({{"text", run.text}, {"marks", MarksToJson(run.marks)}});
+            item["runs"].push_back({{"text", run.text}});
         }
         json["blocks"].push_back(std::move(item));
     }
@@ -121,13 +101,14 @@ bool NoteSerializer::LoadNote(const std::filesystem::path& path, NoteDocument& n
             if (!ParseBlockType(item.value("type", ""), block.type)) { error = "Unknown note block type."; return false; }
             block.indent = item.value("indent", 0);
             block.checked = item.value("checked", false);
+            block.heading = std::clamp(item.value("heading", 0), 0, 3);
             for (const auto& run_json : item.at("runs")) {
-                block.runs.push_back({run_json.value("text", ""), MarksFromJson(run_json.value("marks", Json::array()))});
+                block.runs.push_back({run_json.value("text", "")});
             }
-            if (block.runs.empty()) block.runs.push_back({"", 0});
+            if (block.runs.empty()) block.runs.push_back({""});
             parsed.blocks.push_back(std::move(block));
         }
-        if (parsed.blocks.empty()) parsed.blocks.push_back({GenerateUuid(), NoteBlockType::Paragraph, 0, false, {{"", 0}}});
+        if (parsed.blocks.empty()) parsed.blocks.push_back({GenerateUuid(), NoteBlockType::Paragraph, 0, false, {{""}}});
         note = std::move(parsed);
         return true;
     } catch (const std::exception& exception) {

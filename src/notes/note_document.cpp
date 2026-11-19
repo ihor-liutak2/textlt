@@ -54,7 +54,7 @@ NoteDocument MakeNewNote(const std::string& device_id) {
     note.updated_at = note.created_at;
     note.saved_at = note.created_at;
     note.modified_by_device_id = device_id;
-    note.blocks.push_back({GenerateUuid(), NoteBlockType::Paragraph, 0, false, {{"", 0}}});
+    note.blocks.push_back({GenerateUuid(), NoteBlockType::Paragraph, 0, false, {{""}}});
     return note;
 }
 
@@ -94,16 +94,6 @@ bool ParseBlockType(const std::string& name, NoteBlockType& type) {
     else if (name == "check_item") type = NoteBlockType::CheckItem;
     else return false;
     return true;
-}
-
-std::string MarkName(NoteMark mark) {
-    switch (mark) {
-        case NoteMark::Bold: return "bold";
-        case NoteMark::Italic: return "italic";
-        case NoteMark::Underlined: return "underlined";
-        case NoteMark::Strikethrough: return "strikethrough";
-    }
-    return {};
 }
 
 } // namespace textlt::notes

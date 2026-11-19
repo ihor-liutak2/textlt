@@ -7,13 +7,6 @@
 
 namespace textlt::notes {
 
-enum class NoteMark : uint8_t {
-    Bold = 1,
-    Italic = 2,
-    Underlined = 4,
-    Strikethrough = 8,
-};
-
 enum class NoteBlockType {
     Paragraph,
     BulletItem,
@@ -23,7 +16,6 @@ enum class NoteBlockType {
 
 struct NoteRun {
     std::string text;
-    uint8_t marks = 0;
 };
 
 struct NoteBlock {
@@ -32,6 +24,9 @@ struct NoteBlock {
     int indent = 0;
     bool checked = false;
     std::vector<NoteRun> runs;
+    // 0 = normal paragraph, 1..3 = heading level. Headings never carry a list
+    // type; setting one clears the other.
+    int heading = 0;
 };
 
 struct NoteDocument {
@@ -75,10 +70,5 @@ std::string BlockText(const NoteBlock& block);
 std::string PlainText(const NoteDocument& note);
 std::string BlockTypeName(NoteBlockType type);
 bool ParseBlockType(const std::string& name, NoteBlockType& type);
-std::string MarkName(NoteMark mark);
-
-inline uint8_t MarkBit(NoteMark mark) {
-    return static_cast<uint8_t>(mark);
-}
 
 } // namespace textlt::notes

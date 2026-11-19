@@ -43,8 +43,11 @@ int main() {
     session.MoveRight(true);
     session.MoveRight(true);
     assert(session.HasSelection());
-    assert(session.ToggleMark(notes::NoteMark::Bold));
-    assert((note.blocks[0].runs.front().marks & notes::MarkBit(notes::NoteMark::Bold)) != 0);
+    assert(session.ToggleHeading(2));
+    assert(note.blocks[0].heading == 2);
+    assert(note.blocks[0].type == notes::NoteBlockType::Paragraph);
+    assert(session.ToggleHeading(2));
+    assert(note.blocks[0].heading == 0);
 
     session.MoveEnd();
     assert(session.Enter());
@@ -64,5 +67,16 @@ int main() {
     assert(session.DeleteSelection());
     assert(note.blocks.size() == 1);
     assert(notes::BlockText(note.blocks[0]).empty());
+
+    // Enter at the end of a heading starts a normal paragraph.
+    assert(session.Insert("Заголовок"));
+    session.MoveEnd();
+    assert(session.ToggleHeading(1));
+    assert(note.blocks[0].heading == 1);
+    assert(session.Enter());
+    assert(note.blocks.size() == 2);
+    assert(note.blocks[0].heading == 1);
+    assert(note.blocks[1].heading == 0);
+    assert(note.blocks[1].type == notes::NoteBlockType::Paragraph);
     return 0;
 }

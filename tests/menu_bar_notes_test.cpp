@@ -82,6 +82,12 @@ int main() {
         "The Notes menu should expose Delete Note.");
     Expect(MenuBarTestAccess::ItemAt(menu_bar, notes_index, 2).label == " Delete Note ",
         "The delete action should be labelled Delete Note outside Trash.");
+    Expect(menu_bar.CommandIdAt(notes_index, 4) == "notes.heading_1",
+        "The Notes menu should expose Heading 1 after the first separator.");
+    Expect(menu_bar.CommandIdAt(notes_index, 5) == "notes.heading_2",
+        "The Notes menu should expose Heading 2.");
+    Expect(menu_bar.CommandIdAt(notes_index, 6) == "notes.heading_3",
+        "The Notes menu should expose Heading 3.");
 
     menu_bar.OpenDropdown(notes_index);
     Expect(menu_bar.IsDropdownOpen(), "The Notes dropdown did not open.");

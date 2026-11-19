@@ -163,11 +163,9 @@ void TextltApp::InitializeCommands() {
     add("notes.new", "New Note", "Notes", "", [this] { CommandNotesNew(); });
     add("notes.edit_selected", "Edit Note", "Notes", "", [this] { CommandNotesEditSelected(); });
     add("notes.delete_selected", "Delete Note", "Notes", "", [this] { CommandNotesDeleteSelected(); });
-    add("notes.bold", "Bold", "Notes", "", [this] { CommandNotesBold(); });
-    add("notes.italic", "Italic", "Notes", "", [this] { CommandNotesItalic(); });
-    add("notes.underline", "Underline", "Notes", "", [this] { CommandNotesUnderline(); });
-    add("notes.strikethrough", "Strikethrough", "Notes", "", [this] { CommandNotesStrikethrough(); });
-    add("notes.clear_formatting", "Clear Formatting", "Notes", "", [this] { CommandNotesClearFormatting(); });
+    add("notes.heading_1", "Heading 1", "Notes", "", [this] { CommandNotesHeading1(); });
+    add("notes.heading_2", "Heading 2", "Notes", "", [this] { CommandNotesHeading2(); });
+    add("notes.heading_3", "Heading 3", "Notes", "", [this] { CommandNotesHeading3(); });
     add("notes.paragraph", "Paragraph", "Notes", "", [this] { CommandNotesParagraph(); });
     add("notes.bullet_list", "Bulleted List", "Notes", "", [this] { CommandNotesBulletList(); });
     add("notes.numbered_list", "Numbered List", "Notes", "", [this] { CommandNotesNumberedList(); });

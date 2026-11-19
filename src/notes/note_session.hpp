@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstddef>
-#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -29,7 +28,7 @@ public:
     const NotePosition& Cursor() const { return cursor_; }
     bool HasSelection() const { return selection_anchor_.has_value() && *selection_anchor_ != cursor_; }
     std::pair<NotePosition, NotePosition> Selection() const;
-    uint8_t ActiveMarks() const { return active_marks_; }
+    int ActiveHeading() const;
     bool Dirty() const { return dirty_; }
     void MarkSaved() { dirty_ = false; }
 
@@ -50,8 +49,9 @@ public:
     void SelectAll();
     std::string SelectedText() const;
     bool DeleteSelection();
-    bool ToggleMark(NoteMark mark);
-    bool ClearFormatting();
+    // Toggles the heading level on every block in the selection. When all
+    // selected blocks already use this level, they return to a paragraph.
+    bool ToggleHeading(int level);
     bool SetBlockType(NoteBlockType type);
     bool ToggleCheck();
     bool Indent(int delta);
@@ -65,17 +65,12 @@ private:
     void PushUndo();
     void Changed();
     bool DeleteRange(NotePosition start, NotePosition end);
-    void ApplyMarks(NoteBlock& block, size_t start, size_t end, uint8_t mask, bool add);
-    void InsertRunText(NoteBlock& block, size_t byte, const std::string& text, uint8_t marks);
-    void NormalizeRuns(NoteBlock& block);
-    uint8_t MarksAt(const NoteBlock& block, size_t byte) const;
+    void InsertTextAt(NoteBlock& block, size_t byte, const std::string& text);
     void SplitBlockAtCursor();
-    void UpdateActiveMarks();
 
     NoteDocument* note_ = nullptr;
     NotePosition cursor_;
     std::optional<NotePosition> selection_anchor_;
-    uint8_t active_marks_ = 0;
     bool dirty_ = false;
     std::vector<NoteDocument> undo_;
     std::vector<NoteDocument> redo_;

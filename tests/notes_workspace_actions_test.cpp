@@ -11,6 +11,7 @@
 #include "ftxui/dom/node.hpp"
 #include "ftxui/screen/screen.hpp"
 #include "notes/notes_workspace_component.hpp"
+#include "theme.hpp"
 
 namespace textlt::notes {
 
@@ -131,8 +132,7 @@ public:
             block.runs.push_back({
                 "Line " + std::to_string(index) +
                     " with plenty of text that must wrap across several visual "
-                    "rows inside the note editor viewport.",
-                0});
+                    "rows inside the note editor viewport."});
             note.blocks.push_back(std::move(block));
         }
         component.session_.SetNote(&note);
@@ -195,6 +195,55 @@ public:
     }
     static size_t CursorBlock(const NotesWorkspaceComponent& component) {
         return component.session_.Cursor().block;
+    }
+    static void SeedHeadingDocument(NotesWorkspaceComponent& component) {
+        NoteDocument& note = component.repository_.Notes().front();
+        note.blocks.clear();
+        for (int level = 1; level <= 3; ++level) {
+            NoteBlock block;
+            block.id = GenerateUuid();
+            block.heading = level;
+            block.runs.push_back({"Heading " + std::to_string(level)});
+            note.blocks.push_back(std::move(block));
+        }
+        component.session_.SetNote(&note);
+        const NoteBlock& last = note.blocks.back();
+        component.session_.SetCursor(
+            {note.blocks.size() - 1, BlockText(last).size()});
+    }
+    static int BlockHeading(
+        const NotesWorkspaceComponent& component, size_t block) {
+        const NoteDocument* note = component.session_.Note();
+        return note && block < note->blocks.size()
+            ? note->blocks[block].heading : 0;
+    }
+    static int ActiveHeading(const NotesWorkspaceComponent& component) {
+        return component.session_.ActiveHeading();
+    }
+    static ftxui::Box HeadingBox(
+        const NotesWorkspaceComponent& component, int level) {
+        if (level == 1) return component.heading_1_box_;
+        if (level == 2) return component.heading_2_box_;
+        if (level == 3) return component.heading_3_box_;
+        return {};
+    }
+    static ftxui::Box CopyBox(const NotesWorkspaceComponent& component) {
+        return component.copy_box_;
+    }
+    static void SetFirstBlockText(
+        NotesWorkspaceComponent& component, const std::string& text) {
+        NoteDocument& note = component.repository_.Notes().front();
+        if (note.blocks.empty()) return;
+        note.blocks.front().runs = {{text}};
+        component.session_.SetNote(&note);
+        component.session_.SetCursor({0, text.size() / 2});
+    }
+    static ftxui::Screen RenderWorkspaceScreen(
+        NotesWorkspaceComponent& component, int width, int height) {
+        auto screen = ftxui::Screen::Create(
+            ftxui::Dimension::Fixed(width), ftxui::Dimension::Fixed(height));
+        ftxui::Render(screen, component.Render());
+        return screen;
     }
     static ftxui::Box CardBox(const NotesWorkspaceComponent& component, size_t index) {
         return index < component.card_boxes_.size()
@@ -664,6 +713,97 @@ int main() {
         "Clicking the second editor column should move the cursor past the first block.");
 
     fs::remove_all(scroll_root, cleanup_error);
+
+    // Headings: H1 mirrors action-title rows (accent background, contrasting
+    // foreground, bold); H2/H3 keep the background and use bold theme accent
+    // text. The toolbar buttons toggle the heading on the active block.
+    const fs::path heading_root =
+        fs::temp_directory_path() / "textlt_notes_workspace_heading_test";
+    fs::remove_all(heading_root, cleanup_error);
+    NotesWorkspaceComponent heading_component(
+        nullptr, [](const std::string&) {}, [] {}, [] {}, [] { return std::string{}; },
+        [](const std::string&) {}, heading_root);
+    NotesWorkspaceActionsTestAccess::NewNote(heading_component);
+    NotesWorkspaceActionsTestAccess::SeedHeadingDocument(heading_component);
+    NotesWorkspaceActionsTestAccess::RenderWorkspace(heading_component);
+    NotesWorkspaceActionsTestAccess::RenderWorkspace(heading_component);
+    const ftxui::Box heading_column =
+        NotesWorkspaceActionsTestAccess::EditorColumnBox(heading_component, 0);
+    const ftxui::Screen heading_screen =
+        NotesWorkspaceActionsTestAccess::RenderWorkspaceScreen(
+            heading_component, 100, 28);
+    const textlt::Theme& heading_theme = textlt::FallbackTheme();
+    const ftxui::Cell& h1_cell = heading_screen.PixelAt(
+        heading_column.x_min, heading_column.y_min);
+    const ftxui::Cell& h2_cell = heading_screen.PixelAt(
+        heading_column.x_min, heading_column.y_min + 1);
+    const ftxui::Cell& h3_cell = heading_screen.PixelAt(
+        heading_column.x_min, heading_column.y_min + 2);
+    Expect(h1_cell.background_color == heading_theme.modal_selected_item_bg,
+        "H1 should fill its row with the action-title background color.");
+    Expect(h1_cell.foreground_color == heading_theme.modal_selected_item_fg,
+        "H1 should use the action-title foreground color.");
+    Expect(h1_cell.bold, "H1 text should be bold.");
+    Expect(heading_screen.PixelAt(heading_column.x_max, heading_column.y_min)
+                .background_color == heading_theme.modal_selected_item_bg,
+        "H1 should fill the whole row, including the trailing blank cells.");
+    Expect(h2_cell.foreground_color == heading_theme.syntax_keyword,
+        "H2 should use the theme keyword accent color.");
+    Expect(h2_cell.bold, "H2 text should be bold.");
+    Expect(h3_cell.foreground_color == heading_theme.syntax_type,
+        "H3 should use the theme type accent color.");
+    Expect(h3_cell.bold, "H3 text should be bold.");
+
+    const ftxui::Box h2_button =
+        NotesWorkspaceActionsTestAccess::HeadingBox(heading_component, 2);
+    Expect(h2_button.x_max >= h2_button.x_min &&
+            h2_button.y_max >= h2_button.y_min,
+        "The H2 toolbar button should have a visible hit box.");
+    Expect(NotesWorkspaceActionsTestAccess::MouseAt(
+            heading_component, ftxui::Mouse::Left, ftxui::Mouse::Pressed,
+            h2_button.x_min + 1, h2_button.y_min),
+        "Clicking the H2 toolbar button should be handled.");
+    Expect(NotesWorkspaceActionsTestAccess::ActiveHeading(heading_component) == 2,
+        "H2 should become the active heading level.");
+    Expect(NotesWorkspaceActionsTestAccess::MouseAt(
+            heading_component, ftxui::Mouse::Left, ftxui::Mouse::Pressed,
+            h2_button.x_min + 1, h2_button.y_min),
+        "Clicking the active H2 toolbar button should be handled.");
+    Expect(NotesWorkspaceActionsTestAccess::ActiveHeading(heading_component) == 0,
+        "Clicking the active heading again should return to a paragraph.");
+
+    fs::remove_all(heading_root, cleanup_error);
+
+    // The Copy toolbar button copies the paragraph under the cursor with
+    // leading and trailing whitespace trimmed.
+    const fs::path copy_root =
+        fs::temp_directory_path() / "textlt_notes_workspace_copy_test";
+    fs::remove_all(copy_root, cleanup_error);
+    std::string copied_text;
+    NotesWorkspaceComponent copy_component(
+        nullptr, [](const std::string&) {}, [] {}, [] {},
+        [] { return std::string{}; },
+        [&copied_text](const std::string& text) { copied_text = text; },
+        copy_root);
+    NotesWorkspaceActionsTestAccess::NewNote(copy_component);
+    NotesWorkspaceActionsTestAccess::SeedEditorDocument(copy_component, 1);
+    NotesWorkspaceActionsTestAccess::SetFirstBlockText(
+        copy_component, "   padded paragraph\t ");
+    NotesWorkspaceActionsTestAccess::RenderWorkspace(copy_component);
+    NotesWorkspaceActionsTestAccess::RenderWorkspace(copy_component);
+    const ftxui::Box copy_button =
+        NotesWorkspaceActionsTestAccess::CopyBox(copy_component);
+    Expect(copy_button.x_max >= copy_button.x_min &&
+            copy_button.y_max >= copy_button.y_min,
+        "The Copy toolbar button should have a visible hit box.");
+    Expect(NotesWorkspaceActionsTestAccess::MouseAt(
+            copy_component, ftxui::Mouse::Left, ftxui::Mouse::Pressed,
+            copy_button.x_min + 1, copy_button.y_min),
+        "Clicking the Copy toolbar button should be handled.");
+    Expect(copied_text == "padded paragraph",
+        "Copy should place the cursor paragraph on the clipboard with trimmed spaces.");
+
+    fs::remove_all(copy_root, cleanup_error);
 
     // Cards in one overview row must have identical widths. Otherwise long
     // titles/previews make one card wider, overflow the row, and interrupt the

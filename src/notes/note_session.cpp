@@ -9,7 +9,7 @@ namespace textlt::notes {
 NoteSession::NoteSession(NoteDocument* note) { SetNote(note); }
 
 void NoteSession::SetNote(NoteDocument* note) {
-    note_ = note; cursor_ = {}; selection_anchor_.reset(); active_marks_ = 0;
+    note_ = note; cursor_ = {}; selection_anchor_.reset();
     dirty_ = false; undo_.clear(); redo_.clear(); ClampCursor();
 }
 
@@ -45,99 +45,31 @@ void NoteSession::Changed() {
     note_->updated_at = UtcNow(); ++note_->revision; dirty_ = true;
 }
 
-void NoteSession::NormalizeRuns(NoteBlock& block) {
-    std::vector<NoteRun> result;
-    for (auto& run : block.runs) {
-        if (run.text.empty()) continue;
-        if (!result.empty() && result.back().marks == run.marks) result.back().text += run.text;
-        else result.push_back(std::move(run));
-    }
-    if (result.empty()) result.push_back({"", active_marks_});
-    block.runs = std::move(result);
-}
-
-uint8_t NoteSession::MarksAt(const NoteBlock& block, size_t byte) const {
-    size_t offset = 0;
-    for (const auto& run : block.runs) {
-        if (byte <= offset + run.text.size()) return run.marks;
-        offset += run.text.size();
-    }
-    return block.runs.empty() ? active_marks_ : block.runs.back().marks;
-}
-
-void NoteSession::UpdateActiveMarks() {
-    if (!note_ || note_->blocks.empty()) return;
-    active_marks_ = MarksAt(note_->blocks[cursor_.block], cursor_.byte);
-}
-
-void NoteSession::InsertRunText(NoteBlock& block, size_t byte, const std::string& text, uint8_t marks) {
-    std::vector<NoteRun> result;
-    size_t offset = 0; bool inserted = false;
-    for (const auto& run : block.runs) {
-        const size_t end = offset + run.text.size();
-        if (!inserted && byte >= offset && byte <= end) {
-            const size_t local = byte - offset;
-            if (local > 0) result.push_back({run.text.substr(0, local), run.marks});
-            result.push_back({text, marks});
-            if (local < run.text.size()) result.push_back({run.text.substr(local), run.marks});
-            inserted = true;
-        } else result.push_back(run);
-        offset = end;
-    }
-    if (!inserted) result.push_back({text, marks});
-    block.runs = std::move(result); NormalizeRuns(block);
-}
-
-void NoteSession::ApplyMarks(NoteBlock& block, size_t start, size_t end, uint8_t mask, bool add) {
-    if (start >= end) return;
-    std::vector<NoteRun> result; size_t offset = 0;
-    for (const auto& run : block.runs) {
-        const size_t run_end = offset + run.text.size();
-        const size_t local_start = start > offset ? std::min(start - offset, run.text.size()) : 0;
-        const size_t local_end = end > offset ? std::min(end - offset, run.text.size()) : 0;
-        if (local_start > 0) result.push_back({run.text.substr(0, local_start), run.marks});
-        if (local_end > local_start) {
-            uint8_t marks = add ? static_cast<uint8_t>(run.marks | mask) : static_cast<uint8_t>(run.marks & ~mask);
-            result.push_back({run.text.substr(local_start, local_end - local_start), marks});
-        }
-        if (local_end < run.text.size()) result.push_back({run.text.substr(local_end), run.marks});
-        offset = run_end;
-    }
-    block.runs = std::move(result); NormalizeRuns(block);
+void NoteSession::InsertTextAt(NoteBlock& block, size_t byte, const std::string& text) {
+    std::string current = BlockText(block);
+    byte = std::min(byte, current.size());
+    current.insert(byte, text);
+    block.runs = {{std::move(current)}};
 }
 
 bool NoteSession::DeleteRange(NotePosition start, NotePosition end) {
     if (!note_ || start == end || Before(end, start)) return false;
     if (start.block == end.block) {
         NoteBlock& block = note_->blocks[start.block];
-        std::vector<NoteRun> result; size_t offset = 0;
-        for (const auto& run : block.runs) {
-            const size_t run_end = offset + run.text.size();
-            const size_t left = std::min(run.text.size(), start.byte > offset ? start.byte - offset : 0);
-            const size_t right = std::min(run.text.size(), end.byte > offset ? end.byte - offset : 0);
-            if (left > 0) result.push_back({run.text.substr(0, left), run.marks});
-            if (right < run.text.size()) result.push_back({run.text.substr(right), run.marks});
-            offset = run_end;
-        }
-        block.runs = std::move(result); NormalizeRuns(block);
+        const std::string text = BlockText(block);
+        const size_t from = std::min(start.byte, text.size());
+        const size_t to = std::max(from, std::min(end.byte, text.size()));
+        block.runs = {{text.substr(0, from) + text.substr(to)}};
     } else {
         NoteBlock& first = note_->blocks[start.block];
         NoteBlock& last = note_->blocks[end.block];
-        std::vector<NoteRun> merged;
-        size_t offset = 0;
-        for (const auto& run : first.runs) {
-            const size_t keep = std::min(run.text.size(), start.byte > offset ? start.byte - offset : 0);
-            if (keep) merged.push_back({run.text.substr(0, keep), run.marks});
-            offset += run.text.size();
-        }
-        offset = 0;
-        for (const auto& run : last.runs) {
-            const size_t skip = std::min(run.text.size(), end.byte > offset ? end.byte - offset : 0);
-            if (skip < run.text.size()) merged.push_back({run.text.substr(skip), run.marks});
-            offset += run.text.size();
-        }
-        first.runs = std::move(merged); NormalizeRuns(first);
-        note_->blocks.erase(note_->blocks.begin() + static_cast<std::ptrdiff_t>(start.block + 1), note_->blocks.begin() + static_cast<std::ptrdiff_t>(end.block + 1));
+        const std::string first_text = BlockText(first);
+        const std::string last_text = BlockText(last);
+        const size_t from = std::min(start.byte, first_text.size());
+        const size_t to = std::min(end.byte, last_text.size());
+        first.runs = {{first_text.substr(0, from) + last_text.substr(to)}};
+        note_->blocks.erase(note_->blocks.begin() + static_cast<std::ptrdiff_t>(start.block + 1),
+            note_->blocks.begin() + static_cast<std::ptrdiff_t>(end.block + 1));
     }
     cursor_ = start; selection_anchor_.reset(); return true;
 }
@@ -152,7 +84,6 @@ void NoteSession::SetCursor(const NotePosition& position, bool selecting) {
     BeginSelection(selecting);
     cursor_ = position;
     ClampCursor();
-    UpdateActiveMarks();
 }
 
 bool NoteSession::Insert(const std::string& text) {
@@ -167,7 +98,7 @@ bool NoteSession::Insert(const std::string& text) {
         if (!part.empty() && part.back() == '\r') part.pop_back();
         if (!part.empty()) {
             NoteBlock& block = note_->blocks[cursor_.block];
-            InsertRunText(block, cursor_.byte, part, active_marks_);
+            InsertTextAt(block, cursor_.byte, part);
             cursor_.byte += part.size();
         }
         if (newline == std::string::npos) break;
@@ -204,16 +135,16 @@ bool NoteSession::DeleteForward() {
 }
 
 void NoteSession::SplitBlockAtCursor() {
-    NoteBlock& block = note_->blocks[cursor_.block]; const std::string text = BlockText(block);
-    NoteBlock next{GenerateUuid(), block.type, block.indent, false, {}};
-    size_t offset = 0;
-    for (const auto& run : block.runs) {
-        const size_t local = std::min(run.text.size(), cursor_.byte > offset ? cursor_.byte - offset : 0);
-        if (local < run.text.size()) next.runs.push_back({run.text.substr(local), run.marks});
-        offset += run.text.size();
-    }
-    DeleteRange(cursor_, {cursor_.block, text.size()});
-    if (next.runs.empty()) next.runs.push_back({"", active_marks_});
+    NoteBlock& block = note_->blocks[cursor_.block];
+    const std::string text = BlockText(block);
+    const size_t offset = std::min(cursor_.byte, text.size());
+    // Enter at the end of a heading continues as a normal paragraph.
+    const NoteBlockType next_type = block.heading > 0
+        ? NoteBlockType::Paragraph : block.type;
+    NoteBlock next{GenerateUuid(), next_type, block.indent, false,
+        {{text.substr(offset)}}};
+    next.heading = 0;
+    block.runs = {{text.substr(0, offset)}};
     note_->blocks.insert(note_->blocks.begin() + static_cast<std::ptrdiff_t>(cursor_.block + 1), std::move(next));
     ++cursor_.block;
     cursor_.byte = 0;
@@ -223,8 +154,10 @@ bool NoteSession::Enter() {
     if (!note_) return false;
     if (HasSelection()) { PushUndo(); auto range = Selection(); DeleteRange(range.first, range.second); } else PushUndo();
     NoteBlock& block = note_->blocks[cursor_.block];
-    if (BlockText(block).empty() && block.type != NoteBlockType::Paragraph) {
+    if (BlockText(block).empty() &&
+        (block.type != NoteBlockType::Paragraph || block.heading > 0)) {
         block.type = NoteBlockType::Paragraph;
+        block.heading = 0;
         block.indent = 0;
         Changed();
         return true;
@@ -239,13 +172,11 @@ bool NoteSession::MoveLeft(bool selecting) {
     BeginSelection(selecting);
     if (cursor_.byte > 0) {
         cursor_.byte = textlt::utils::PreviousUtf8CodepointStart(BlockText(note_->blocks[cursor_.block]), cursor_.byte);
-        UpdateActiveMarks();
         return true;
     }
     if (cursor_.block == 0) return false;
     --cursor_.block;
     cursor_.byte = BlockText(note_->blocks[cursor_.block]).size();
-    UpdateActiveMarks();
     return true;
 }
 bool NoteSession::MoveRight(bool selecting) {
@@ -254,19 +185,17 @@ bool NoteSession::MoveRight(bool selecting) {
     const std::string text = BlockText(note_->blocks[cursor_.block]);
     if (cursor_.byte < text.size()) {
         cursor_.byte = textlt::utils::NextUtf8CodepointStart(text, cursor_.byte);
-        UpdateActiveMarks();
         return true;
     }
     if (cursor_.block + 1 >= note_->blocks.size()) return false;
     ++cursor_.block;
     cursor_.byte = 0;
-    UpdateActiveMarks();
     return true;
 }
-bool NoteSession::MoveUp(bool selecting) { if (!note_ || cursor_.block == 0) return false; BeginSelection(selecting); --cursor_.block; cursor_.byte = std::min(cursor_.byte, BlockText(note_->blocks[cursor_.block]).size()); UpdateActiveMarks(); return true; }
-bool NoteSession::MoveDown(bool selecting) { if (!note_ || cursor_.block + 1 >= note_->blocks.size()) return false; BeginSelection(selecting); ++cursor_.block; cursor_.byte = std::min(cursor_.byte, BlockText(note_->blocks[cursor_.block]).size()); UpdateActiveMarks(); return true; }
-void NoteSession::MoveHome(bool selecting) { BeginSelection(selecting); cursor_.byte = 0; UpdateActiveMarks(); }
-void NoteSession::MoveEnd(bool selecting) { BeginSelection(selecting); if (note_) cursor_.byte = BlockText(note_->blocks[cursor_.block]).size(); UpdateActiveMarks(); }
+bool NoteSession::MoveUp(bool selecting) { if (!note_ || cursor_.block == 0) return false; BeginSelection(selecting); --cursor_.block; cursor_.byte = std::min(cursor_.byte, BlockText(note_->blocks[cursor_.block]).size()); return true; }
+bool NoteSession::MoveDown(bool selecting) { if (!note_ || cursor_.block + 1 >= note_->blocks.size()) return false; BeginSelection(selecting); ++cursor_.block; cursor_.byte = std::min(cursor_.byte, BlockText(note_->blocks[cursor_.block]).size()); return true; }
+void NoteSession::MoveHome(bool selecting) { BeginSelection(selecting); cursor_.byte = 0; }
+void NoteSession::MoveEnd(bool selecting) { BeginSelection(selecting); if (note_) cursor_.byte = BlockText(note_->blocks[cursor_.block]).size(); }
 void NoteSession::SelectAll() { if (!note_ || note_->blocks.empty()) return; selection_anchor_ = NotePosition{0, 0}; cursor_ = {note_->blocks.size() - 1, BlockText(note_->blocks.back()).size()}; }
 
 std::string NoteSession::SelectedText() const {
@@ -282,29 +211,35 @@ std::string NoteSession::SelectedText() const {
     return result;
 }
 
-bool NoteSession::ToggleMark(NoteMark mark) {
-    const uint8_t mask = MarkBit(mark);
+int NoteSession::ActiveHeading() const {
+    if (!note_ || note_->blocks.empty()) return 0;
+    return note_->blocks[std::min(cursor_.block, note_->blocks.size() - 1)].heading;
+}
+
+bool NoteSession::ToggleHeading(int level) {
     if (!note_) return false;
-    if (!HasSelection()) { active_marks_ ^= mask; return true; }
-    PushUndo(); const auto range = Selection(); bool all_set = true;
+    level = std::clamp(level, 1, 3);
+    PushUndo();
+    const auto range = Selection();
+    bool all_same = true;
     for (size_t block = range.first.block; block <= range.second.block; ++block) {
-        const auto& item = note_->blocks[block]; const size_t start = block == range.first.block ? range.first.byte : 0; const size_t end = block == range.second.block ? range.second.byte : BlockText(item).size();
-        size_t offset = 0; for (const auto& run : item.runs) { if (offset < end && offset + run.text.size() > start && (run.marks & mask) == 0) all_set = false; offset += run.text.size(); }
+        if (note_->blocks[block].heading != level) { all_same = false; break; }
     }
-    for (size_t block = range.first.block; block <= range.second.block; ++block) { auto& item = note_->blocks[block]; const size_t start = block == range.first.block ? range.first.byte : 0; const size_t end = block == range.second.block ? range.second.byte : BlockText(item).size(); ApplyMarks(item, start, end, mask, !all_set); }
-    Changed(); return true;
+    const int target = all_same ? 0 : level;
+    for (size_t block = range.first.block; block <= range.second.block; ++block) {
+        NoteBlock& item = note_->blocks[block];
+        item.heading = target;
+        if (target > 0) {
+            item.type = NoteBlockType::Paragraph;
+            item.checked = false;
+        }
+    }
+    Changed();
+    return true;
 }
 
-bool NoteSession::ClearFormatting() {
-    if (!note_) return false;
-    if (!HasSelection()) { active_marks_ = 0; return true; }
-    PushUndo(); const auto range = Selection();
-    for (size_t block = range.first.block; block <= range.second.block; ++block) { auto& item = note_->blocks[block]; size_t start = block == range.first.block ? range.first.byte : 0; size_t end = block == range.second.block ? range.second.byte : BlockText(item).size(); ApplyMarks(item, start, end, 0xff, false); }
-    Changed(); return true;
-}
-
-bool NoteSession::SetBlockType(NoteBlockType type) { if (!note_) return false; PushUndo(); auto range = Selection(); for (size_t block = range.first.block; block <= range.second.block; ++block) { note_->blocks[block].type = type; if (type != NoteBlockType::CheckItem) note_->blocks[block].checked = false; } Changed(); return true; }
-bool NoteSession::ToggleCheck() { if (!note_) return false; auto& block = note_->blocks[cursor_.block]; if (block.type != NoteBlockType::CheckItem) return SetBlockType(NoteBlockType::CheckItem); PushUndo(); block.checked = !block.checked; Changed(); return true; }
+bool NoteSession::SetBlockType(NoteBlockType type) { if (!note_) return false; PushUndo(); auto range = Selection(); for (size_t block = range.first.block; block <= range.second.block; ++block) { note_->blocks[block].type = type; note_->blocks[block].heading = 0; if (type != NoteBlockType::CheckItem) note_->blocks[block].checked = false; } Changed(); return true; }
+bool NoteSession::ToggleCheck() { if (!note_) return false; auto& block = note_->blocks[cursor_.block]; if (block.type != NoteBlockType::CheckItem || block.heading > 0) return SetBlockType(NoteBlockType::CheckItem); PushUndo(); block.checked = !block.checked; Changed(); return true; }
 bool NoteSession::Indent(int delta) { if (!note_) return false; PushUndo(); auto range = Selection(); for (size_t block = range.first.block; block <= range.second.block; ++block) note_->blocks[block].indent = std::clamp(note_->blocks[block].indent + delta, 0, 6); Changed(); return true; }
 
 bool NoteSession::Undo() {

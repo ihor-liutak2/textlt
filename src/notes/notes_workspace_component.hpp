@@ -58,9 +58,9 @@ public:
     void FocusSidebar();
     void FocusMainArea();
     std::string StatusText() const;
-    void ToggleMark(NoteMark mark);
+    void ToggleHeading(int level);
     void SetBlockType(NoteBlockType type);
-    void ClearFormatting();
+    void CopyCurrentParagraph();
     void NewNote();
     // Opens the card selected in the overview. Does nothing (with a status
     // message) when there is no editable note selection.
@@ -238,14 +238,10 @@ private:
     ftxui::Box pin_box_;
     ftxui::Box section_box_;
     ftxui::Box trash_box_;
-    ftxui::Box bold_box_;
-    ftxui::Box italic_box_;
-    ftxui::Box underline_box_;
-    ftxui::Box strike_box_;
-    ftxui::Box bullet_box_;
-    ftxui::Box numbered_box_;
-    ftxui::Box check_box_;
-    ftxui::Box paragraph_box_;
+    ftxui::Box heading_1_box_;
+    ftxui::Box heading_2_box_;
+    ftxui::Box heading_3_box_;
+    ftxui::Box copy_box_;
     ftxui::Box col_1_box_;
     ftxui::Box col_2_box_;
     ftxui::Box col_3_box_;

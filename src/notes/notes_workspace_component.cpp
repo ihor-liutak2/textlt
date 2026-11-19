@@ -32,6 +32,20 @@ int ToolbarItemWidth(const std::string& label) {
     return ftxui::string_width(" " + label + " ");
 }
 
+std::string TrimWhitespace(const std::string& value) {
+    size_t begin = 0;
+    while (begin < value.size() &&
+        std::isspace(static_cast<unsigned char>(value[begin]))) {
+        ++begin;
+    }
+    size_t end = value.size();
+    while (end > begin &&
+        std::isspace(static_cast<unsigned char>(value[end - 1]))) {
+        --end;
+    }
+    return value.substr(begin, end - begin);
+}
+
 struct EditorScrollMetrics {
     size_t viewport_rows = 0;
     size_t page_rows = 0;
@@ -100,14 +114,6 @@ std::string FitText(const std::string& value, size_t max_columns) {
     const size_t end = textlt::utils::Utf8ByteIndexAtDisplayColumn(
         value, 0, max_columns - 3);
     return value.substr(0, end) + "...";
-}
-
-ftxui::Element ApplyRunStyle(ftxui::Element element, uint8_t marks) {
-    if (marks & MarkBit(NoteMark::Bold)) element = element | ftxui::bold;
-    if (marks & MarkBit(NoteMark::Italic)) element = element | ftxui::italic;
-    if (marks & MarkBit(NoteMark::Underlined)) element = element | ftxui::underlined;
-    if (marks & MarkBit(NoteMark::Strikethrough)) element = element | ftxui::strikethrough;
-    return element;
 }
 
 } // namespace
@@ -993,14 +999,10 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
                 else DeleteSelectedNote();
                 return true;
             }
-            if (bold_box_.Contain(mouse.x, mouse.y)) { ToggleMark(NoteMark::Bold); return true; }
-            if (italic_box_.Contain(mouse.x, mouse.y)) { ToggleMark(NoteMark::Italic); return true; }
-            if (underline_box_.Contain(mouse.x, mouse.y)) { ToggleMark(NoteMark::Underlined); return true; }
-            if (strike_box_.Contain(mouse.x, mouse.y)) { ToggleMark(NoteMark::Strikethrough); return true; }
-            if (bullet_box_.Contain(mouse.x, mouse.y)) { SetBlockType(NoteBlockType::BulletItem); return true; }
-            if (numbered_box_.Contain(mouse.x, mouse.y)) { SetBlockType(NoteBlockType::NumberedItem); return true; }
-            if (check_box_.Contain(mouse.x, mouse.y)) { SetBlockType(NoteBlockType::CheckItem); return true; }
-            if (paragraph_box_.Contain(mouse.x, mouse.y)) { SetBlockType(NoteBlockType::Paragraph); return true; }
+            if (heading_1_box_.Contain(mouse.x, mouse.y)) { ToggleHeading(1); return true; }
+            if (heading_2_box_.Contain(mouse.x, mouse.y)) { ToggleHeading(2); return true; }
+            if (heading_3_box_.Contain(mouse.x, mouse.y)) { ToggleHeading(3); return true; }
+            if (copy_box_.Contain(mouse.x, mouse.y)) { CopyCurrentParagraph(); return true; }
             if (col_1_box_.Contain(mouse.x, mouse.y)) { SetEditorColumns(1); return true; }
             if (col_2_box_.Contain(mouse.x, mouse.y)) { SetEditorColumns(2); return true; }
             if (col_3_box_.Contain(mouse.x, mouse.y)) { SetEditorColumns(3); return true; }
@@ -1132,7 +1134,7 @@ ftxui::Element NotesWorkspaceComponent::RenderTitleEditor() {
         bgcolor(theme.modal_background) | clear_under;
 }
 
-void NotesWorkspaceComponent::ToggleMark(NoteMark mark) { if (session_.ToggleMark(mark) && session_.Dirty()) TouchAndSave(); }
+void NotesWorkspaceComponent::ToggleHeading(int level) { if (session_.ToggleHeading(level)) TouchAndSave(); }
 void NotesWorkspaceComponent::SetBlockType(NoteBlockType type) {
     if (type == NoteBlockType::CheckItem && session_.Note() &&
         session_.Note()->blocks[session_.Cursor().block].type == NoteBlockType::CheckItem) {
@@ -1141,7 +1143,23 @@ void NotesWorkspaceComponent::SetBlockType(NoteBlockType type) {
     }
     if (session_.SetBlockType(type)) TouchAndSave();
 }
-void NotesWorkspaceComponent::ClearFormatting() { if (session_.ClearFormatting() && session_.Dirty()) TouchAndSave(); }
+void NotesWorkspaceComponent::CopyCurrentParagraph() {
+    auto* note = session_.Note();
+    if (!note || note->blocks.empty()) return;
+    const size_t block_index = std::min(
+        session_.Cursor().block, note->blocks.size() - 1);
+    const std::string text = TrimWhitespace(BlockText(note->blocks[block_index]));
+    if (text.empty()) {
+        Notify("Nothing to copy");
+        return;
+    }
+    if (!write_clipboard_) {
+        Notify("Clipboard unavailable");
+        return;
+    }
+    write_clipboard_(text);
+    Notify("Copied paragraph");
+}
 
 ftxui::Element NotesWorkspaceComponent::RenderSidebar() {
     using namespace ftxui; const Theme& theme = theme_ ? *theme_ : FallbackTheme(); sidebar_row_boxes_.resize(sidebar_entries_.size()); Elements rows;
@@ -1532,13 +1550,19 @@ ftxui::Element NotesWorkspaceComponent::RenderEditorRow(const EditorRow& row) {
     if (!note || row.block >= note->blocks.size()) return text("");
 
     const NoteBlock& block = note->blocks[row.block];
+    const int heading = std::clamp(block.heading, 0, 3);
+    const bool is_heading = heading > 0;
+    const ftxui::Color heading_fg = heading == 1
+        ? theme.modal_selected_item_fg
+        : heading == 2 ? theme.syntax_keyword : theme.syntax_type;
     const std::string value = BlockText(block);
     const bool has_selection = session_.HasSelection();
     const auto range = session_.Selection();
     const NotePosition cursor = session_.Cursor();
 
     Elements elements;
-    elements.push_back(text(row.prefix) | color(theme.gutter));
+    elements.push_back(text(row.prefix) |
+        color(is_heading ? heading_fg : theme.gutter));
 
     size_t byte = 0;
     for (const auto& run : block.runs) {
@@ -1553,9 +1577,9 @@ ftxui::Element NotesWorkspaceComponent::RenderEditorRow(const EditorRow& row) {
                 size_t next = textlt::utils::NextUtf8CodepointStart(run.text, local);
                 if (next > local_end) next = local_end;
                 const size_t absolute = run_start + local;
-                Element glyph = ApplyRunStyle(
-                    text(run.text.substr(local, next - local)), run.marks) |
-                    color(theme.editor_text);
+                Element glyph = text(run.text.substr(local, next - local)) |
+                    color(is_heading ? heading_fg : theme.editor_text);
+                if (is_heading) glyph = glyph | bold;
                 if (has_selection &&
                     !NoteSession::Before({row.block, absolute}, range.first) &&
                     NoteSession::Before({row.block, absolute}, range.second)) {
@@ -1575,6 +1599,13 @@ ftxui::Element NotesWorkspaceComponent::RenderEditorRow(const EditorRow& row) {
     if (!has_selection && row.last && row.block == cursor.block &&
         cursor.byte == value.size()) {
         elements.push_back(text(" ") | inverted);
+    }
+    if (heading == 1) {
+        // H1 behaves like an action-title row: bold text on a filled accent
+        // background spanning the whole column width.
+        elements.push_back(filler());
+        return hbox(std::move(elements)) | bold |
+            bgcolor(theme.modal_selected_item_bg) | xflex;
     }
     return hbox(std::move(elements));
 }
@@ -1725,17 +1756,13 @@ ftxui::Element NotesWorkspaceComponent::RenderEditor() {
     Element back = text(back_label) | bold | reflect(back_box_); Element title = text(title_label) | bold | reflect(title_box_);
     Element pin = text(pin_label) | reflect(pin_box_);
     Element group = text(group_label) | reflect(section_box_); Element trash = text(trash_label) | color(note->deleted_at ? theme.button_success : theme.button_danger) | reflect(trash_box_);
-    const uint8_t marks = session_.ActiveMarks(); auto type = note->blocks[session_.Cursor().block].type;
+    const int heading = session_.ActiveHeading();
     Element toolbar = hbox({
-        ToolbarItem("B", marks & MarkBit(NoteMark::Bold), bold_box_),
-        ToolbarItem("I", marks & MarkBit(NoteMark::Italic), italic_box_),
-        ToolbarItem("U", marks & MarkBit(NoteMark::Underlined), underline_box_),
-        ToolbarItem("S", marks & MarkBit(NoteMark::Strikethrough), strike_box_),
+        ToolbarItem("H1", heading == 1, heading_1_box_),
+        ToolbarItem("H2", heading == 2, heading_2_box_),
+        ToolbarItem("H3", heading == 3, heading_3_box_),
         separator(),
-        ToolbarItem("• List", type == NoteBlockType::BulletItem, bullet_box_),
-        ToolbarItem("1. List", type == NoteBlockType::NumberedItem, numbered_box_),
-        ToolbarItem("[ ] Check", type == NoteBlockType::CheckItem, check_box_),
-        ToolbarItem("¶", type == NoteBlockType::Paragraph, paragraph_box_),
+        ToolbarItem("Copy", false, copy_box_),
         separator(),
         text(" Cols:") | color(theme.foreground),
         ToolbarItem("1", editor_columns_ == 1, col_1_box_),
@@ -1745,10 +1772,9 @@ ftxui::Element NotesWorkspaceComponent::RenderEditor() {
     // Keep the formatting buttons on the title/Group row when the content area
     // is wide enough for them; otherwise fall back to a dedicated toolbar row.
     const int toolbar_width =
-        ToolbarItemWidth("B") + ToolbarItemWidth("I") +
-        ToolbarItemWidth("U") + ToolbarItemWidth("S") + 1 +
-        ToolbarItemWidth("• List") + ToolbarItemWidth("1. List") +
-        ToolbarItemWidth("[ ] Check") + ToolbarItemWidth("¶") + 1 +
+        ToolbarItemWidth("H1") + ToolbarItemWidth("H2") +
+        ToolbarItemWidth("H3") + 1 +
+        ToolbarItemWidth("Copy") + 1 +
         string_width(" Cols:") + ToolbarItemWidth("1") +
         ToolbarItemWidth("2") + ToolbarItemWidth("3");
     const int header_width = string_width(back_label) + string_width(title_label) +

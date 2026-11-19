@@ -374,11 +374,9 @@ private:
     void CommandNotesNew();
     void CommandNotesEditSelected();
     void CommandNotesDeleteSelected();
-    void CommandNotesBold();
-    void CommandNotesItalic();
-    void CommandNotesUnderline();
-    void CommandNotesStrikethrough();
-    void CommandNotesClearFormatting();
+    void CommandNotesHeading1();
+    void CommandNotesHeading2();
+    void CommandNotesHeading3();
     void CommandNotesParagraph();
     void CommandNotesBulletList();
     void CommandNotesNumberedList();
