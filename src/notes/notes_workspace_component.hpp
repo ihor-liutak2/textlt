@@ -5,6 +5,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "ftxui/component/component_base.hpp"
@@ -49,6 +50,11 @@ public:
     bool IsTrashSelected() const { return trash_selected_ && !editing_; }
     void SetSidebarVisible(bool visible);
     bool IsSidebarVisible() const { return sidebar_visible_; }
+    void SetEditorColumns(int columns);
+    int EditorColumns() const { return editor_columns_; }
+    void SetColumnsChangedCallback(std::function<void(int)> callback) {
+        on_columns_changed_ = std::move(callback);
+    }
     void FocusSidebar();
     void FocusMainArea();
     std::string StatusText() const;
@@ -137,13 +143,13 @@ private:
     ftxui::Element RenderCard(NoteDocument& note, bool selected,
         size_t visible_index, int card_width);
     ftxui::Element RenderEditorRow(const EditorRow& row);
-    ftxui::Element RenderEditorScrollbar(size_t visible_rows, size_t total_rows,
-        size_t scroll, size_t max_scroll, const Theme& theme);
+    ftxui::Element RenderEditorScrollbar(size_t viewport_rows, size_t page_rows,
+        size_t total_rows, size_t scroll, const Theme& theme);
     void BuildEditorRows(size_t width);
     std::optional<size_t> EditorRowForPosition(const NotePosition& position) const;
     std::optional<NotePosition> NotePositionAt(int x, int y) const;
     void ScrollEditor(int delta);
-    void EnsureEditorCursorVisible(size_t visible_rows);
+    void EnsureEditorCursorVisible(size_t page_rows);
     void ResetEditorViewport();
     ftxui::Element ToolbarItem(const std::string& text, bool active, ftxui::Box& box);
     std::string SectionName(const NoteDocument& note) const;
@@ -172,8 +178,11 @@ private:
     std::optional<std::string> active_note_id_;
     FocusArea focus_ = FocusArea::Cards;
     std::vector<EditorRow> editor_rows_;
+    std::vector<ftxui::Box> editor_column_boxes_;
+    int editor_columns_ = 1;
     int editor_scroll_ = 0;
     size_t editor_visible_rows_ = 0;
+    size_t editor_column_rows_ = 0;
     size_t editor_content_width_ = 0;
     bool editor_view_known_ = false;
     bool editor_scrollbar_dragging_ = false;
@@ -237,8 +246,12 @@ private:
     ftxui::Box numbered_box_;
     ftxui::Box check_box_;
     ftxui::Box paragraph_box_;
+    ftxui::Box col_1_box_;
+    ftxui::Box col_2_box_;
+    ftxui::Box col_3_box_;
     std::vector<ftxui::Box> sidebar_row_boxes_;
     std::vector<ftxui::Box> card_boxes_;
+    std::function<void(int)> on_columns_changed_;
 };
 
 } // namespace textlt::notes

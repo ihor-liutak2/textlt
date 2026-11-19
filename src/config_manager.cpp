@@ -1,5 +1,6 @@
 #include "config_manager.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -58,6 +59,9 @@ EditorConfig ConfigManager::Load() const {
         root, "show_notes_sidebar", config.show_notes_sidebar);
     config.show_actions_sidebar = JsonBool(
         root, "show_actions_sidebar", config.show_actions_sidebar);
+    config.notes_editor_columns = JsonInt(
+        root, "notes_editor_columns", config.notes_editor_columns);
+    config.notes_editor_columns = std::clamp(config.notes_editor_columns, 1, 3);
     config.smart_word_wrap = JsonBool(root, "smart_word_wrap", config.smart_word_wrap);
     config.syntax_highlighting = JsonBool(
         root, "syntax_highlighting", config.syntax_highlighting);

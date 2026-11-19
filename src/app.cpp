@@ -502,6 +502,12 @@ TextltApp::TextltApp()
         [this] { ShowActionsWorkspace(); },
         [this] { return clipboard_controller_.ReadText(); },
         [this](const std::string& text) { clipboard_controller_.WriteText(text); });
+    auto notes_component = std::static_pointer_cast<notes::NotesWorkspaceComponent>(
+        notes_workspace_component_);
+    notes_component->SetColumnsChangedCallback([this](int columns) {
+        editor_config_.notes_editor_columns = columns;
+        SaveConfig();
+    });
     SyncNotesProjectContext();
 
     actions_workspace_component_ = ftxui::Make<actions::ActionsWorkspaceComponent>(

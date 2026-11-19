@@ -147,6 +147,12 @@ public:
             ftxui::Dimension::Fixed(width), ftxui::Dimension::Fixed(height));
         ftxui::Render(screen, component.Render());
     }
+    static std::string RenderWorkspaceText(NotesWorkspaceComponent& component) {
+        auto screen = ftxui::Screen::Create(
+            ftxui::Dimension::Fixed(100), ftxui::Dimension::Fixed(28));
+        ftxui::Render(screen, component.Render());
+        return screen.ToString();
+    }
     static size_t EditorRowCount(const NotesWorkspaceComponent& component) {
         return component.editor_rows_.size();
     }
@@ -166,6 +172,29 @@ public:
     }
     static ftxui::Box EditorViewBox(const NotesWorkspaceComponent& component) {
         return component.editor_view_box_;
+    }
+    static void SetEditorColumns(NotesWorkspaceComponent& component, int columns) {
+        component.SetEditorColumns(columns);
+    }
+    static int EditorColumns(const NotesWorkspaceComponent& component) {
+        return component.EditorColumns();
+    }
+    static size_t EditorColumnCount(const NotesWorkspaceComponent& component) {
+        return component.editor_column_boxes_.size();
+    }
+    static ftxui::Box EditorColumnBox(
+        const NotesWorkspaceComponent& component, size_t index) {
+        return index < component.editor_column_boxes_.size()
+            ? component.editor_column_boxes_[index] : ftxui::Box{};
+    }
+    static size_t EditorColumnRows(const NotesWorkspaceComponent& component) {
+        return component.editor_column_rows_;
+    }
+    static size_t EditorPageRows(const NotesWorkspaceComponent& component) {
+        return component.editor_visible_rows_;
+    }
+    static size_t CursorBlock(const NotesWorkspaceComponent& component) {
+        return component.session_.Cursor().block;
     }
     static ftxui::Box CardBox(const NotesWorkspaceComponent& component, size_t index) {
         return index < component.card_boxes_.size()
@@ -590,6 +619,50 @@ int main() {
         ftxui::Mouse::Pressed, drag_x, drag_y);
     Expect(!NotesWorkspaceActionsTestAccess::HasSelection(scroll_component),
         "A new click should clear the previous mouse selection.");
+
+    // Column view: clamp to 1..3, render one reflected box per column, and
+    // map clicks in later columns to later visual rows.
+    const size_t single_column_rows =
+        NotesWorkspaceActionsTestAccess::EditorRowCount(scroll_component);
+    NotesWorkspaceActionsTestAccess::SetEditorColumns(scroll_component, 0);
+    Expect(NotesWorkspaceActionsTestAccess::EditorColumns(scroll_component) == 1,
+        "Column count should clamp to at least one.");
+    NotesWorkspaceActionsTestAccess::SetEditorColumns(scroll_component, 4);
+    Expect(NotesWorkspaceActionsTestAccess::EditorColumns(scroll_component) == 3,
+        "Column count should clamp to at most three.");
+    NotesWorkspaceActionsTestAccess::SetEditorColumns(scroll_component, 2);
+    NotesWorkspaceActionsTestAccess::RenderWorkspace(scroll_component);
+    const std::string two_column_text =
+        NotesWorkspaceActionsTestAccess::RenderWorkspaceText(scroll_component);
+    Expect(NotesWorkspaceActionsTestAccess::EditorColumnCount(scroll_component) == 2,
+        "Two-column mode should render two editor columns.");
+    Expect(two_column_text.find("·") != std::string::npos,
+        "Two-column mode should render dotted column separators.");
+    Expect(NotesWorkspaceActionsTestAccess::EditorColumnRows(scroll_component) > 0,
+        "Two-column mode should compute a non-empty column height.");
+    Expect(NotesWorkspaceActionsTestAccess::EditorPageRows(scroll_component) ==
+            NotesWorkspaceActionsTestAccess::EditorColumnRows(scroll_component) * 2,
+        "Two-column mode should use two column heights as the scroll page size.");
+    Expect(NotesWorkspaceActionsTestAccess::EditorRowCount(scroll_component) >
+            single_column_rows,
+        "Narrower columns should wrap the note into more visual rows.");
+    const ftxui::Box first_column =
+        NotesWorkspaceActionsTestAccess::EditorColumnBox(scroll_component, 0);
+    const ftxui::Box second_column =
+        NotesWorkspaceActionsTestAccess::EditorColumnBox(scroll_component, 1);
+    Expect(second_column.x_max >= second_column.x_min &&
+            second_column.y_max >= second_column.y_min,
+        "The second editor column should have a visible hit box.");
+    Expect(second_column.x_min >= first_column.x_max + 3,
+        "A separator and one blank cell should sit before the second column text.");
+    Expect(NotesWorkspaceActionsTestAccess::MouseAt(
+            scroll_component, ftxui::Mouse::Left,
+            ftxui::Mouse::Pressed,
+            second_column.x_min + 2, second_column.y_min + 1),
+        "Clicking the second editor column should be handled.");
+    Expect(NotesWorkspaceActionsTestAccess::CursorBlock(scroll_component) > 0,
+        "Clicking the second editor column should move the cursor past the first block.");
+
     fs::remove_all(scroll_root, cleanup_error);
 
     // Cards in one overview row must have identical widths. Otherwise long

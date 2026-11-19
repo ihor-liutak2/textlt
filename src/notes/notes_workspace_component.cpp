@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <limits>
 #include <utility>
 
 #include "editor_utils.hpp"
@@ -29,6 +30,41 @@ constexpr size_t kNoteTitleMaxChars = 20;
 
 int ToolbarItemWidth(const std::string& label) {
     return ftxui::string_width(" " + label + " ");
+}
+
+struct EditorScrollMetrics {
+    size_t viewport_rows = 0;
+    size_t page_rows = 0;
+    size_t total_rows = 0;
+    size_t max_scroll = 0;
+    size_t thumb_height = 0;
+    size_t track_space = 0;
+    bool needs_scrollbar = false;
+};
+
+EditorScrollMetrics ComputeEditorScrollMetrics(
+    size_t viewport_rows, size_t page_rows, size_t total_rows) {
+    EditorScrollMetrics metrics;
+    metrics.viewport_rows = std::max<size_t>(1, viewport_rows);
+    metrics.page_rows = std::max<size_t>(1, page_rows);
+    metrics.total_rows = total_rows;
+    metrics.needs_scrollbar = total_rows > metrics.page_rows;
+    metrics.max_scroll = metrics.needs_scrollbar
+        ? total_rows - metrics.page_rows : 0;
+    if (!metrics.needs_scrollbar) {
+        metrics.thumb_height = metrics.viewport_rows;
+        return metrics;
+    }
+
+    const size_t min_thumb = metrics.viewport_rows >= 2 ? 2 : 1;
+    const size_t proportional =
+        (metrics.viewport_rows * metrics.page_rows) /
+        std::max<size_t>(1, total_rows);
+    metrics.thumb_height = std::min(
+        metrics.viewport_rows, std::max(min_thumb, proportional));
+    metrics.track_space = metrics.viewport_rows > metrics.thumb_height
+        ? metrics.viewport_rows - metrics.thumb_height : 0;
+    return metrics;
 }
 
 bool IsCtrl(const ftxui::Event& event, char key) {
@@ -125,6 +161,15 @@ void NotesWorkspaceComponent::SetSidebarVisible(bool visible) {
     footer_orphan_general_box_ = empty_box;
     footer_orphan_relink_box_ = empty_box;
     sidebar_row_boxes_.clear();
+}
+
+void NotesWorkspaceComponent::SetEditorColumns(int columns) {
+    const int clamped = std::clamp(columns, 1, 3);
+    if (editor_columns_ == clamped) return;
+    editor_columns_ = clamped;
+    has_last_editor_cursor_ = false;
+    editor_column_boxes_.clear();
+    if (on_columns_changed_) on_columns_changed_(clamped);
 }
 
 void NotesWorkspaceComponent::FocusSidebar() {
@@ -837,25 +882,18 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
             return true;
         }
         if (editor_scrollbar_dragging_ && mouse.motion == ftxui::Mouse::Moved) {
-            const size_t total_rows = editor_rows_.size();
-            const size_t visible_rows = editor_visible_rows_;
-            if (visible_rows > 0 && total_rows > visible_rows) {
-                const size_t max_scroll = total_rows - visible_rows;
-                const size_t thumb_height = std::min(
-                    visible_rows,
-                    std::max<size_t>(visible_rows >= 2 ? 2 : 1,
-                        (visible_rows * visible_rows) / total_rows));
-                const size_t track_space = visible_rows > thumb_height
-                    ? visible_rows - thumb_height : 0;
-                if (track_space > 0) {
-                    const long long delta_rows =
-                        static_cast<long long>(mouse.y - editor_scrollbar_drag_y_) *
-                        static_cast<long long>(max_scroll) /
-                        static_cast<long long>(track_space);
-                    const long long target = static_cast<long long>(editor_scrollbar_drag_scroll_) + delta_rows;
-                    editor_scroll_ = static_cast<int>(std::clamp<long long>(
-                        target, 0, static_cast<long long>(max_scroll)));
-                }
+            const EditorScrollMetrics metrics = ComputeEditorScrollMetrics(
+                editor_column_rows_, editor_visible_rows_, editor_rows_.size());
+            if (metrics.needs_scrollbar && metrics.track_space > 0) {
+                const long long delta_rows =
+                    static_cast<long long>(mouse.y - editor_scrollbar_drag_y_) *
+                    static_cast<long long>(metrics.max_scroll) /
+                    static_cast<long long>(metrics.track_space);
+                const long long target =
+                    static_cast<long long>(editor_scrollbar_drag_scroll_) +
+                    delta_rows;
+                editor_scroll_ = static_cast<int>(std::clamp<long long>(
+                    target, 0, static_cast<long long>(metrics.max_scroll)));
             }
             return true;
         }
@@ -882,29 +920,21 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
         }
         if (mouse.button == ftxui::Mouse::Left && mouse.motion == ftxui::Mouse::Pressed &&
             editor_scrollbar_box_.Contain(mouse.x, mouse.y)) {
-            const size_t total_rows = editor_rows_.size();
-            const size_t visible_rows = editor_visible_rows_;
-            if (visible_rows > 0 && total_rows > visible_rows) {
-                const size_t max_scroll = total_rows - visible_rows;
-                const size_t thumb_height = std::min(
-                    visible_rows,
-                    std::max<size_t>(visible_rows >= 2 ? 2 : 1,
-                        (visible_rows * visible_rows) / total_rows));
-                const size_t track_space = visible_rows > thumb_height
-                    ? visible_rows - thumb_height : 0;
-                if (track_space > 0) {
-                    const int relative_y = std::clamp(
-                        mouse.y - editor_scrollbar_box_.y_min, 0,
-                        static_cast<int>(visible_rows) - 1);
-                    const int thumb_top = std::clamp(
-                        relative_y - static_cast<int>(thumb_height / 2), 0,
-                        static_cast<int>(track_space));
-                    editor_scroll_ = static_cast<int>(
-                        (static_cast<size_t>(thumb_top) * max_scroll) / track_space);
-                    editor_scrollbar_dragging_ = true;
-                    editor_scrollbar_drag_y_ = mouse.y;
-                    editor_scrollbar_drag_scroll_ = editor_scroll_;
-                }
+            const EditorScrollMetrics metrics = ComputeEditorScrollMetrics(
+                editor_column_rows_, editor_visible_rows_, editor_rows_.size());
+            if (metrics.needs_scrollbar && metrics.track_space > 0) {
+                const int relative_y = std::clamp(
+                    mouse.y - editor_scrollbar_box_.y_min, 0,
+                    static_cast<int>(metrics.viewport_rows) - 1);
+                const int thumb_top = std::clamp(
+                    relative_y - static_cast<int>(metrics.thumb_height / 2), 0,
+                    static_cast<int>(metrics.track_space));
+                editor_scroll_ = static_cast<int>(
+                    (static_cast<size_t>(thumb_top) * metrics.max_scroll) /
+                    metrics.track_space);
+                editor_scrollbar_dragging_ = true;
+                editor_scrollbar_drag_y_ = mouse.y;
+                editor_scrollbar_drag_scroll_ = editor_scroll_;
             }
             return true;
         }
@@ -971,6 +1001,9 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
             if (numbered_box_.Contain(mouse.x, mouse.y)) { SetBlockType(NoteBlockType::NumberedItem); return true; }
             if (check_box_.Contain(mouse.x, mouse.y)) { SetBlockType(NoteBlockType::CheckItem); return true; }
             if (paragraph_box_.Contain(mouse.x, mouse.y)) { SetBlockType(NoteBlockType::Paragraph); return true; }
+            if (col_1_box_.Contain(mouse.x, mouse.y)) { SetEditorColumns(1); return true; }
+            if (col_2_box_.Contain(mouse.x, mouse.y)) { SetEditorColumns(2); return true; }
+            if (col_3_box_.Contain(mouse.x, mouse.y)) { SetEditorColumns(3); return true; }
         }
     }
     return editing_ ? HandleEditorEvent(std::move(event)) : HandleOverviewEvent(std::move(event));
@@ -1320,8 +1353,10 @@ ftxui::Element NotesWorkspaceComponent::ToolbarItem(const std::string& label, bo
 
 void NotesWorkspaceComponent::ResetEditorViewport() {
     editor_rows_.clear();
+    editor_column_boxes_.clear();
     editor_scroll_ = 0;
     editor_visible_rows_ = 0;
+    editor_column_rows_ = 0;
     editor_content_width_ = 0;
     editor_view_known_ = false;
     editor_scrollbar_dragging_ = false;
@@ -1392,26 +1427,67 @@ std::optional<NotePosition> NotesWorkspaceComponent::NotePositionAt(int x, int y
         return std::nullopt;
     }
 
-    const int rows_height = std::max(
+    size_t column_index = 0;
+    int column_x_min = editor_view_box_.x_min +
+        static_cast<int>(kEditorLeftPadding);
+    int column_y_min = editor_view_box_.y_min +
+        static_cast<int>(kEditorTopPadding);
+    size_t column_rows = static_cast<size_t>(std::max(
         1, editor_view_box_.y_max - editor_view_box_.y_min + 1 -
-            static_cast<int>(kEditorTopPadding));
-    const size_t offset = static_cast<size_t>(std::clamp(
-        y - editor_view_box_.y_min - static_cast<int>(kEditorTopPadding),
-        0, rows_height - 1));
+            static_cast<int>(kEditorTopPadding)));
+
+    if (!editor_column_boxes_.empty()) {
+        bool found = false;
+        for (size_t index = 0; index < editor_column_boxes_.size(); ++index) {
+            if (editor_column_boxes_[index].Contain(x, y)) {
+                column_index = index;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            // Separators and padding do not belong to a column. Pick the
+            // closest column so clicks on a boundary keep working.
+            int best_distance = std::numeric_limits<int>::max();
+            for (size_t index = 0; index < editor_column_boxes_.size(); ++index) {
+                const ftxui::Box& box = editor_column_boxes_[index];
+                const int distance = x < box.x_min ? box.x_min - x
+                    : x > box.x_max ? x - box.x_max : 0;
+                if (distance < best_distance) {
+                    best_distance = distance;
+                    column_index = index;
+                }
+            }
+        }
+
+        const ftxui::Box& box = editor_column_boxes_[column_index];
+        column_x_min = box.x_min;
+        column_y_min = box.y_min;
+        if (editor_column_rows_ > 0) {
+            column_rows = editor_column_rows_;
+        } else {
+            column_rows = static_cast<size_t>(std::max(
+                1, box.y_max - box.y_min + 1));
+        }
+    }
+
+    const size_t row_offset = static_cast<size_t>(std::clamp(
+        y - column_y_min, 0, static_cast<int>(column_rows) - 1));
     const size_t row_index = std::min(
-        static_cast<size_t>(std::max(0, editor_scroll_)) + offset,
+        static_cast<size_t>(std::max(0, editor_scroll_)) +
+            column_index * column_rows + row_offset,
         editor_rows_.size() - 1);
     const EditorRow& row = editor_rows_[row_index];
     if (row.block >= note->blocks.size()) return std::nullopt;
 
     const int prefix_width = static_cast<int>(
         textlt::utils::Utf8DisplayWidth(row.prefix));
-    const int content_x_min = editor_view_box_.x_min +
-        static_cast<int>(kEditorLeftPadding) + prefix_width;
+    const int content_x_min = column_x_min + prefix_width;
     if (x <= content_x_min) return NotePosition{row.block, row.start};
 
     const std::string text = BlockText(note->blocks[row.block]);
-    const size_t columns = static_cast<size_t>(x - content_x_min);
+    const size_t columns = static_cast<size_t>(
+        std::max(0, x - content_x_min));
     size_t byte = textlt::utils::Utf8ByteIndexAtDisplayColumn(
         text, row.start, columns);
     byte = std::clamp(byte, row.start, row.end);
@@ -1422,16 +1498,16 @@ void NotesWorkspaceComponent::ScrollEditor(int delta) {
     const size_t total_rows = editor_rows_.empty() && session_.Note()
         ? session_.Note()->blocks.size()
         : editor_rows_.size();
-    const size_t visible_rows = std::max<size_t>(1, editor_visible_rows_);
-    const size_t max_scroll = total_rows > visible_rows
-        ? total_rows - visible_rows : 0;
+    const size_t page_rows = std::max<size_t>(1, editor_visible_rows_);
+    const size_t max_scroll = total_rows > page_rows
+        ? total_rows - page_rows : 0;
     const long long target = static_cast<long long>(editor_scroll_) + delta;
     editor_scroll_ = static_cast<int>(std::clamp<long long>(
         target, 0, static_cast<long long>(max_scroll)));
 }
 
-void NotesWorkspaceComponent::EnsureEditorCursorVisible(size_t visible_rows) {
-    if (!session_.Note() || editor_rows_.empty() || visible_rows == 0) return;
+void NotesWorkspaceComponent::EnsureEditorCursorVisible(size_t page_rows) {
+    if (!session_.Note() || editor_rows_.empty() || page_rows == 0) return;
 
     const NotePosition cursor = session_.Cursor();
     if (has_last_editor_cursor_ && cursor == last_editor_cursor_) return;
@@ -1440,9 +1516,9 @@ void NotesWorkspaceComponent::EnsureEditorCursorVisible(size_t visible_rows) {
     if (cursor_row) {
         if (*cursor_row < static_cast<size_t>(editor_scroll_)) {
             editor_scroll_ = static_cast<int>(*cursor_row);
-        } else if (*cursor_row >= static_cast<size_t>(editor_scroll_) + visible_rows) {
+        } else if (*cursor_row >= static_cast<size_t>(editor_scroll_) + page_rows) {
             editor_scroll_ = static_cast<int>(
-                *cursor_row + 1 - visible_rows);
+                *cursor_row + 1 - page_rows);
         }
     }
     last_editor_cursor_ = cursor;
@@ -1504,28 +1580,24 @@ ftxui::Element NotesWorkspaceComponent::RenderEditorRow(const EditorRow& row) {
 }
 
 ftxui::Element NotesWorkspaceComponent::RenderEditorScrollbar(
-    size_t visible_rows, size_t total_rows, size_t scroll, size_t max_scroll,
+    size_t viewport_rows, size_t page_rows, size_t total_rows, size_t scroll,
     const Theme& theme) {
     using namespace ftxui;
+    const EditorScrollMetrics metrics = ComputeEditorScrollMetrics(
+        viewport_rows, page_rows, total_rows);
     Elements cells;
-    cells.reserve(visible_rows);
+    cells.reserve(metrics.viewport_rows);
 
-    const bool needs_scrollbar = total_rows > visible_rows;
-    const size_t thumb_height = needs_scrollbar
-        ? std::min(visible_rows,
-            std::max<size_t>(visible_rows >= 2 ? 2 : 1,
-                (visible_rows * visible_rows) / total_rows))
-        : visible_rows;
-    const size_t track_space = visible_rows > thumb_height
-        ? visible_rows - thumb_height : 0;
-    const size_t thumb_top = needs_scrollbar && max_scroll > 0 && track_space > 0
-        ? (scroll * track_space) / max_scroll : 0;
+    const size_t thumb_top = metrics.needs_scrollbar &&
+        metrics.max_scroll > 0 && metrics.track_space > 0
+        ? (scroll * metrics.track_space) / metrics.max_scroll : 0;
 
-    for (size_t row = 0; row < visible_rows; ++row) {
-        if (!needs_scrollbar) {
+    for (size_t row = 0; row < metrics.viewport_rows; ++row) {
+        if (!metrics.needs_scrollbar) {
             cells.push_back(text(std::string(kEditorScrollbarColumns, ' ')) |
                 bgcolor(theme.background));
-        } else if (row >= thumb_top && row < thumb_top + thumb_height) {
+        } else if (row >= thumb_top &&
+            row < thumb_top + metrics.thumb_height) {
             cells.push_back(text(std::string(kEditorScrollbarColumns, ' ')) |
                 bgcolor(theme.modal_selected_item_bg) |
                 color(theme.modal_selected_item_fg));
@@ -1562,33 +1634,62 @@ ftxui::Element NotesWorkspaceComponent::RenderEditor() {
             editor_border - static_cast<int>(kEditorLeftPadding + kEditorRightPadding);
         if (estimate > 0) content_width = static_cast<size_t>(estimate);
     }
-    if (content_width != editor_content_width_) has_last_editor_cursor_ = false;
-    BuildEditorRows(content_width);
-    editor_content_width_ = content_width;
+    const size_t column_count = static_cast<size_t>(
+        std::clamp(editor_columns_, 1, 3));
+    const size_t separator_width = column_count > 1 ? column_count - 1 : 0;
+    // Keep one blank cell between each separator and the column to its right.
+    const size_t column_gap = column_count > 1 ? column_count - 1 : 0;
+    const size_t column_overhead = separator_width + column_gap;
+    const size_t column_text_width = content_width > column_overhead
+        ? std::max<size_t>(1,
+            (content_width - column_overhead) / column_count)
+        : 1;
 
-    size_t visible_rows = 0;
+    if (column_text_width != editor_content_width_) has_last_editor_cursor_ = false;
+    BuildEditorRows(column_text_width);
+    editor_content_width_ = column_text_width;
+
+    size_t column_rows = 0;
     if (editor_view_known_) {
         const size_t view_height = static_cast<size_t>(std::max(
             0, editor_view_box_.y_max - editor_view_box_.y_min + 1));
-        visible_rows = view_height > kEditorTopPadding
+        column_rows = view_height > kEditorTopPadding
             ? view_height - kEditorTopPadding : 0;
     }
     const size_t total_rows = editor_rows_.size();
-    if (visible_rows == 0) visible_rows = std::max<size_t>(1, total_rows);
-    const size_t max_scroll = total_rows > visible_rows
-        ? total_rows - visible_rows : 0;
-    EnsureEditorCursorVisible(visible_rows);
+    if (column_rows == 0) column_rows = std::max<size_t>(1, total_rows);
+    const size_t page_rows = column_rows * column_count;
+    const EditorScrollMetrics metrics = ComputeEditorScrollMetrics(
+        column_rows, page_rows, total_rows);
+    EnsureEditorCursorVisible(page_rows);
     editor_scroll_ = static_cast<int>(std::min<size_t>(
-        static_cast<size_t>(std::max(0, editor_scroll_)), max_scroll));
-    editor_visible_rows_ = visible_rows;
+        static_cast<size_t>(std::max(0, editor_scroll_)), metrics.max_scroll));
+    editor_visible_rows_ = page_rows;
+    editor_column_rows_ = column_rows;
 
-    Elements rows;
-    const size_t end = std::min(
-        total_rows, static_cast<size_t>(editor_scroll_) + visible_rows);
-    for (size_t index = static_cast<size_t>(editor_scroll_); index < end; ++index) {
-        rows.push_back(RenderEditorRow(editor_rows_[index]));
+    Elements columns;
+    editor_column_boxes_.resize(column_count);
+    const size_t scroll = static_cast<size_t>(std::max(0, editor_scroll_));
+    for (size_t column = 0; column < column_count; ++column) {
+        Elements rows;
+        const size_t column_start = scroll + column * column_rows;
+        const size_t column_end = std::min(
+            total_rows, column_start + column_rows);
+        for (size_t index = column_start; index < column_end; ++index) {
+            rows.push_back(RenderEditorRow(editor_rows_[index]));
+        }
+        while (rows.size() < column_rows) rows.push_back(text(""));
+        columns.push_back(
+            vbox(std::move(rows)) |
+            size(WIDTH, EQUAL, static_cast<int>(column_text_width)) |
+            reflect(editor_column_boxes_[column]));
+        if (column + 1 < column_count) {
+            columns.push_back(separatorCharacter("·") | color(theme.gutter));
+            // One blank cell before the next column's text.
+            columns.push_back(text(" "));
+        }
     }
-    while (rows.size() < visible_rows) rows.push_back(text(""));
+    columns.push_back(filler());
 
     const size_t text_right_gap = kEditorRightPadding > kEditorScrollbarColumns
         ? kEditorRightPadding - kEditorScrollbarColumns : 0;
@@ -1597,15 +1698,15 @@ ftxui::Element NotesWorkspaceComponent::RenderEditor() {
         text(std::string(kEditorLeftPadding, ' ')),
         vbox({
             vbox(top_padding),
-            vbox(std::move(rows)) | xflex,
+            hbox(std::move(columns)),
         }) | xflex,
         text(std::string(text_right_gap, ' ')),
     }) | yflex | reflect(editor_view_box_);
     Element scrollbar = vbox({
         vbox(top_padding),
         RenderEditorScrollbar(
-            visible_rows, total_rows, static_cast<size_t>(editor_scroll_),
-            max_scroll, theme),
+            column_rows, page_rows, total_rows,
+            static_cast<size_t>(editor_scroll_), theme),
     });
     Element view = hbox({std::move(text_area) | xflex, std::move(scrollbar)}) | yflex;
 
@@ -1625,11 +1726,31 @@ ftxui::Element NotesWorkspaceComponent::RenderEditor() {
     Element pin = text(pin_label) | reflect(pin_box_);
     Element group = text(group_label) | reflect(section_box_); Element trash = text(trash_label) | color(note->deleted_at ? theme.button_success : theme.button_danger) | reflect(trash_box_);
     const uint8_t marks = session_.ActiveMarks(); auto type = note->blocks[session_.Cursor().block].type;
-    Element toolbar = hbox({ToolbarItem("B", marks & MarkBit(NoteMark::Bold), bold_box_), ToolbarItem("I", marks & MarkBit(NoteMark::Italic), italic_box_), ToolbarItem("U", marks & MarkBit(NoteMark::Underlined), underline_box_), ToolbarItem("S", marks & MarkBit(NoteMark::Strikethrough), strike_box_), separator(), ToolbarItem("• List", type == NoteBlockType::BulletItem, bullet_box_), ToolbarItem("1. List", type == NoteBlockType::NumberedItem, numbered_box_), ToolbarItem("[ ] Check", type == NoteBlockType::CheckItem, check_box_), ToolbarItem("¶", type == NoteBlockType::Paragraph, paragraph_box_)});
+    Element toolbar = hbox({
+        ToolbarItem("B", marks & MarkBit(NoteMark::Bold), bold_box_),
+        ToolbarItem("I", marks & MarkBit(NoteMark::Italic), italic_box_),
+        ToolbarItem("U", marks & MarkBit(NoteMark::Underlined), underline_box_),
+        ToolbarItem("S", marks & MarkBit(NoteMark::Strikethrough), strike_box_),
+        separator(),
+        ToolbarItem("• List", type == NoteBlockType::BulletItem, bullet_box_),
+        ToolbarItem("1. List", type == NoteBlockType::NumberedItem, numbered_box_),
+        ToolbarItem("[ ] Check", type == NoteBlockType::CheckItem, check_box_),
+        ToolbarItem("¶", type == NoteBlockType::Paragraph, paragraph_box_),
+        separator(),
+        text(" Cols:") | color(theme.foreground),
+        ToolbarItem("1", editor_columns_ == 1, col_1_box_),
+        ToolbarItem("2", editor_columns_ == 2, col_2_box_),
+        ToolbarItem("3", editor_columns_ == 3, col_3_box_),
+    });
     // Keep the formatting buttons on the title/Group row when the content area
     // is wide enough for them; otherwise fall back to a dedicated toolbar row.
-    const int toolbar_width = ToolbarItemWidth("B") + ToolbarItemWidth("I") + ToolbarItemWidth("U") + ToolbarItemWidth("S") + 1 +
-        ToolbarItemWidth("• List") + ToolbarItemWidth("1. List") + ToolbarItemWidth("[ ] Check") + ToolbarItemWidth("¶");
+    const int toolbar_width =
+        ToolbarItemWidth("B") + ToolbarItemWidth("I") +
+        ToolbarItemWidth("U") + ToolbarItemWidth("S") + 1 +
+        ToolbarItemWidth("• List") + ToolbarItemWidth("1. List") +
+        ToolbarItemWidth("[ ] Check") + ToolbarItemWidth("¶") + 1 +
+        string_width(" Cols:") + ToolbarItemWidth("1") +
+        ToolbarItemWidth("2") + ToolbarItemWidth("3");
     const int header_width = string_width(back_label) + string_width(title_label) +
         string_width(pin_label) + string_width(group_label) + string_width(trash_label) + 4;
     const bool inline_toolbar = header_width + toolbar_width <= static_cast<int>(content_width) + 4;

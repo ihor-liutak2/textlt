@@ -23,6 +23,7 @@ void TextltApp::ShowNotesWorkspace() {
     if (notes_workspace_component_) {
         auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_);
         notes->SetSidebarVisible(editor_config_.show_notes_sidebar);
+        notes->SetEditorColumns(editor_config_.notes_editor_columns);
         if (!editor_config_.show_notes_sidebar) {
             notes->FocusMainArea();
         }

@@ -71,6 +71,7 @@ bool WriteConfigAtomically(const std::filesystem::path& path, const EditorConfig
         {"show_file_explorer", config.show_file_explorer},
         {"show_notes_sidebar", config.show_notes_sidebar},
         {"show_actions_sidebar", config.show_actions_sidebar},
+        {"notes_editor_columns", config.notes_editor_columns},
         {"smart_word_wrap", config.smart_word_wrap},
         {"syntax_highlighting", config.syntax_highlighting},
         {"auto_pairing", config.auto_pairing},
