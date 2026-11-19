@@ -27,8 +27,8 @@ public:
 
     ftxui::Element Render() override;
     ftxui::Component GetMainComponent() override { return container_; }
-    std::string GetTitle() override { return "Sidebar"; }
-    ModalSizePreference GetModalSizePreference() const override { return {44, 13}; }
+    std::string GetTitle() override { return "Quick Commands"; }
+    ModalSizePreference GetModalSizePreference() const override { return {34, 14}; }
     ModalFrameStyle GetModalFrameStyle() const override { return ModalFrameStyle::TitleInBorder; }
     std::string GetFooterText() const override { return {}; }
 

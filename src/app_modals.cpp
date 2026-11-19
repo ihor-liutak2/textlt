@@ -111,11 +111,13 @@ std::vector<std::string> BuiltInHelpLines() {
         "  Tab           Switch focus from File Explorer to Editor",
         "  Alt+Left      Switch to the previous editor pane",
         "  Alt+Right     Switch to the next editor pane",
-        "  Ctrl+B        Open Sidebar popup",
+        "  Ctrl+B        Open Quick Commands",
         "  B             Toggle sidebar",
-        "  O             Open the Opened Files sidebar",
-        "  F             Open the Favorites sidebar",
-        "  P             Open the Project sidebar",
+        "  O             Open the Opened files tab in Docs",
+        "  F             Open the Favorites tab in Docs",
+        "  D             Open the Folder tab in Docs",
+        "  P             Open the Projects tab in Docs",
+        "  R             Open Recent Files from Quick Commands",
         "  Project > Copy Path copies the selected file or directory path",
         "  F1            Open this help window",
         "  F2            Open the File menu",
@@ -224,7 +226,7 @@ void TextltApp::OpenSidebarShortcutModal() {
         menu_bar_->CloseDropdown();
     }
     sidebar_shortcuts_modal_.Open();
-    active_action_ = "Opened Sidebar";
+    active_action_ = "Opened Quick Commands";
     SetActiveLayer(UiLayer::SidebarShortcuts);
     screen_.PostEvent(ftxui::Event::Custom);
 }
@@ -621,14 +623,12 @@ bool TextltApp::OpenSearchFileMatch(const FileSearchMatch& match, std::string& e
         return false;
     }
 
-    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-    editor_ptr->JumpToLine(match.line_number);
-
-    active_action_ =
-    "Opened search result " +
-    match.relative_path.generic_string() +
-    ":" +
-    std::to_string(match.line_number);
+    active_action_ = "Opened search result " + match.relative_path.generic_string();
+    if (match.line_number != 0) {
+        auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
+        editor_ptr->JumpToLine(match.line_number);
+        active_action_ += ":" + std::to_string(match.line_number);
+    }
 
     FocusEditor();
     screen_.PostEvent(ftxui::Event::Custom);

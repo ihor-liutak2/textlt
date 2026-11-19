@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -43,17 +44,15 @@ public:
     ModalFrameStyle GetModalFrameStyle() const override {
         return ModalFrameStyle::TitleInBorder;
     }
-    std::string GetFooterText() const override;
+    bool HasCustomFooter() const override { return true; }
+    int GetCustomFooterHeight() const override { return 3; }
+    ftxui::Element RenderCustomFooter() override;
 
     void Open();
     void Close();
     void SetTheme(const Theme* theme) { theme_ = theme; }
 
-    void ExecuteSearchFromFooter();
-
     bool HandleEvent(ftxui::Event event);
-
-    void SaveFiltersFromFooter();
 
 private:
     struct DirectoryChoice {
@@ -68,6 +67,8 @@ private:
     ftxui::Component MakeTabButton(
         std::string label,
         int tab_index);
+    ftxui::Component MakeFooterButtons(ftxui::Components buttons);
+    void SelectTab(int tab_index);
 
     void BuildDirectoryChoices();
     void AddDirectoryChoice(
@@ -84,14 +85,11 @@ private:
     std::vector<FileSearchRoot> SelectedRoots() const;
 
     void UseMaskSet(size_t index);
-    void UseFirstMaskSet();
-    void UsePreviousMaskSet();
-    void UseNextMaskSet();
-
-    void ExecuteSearch();
+    void ExecuteSearch(FileSearchTarget target = FileSearchTarget::Content);
     void OpenSelectedMatch();
     void PasteSearchQuery();
     void ClearSearchQuery();
+    void CopyResultText();
     void CopyResultPaths();
 
     std::filesystem::path CurrentRootPath() const;
@@ -106,21 +104,16 @@ private:
     bool HandleResultsMouseEvent(ftxui::Event event);
     ftxui::Element RenderSelectedResultPreview() const;
 
-    size_t ParseContextValue(const std::string& value) const;
-
     ftxui::Element RenderHeaderRow();
     ftxui::Element RenderSearchTab();
     ftxui::Element RenderResultsTab();
 
     ftxui::Element RenderDirectoryList() const;
-    ftxui::Element RenderResultList() const;
-    ftxui::Element RenderMatch(
-        const FileSearchMatch& match,
-        size_t index,
-        bool selected) const;
+    ftxui::Element RenderResultList();
     ftxui::Element RenderContextLine(const FileSearchContextLine& line) const;
 
     std::string StatusText() const;
+    std::string FooterSummaryText() const;
     std::string DirectorySummaryText() const;
     std::string FormatLocation(const FileSearchMatch& match) const;
     std::string FormatLineNumber(size_t line_number) const;
@@ -149,8 +142,8 @@ private:
     int query_cursor_position_ = 0;
     std::string query_;
     std::string masks_;
-    std::string context_before_input_ = "0";
-    std::string context_after_input_ = "0";
+    size_t context_before_ = 0;
+    size_t context_after_ = 0;
 
     std::string status_;
 
@@ -158,6 +151,8 @@ private:
     std::vector<std::string> result_labels_;
     ftxui::Component result_menu_;
     ftxui::Component result_list_component_;
+    ftxui::Box result_list_box_;
+    std::vector<ftxui::Box> result_row_boxes_;
     
     std::chrono::steady_clock::time_point last_result_click_time_{};
     int last_clicked_result_ = -1;
@@ -175,27 +170,24 @@ private:
     ftxui::Component query_input_;
     ftxui::Component search_paste_button_;
     ftxui::Component search_clear_button_;
-    ftxui::Component masks_input_;
+    ftxui::Component mask_picker_button_;
     std::vector<std::string> filter_labels_;
     int selected_filter_ = 0;
+    ftxui::Box filter_list_box_;
+    std::vector<ftxui::Box> filter_row_boxes_;
+    std::chrono::steady_clock::time_point last_filter_click_time_{};
+    int last_clicked_filter_ = -1;
 
     std::string filter_name_input_;
     std::string filter_value_input_;
 
     ftxui::Component filter_menu_;
+    ftxui::Component filter_list_component_;
     ftxui::Component filter_name_input_component_;
     ftxui::Component filter_value_input_component_;
 
-    ftxui::Component apply_filter_button_;
-    ftxui::Component add_filter_button_;
-    ftxui::Component delete_filter_button_;
-    ftxui::Component save_filters_button_;
     ftxui::Component context_before_input_component_;
     ftxui::Component context_after_input_component_;
-
-    ftxui::Component start_mask_button_;
-    ftxui::Component previous_mask_button_;
-    ftxui::Component next_mask_button_;
 
     ftxui::Component directory_menu_;
     ftxui::Component directory_list_component_;
@@ -203,8 +195,7 @@ private:
     ftxui::Component all_directories_button_;
     ftxui::Component none_directories_button_;
 
-    ftxui::Component open_button_;
-    ftxui::Component copy_paths_button_;
+    std::array<ftxui::Component, 3> tab_footer_buttons_;
 
     ftxui::Component search_tab_container_;
     ftxui::Component results_tab_container_;
@@ -224,6 +215,7 @@ private:
     void UpdateSelectedFilterFromInputs();
 
     void ApplySelectedFilter();
+    bool HandleFilterMouseEvent(ftxui::Event event);
     void AddFilter();
     void DeleteFilter();
 

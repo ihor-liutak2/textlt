@@ -740,6 +740,9 @@ void GitModalContent::FocusTabBody(int tab_index) {
     } else if (tab_index == static_cast<int>(Tab::Remote) && remote_filter_input_component_) {
         remote_filter_input_component_->TakeFocus();
     } else if (tab_index == static_cast<int>(Tab::Tags) && tag_filter_input_component_) {
+        if (!tag_labels_.empty()) {
+            selected_tag_ = static_cast<int>(tag_labels_.size()) - 1;
+        }
         tag_filter_input_component_->TakeFocus();
     } else if (tab_index == static_cast<int>(Tab::Compare) && compare_file_menu_) {
         if (compare_refs_.empty()) {

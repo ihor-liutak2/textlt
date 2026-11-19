@@ -93,11 +93,6 @@ void TextltApp::CommandFileNew() {
 }
 
 
-void TextltApp::CommandFileManageFiles() {
-    OpenFilesModal(FilesModalMode::Manage);
-}
-
-
 void TextltApp::CommandFileOpen() {
     OpenFilesModal(FilesModalMode::Open);
 }

@@ -1,55 +1,29 @@
 ftxui::Element SearchFilesModalContent::RenderSearchTab() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
-    const std::string mask_name = mask_sets_.empty()
-        ? "Custom"
-        : mask_sets_[selected_mask_set_].name;
-
     return ftxui::vbox({
-    ftxui::text(""),
-
-    ftxui::hbox({
-        ftxui::text("Search: ") | ftxui::color(theme.modal_text_color),
-        query_input_->Render() |
-            ftxui::bgcolor(theme.modal_input_bg) |
-            ftxui::color(theme.modal_input_fg) |
-            ftxui::xflex,
-        ftxui::text("  "),
-        search_paste_button_->Render(),
-        ftxui::text(" "),
-        search_clear_button_->Render(),
-    }),
-
-    ftxui::text(""),
-
-    ftxui::hbox({
-        ftxui::text("Masks:  ") | ftxui::color(theme.modal_text_color),
-
-            masks_input_->Render() |
+        ftxui::hbox({
+            ftxui::text("Search: ") | ftxui::color(theme.modal_text_color),
+            query_input_->Render() |
                 ftxui::bgcolor(theme.modal_input_bg) |
                 ftxui::color(theme.modal_input_fg) |
                 ftxui::xflex,
+            ftxui::text(" "),
+            search_paste_button_->Render(),
+            ftxui::text(" "),
+            search_clear_button_->Render(),
         }),
+        ftxui::text(""),
         ftxui::hbox({
-            ftxui::text("Set: " + mask_name + " ") |
-                ftxui::color(theme.modal_text_color),
-            start_mask_button_->Render(),
-            ftxui::text(" "),
-            previous_mask_button_->Render(),
-            ftxui::text(" "),
-            next_mask_button_->Render(),
-            ftxui::text("   Context before: ") |
-                ftxui::color(theme.modal_text_color),
-            context_before_input_component_->Render() |
-                ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 5) |
-                ftxui::bgcolor(theme.modal_input_bg) |
-                ftxui::color(theme.modal_input_fg),
+            ftxui::text("Filter Mask: ") | ftxui::color(theme.modal_text_color),
+            mask_picker_button_->Render(),
+            ftxui::text("   Preview before match: ") | ftxui::color(theme.modal_text_color),
+            context_before_input_component_->Render(),
             ftxui::text(" after: ") |
                 ftxui::color(theme.modal_text_color),
-            context_after_input_component_->Render() |
-                ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 5) |
-                ftxui::bgcolor(theme.modal_input_bg) |
-                ftxui::color(theme.modal_input_fg),
+            context_after_input_component_->Render(),
+            ftxui::text("  (0–" + std::to_string(kMaxContextLines) + " lines each)") |
+                ftxui::dim | ftxui::color(theme.modal_text_color),
         }),
         ftxui::separator() | ftxui::color(theme.modal_border),
         ftxui::hbox({
@@ -71,14 +45,6 @@ ftxui::Element SearchFilesModalContent::RenderResultsTab() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
     return ftxui::vbox({
-        ftxui::hbox({
-            ftxui::text(StatusText()) | ftxui::color(theme.modal_text_color),
-            ftxui::filler(),
-            open_button_->Render(),
-            ftxui::text(" "),
-            copy_paths_button_->Render(),
-        }),
-        ftxui::separator() | ftxui::color(theme.modal_border),
         RenderResultList() | ftxui::yflex,
         ftxui::separator() | ftxui::color(theme.modal_border),
         RenderSelectedResultPreview(),
@@ -97,21 +63,23 @@ ftxui::Element SearchFilesModalContent::RenderDirectoryList() const {
         ftxui::frame;
 }
 
-ftxui::Element SearchFilesModalContent::RenderResultList() const {
+ftxui::Element SearchFilesModalContent::RenderResultList() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
     if (summary_.matches.empty()) {
         const std::string message = query_.empty()
-            ? "Enter a query on the Search tab and press [Search]."
+            ? "Enter a query on the Search tab."
             : "No matches.";
         return ftxui::text(message) |
             ftxui::color(theme.modal_text_color) |
             ftxui::frame;
     }
 
+    result_row_boxes_.resize(result_labels_.size());
     return result_list_component_->Render() |
         ftxui::vscroll_indicator |
-        ftxui::frame;
+        ftxui::frame |
+        ftxui::reflect(result_list_box_);
 }
 
 ftxui::Element SearchFilesModalContent::RenderSelectedResultPreview() const {
@@ -125,6 +93,10 @@ ftxui::Element SearchFilesModalContent::RenderSelectedResultPreview() const {
     const int max_index = static_cast<int>(summary_.matches.size() - 1);
     const int safe_index = std::max(0, std::min(max_index, selected_result_));
     const FileSearchMatch& match = summary_.matches[static_cast<size_t>(safe_index)];
+
+    if (match.line_number == 0) {
+        return ftxui::text(ToDisplayPath(match.path)) | ftxui::color(theme.modal_accent);
+    }
 
     ftxui::Elements rows;
     rows.push_back(
@@ -144,55 +116,15 @@ ftxui::Element SearchFilesModalContent::RenderSelectedResultPreview() const {
             TrimForDisplay(match.line_text, 170)) |
         ftxui::bgcolor(theme.modal_selected_item_bg) |
         ftxui::color(theme.modal_selected_item_fg) |
-        ftxui::bold);
+        ftxui::bold | ftxui::focus);
 
     for (const FileSearchContextLine& line : match.after) {
         rows.push_back(RenderContextLine(line));
     }
 
     return ftxui::vbox(std::move(rows)) |
-        ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, 9);
-}
-
-ftxui::Element SearchFilesModalContent::RenderMatch(
-    const FileSearchMatch& match,
-    size_t index,
-    bool selected) const {
-    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-
-    ftxui::Elements rows;
-
-    for (const FileSearchContextLine& line : match.before) {
-        rows.push_back(RenderContextLine(line));
-    }
-
-    const std::string prefix = selected ? "> " : "  ";
-    ftxui::Element main_line = ftxui::text(
-        prefix +
-        FormatLocation(match) +
-        "  " +
-        TrimForDisplay(match.line_text, 170));
-
-    if (selected) {
-        main_line = main_line |
-            ftxui::bgcolor(theme.modal_selected_item_bg) |
-            ftxui::color(theme.modal_selected_item_fg) |
-            ftxui::bold;
-    } else {
-        main_line = main_line | ftxui::color(theme.modal_foreground);
-    }
-
-    rows.push_back(main_line);
-
-    for (const FileSearchContextLine& line : match.after) {
-        rows.push_back(RenderContextLine(line));
-    }
-
-    if (index + 1 < summary_.matches.size()) {
-        rows.push_back(ftxui::text(""));
-    }
-
-    return ftxui::vbox(std::move(rows));
+        ftxui::yframe |
+        ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, 2 * kMaxContextLines + 2);
 }
 
 ftxui::Element SearchFilesModalContent::RenderContextLine(
@@ -239,11 +171,14 @@ std::string SearchFilesModalContent::DirectorySummaryText() const {
 
     return std::to_string(selected) + " of " +
         std::to_string(directories_.size()) +
-        " directorie(s) selected";
+        (directories_.size() == 1 ? " directory selected" : " directories selected");
 }
 
 std::string SearchFilesModalContent::FormatLocation(
     const FileSearchMatch& match) const {
+    if (match.line_number == 0) {
+        return ToDisplayPath(match.relative_path);
+    }
     return ToDisplayPath(match.relative_path) +
         ":" +
         std::to_string(match.line_number) +

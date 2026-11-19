@@ -105,10 +105,11 @@ void ModalWindow::RebuildChildren() {
     }
 }
 
-void ModalWindow::SetFooterButtons(std::vector<FooterButton> buttons) {
+void ModalWindow::SetFooterButtons(std::vector<FooterButton> buttons, size_t left_aligned_count) {
     footer_buttons_.clear();
     footer_button_enabled_.clear();
     const size_t count = std::min(buttons.size(), kMaximumFooterButtons);
+    left_aligned_footer_count_ = std::min(left_aligned_count, count);
     footer_buttons_.reserve(count);
 
     for (size_t index = 0; index < count; ++index) {
@@ -242,12 +243,17 @@ ftxui::Element ModalWindow::RenderFooter(const Theme& theme) {
         content_ && !content_->GetFooterText().empty()
             ? content_->GetFooterText()
             : footer_text_;
-    Elements button_row = {filler()};
+    Elements button_row;
     for (size_t index = 0; index < footer_buttons_.size(); ++index) {
-        if (index > 0) {
+        if (index == left_aligned_footer_count_) {
+            button_row.push_back(filler());
+        } else if (index > 0) {
             button_row.push_back(text(" "));
         }
         button_row.push_back(footer_buttons_[index]->Render());
+    }
+    if (left_aligned_footer_count_ == footer_buttons_.size()) {
+        button_row.push_back(filler());
     }
 
     const auto footer_style = [&](Element element) {

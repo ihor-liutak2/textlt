@@ -1,12 +1,9 @@
 void SearchFilesModalContent::Open() {
     LoadFilters();
     RebuildFilterLabels();
-    UseMaskSet(std::min(selected_mask_set_, mask_sets_.size() - 1));
     SyncFilterInputsFromSelection();
 
-    selected_tab_ = 0;
     selected_result_ = 0;
-    status_.clear();
 
     last_clicked_directory_ = -1;
     last_directory_click_time_ = {};
@@ -15,16 +12,28 @@ void SearchFilesModalContent::Open() {
     RestoreSelectedDirectoriesForCurrentRoot();
     RefreshDirectoryLabels();
 
-    if (query_input_) {
-        query_input_->TakeFocus();
-    }
+    SelectTab(0);
 }
 
 void SearchFilesModalContent::Close() {
 }
 
-void SearchFilesModalContent::ExecuteSearchFromFooter() {
-    ExecuteSearch();
+void SearchFilesModalContent::SelectTab(int tab_index) {
+    selected_tab_ = tab_index;
+    status_.clear();
+    last_clicked_filter_ = -1;
+    last_clicked_result_ = -1;
+
+    if (tab_index == 0) {
+        query_input_->TakeFocus();
+    } else if (tab_index == 1 && !summary_.matches.empty()) {
+        result_menu_->TakeFocus();
+    } else if (tab_index == 2) {
+        filter_menu_->TakeFocus();
+    } else {
+        const auto& footer = tab_footer_buttons_[tab_index];
+        footer->ChildAt(footer->ChildCount() - 1)->TakeFocus();
+    }
 }
 
 ftxui::Element SearchFilesModalContent::RenderTitle() {
@@ -66,11 +75,7 @@ ftxui::Element SearchFilesModalContent::Render() {
     ftxui::color(theme.modal_foreground);
 }
 
-std::string SearchFilesModalContent::GetFooterText() const {
-    if (!status_.empty()) {
-        return status_;
-    }
-
+std::string SearchFilesModalContent::FooterSummaryText() const {
     if (selected_tab_ == 0) {
         return DirectorySummaryText();
     }
@@ -79,5 +84,23 @@ std::string SearchFilesModalContent::GetFooterText() const {
         return StatusText();
     }
 
-    return "Filters are saved to search_file_filter.json";
+    return std::to_string(mask_sets_.size()) + " filter masks";
+}
+
+ftxui::Element SearchFilesModalContent::RenderCustomFooter() {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    Elements buttons = {filler()};
+    const auto& footer = tab_footer_buttons_[selected_tab_];
+    for (size_t index = 0; index < footer->ChildCount(); ++index) {
+        buttons.push_back(text(" "));
+        buttons.push_back(footer->ChildAt(index)->Render());
+    }
+
+    return vbox({
+        text(" " + (status_.empty() ? FooterSummaryText() : status_)) |
+            dim | color(theme.modal_text_color),
+        separator() | color(theme.modal_border),
+        hbox(std::move(buttons)),
+    });
 }

@@ -166,6 +166,9 @@ private:
     bool AddFileModalDirectory(
         const std::filesystem::path& directory,
         std::string& error);
+    bool RemoveFileModalDirectory(
+        const std::filesystem::path& directory,
+        std::string& error);
     void CopyFileModalPathText(const std::string& text);
     bool GetTextProcessorTargetText(
         bool whole_document,
@@ -325,7 +328,6 @@ private:
     
     // Built-in command actions. UI surfaces and shortcuts call these through command IDs.
     void CommandFileNew();
-    void CommandFileManageFiles();
     void CommandFileOpen();
     void CommandFileOpenFolder();
     void CommandFileSaveAs();

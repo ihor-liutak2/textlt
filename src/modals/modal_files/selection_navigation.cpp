@@ -94,7 +94,7 @@ void FilesModalContent::MoveSelectionWithRange(int delta) {
 
 void FilesModalContent::ConfirmSelected() {
     if (!IsFileActionMode()) {
-        SetStatus("Files mode is for navigation and file operations.");
+        SetStatus("No file action selected.");
         return;
     }
 
@@ -284,7 +284,6 @@ FileFilter FilesModalContent::FilterForMode() const {
         case FilesModalMode::None:
         case FilesModalMode::Open:
         case FilesModalMode::SaveAs:
-        case FilesModalMode::Manage:
             break;
     }
     return filter;
@@ -295,12 +294,7 @@ bool FilesModalContent::IsParentEntry(const FileEntry& entry) const {
 }
 
 bool FilesModalContent::IsFileActionMode() const {
-    return mode_ == FilesModalMode::Open ||
-        mode_ == FilesModalMode::SaveAs ||
-        mode_ == FilesModalMode::Import ||
-        mode_ == FilesModalMode::ImportActions ||
-        mode_ == FilesModalMode::OpenFolder ||
-        mode_ == FilesModalMode::SelectDirectory;
+    return mode_ != FilesModalMode::None;
 }
 
 bool FilesModalContent::IsSaveLikeMode() const {

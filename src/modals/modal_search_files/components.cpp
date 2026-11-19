@@ -10,21 +10,15 @@ SearchFilesModalContent::SearchFilesModalContent(
         on_open_(std::move(on_open)),
         read_clipboard_(std::move(read_clipboard)),
         write_clipboard_(std::move(write_clipboard)),
-        on_close_(std::move(on_close)),
-        mask_sets_(FileSearchEngine::DefaultMaskSets()) {
-          LoadFilters();
-
-    if (mask_sets_.empty()) {
-        mask_sets_.push_back(FileSearchEngine::DefaultCodeMaskSet());
-    }
+        on_close_(std::move(on_close)) {
+    LoadFilters();
 
     RebuildFilterLabels();
-    UseMaskSet(0);
     SyncFilterInputsFromSelection();
 
     search_tab_button_ = MakeTabButton("Search", 0);
     results_tab_button_ = MakeTabButton("Results", 1);
-    filters_tab_button_ = MakeTabButton("Filters", 2);
+    filters_tab_button_ = MakeTabButton("Filter Masks", 2);
 
     tab_buttons_ = ftxui::Container::Horizontal({
         search_tab_button_,
@@ -44,24 +38,32 @@ SearchFilesModalContent::SearchFilesModalContent(
     search_paste_button_ = MakeTextButton("Paste", [this] { PasteSearchQuery(); });
     search_clear_button_ = MakeTextButton("Clear", [this] { ClearSearchQuery(); });
 
-    ftxui::InputOption masks_option;
-    masks_option.multiline = false;
-    masks_option.on_enter = [this] { ExecuteSearch(); };
-    masks_option.transform = [this](ftxui::InputState state) {
-        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return theme.InputTransform(std::move(state));
+    ftxui::ButtonOption mask_picker_option = ftxui::ButtonOption::Simple();
+    mask_picker_option.on_click = [this] {
+        selected_filter_ = static_cast<int>(selected_mask_set_);
+        SyncFilterInputsFromSelection();
+        SelectTab(2);
     };
-    masks_input_ = ftxui::Input(&masks_, "*.cpp *.hpp *.txt", masks_option);
+    mask_picker_option.transform = [this](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        const auto& mask = mask_sets_[selected_mask_set_];
+        ButtonSpec spec = ButtonSpecFromLabel(
+            masks_ == mask.value ? TrimForDisplay(mask.name, 42) : "Custom",
+            ButtonRole::Navigation);
+        return RenderModalFlatButton(theme, spec, state.focused || state.active);
+    };
+    mask_picker_button_ = ftxui::Button(mask_picker_option);
 
     ftxui::MenuOption filter_option = ftxui::MenuOption::Vertical();
     filter_option.on_change = [this] {
         SyncFilterInputsFromSelection();
     };
+    filter_option.on_enter = [this] { ApplySelectedFilter(); };
     filter_option.entries_option.transform = [this](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
         ftxui::Element row = ftxui::text(TrimForDisplay(state.label, 42)) |
-            ftxui::size(ftxui::WIDTH, ftxui::LESS_THAN, 43);
+            ftxui::xflex | ftxui::reflect(filter_row_boxes_[static_cast<size_t>(state.index)]);
         if (state.focused || state.active) {
             return row |
             ftxui::bgcolor(theme.modal_selected_item_bg) |
@@ -73,6 +75,9 @@ SearchFilesModalContent::SearchFilesModalContent(
     };
 
     filter_menu_ = ftxui::Menu(&filter_labels_, &selected_filter_, filter_option);
+    filter_list_component_ = ftxui::CatchEvent(filter_menu_, [this](ftxui::Event event) {
+        return HandleFilterMouseEvent(std::move(event));
+    });
 
     ftxui::InputOption filter_name_option;
     filter_name_option.multiline = false;
@@ -98,34 +103,10 @@ SearchFilesModalContent::SearchFilesModalContent(
     filter_value_input_component_ =
     ftxui::Input(&filter_value_input_, "file masks", filter_value_option);
 
-    apply_filter_button_ = MakeTextButton("Apply", [this] { ApplySelectedFilter(); });
-    add_filter_button_ = MakeTextButton("Add", [this] { AddFilter(); });
-    delete_filter_button_ = MakeTextButton("Delete", [this] { DeleteFilter(); });
-    save_filters_button_ = MakeTextButton("Save", [this] { SaveFilters(); });
-
-    ftxui::InputOption context_before_option;
-    context_before_option.multiline = false;
-    context_before_option.on_enter = [this] { ExecuteSearch(); };
-    context_before_option.transform = [this](ftxui::InputState state) {
-        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return theme.InputTransform(std::move(state));
-    };
-    context_before_input_component_ =
-        ftxui::Input(&context_before_input_, "before", context_before_option);
-
-    ftxui::InputOption context_after_option;
-    context_after_option.multiline = false;
-    context_after_option.on_enter = [this] { ExecuteSearch(); };
-    context_after_option.transform = [this](ftxui::InputState state) {
-        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return theme.InputTransform(std::move(state));
-    };
-    context_after_input_component_ =
-        ftxui::Input(&context_after_input_, "after", context_after_option);
-
-    start_mask_button_ = MakeTextButton("<< Start", [this] { UseFirstMaskSet(); });
-    previous_mask_button_ = MakeTextButton("< Mask", [this] { UsePreviousMaskSet(); });
-    next_mask_button_ = MakeTextButton("Mask >", [this] { UseNextMaskSet(); });
+    context_before_input_component_ = ftxui::Make<ContextInput>(
+        context_before_, theme_, [this] { ExecuteSearch(); });
+    context_after_input_component_ = ftxui::Make<ContextInput>(
+        context_after_, theme_, [this] { ExecuteSearch(); });
 
     ftxui::MenuOption directory_option = ftxui::MenuOption::Vertical();
     directory_option.entries_option.transform = [this](const ftxui::EntryState& state) {
@@ -160,14 +141,30 @@ SearchFilesModalContent::SearchFilesModalContent(
     all_directories_button_ = MakeTextButton("All", [this] { SelectAllDirectories(); });
     none_directories_button_ = MakeTextButton("None", [this] { ClearDirectorySelection(); });
 
-    open_button_ = MakeTextButton("Open", [this] { OpenSelectedMatch(); });
-    copy_paths_button_ = MakeTextButton("Copy paths", [this] { CopyResultPaths(); });
+    tab_footer_buttons_ = {
+        MakeFooterButtons({
+            MakeTextButton("Search File Contents", [this] { ExecuteSearch(); }),
+            MakeTextButton("Search Filenames", [this] { ExecuteSearch(FileSearchTarget::Filename); }),
+        }),
+        MakeFooterButtons({
+            MakeTextButton("Open", [this] { OpenSelectedMatch(); }),
+            MakeTextButton("Copy Text", [this] { CopyResultText(); }),
+            MakeTextButton("Copy Paths", [this] { CopyResultPaths(); }),
+        }),
+        MakeFooterButtons({
+            MakeTextButton("Use Mask", [this] { ApplySelectedFilter(); }),
+            MakeTextButton("Add", [this] { AddFilter(); }),
+            MakeTextButton("Delete", [this] { DeleteFilter(); }),
+            MakeTextButton("Save", [this] { SaveFilters(); }),
+        }),
+    };
 
     ftxui::MenuOption result_option = ftxui::MenuOption::Vertical();
         result_option.entries_option.transform = [this](const ftxui::EntryState& state) {
             const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
-            ftxui::Element row = ftxui::text(state.label);
+            ftxui::Element row = ftxui::text(state.label) |
+                ftxui::xflex | ftxui::reflect(result_row_boxes_[static_cast<size_t>(state.index)]);
             if (state.focused || state.active) {
                 return row |
                     ftxui::bgcolor(theme.modal_selected_item_bg) |
@@ -183,27 +180,30 @@ SearchFilesModalContent::SearchFilesModalContent(
     result_list_component_ = ftxui::CatchEvent(
         result_menu_,
         [this](ftxui::Event event) {
-            if (event == ftxui::Event::Return) {
+            if (result_menu_->Focused() && event == ftxui::Event::Return) {
                 OpenSelectedMatch();
                 return true;
             }
 
-            return false;
+            if (result_menu_->Focused() &&
+                (event == ftxui::Event::PageDown || event == ftxui::Event::PageUp)) {
+                MoveResultSelection(event == ftxui::Event::PageDown ? 10 : -10);
+                return true;
+            }
+
+            return HandleResultsMouseEvent(std::move(event));
         });
 
     search_tab_container_ = ftxui::Container::Vertical({
         ftxui::Container::Horizontal({
             query_input_,
-            ftxui::Container::Vertical({
+            ftxui::Container::Horizontal({
                 search_paste_button_,
                 search_clear_button_,
             }),
         }),
-        masks_input_,
         ftxui::Container::Horizontal({
-            start_mask_button_,
-            previous_mask_button_,
-            next_mask_button_,
+            mask_picker_button_,
             context_before_input_component_,
             context_after_input_component_,
         }),
@@ -212,27 +212,20 @@ SearchFilesModalContent::SearchFilesModalContent(
             all_directories_button_,
             none_directories_button_,
         }),
-            directory_list_component_,
+        directory_list_component_,
+        tab_footer_buttons_[0],
     });
 
     results_tab_container_ = ftxui::Container::Vertical({
-        ftxui::Container::Horizontal({
-            open_button_,
-            copy_paths_button_,
-        }),
         result_list_component_,
+        tab_footer_buttons_[1],
     });
 
     filters_tab_container_ = ftxui::Container::Vertical({
-        filter_menu_,
+        filter_list_component_,
         filter_name_input_component_,
         filter_value_input_component_,
-        ftxui::Container::Horizontal({
-            apply_filter_button_,
-            add_filter_button_,
-            delete_filter_button_,
-            save_filters_button_,
-        }),
+        tab_footer_buttons_[2],
     });
 
     tab_body_container_ = ftxui::Container::Tab({
@@ -251,7 +244,19 @@ ftxui::Component SearchFilesModalContent::MakeTextButton(
     std::string label,
     std::function<void()> on_click) {
     ButtonSpec spec = SearchButtonSpec(std::move(label));
-    return MakeButton(theme_, std::move(spec), std::move(on_click));
+    ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
+    option.label = ButtonCaptionText(spec);
+    option.on_click = std::move(on_click);
+    option.transform = [this, spec = std::move(spec)](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return RenderModalFlatButton(theme, spec, state.focused || state.active);
+    };
+    return ftxui::Button(option);
+}
+
+ftxui::Component SearchFilesModalContent::MakeFooterButtons(ftxui::Components buttons) {
+    buttons.push_back(MakeTextButton("Close", on_close_));
+    return ftxui::Container::Horizontal(std::move(buttons));
 }
 
 ftxui::Component SearchFilesModalContent::MakeTabButton(
@@ -259,19 +264,15 @@ ftxui::Component SearchFilesModalContent::MakeTabButton(
     int tab_index) {
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
     option.label = "  " + label + "  ";
-    option.on_click = [this, tab_index] {
-        selected_tab_ = tab_index;
-        if (selected_tab_ == 0 && query_input_) {
-            query_input_->TakeFocus();
-        }
-    };
+    option.on_click = [this, tab_index] { SelectTab(tab_index); };
     option.transform = [this, tab_index, label = std::move(label)](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return RenderModalTabButton(
-            theme,
-            label,
-            selected_tab_ == tab_index,
-            state.focused || state.active);
+        const bool selected = selected_tab_ == tab_index;
+        auto tab = RenderModalTabButton(theme, label, selected);
+        if (state.focused && !selected) {
+            tab |= ftxui::underlined;
+        }
+        return tab;
     };
 
     return ftxui::Button(option);

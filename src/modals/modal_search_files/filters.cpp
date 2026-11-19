@@ -86,8 +86,9 @@ void SearchFilesModalContent::RestoreSelectedDirectoriesForCurrentRoot() {
                 continue;
             }
 
-            std::filesystem::path absolute_path =
-                (root_path / relative_path).lexically_normal();
+            std::filesystem::path absolute_path = relative_path == "."
+                ? root_path
+                : (root_path / relative_path).lexically_normal();
             std::error_code status_error;
             if (!std::filesystem::is_directory(absolute_path, status_error)) {
                 continue;
@@ -277,20 +278,37 @@ void SearchFilesModalContent::LoadFilters() {
         }
     }
 
-    if (loaded.empty()) {
-        loaded = FileSearchEngine::DefaultMaskSets();
-    }
+    const auto add_missing_presets = [&loaded](const std::vector<FileSearchMaskSet>& presets) {
+        for (const auto& preset : presets) {
+            const auto existing = std::find_if(loaded.begin(), loaded.end(),
+                [&preset](const FileSearchMaskSet& mask) { return mask.name == preset.name; });
+            if (existing == loaded.end()) {
+                loaded.push_back(preset);
+            }
+        }
+    };
 
     if (loaded.empty()) {
-        loaded.push_back(FileSearchEngine::DefaultCodeMaskSet());
+        loaded = FileSearchEngine::DefaultMaskSets();
+    } else {
+        if (!JsonBool(root, "python_presets_added", false)) {
+            add_missing_presets(FileSearchEngine::PythonMaskSets());
+        }
+        if (!JsonBool(root, "web_project_presets_added", false)) {
+            add_missing_presets(FileSearchEngine::WebProjectMaskSets());
+            if (std::none_of(loaded.begin(), loaded.end(),
+                    [](const FileSearchMaskSet& mask) { return mask.value == "*"; })) {
+                add_missing_presets({FileSearchEngine::AllFilesMaskSet()});
+            }
+        }
     }
 
     mask_sets_ = std::move(loaded);
-
-    if (selected_mask_set_ >= mask_sets_.size()) {
-        selected_mask_set_ = 0;
-    }
-    selected_filter_ = static_cast<int>(selected_mask_set_);
+    const auto all_files = std::find_if(mask_sets_.begin(), mask_sets_.end(),
+        [](const FileSearchMaskSet& mask) { return mask.value == "*"; });
+    UseMaskSet(all_files == mask_sets_.end()
+        ? 0
+        : static_cast<size_t>(all_files - mask_sets_.begin()));
 }
 
 void SearchFilesModalContent::SaveFilters() {
@@ -299,6 +317,8 @@ void SearchFilesModalContent::SaveFilters() {
     const std::filesystem::path path = FilterConfigPath();
 
     Json root = LoadFilterConfig();
+    root["python_presets_added"] = true;
+    root["web_project_presets_added"] = true;
     root["filters"] = Json::array();
 
     for (const FileSearchMaskSet& filter : mask_sets_) {
@@ -317,17 +337,12 @@ void SearchFilesModalContent::SaveFilters() {
     RebuildFilterLabels();
 }
 
-void SearchFilesModalContent::SaveFiltersFromFooter() {
-    SaveFilters();
-}
-
 void SearchFilesModalContent::RebuildFilterLabels() {
     filter_labels_.clear();
     filter_labels_.reserve(mask_sets_.size());
 
     for (const FileSearchMaskSet& filter : mask_sets_) {
-        filter_labels_.push_back(
-            filter.name + " — " + TrimForDisplay(filter.value, 34));
+        filter_labels_.push_back(filter.name);
     }
 
     if (selected_filter_ < 0) {
@@ -357,10 +372,8 @@ void SearchFilesModalContent::SyncFilterInputsFromSelection() {
         selected_filter_ = static_cast<int>(mask_sets_.size() - 1);
     }
 
-    selected_mask_set_ = static_cast<size_t>(selected_filter_);
-
-    filter_name_input_ = mask_sets_[selected_mask_set_].name;
-    filter_value_input_ = mask_sets_[selected_mask_set_].value;
+    filter_name_input_ = mask_sets_[selected_filter_].name;
+    filter_value_input_ = mask_sets_[selected_filter_].value;
 }
 
 void SearchFilesModalContent::UpdateSelectedFilterFromInputs() {
@@ -376,8 +389,6 @@ void SearchFilesModalContent::UpdateSelectedFilterFromInputs() {
         selected_filter_ = static_cast<int>(mask_sets_.size() - 1);
     }
 
-    selected_mask_set_ = static_cast<size_t>(selected_filter_);
-
     if (filter_name_input_.empty()) {
         filter_name_input_ = "New Filter";
     }
@@ -386,8 +397,11 @@ void SearchFilesModalContent::UpdateSelectedFilterFromInputs() {
         filter_value_input_ = "*";
     }
 
-    mask_sets_[selected_mask_set_].name = filter_name_input_;
-    mask_sets_[selected_mask_set_].value = filter_value_input_;
+    const size_t index = static_cast<size_t>(selected_filter_);
+    if (index == selected_mask_set_ && masks_ == mask_sets_[index].value) {
+        masks_ = filter_value_input_;
+    }
+    mask_sets_[index] = {filter_name_input_, filter_value_input_};
 
     RebuildFilterLabels();
 }
@@ -401,12 +415,8 @@ void SearchFilesModalContent::ApplySelectedFilter() {
     }
 
     UseMaskSet(static_cast<size_t>(selected_filter_));
-    selected_tab_ = 0;
+    SelectTab(0);
     status_ = "Applied filter: " + mask_sets_[selected_mask_set_].name;
-
-    if (query_input_) {
-        query_input_->TakeFocus();
-    }
 }
 
 void SearchFilesModalContent::AddFilter() {
@@ -422,8 +432,7 @@ void SearchFilesModalContent::AddFilter() {
 
     mask_sets_.push_back(filter);
 
-    selected_mask_set_ = mask_sets_.size() - 1;
-    selected_filter_ = static_cast<int>(selected_mask_set_);
+    selected_filter_ = static_cast<int>(mask_sets_.size() - 1);
 
     RebuildFilterLabels();
     SyncFilterInputsFromSelection();
@@ -445,13 +454,18 @@ void SearchFilesModalContent::DeleteFilter() {
         selected_filter_ = static_cast<int>(mask_sets_.size() - 1);
     }
 
+    const size_t removed = static_cast<size_t>(selected_filter_);
     mask_sets_.erase(mask_sets_.begin() + selected_filter_);
 
     if (selected_filter_ >= static_cast<int>(mask_sets_.size())) {
         selected_filter_ = static_cast<int>(mask_sets_.size() - 1);
     }
 
-    selected_mask_set_ = static_cast<size_t>(selected_filter_);
+    if (removed == selected_mask_set_) {
+        UseMaskSet(static_cast<size_t>(selected_filter_));
+    } else if (removed < selected_mask_set_) {
+        --selected_mask_set_;
+    }
 
     RebuildFilterLabels();
     SyncFilterInputsFromSelection();
@@ -460,52 +474,27 @@ void SearchFilesModalContent::DeleteFilter() {
 }
 
 ftxui::Element SearchFilesModalContent::RenderFiltersTab() {
+    using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    filter_row_boxes_.resize(filter_labels_.size());
 
-    return ftxui::vbox({
-        ftxui::text(""),
-                       ftxui::hbox({
-                           ftxui::text("Filters:") |
-                           ftxui::bold |
-                           ftxui::color(theme.modal_accent),
-                                   ftxui::filler(),
-                                   apply_filter_button_->Render(),
-                                   ftxui::text(" "),
-                                   add_filter_button_->Render(),
-                                   ftxui::text(" "),
-                                   delete_filter_button_->Render(),
-                                   ftxui::text(" "),
-                                   save_filters_button_->Render(),
-                       }),
-                       ftxui::separator() | ftxui::color(theme.modal_border),
-                       ftxui::hbox({
-                           filter_menu_->Render() |
-                           ftxui::vscroll_indicator |
-                           ftxui::frame |
-                           ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 45) |
-                           ftxui::yflex,
-
-                           ftxui::separator() | ftxui::color(theme.modal_border),
-
-                                   ftxui::vbox({
-                                       ftxui::text("Name:") | ftxui::color(theme.modal_text_color),
-                                               filter_name_input_component_->Render() |
-                                               ftxui::bgcolor(theme.modal_input_bg) |
-                                               ftxui::color(theme.modal_input_fg),
-
-                                               ftxui::text(""),
-                                               ftxui::text("Masks:") | ftxui::color(theme.modal_text_color),
-                                               filter_value_input_component_->Render() |
-                                               ftxui::bgcolor(theme.modal_input_bg) |
-                                               ftxui::color(theme.modal_input_fg),
-
-                                               ftxui::text(""),
-                                               ftxui::paragraph(
-                                                   "Apply copies the selected filter into the Search tab. "
-                                                   "Save writes search_file_filter.json.") |
-                                                   ftxui::color(theme.modal_text_color) |
-                                                   ftxui::dim,
-                                   }) | ftxui::xflex,
-                       }) | ftxui::yflex,
+    return hbox({
+        filter_list_component_->Render() |
+            vscroll_indicator | yframe |
+            size(WIDTH, EQUAL, 45) | yflex | reflect(filter_list_box_),
+        separator() | color(theme.modal_border),
+        vbox({
+            hbox({
+                text(" Name: ") | color(theme.modal_text_color),
+                filter_name_input_component_->Render() |
+                    bgcolor(theme.modal_input_bg) | color(theme.modal_input_fg) | xflex,
+            }),
+            text(""),
+            hbox({
+                text(" Patterns: ") | color(theme.modal_text_color),
+                filter_value_input_component_->Render() |
+                    bgcolor(theme.modal_input_bg) | color(theme.modal_input_fg) | xflex,
+            }),
+        }) | xflex,
     });
 }

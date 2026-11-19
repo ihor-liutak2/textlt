@@ -16,13 +16,75 @@
 namespace textlt {
 namespace {
 
+constexpr int kMaxContextLines = 5;
+
+class ContextInput final : public ftxui::ComponentBase {
+public:
+    ContextInput(size_t& value, const Theme*& theme, std::function<void()> on_enter)
+        : value_(value), theme_(theme), on_enter_(std::move(on_enter)) {}
+
+private:
+    bool Focusable() const override { return true; }
+
+    ftxui::Element OnRender() override {
+        using namespace ftxui;
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        auto digit = text(std::to_string(value_)) | color(theme.modal_input_fg);
+        if (Focused()) {
+            digit |= bgcolor(theme.modal_selected_item_bg) |
+                color(theme.modal_selected_item_fg) | bold;
+        }
+        return hbox({std::move(digit), filler()}) |
+            size(WIDTH, EQUAL, 3) | bgcolor(theme.modal_input_bg) | reflect(box_);
+    }
+
+    bool OnEvent(ftxui::Event event) override {
+        using namespace ftxui;
+        if (event.is_mouse()) {
+            const auto& mouse = event.mouse();
+            if (mouse.button == Mouse::Left && mouse.motion == Mouse::Pressed &&
+                box_.Contain(mouse.x, mouse.y) && CaptureMouse(event)) {
+                TakeFocus();
+                return true;
+            }
+            return false;
+        }
+        if (!Focused()) {
+            return false;
+        }
+        if (event == Event::Return) {
+            on_enter_();
+            return true;
+        }
+        if (event == Event::Backspace || event == Event::Delete) {
+            value_ = 0;
+            return true;
+        }
+        if (event.is_character()) {
+            const auto& input = event.character();
+            if (input.size() == 1 && input.front() >= '0' && input.front() <= '0' + kMaxContextLines) {
+                value_ = static_cast<size_t>(input.front() - '0');
+            }
+            return true;
+        }
+        return false;
+    }
+
+    size_t& value_;
+    const Theme*& theme_;
+    std::function<void()> on_enter_;
+    ftxui::Box box_;
+};
+
 ButtonSpec SearchButtonSpec(std::string label) {
     ButtonSpec spec;
     spec.caption = std::move(label);
     spec.variant = ButtonVariant::AccentEdges;
 
     const std::string& caption = spec.caption;
-    if (caption == "Open" || caption == "Apply" || caption == "Add" || caption == "Save") {
+    if (caption == "Open" || caption == "Use Mask" || caption == "Add" ||
+        caption == "Save" || caption == "Search File Contents" ||
+        caption == "Search Filenames") {
         spec.role = ButtonRole::Primary;
         return spec;
     }
@@ -35,16 +97,15 @@ ButtonSpec SearchButtonSpec(std::string label) {
         spec.size = ButtonSize::Compact;
         return spec;
     }
-    if (caption == "<< Start" || caption == "< Mask" || caption == "Mask >") {
-        spec.role = ButtonRole::Navigation;
-        spec.size = ButtonSize::Compact;
+    if (caption == "Close") {
+        spec.role = ButtonRole::Cancel;
         return spec;
     }
     if (caption == "Paste") {
         spec.role = ButtonRole::Warning;
         return spec;
     }
-    if (caption == "Copy paths") {
+    if (caption == "Copy Paths" || caption == "Copy Text") {
         spec.role = ButtonRole::Utility;
         return spec;
     }
@@ -70,13 +131,6 @@ std::string RootLabelForPath(const std::filesystem::path& path) {
 
     const std::string value = path.generic_string();
     return value.empty() ? "." : value;
-}
-
-bool IsDigitsOnly(const std::string& value) {
-    return !value.empty() &&
-           std::all_of(value.begin(), value.end(), [](unsigned char ch) {
-               return std::isdigit(ch) != 0;
-           });
 }
 
 std::string LowerCopy(std::string value) {

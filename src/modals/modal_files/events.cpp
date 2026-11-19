@@ -166,8 +166,7 @@ bool FilesModalContent::HandleFavoriteMouseEvent(ftxui::Event event) {
     for (size_t index = 0; index < favorite_boxes_.size(); ++index) {
         if (favorite_boxes_[index].Contain(mouse.x, mouse.y)) {
             if (index < favorite_directories_.size()) {
-                last_clicked_entry_ = -1;
-                LoadDirectory(favorite_directories_[index]);
+                LoadShortcutDirectory(favorite_directories_[index]);
                 return true;
             }
         }

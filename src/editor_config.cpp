@@ -133,21 +133,25 @@ bool EditorConfig::RemoveFileModalDirectory(const std::string& path) {
         return false;
     }
 
-    const size_t old_size = file_modal_directories_.size();
-    file_modal_directories_.erase(
+    auto remaining = file_modal_directories_;
+    remaining.erase(
         std::remove_if(
-            file_modal_directories_.begin(),
-            file_modal_directories_.end(),
+            remaining.begin(),
+            remaining.end(),
             [&](const std::string& directory) {
                 return PathsEqual(directory, normalized_path);
             }),
-        file_modal_directories_.end());
-    if (file_modal_directories_.size() == old_size) {
+        remaining.end());
+    if (remaining.size() == file_modal_directories_.size()) {
         return false;
     }
 
-    Persist();
-    return true;
+    file_modal_directories_.swap(remaining);
+    if (Persist()) {
+        return true;
+    }
+    file_modal_directories_.swap(remaining);
+    return false;
 }
 
 bool EditorConfig::IsFileModalDirectory(const std::string& path) const {

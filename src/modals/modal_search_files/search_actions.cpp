@@ -11,68 +11,28 @@ void SearchFilesModalContent::UseMaskSet(size_t index) {
     masks_ = mask_sets_[selected_mask_set_].value;
 }
 
-void SearchFilesModalContent::UseFirstMaskSet() {
-    UseMaskSet(0);
-    status_ = "Mask set: " + mask_sets_[selected_mask_set_].name;
-}
-
-void SearchFilesModalContent::UsePreviousMaskSet() {
-    if (mask_sets_.empty()) {
-        return;
-    }
-
-    if (selected_mask_set_ == 0) {
-        selected_mask_set_ = mask_sets_.size() - 1;
-    } else {
-        --selected_mask_set_;
-    }
-
-    masks_ = mask_sets_[selected_mask_set_].value;
-    status_ = "Mask set: " + mask_sets_[selected_mask_set_].name;
-}
-
-void SearchFilesModalContent::UseNextMaskSet() {
-    if (mask_sets_.empty()) {
-        return;
-    }
-
-    selected_mask_set_ = (selected_mask_set_ + 1) % mask_sets_.size();
-    masks_ = mask_sets_[selected_mask_set_].value;
-    status_ = "Mask set: " + mask_sets_[selected_mask_set_].name;
-}
-
-void SearchFilesModalContent::ExecuteSearch() {
+void SearchFilesModalContent::ExecuteSearch(FileSearchTarget target) {
+    status_.clear();
     SaveSelectedDirectoriesForCurrentRoot();
+    const std::string save_status = status_;
 
     FileSearchOptions options;
     options.roots = SelectedRoots();
     options.query = query_;
-
-    options.mask_set = mask_sets_.empty()
-        ? FileSearchEngine::DefaultCodeMaskSet()
-        : mask_sets_[selected_mask_set_];
+    options.mask_set = mask_sets_[selected_mask_set_];
     options.mask_set.value = masks_;
-
-    options.context_before = ParseContextValue(context_before_input_);
-    options.context_after = ParseContextValue(context_after_input_);
+    options.target = target;
+    options.context_before = context_before_;
+    options.context_after = context_after_;
 
     summary_ = engine_.Search(options);
     RebuildResultLabels();
-
-    selected_tab_ = 1;
-
-    if (result_list_component_) {
-        result_list_component_->TakeFocus();
-    }
+    SelectTab(1);
 
     if (summary_.HasErrors() && summary_.matches.empty()) {
         status_ = summary_.FirstError();
-    } else {
-        status_ = StatusText();
-    }
-
-    if (open_button_) {
-        open_button_->TakeFocus();
+    } else if (!save_status.empty()) {
+        status_ = StatusText() + " | " + save_status;
     }
 }
 
@@ -132,6 +92,27 @@ void SearchFilesModalContent::ClearSearchQuery() {
 
     if (query_input_) {
         query_input_->TakeFocus();
+    }
+}
+
+void SearchFilesModalContent::CopyResultText() {
+    if (summary_.matches.empty()) {
+        status_ = "No result selected.";
+        return;
+    }
+    if (!write_clipboard_) {
+        status_ = "Clipboard write is not configured.";
+        return;
+    }
+
+    ClampResultSelection();
+    const auto& match = summary_.matches[static_cast<size_t>(selected_result_)];
+    if (match.line_number == 0) {
+        write_clipboard_(ToDisplayPath(match.path.filename()));
+        status_ = "Copied filename.";
+    } else {
+        write_clipboard_(match.line_text);
+        status_ = "Copied matching line.";
     }
 }
 
@@ -196,24 +177,13 @@ void SearchFilesModalContent::RebuildResultLabels() {
     result_labels_.reserve(summary_.matches.size());
 
     for (const FileSearchMatch& match : summary_.matches) {
-        result_labels_.push_back(
-            FormatLocation(match) +
-            "  " +
-            TrimForDisplay(match.line_text, 170));
+        std::string label = FormatLocation(match);
+        if (match.line_number != 0) {
+            label += "  " + TrimForDisplay(match.line_text, 170);
+        }
+        result_labels_.push_back(std::move(label));
     }
 
     selected_result_ = 0;
     ClampResultSelection();
-}
-
-size_t SearchFilesModalContent::ParseContextValue(const std::string& value) const {
-    if (!IsDigitsOnly(value)) {
-        return 0;
-    }
-
-    try {
-        return std::min<size_t>(static_cast<size_t>(std::stoul(value)), 20);
-    } catch (const std::exception&) {
-        return 0;
-    }
 }

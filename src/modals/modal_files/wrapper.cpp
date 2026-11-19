@@ -3,7 +3,8 @@ FilesModal::FilesModal(
     FileManager* file_manager,
     StartDirectoryProvider start_directory_provider,
     FavoriteDirectoriesProvider favorite_directories_provider,
-    AddFavoriteDirectoryCallback on_add_favorite_directory,
+    FavoriteDirectoryCallback on_add_favorite_directory,
+    FavoriteDirectoryCallback on_remove_favorite_directory,
     CopyPathCallback on_copy_path,
     ConfirmPathCallback on_confirm_path,
     FilesChangedCallback on_files_changed)
@@ -14,6 +15,7 @@ FilesModal::FilesModal(
         std::move(start_directory_provider),
         std::move(favorite_directories_provider),
         std::move(on_add_favorite_directory),
+        std::move(on_remove_favorite_directory),
         std::move(on_copy_path),
         std::move(on_confirm_path),
         [this] { Close(); },
@@ -69,7 +71,7 @@ bool FilesModal::OnEvent(ftxui::Event event) {
         return modal_handled;
     }
 
-    if (content_ && content_->HandleEvent(event)) {
+    if (content_ && content_->GetMainComponent()->Focused() && content_->HandleEvent(event)) {
         return true;
     }
 
@@ -81,24 +83,23 @@ void FilesModal::RebuildFooterButtons() {
         return;
     }
 
-    if (content_->Mode() == FilesModalMode::Manage || content_->Mode() == FilesModalMode::None) {
-        modal_->SetFooterButtons({
-            {"Close", [this] { Close(); }},
-        });
-        return;
-    }
+    const auto operations_available = [this] { return !content_->HasPendingOperation(); };
+    std::vector<ModalWindow::FooterButton> buttons = {
+        {"Add Dir", [this] { content_->AddCurrentDirectoryToFavorites(); },
+            ButtonRole::Primary, operations_available},
+        {"Remove Dir", [this] { content_->RemoveCurrentDirectoryFromFavorites(); },
+            ButtonRole::Warning, operations_available},
+        {"Refresh", [this] { content_->Refresh(); },
+            ButtonRole::Navigation, operations_available},
+        {"Copy Path", [this] { content_->CopySelectedPathText(); },
+            ButtonRole::Navigation, operations_available},
+    };
+    const size_t directory_action_count = buttons.size();
 
-    modal_->SetFooterButtons({
-        {content_->Mode() == FilesModalMode::SaveAs ? "Save As" :
-            content_->Mode() == FilesModalMode::OpenFolder ? "Open Folder" :
-            content_->Mode() == FilesModalMode::SelectDirectory ? "Add Project" :
-            (content_->Mode() == FilesModalMode::Import ||
-             content_->Mode() == FilesModalMode::ImportActions) ? "Import" : "Open",
-            [this] {
-                if (content_) {
-                    content_->ConfirmSelected();
-                }
-            }},
-        {"Close", [this] { Close(); }},
-    });
+    if (content_->IsFileActionMode()) {
+        buttons.push_back({content_->FooterActionLabel(),
+            [this] { content_->ConfirmSelected(); }, ButtonRole::Default, operations_available});
+    }
+    buttons.push_back({"Close", [this] { Close(); }});
+    modal_->SetFooterButtons(std::move(buttons), directory_action_count);
 }

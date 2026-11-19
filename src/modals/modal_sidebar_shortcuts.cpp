@@ -27,13 +27,14 @@ SidebarShortcutModalContent::SidebarShortcutModalContent(
       close_callback_(std::move(close_callback)),
       entries_({
           {'B', "Toggle sidebar", "sidebar.toggle_file_explorer"},
-          {'O', "Opened files (Sidebar)", "sidebar.show_opened_files"},
-          {'F', "Favorites (Sidebar)", "sidebar.show_favorites"},
-          {'P', "Folder (Sidebar)", "sidebar.show_project"},
-          {'D', "Docs view", "docs.open"},
+          {'O', "Opened files (Docs)", "sidebar.show_opened_files"},
+          {'F', "Favorites (Docs)", "sidebar.show_favorites"},
+          {'D', "Folder (Docs)", "sidebar.show_project"},
+          {'P', "Projects (Docs)", "sidebar.show_projects"},
           {'N', "Notes view", "notes.toggle"},
           {'A', "Actions view", "actions.open"},
-          {'M', "File manager", "file.files"},
+          {'M', "File manager", "file.open"},
+          {'R', "Recent files", "file.recent"},
           {'S', "Search in files", "search.files"},
           {'T', "Text processors", "text_processors.open"},
           {'G', "Git", "git.open"},
@@ -149,7 +150,6 @@ void SidebarShortcutModal::Open() {
         modal_->SetTheme(theme_);
         modal_->SetHeaderCloseVisible(false);
         modal_->SetFooterVisible(false);
-        modal_->SetModalSize(34, 13);
     }
 }
 

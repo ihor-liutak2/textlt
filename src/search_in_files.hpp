@@ -15,6 +15,7 @@ struct FileSearchMaskSet {
 struct FileSearchRoot {
     std::filesystem::path path;
     std::string label;
+    bool recursive = true;
 };
 
 struct FileSearchContextLine {
@@ -29,7 +30,7 @@ struct FileSearchMatch {
 
     std::string root_label;
 
-    size_t line_number = 0;
+    size_t line_number = 0;  // Zero for filename matches.
     size_t column = 0;
 
     std::string line_text;
@@ -37,6 +38,8 @@ struct FileSearchMatch {
     std::vector<FileSearchContextLine> before;
     std::vector<FileSearchContextLine> after;
 };
+
+enum class FileSearchTarget { Content, Filename };
 
 struct FileSearchOptions {
     std::vector<FileSearchRoot> roots;
@@ -71,6 +74,8 @@ struct FileSearchOptions {
         "out",
         "target"
     };
+
+    FileSearchTarget target = FileSearchTarget::Content;
 };
 
 struct FileSearchSummary {
@@ -93,7 +98,10 @@ struct FileSearchSummary {
 class FileSearchEngine final {
 public:
     static FileSearchMaskSet DefaultCodeMaskSet();
+    static FileSearchMaskSet AllFilesMaskSet();
     static std::vector<FileSearchMaskSet> DefaultMaskSets();
+    static std::vector<FileSearchMaskSet> PythonMaskSets();
+    static std::vector<FileSearchMaskSet> WebProjectMaskSets();
 
     static std::vector<std::string> ParseMasks(const std::string& masks);
 

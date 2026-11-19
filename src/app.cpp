@@ -127,7 +127,7 @@ TextltApp::TextltApp()
           [this] { AddActiveFavoriteFromSidebar(); },
           [this](size_t index) { CloseSidebarOpenedFile(index); },
           [this] { CloseAllOpenedFiles(); },
-          [this] { OpenFilesModal(FilesModalMode::Manage); },
+          [this] { OpenFilesModal(FilesModalMode::Open); },
           [this](const std::filesystem::path& path) {
               if (path.empty()) {
                   active_action_ = "No Project item selected to copy";
@@ -247,6 +247,9 @@ TextltApp::TextltApp()
           },
           [this](const std::filesystem::path& directory, std::string& error) {
               return AddFileModalDirectory(directory, error);
+          },
+          [this](const std::filesystem::path& directory, std::string& error) {
+              return RemoveFileModalDirectory(directory, error);
           },
           [this](const std::string& text) {
               CopyFileModalPathText(text);

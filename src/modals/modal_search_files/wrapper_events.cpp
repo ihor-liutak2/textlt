@@ -15,15 +15,6 @@ SearchFilesModal::SearchFilesModal(
 
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
 
-    modal_->SetFooterButtons({
-        {"Search", [this] {
-            if (content_) {
-                content_->ExecuteSearchFromFooter();
-            }
-        }, ButtonRole::Cancel},
-        {"Close", [this] { Close(); }},
-    });
-
     modal_->SetBodyFrameScrolling(false);
 }
 
@@ -108,81 +99,70 @@ bool SearchFilesModalContent::HandleEvent(ftxui::Event event) {
         return HandleDirectoryMouseEvent(event);
     }
 
-    if (selected_tab_ != 1) {
+    return false;
+}
+
+namespace {
+
+int ClickedRow(ftxui::Event& event, const ftxui::Box& list,
+               const std::vector<ftxui::Box>& rows) {
+    if (!event.is_mouse()) {
+        return -1;
+    }
+
+    const auto& mouse = event.mouse();
+    if (mouse.button != ftxui::Mouse::Left || mouse.motion != ftxui::Mouse::Pressed ||
+        !list.Contain(mouse.x, mouse.y)) {
+        return -1;
+    }
+
+    const auto row = std::find_if(rows.begin(), rows.end(), [&mouse](const ftxui::Box& box) {
+        return box.Contain(mouse.x, mouse.y);
+    });
+    return row == rows.end() ? -1 : static_cast<int>(row - rows.begin());
+}
+
+bool RecordDoubleClick(int clicked, int& last_clicked,
+                       std::chrono::steady_clock::time_point& last_click_time) {
+    const auto now = std::chrono::steady_clock::now();
+    const bool double_click = clicked == last_clicked &&
+        now - last_click_time <= std::chrono::milliseconds(500);
+    last_clicked = double_click ? -1 : clicked;
+    last_click_time = now;
+    return double_click;
+}
+
+} // namespace
+
+bool SearchFilesModalContent::HandleFilterMouseEvent(ftxui::Event event) {
+    const int clicked = ClickedRow(event, filter_list_box_, filter_row_boxes_);
+    if (clicked < 0 || clicked >= static_cast<int>(filter_labels_.size())) {
         return false;
     }
 
-    if (event == ftxui::Event::ArrowDown) {
-        MoveResultSelection(1);
-        return true;
+    filter_menu_->TakeFocus();
+    if (selected_filter_ != clicked) {
+        selected_filter_ = clicked;
+        SyncFilterInputsFromSelection();
     }
-
-    if (event == ftxui::Event::ArrowUp) {
-        MoveResultSelection(-1);
-        return true;
+    if (RecordDoubleClick(clicked, last_clicked_filter_, last_filter_click_time_)) {
+        ApplySelectedFilter();
     }
-
-    if (event == ftxui::Event::PageDown) {
-        MoveResultSelection(10);
-        return true;
-    }
-
-    if (event == ftxui::Event::PageUp) {
-        MoveResultSelection(-10);
-        return true;
-    }
-
-    if (event == ftxui::Event::Return) {
-        OpenSelectedMatch();
-        return true;
-    }
-
-    return HandleResultsMouseEvent(event);
+    return true;
 }
 
 bool SearchFilesModalContent::HandleResultsMouseEvent(ftxui::Event event) {
-    if (!event.is_mouse() || selected_tab_ != 1) {
+    const int clicked = ClickedRow(event, result_list_box_, result_row_boxes_);
+    if (clicked < 0 || clicked >= static_cast<int>(result_labels_.size())) {
         return false;
     }
 
-    const ftxui::Mouse& mouse = event.mouse();
-
-    if (mouse.button == ftxui::Mouse::WheelDown) {
-        MoveResultSelection(3);
-        return true;
+    result_menu_->TakeFocus();
+    selected_result_ = clicked;
+    if (RecordDoubleClick(clicked, last_clicked_result_, last_result_click_time_)) {
+        OpenSelectedMatch();
     }
-
-    if (mouse.button == ftxui::Mouse::WheelUp) {
-        MoveResultSelection(-3);
-        return true;
-    }
-
-    if (mouse.button != ftxui::Mouse::Left ||
-        mouse.motion != ftxui::Mouse::Pressed) {
-        return false;
-        }
-
-        const int clicked_result = selected_result_;
-
-    const auto now = std::chrono::steady_clock::now();
-    const auto elapsed_ms =
-    std::chrono::duration_cast<std::chrono::milliseconds>(
-        now - last_result_click_time_).count();
-
-        const bool is_double_click =
-        last_clicked_result_ == clicked_result &&
-        elapsed_ms >= 0 &&
-        elapsed_ms <= 500;
-
-        last_result_click_time_ = now;
-        last_clicked_result_ = clicked_result;
-
-        if (is_double_click) {
-            OpenSelectedMatch();
-            return true;
-        }
-
-        return false;
+    return true;
 }
 
 bool SearchFilesModalContent::HandleDirectoryMouseEvent(ftxui::Event event) {

@@ -14,8 +14,7 @@ bool IsWorkspaceModalCommand(const std::string& command_id) {
     // Notes and Actions are full workspaces, but the application-level dialogs
     // still belong to the shared menu bar. Keep document mutations guarded in
     // those workspaces while allowing dialogs to be opened on top of them.
-    return command_id == "file.files" ||
-        command_id == "file.open" ||
+    return command_id == "file.open" ||
         command_id == "file.open_folder" ||
         command_id == "file.save_as" ||
         command_id == "file.import" ||
@@ -67,7 +66,6 @@ void TextltApp::InitializeCommands() {
     };
 
     add("file.new", "New", "File", "", [this] { CommandFileNew(); });
-    add("file.files", "Files", "File", "", [this] { CommandFileManageFiles(); });
     add("file.open", "Open", "File", "Ctrl+O", [this] { CommandFileOpen(); });
     add("file.open_folder", "Open Folder", "File", "", [this] { CommandFileOpenFolder(); });
     add("file.save_as", "Save As", "File", "", [this] { CommandFileSaveAs(); });
@@ -151,7 +149,7 @@ void TextltApp::InitializeCommands() {
 
     add("view.toggle_line_numbers", "Toggle Line Numbers", "Options", "", [this] { CommandViewToggleLineNumbers(); });
     add("sidebar.toggle_file_explorer", "Toggle File Explorer", "Options", "", [this] { CommandSidebarToggleFileExplorer(); });
-    add("sidebar.ctrl_b_file_explorer", "Sidebar", "Options", "Ctrl+B", [this] { OpenSidebarShortcutModal(); });
+    add("sidebar.ctrl_b_file_explorer", "Quick Commands", "Options", "Ctrl+B", [this] { OpenSidebarShortcutModal(); });
     add("sidebar.show_project", "Folder Sidebar", "Options", "", [this] { ShowProjectSidebar(); });
     add("sidebar.show_projects", "Projects Sidebar", "Options", "", [this] { ShowProjectsSidebar(); });
     add("sidebar.show_favorites", "Favorites Sidebar", "Options", "", [this] { ShowFavoritesSidebar(); });
@@ -277,6 +275,12 @@ bool TextltApp::RunTextShortcut(ftxui::Event event) {
 }
 
 bool TextltApp::RunCommand(const std::string& command_id) {
+    if (workspace_mode_ != WorkspaceMode::Documents &&
+        (command_id == "sidebar.show_opened_files" || command_id == "sidebar.show_favorites" ||
+         command_id == "sidebar.show_project" || command_id == "sidebar.show_projects")) {
+        ShowDocumentsWorkspace();
+    }
+
     if (workspace_mode_ == WorkspaceMode::Notes) {
         const std::pair<const char*, const char*> note_edit_commands[] = {
             {"edit.undo", "Ctrl+Z"},

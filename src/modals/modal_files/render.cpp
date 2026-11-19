@@ -1,60 +1,42 @@
-ftxui::Element FilesModalContent::RenderTopButtons() {
-    using namespace ftxui;
-    return hbox({
-        home_button_->Render(),
-        text(" "),
-        documents_button_->Render(),
-        text(" "),
-        downloads_button_->Render(),
-        text(" "),
-        current_dir_button_->Render(),
-        text(" "),
-        add_dir_button_->Render(),
-        text(" "),
-        refresh_button_->Render(),
-        text(" "),
-        copy_path_button_->Render(),
-    });
-}
-
 ftxui::Element FilesModalContent::RenderHeaderRow() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-
-    return hbox({
-        RenderTopButtons(),
-        filler(),
-    }) | bgcolor(theme.modal_background) | color(theme.modal_text_color);
-}
-
-ftxui::Element FilesModalContent::RenderFavoriteDirectories() {
-    using namespace ftxui;
-    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    favorite_boxes_.assign(favorite_directories_.size(), {});
-    if (favorite_directories_.empty()) {
-        return text(" Added directories: none") |
-            dim |
-            color(theme.modal_text_color);
-    }
+    const auto built_in = BuiltInDirectories();
+    const auto active = std::find_if(built_in.begin(), built_in.end(), [&](const auto& directory) {
+        return SameDirectory(directory, current_directory_);
+    });
+    active_builtin_directory_ = static_cast<size_t>(active - built_in.begin());
 
     Elements buttons;
-    buttons.push_back(text(" ") | color(theme.modal_text_color));
+    for (const auto& button : built_in_directory_buttons_) {
+        buttons.push_back(button->Render());
+    }
+    favorite_boxes_.assign(favorite_directories_.size(), {});
     for (size_t index = 0; index < favorite_directories_.size(); ++index) {
-        if (index > 0) {
-            buttons.push_back(text(" "));
-        }
         std::string label = FileManager::PathToUtf8(favorite_directories_[index].filename());
         if (label.empty()) {
             label = FileManager::PathToUtf8(favorite_directories_[index]);
         }
         ButtonSpec spec;
-        spec.caption = TrimForDisplay(label, 16);
+        size_t characters = 0;
+        for (const auto& glyph : Utf8ToGlyphs(label)) {
+            if (glyph.empty()) {
+                continue;
+            }
+            spec.caption += glyph;
+            if (++characters == 15) {
+                break;
+            }
+        }
         spec.role = ButtonRole::Navigation;
         spec.variant = ButtonVariant::Minimal;
         spec.size = ButtonSize::Compact;
+        spec.selected = active == built_in.end() &&
+            SameDirectory(favorite_directories_[index], current_directory_);
         buttons.push_back(RenderModalFlatButton(theme, spec) | reflect(favorite_boxes_[index]));
     }
-    return hbox(std::move(buttons));
+    return flexbox(std::move(buttons), FlexboxConfig().SetGap(1, 0)) |
+        bgcolor(theme.modal_background) | color(theme.modal_text_color);
 }
 
 ftxui::Element FilesModalContent::RenderPathInput() {
@@ -290,8 +272,6 @@ ftxui::Element FilesModalContent::Render() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     Elements rows = {
         RenderHeaderRow(),
-        separator() | color(theme.modal_border),
-        RenderFavoriteDirectories(),
         text(""),
         RenderPathInput(),
     };
@@ -336,8 +316,6 @@ std::string FilesModalContent::ModeTitle() const {
             return "Open Folder";
         case FilesModalMode::SelectDirectory:
             return "Add Project";
-        case FilesModalMode::Manage:
-            return "Files";
         case FilesModalMode::None:
             break;
     }
@@ -358,7 +336,6 @@ std::string FilesModalContent::FooterActionLabel() const {
             return "Open Folder";
         case FilesModalMode::SelectDirectory:
             return "Add Project";
-        case FilesModalMode::Manage:
         case FilesModalMode::None:
             break;
     }

@@ -28,6 +28,12 @@ void SearchFilesModalContent::BuildDirectoryChoices() {
             current_root_path_ = absolute_root;
         }
 
+        const std::string root_label = raw_root.label.empty()
+            ? RootLabelForPath(absolute_root)
+            : raw_root.label;
+        AddDirectoryChoice({absolute_root, root_label + " (top-level files)", false},
+                           true, &seen_paths);
+
         std::filesystem::directory_iterator iterator(
             absolute_root,
             std::filesystem::directory_options::skip_permission_denied,

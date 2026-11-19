@@ -44,7 +44,7 @@ public:
     void SetFooterVisible(bool visible);
     void SetHeaderCloseVisible(bool visible);
     void SetFooterText(std::string text);
-    void SetFooterButtons(std::vector<FooterButton> buttons);
+    void SetFooterButtons(std::vector<FooterButton> buttons, size_t left_aligned_count = 0);
     void SetBodyHeightLimit(int rows) { max_body_height_ = rows; }
     void SetBodyWidth(int columns);
     void SetModalSize(int columns, int rows);
@@ -77,6 +77,7 @@ private:
     ftxui::Component header_close_button_;
     std::vector<ftxui::Component> footer_buttons_;
     std::vector<ButtonEnabledCallback> footer_button_enabled_;
+    size_t left_aligned_footer_count_ = 0;
     std::string footer_text_;
     bool show_header_ = true;
     bool show_footer_ = true;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <chrono>
 #include <filesystem>
 #include <functional>
@@ -29,14 +30,13 @@ enum class FilesModalMode {
     ImportActions,
     OpenFolder,
     SelectDirectory,
-    Manage,
 };
 
 class FilesModalContent : public IModalContent {
 public:
     using StartDirectoryProvider = std::function<std::filesystem::path()>;
     using FavoriteDirectoriesProvider = std::function<std::vector<std::filesystem::path>()>;
-    using AddFavoriteDirectoryCallback = std::function<bool(
+    using FavoriteDirectoryCallback = std::function<bool(
         const std::filesystem::path& directory,
         std::string& error)>;
     using CopyPathCallback = std::function<void(const std::string& text)>;
@@ -52,7 +52,8 @@ public:
         FileManager* file_manager,
         StartDirectoryProvider start_directory_provider,
         FavoriteDirectoriesProvider favorite_directories_provider,
-        AddFavoriteDirectoryCallback on_add_favorite_directory,
+        FavoriteDirectoryCallback on_add_favorite_directory,
+        FavoriteDirectoryCallback on_remove_favorite_directory,
         CopyPathCallback on_copy_path,
         ConfirmPathCallback on_confirm_path,
         CloseCallback on_close,
@@ -74,13 +75,14 @@ public:
               std::string suggested_file_name);
     void Close();
 
-    FilesModalMode Mode() const { return mode_; }
     void Refresh();
     void ConfirmSelected();
     void NavigateUp();
     bool HandleEvent(ftxui::Event event);
 
 private:
+    friend class FilesModal;
+
     enum class PendingFileOperation {
         None,
         CreateDirectoryItem,
@@ -89,6 +91,16 @@ private:
         RenameItem,
         PasteItems,
     };
+
+    struct InputSelection {
+        ftxui::Box box;
+        std::chrono::steady_clock::time_point last_click{};
+        bool all_selected = false;
+    };
+
+    ftxui::Component MakeSelectableInput(
+        std::string& value, int& cursor, InputSelection& selection,
+        std::string placeholder, std::function<void()> on_enter);
 
     ftxui::Component MakeTextButton(
         std::string label,
@@ -99,11 +111,13 @@ private:
         ButtonSize size = ButtonSize::Normal);
 
     void RebuildComponents();
+    std::array<std::filesystem::path, 4> BuiltInDirectories() const;
     void RefreshFavorites();
     void LoadDirectory(const std::filesystem::path& directory);
     void LoadPathFromInput();
-    void LoadBuiltInDirectory(const std::filesystem::path& directory);
+    void LoadShortcutDirectory(const std::filesystem::path& directory);
     void AddCurrentDirectoryToFavorites();
+    void RemoveCurrentDirectoryFromFavorites();
     void CopySelectedPathText();
     void StartCreateDirectoryOperation();
     void StartCreateFileOperation();
@@ -150,8 +164,6 @@ private:
     bool IsShiftArrowDownEvent(const ftxui::Event& event) const;
 
     ftxui::Element RenderHeaderRow();
-    ftxui::Element RenderTopButtons();
-    ftxui::Element RenderFavoriteDirectories();
     ftxui::Element RenderPathInput();
     ftxui::Element RenderOperationButtons();
     ftxui::Element RenderEntryList();
@@ -172,7 +184,8 @@ private:
     FileManager* file_manager_ = nullptr;
     StartDirectoryProvider start_directory_provider_;
     FavoriteDirectoriesProvider favorite_directories_provider_;
-    AddFavoriteDirectoryCallback on_add_favorite_directory_;
+    FavoriteDirectoryCallback on_add_favorite_directory_;
+    FavoriteDirectoryCallback on_remove_favorite_directory_;
     CopyPathCallback on_copy_path_;
     ConfirmPathCallback on_confirm_path_;
     CloseCallback on_close_;
@@ -190,8 +203,10 @@ private:
     int selection_anchor_ = -1;
     std::string path_input_value_;
     int path_input_cursor_ = 0;
+    InputSelection path_input_selection_;
     std::string file_name_input_value_;
     int file_name_input_cursor_ = 0;
+    InputSelection file_name_input_selection_;
     std::string status_ = "Ready.";
     bool status_is_error_ = false;
     PendingFileOperation pending_operation_ = PendingFileOperation::None;
@@ -206,13 +221,8 @@ private:
     std::chrono::steady_clock::time_point last_entry_click_time_{};
     int last_clicked_entry_ = -1;
 
-    ftxui::Component home_button_;
-    ftxui::Component documents_button_;
-    ftxui::Component downloads_button_;
-    ftxui::Component current_dir_button_;
-    ftxui::Component add_dir_button_;
-    ftxui::Component refresh_button_;
-    ftxui::Component copy_path_button_;
+    std::array<ftxui::Component, 4> built_in_directory_buttons_;
+    size_t active_builtin_directory_ = built_in_directory_buttons_.size();
     ftxui::Component create_dir_button_;
     ftxui::Component create_file_button_;
     ftxui::Component delete_button_;
@@ -234,7 +244,7 @@ class FilesModal {
 public:
     using StartDirectoryProvider = FilesModalContent::StartDirectoryProvider;
     using FavoriteDirectoriesProvider = FilesModalContent::FavoriteDirectoriesProvider;
-    using AddFavoriteDirectoryCallback = FilesModalContent::AddFavoriteDirectoryCallback;
+    using FavoriteDirectoryCallback = FilesModalContent::FavoriteDirectoryCallback;
     using CopyPathCallback = FilesModalContent::CopyPathCallback;
     using ConfirmPathCallback = FilesModalContent::ConfirmPathCallback;
     using FilesChangedCallback = FilesModalContent::FilesChangedCallback;
@@ -244,7 +254,8 @@ public:
         FileManager* file_manager,
         StartDirectoryProvider start_directory_provider,
         FavoriteDirectoriesProvider favorite_directories_provider,
-        AddFavoriteDirectoryCallback on_add_favorite_directory,
+        FavoriteDirectoryCallback on_add_favorite_directory,
+        FavoriteDirectoryCallback on_remove_favorite_directory,
         CopyPathCallback on_copy_path,
         ConfirmPathCallback on_confirm_path,
         FilesChangedCallback on_files_changed = {});

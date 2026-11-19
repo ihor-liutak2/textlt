@@ -7,6 +7,7 @@
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/mouse.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "ftxui/screen/string.hpp"
 #include "ui_button.hpp"
 
 namespace textlt {
@@ -17,6 +18,24 @@ constexpr int kEntryNameWidth = 72;
 constexpr int kEntrySizeWidth = 12;
 constexpr int kMinDoubleClickMs = 80;
 constexpr int kMaxDoubleClickMs = 500;
+
+bool SameDirectory(const std::filesystem::path& left, const std::filesystem::path& right) {
+    if (left.empty() || right.empty()) {
+        return false;
+    }
+    if (left.lexically_normal() == right.lexically_normal()) {
+        return true;
+    }
+    std::error_code error;
+    return std::filesystem::equivalent(left, right, error);
+}
+
+template <typename Directories>
+bool ContainsDirectory(const Directories& directories, const std::filesystem::path& path) {
+    return std::any_of(directories.begin(), directories.end(), [&](const auto& directory) {
+        return SameDirectory(directory, path);
+    });
+}
 
 std::string FileTypeLabel(FileEntryType type) {
     switch (type) {
@@ -47,7 +66,8 @@ FilesModalContent::FilesModalContent(
     FileManager* file_manager,
     StartDirectoryProvider start_directory_provider,
     FavoriteDirectoriesProvider favorite_directories_provider,
-    AddFavoriteDirectoryCallback on_add_favorite_directory,
+    FavoriteDirectoryCallback on_add_favorite_directory,
+    FavoriteDirectoryCallback on_remove_favorite_directory,
     CopyPathCallback on_copy_path,
     ConfirmPathCallback on_confirm_path,
     CloseCallback on_close,
@@ -57,6 +77,7 @@ FilesModalContent::FilesModalContent(
       start_directory_provider_(std::move(start_directory_provider)),
       favorite_directories_provider_(std::move(favorite_directories_provider)),
       on_add_favorite_directory_(std::move(on_add_favorite_directory)),
+      on_remove_favorite_directory_(std::move(on_remove_favorite_directory)),
       on_copy_path_(std::move(on_copy_path)),
       on_confirm_path_(std::move(on_confirm_path)),
       on_close_(std::move(on_close)),

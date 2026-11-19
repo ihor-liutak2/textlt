@@ -5,6 +5,8 @@ void FilesModalContent::Open(
     mode_ = mode;
     status_is_error_ = false;
     status_ = "Ready.";
+    path_input_selection_ = {};
+    file_name_input_selection_ = {};
     CancelPendingOperation();
     ClearSelectionMarks();
     file_name_input_value_ = std::move(suggested_file_name);
@@ -61,10 +63,26 @@ void FilesModalContent::Refresh() {
     LoadDirectory(current_directory_);
 }
 
+std::array<std::filesystem::path, 4> FilesModalContent::BuiltInDirectories() const {
+    return {
+        FileManager::UserHomeDirectory(),
+        FileManager::UserDocumentsDirectory(),
+        FileManager::UserDownloadsDirectory(),
+        start_directory_provider_ ? start_directory_provider_() : std::filesystem::path(),
+    };
+}
+
 void FilesModalContent::RefreshFavorites() {
     favorite_directories_.clear();
-    if (favorite_directories_provider_) {
-        favorite_directories_ = favorite_directories_provider_();
+    if (!favorite_directories_provider_) {
+        return;
+    }
+    const auto built_in = BuiltInDirectories();
+    for (auto& path : favorite_directories_provider_()) {
+        if (!path.empty() && !ContainsDirectory(built_in, path) &&
+            !ContainsDirectory(favorite_directories_, path)) {
+            favorite_directories_.push_back(std::move(path));
+        }
     }
 }
 
@@ -129,6 +147,7 @@ void FilesModalContent::LoadDirectory(const std::filesystem::path& directory) {
 }
 
 void FilesModalContent::LoadPathFromInput() {
+    path_input_selection_.all_selected = false;
     if (!file_manager_) {
         SetStatus("File manager is not available.", true);
         return;
@@ -184,17 +203,24 @@ void FilesModalContent::LoadPathFromInput() {
     }
 }
 
-void FilesModalContent::LoadBuiltInDirectory(const std::filesystem::path& directory) {
+void FilesModalContent::LoadShortcutDirectory(const std::filesystem::path& directory) {
     if (directory.empty()) {
         SetStatus("Directory is not available.", true);
         return;
     }
+    last_clicked_entry_ = -1;
     LoadDirectory(directory);
+    entry_list_component_->TakeFocus();
 }
 
 void FilesModalContent::AddCurrentDirectoryToFavorites() {
     if (current_directory_.empty()) {
         SetStatus("No active directory to add.", true);
+        return;
+    }
+    if (ContainsDirectory(BuiltInDirectories(), current_directory_) ||
+        ContainsDirectory(favorite_directories_, current_directory_)) {
+        SetStatus("Directory already has a shortcut.");
         return;
     }
     std::string error;
@@ -205,6 +231,25 @@ void FilesModalContent::AddCurrentDirectoryToFavorites() {
     }
     RefreshFavorites();
     SetStatus("Added directory: " + FileManager::PathToUtf8(current_directory_));
+}
+
+void FilesModalContent::RemoveCurrentDirectoryFromFavorites() {
+    if (current_directory_.empty()) {
+        SetStatus("No active directory to remove.", true);
+        return;
+    }
+    if (ContainsDirectory(BuiltInDirectories(), current_directory_)) {
+        SetStatus("Built-in directory shortcuts cannot be removed.");
+        return;
+    }
+    std::string error;
+    if (!on_remove_favorite_directory_ ||
+        !on_remove_favorite_directory_(current_directory_, error)) {
+        SetStatus(error.empty() ? "Directory was not removed." : error, true);
+        return;
+    }
+    RefreshFavorites();
+    SetStatus("Removed added directory: " + FileManager::PathToUtf8(current_directory_));
 }
 
 void FilesModalContent::CopySelectedPathText() {

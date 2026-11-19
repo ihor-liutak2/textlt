@@ -21,32 +21,88 @@ ftxui::Component FilesModalContent::MakeTextButton(
     return ftxui::Button(option);
 }
 
-void FilesModalContent::RebuildComponents() {
-    home_button_ = MakeTextButton("Home", [this] {
-        LoadBuiltInDirectory(FileManager::UserHomeDirectory());
-    }, ButtonRole::Navigation, ButtonVariant::AccentEdges, "⌂");
-    documents_button_ = MakeTextButton("Documents", [this] {
-        LoadBuiltInDirectory(FileManager::UserDocumentsDirectory());
-    }, ButtonRole::Navigation, ButtonVariant::AccentEdges);
-    downloads_button_ = MakeTextButton("Download", [this] {
-        LoadBuiltInDirectory(FileManager::UserDownloadsDirectory());
-    }, ButtonRole::Navigation, ButtonVariant::AccentEdges);
-    current_dir_button_ = MakeTextButton("Current Dir", [this] {
-        std::filesystem::path directory;
-        if (start_directory_provider_) {
-            directory = start_directory_provider_();
+ftxui::Component FilesModalContent::MakeSelectableInput(
+    std::string& value, int& cursor, InputSelection& selection,
+    std::string placeholder, std::function<void()> on_enter) {
+    using namespace ftxui;
+    InputOption option;
+    option.multiline = false;
+    option.cursor_position = &cursor;
+    option.on_enter = std::move(on_enter);
+    option.transform = [this, &selection](InputState state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        if (!state.focused) {
+            selection.all_selected = false;
+            selection.last_click = {};
         }
-        LoadBuiltInDirectory(directory);
-    }, ButtonRole::Navigation, ButtonVariant::AccentEdges);
-    add_dir_button_ = MakeTextButton("Add Dir", [this] {
-        AddCurrentDirectoryToFavorites();
-    }, ButtonRole::Primary, ButtonVariant::AccentEdges, "+");
-    refresh_button_ = MakeTextButton("Refresh", [this] { Refresh(); },
-        ButtonRole::Navigation, ButtonVariant::AccentEdges, "⟳");
-    copy_path_button_ = MakeTextButton("Copy Path", [this] {
-        CopySelectedPathText();
-    }, ButtonRole::Navigation, ButtonVariant::AccentEdges, "⧉");
+        auto element = state.element | bgcolor(theme.modal_input_bg) | color(theme.modal_input_fg);
+        return selection.all_selected ? element | inverted : element;
+    };
+    auto input = Input(&value, std::move(placeholder), option);
+    auto view = Renderer(input, [input, &selection] { return input->Render() | reflect(selection.box); });
+    return CatchEvent(view, [input, &value, &cursor, &selection](Event event) {
+        if (event.is_mouse()) {
+            const auto& mouse = event.mouse();
+            if (mouse.button != Mouse::Left || mouse.motion != Mouse::Pressed) {
+                return false;
+            }
+            selection.all_selected = false;
+            if (!selection.box.Contain(mouse.x, mouse.y)) {
+                selection.last_click = {};
+                return false;
+            }
 
+            const auto now = std::chrono::steady_clock::now();
+            if (now - selection.last_click <= std::chrono::milliseconds(kMaxDoubleClickMs)) {
+                selection.last_click = {};
+                selection.all_selected = true;
+                cursor = static_cast<int>(value.size());
+                input->TakeFocus();
+                return true;
+            }
+            selection.last_click = now;
+            return false;
+        }
+
+        if (!selection.all_selected || !input->Focused() || event == Event::Custom) {
+            return false;
+        }
+
+        selection.all_selected = false;
+        if (event.is_character() || event == Event::Backspace || event == Event::Delete) {
+            value.clear();
+            cursor = 0;
+            return !event.is_character();
+        }
+        if (event == Event::ArrowLeft) {
+            cursor = 0;
+            return true;
+        }
+        return event == Event::ArrowRight;
+    });
+}
+
+void FilesModalContent::RebuildComponents() {
+    const std::array<const char*, 4> labels = {"Home", "Documents", "Download", "Current Dir"};
+    for (size_t index = 0; index < labels.size(); ++index) {
+        ButtonSpec spec = ButtonSpecFromLabel(labels[index], ButtonRole::Navigation);
+        if (index == 0) {
+            spec.icon = "⌂";
+        }
+        ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
+        option.label = ButtonCaptionText(spec);
+        option.on_click = [this, index] { LoadShortcutDirectory(BuiltInDirectories()[index]); };
+        option.transform = [this, index, spec = std::move(spec)](const ftxui::EntryState&) mutable {
+            const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+            spec.selected = index == active_builtin_directory_;
+            auto button = RenderModalFlatButton(theme, spec);
+            if (!spec.selected && built_in_directory_buttons_[index]->Focused()) {
+                button |= ftxui::underlined;
+            }
+            return button;
+        };
+        built_in_directory_buttons_[index] = ftxui::Button(option);
+    }
     create_dir_button_ = MakeTextButton("Create Dir", [this] {
         StartCreateDirectoryOperation();
     }, ButtonRole::Primary, ButtonVariant::AccentEdges, "+");
@@ -69,22 +125,10 @@ void FilesModalContent::RebuildComponents() {
         StartPasteOperation();
     }, ButtonRole::Navigation, ButtonVariant::AccentEdges);
 
-    ftxui::InputOption path_option;
-    path_option.multiline = false;
-    path_option.cursor_position = &path_input_cursor_;
-    path_option.on_enter = [this] { LoadPathFromInput(); };
-    path_option.transform = [this](ftxui::InputState state) {
-        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return state.element |
-            ftxui::bgcolor(theme.modal_input_bg) |
-            ftxui::color(theme.modal_input_fg);
-    };
-    path_input_ = ftxui::Input(&path_input_value_, "directory path", path_option);
-
-    ftxui::InputOption file_option = path_option;
-    file_option.cursor_position = &file_name_input_cursor_;
-    file_option.on_enter = [this] { ConfirmSelected(); };
-    file_name_input_ = ftxui::Input(&file_name_input_value_, "file name", file_option);
+    path_input_ = MakeSelectableInput(path_input_value_, path_input_cursor_, path_input_selection_,
+        "directory path", [this] { LoadPathFromInput(); });
+    file_name_input_ = MakeSelectableInput(file_name_input_value_, file_name_input_cursor_,
+        file_name_input_selection_, "file name", [this] { ConfirmSelected(); });
 
     ftxui::InputOption operation_option;
     operation_option.multiline = false;
@@ -115,15 +159,8 @@ void FilesModalContent::RebuildComponents() {
         [this](ftxui::Event event) { return HandleEvent(event); });
 
     auto primary_container = ftxui::Container::Vertical({
-        ftxui::Container::Horizontal({
-            home_button_,
-            documents_button_,
-            downloads_button_,
-            current_dir_button_,
-            add_dir_button_,
-            refresh_button_,
-            copy_path_button_,
-        }),
+        ftxui::Container::Horizontal(ftxui::Components(
+            built_in_directory_buttons_.begin(), built_in_directory_buttons_.end())),
         path_input_,
         file_name_input_,
         ftxui::Container::Horizontal({

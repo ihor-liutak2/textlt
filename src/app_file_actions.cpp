@@ -235,12 +235,33 @@ bool TextltApp::AddFileModalDirectory(
         return false;
     }
 
-    if (!editor_config_.IsFileModalDirectory(normalized_path)) {
-        editor_config_.file_modal_directories_.push_back(normalized_path);
-        SaveConfig();
+    if (editor_config_.IsFileModalDirectory(normalized_path)) {
+        error = "Directory already has a shortcut.";
+        return false;
     }
+    editor_config_.file_modal_directories_.push_back(normalized_path);
+    SaveConfig();
 
     active_action_ = "Added file modal directory " + normalized_path;
+    screen_.PostEvent(ftxui::Event::Custom);
+    return true;
+}
+
+
+bool TextltApp::RemoveFileModalDirectory(
+    const std::filesystem::path& directory,
+    std::string& error) {
+    const std::string path = directory.string();
+    if (!editor_config_.IsFileModalDirectory(path)) {
+        error = "Current directory is not in the added list.";
+        return false;
+    }
+    if (!editor_config_.RemoveFileModalDirectory(path)) {
+        error = "Unable to save the added directory list.";
+        return false;
+    }
+
+    active_action_ = "Removed file modal directory " + FileManager::PathToUtf8(directory);
     screen_.PostEvent(ftxui::Event::Custom);
     return true;
 }

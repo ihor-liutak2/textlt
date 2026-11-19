@@ -170,7 +170,8 @@ FileSearchMaskSet FileSearchEngine::DefaultCodeMaskSet() {
 }
 
 std::vector<FileSearchMaskSet> FileSearchEngine::DefaultMaskSets() {
-    return {
+    std::vector<FileSearchMaskSet> masks = {
+        AllFilesMaskSet(),
         {
             "C/C++ Project",
             "*.cpp *.hpp *.h *.cxx *.cc *.c *.hh *.ipp *.inl *.cmake CMakeLists.txt"
@@ -186,10 +187,59 @@ std::vector<FileSearchMaskSet> FileSearchEngine::DefaultMaskSets() {
         {
             "Web Project",
             "*.html *.htm *.css *.scss *.js *.jsx *.ts *.tsx *.json"
+        }
+    };
+    auto python_masks = PythonMaskSets();
+    masks.insert(masks.end(), python_masks.begin(), python_masks.end());
+    auto web_masks = WebProjectMaskSets();
+    masks.insert(masks.end(), web_masks.begin(), web_masks.end());
+    return masks;
+}
+
+FileSearchMaskSet FileSearchEngine::AllFilesMaskSet() {
+    return {"All Files", "*"};
+}
+
+std::vector<FileSearchMaskSet> FileSearchEngine::PythonMaskSets() {
+    return {
+        {
+            "Python Project",
+            "*.py *.pyi *.pyw *.ipynb pyproject.toml setup.cfg requirements*.txt Pipfile"
         },
         {
-            "All Text Files",
-            "*"
+            "Python Tests (pytest / unittest)",
+            "test_*.py *_test.py tests/*.py test/*.py conftest.py pytest.ini tox.ini pyproject.toml"
+        },
+        {
+            "Python Test Automation",
+            "*.py *.robot *.resource *.feature *.yaml *.yml pytest.ini tox.ini pyproject.toml requirements*.txt"
+        }
+    };
+}
+
+std::vector<FileSearchMaskSet> FileSearchEngine::WebProjectMaskSets() {
+    return {
+        {
+            "PHP Laravel",
+            "*.php *.blade.php *.js *.ts *.vue *.css *.scss *.json *.yaml *.yml "
+            "artisan composer.lock .env.example phpunit.xml phpunit.xml.dist"
+        },
+        {
+            "PHP WordPress Plugins",
+            "*.php *.inc *.js *.ts *.jsx *.tsx *.css *.scss *.json *.html *.pot *.po "
+            "readme.txt *.md composer.lock"
+        },
+        {
+            "React TypeScript",
+            "*.ts *.tsx *.js *.jsx *.mjs *.cjs *.css *.scss *.sass *.less *.html *.json"
+        },
+        {
+            "Angular TypeScript",
+            "*.ts *.js *.mjs *.cjs *.html *.css *.scss *.sass *.less *.json"
+        },
+        {
+            "JavaScript",
+            "*.js *.jsx *.mjs *.cjs *.json *.html *.css"
         }
     };
 }
@@ -377,7 +427,8 @@ void FileSearchEngine::SearchRoot(
             ++summary->directories_scanned;
 
             const std::string directory_name = entry.path().filename().string();
-            if (ContainsIgnoredDirectory(options.ignored_directories, directory_name)) {
+            if (!root.recursive ||
+                ContainsIgnoredDirectory(options.ignored_directories, directory_name)) {
                 iterator.disable_recursion_pending();
             }
 
@@ -434,6 +485,25 @@ void FileSearchEngine::SearchFile(
         return;
     }
 
+    const std::string needle = options.match_case ? options.query : LowerCopy(options.query);
+    if (options.target == FileSearchTarget::Filename) {
+        ++summary->files_scanned;
+        const auto filename_utf8 = file_path.filename().u8string();
+        const std::string filename(filename_utf8.begin(), filename_utf8.end());
+        const std::string haystack = options.match_case ? filename : LowerCopy(filename);
+        if (haystack.find(needle) != std::string::npos) {
+            FileSearchMatch match;
+            match.path = file_path;
+            match.root = root;
+            match.relative_path = relative_path;
+            match.root_label = root_label;
+            summary->matches.push_back(std::move(match));
+            ++summary->files_with_matches;
+            summary->truncated = summary->matches.size() >= options.max_results;
+        }
+        return;
+    }
+
     std::error_code size_error;
     const auto file_size = std::filesystem::file_size(file_path, size_error);
     if (size_error || file_size > options.max_file_size_bytes || IsLikelyBinaryFile(file_path)) {
@@ -455,9 +525,6 @@ void FileSearchEngine::SearchFile(
     }
 
     ++summary->files_scanned;
-
-    const std::string needle =
-        options.match_case ? options.query : LowerCopy(options.query);
 
     const size_t matches_before_file = summary->matches.size();
 

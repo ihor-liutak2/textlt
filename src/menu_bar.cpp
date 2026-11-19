@@ -51,7 +51,6 @@ MenuBarComponent::MenuBarComponent(
       dropdown_items_({
           {
               {" New ", "file.new"},
-              {" Files... ", "file.files"},
               {" Open...            (Ctrl+O) ", "file.open"},
               {" Open Folder... ", "file.open_folder"},
               {" Save As... ", "file.save_as"},
@@ -96,7 +95,7 @@ MenuBarComponent::MenuBarComponent(
           },
           {
               {" Toggle Line Numbers ", "view.toggle_line_numbers"},
-              {" Sidebar                 (Ctrl+B) ", "sidebar.ctrl_b_file_explorer"},
+              {" Quick Commands          (Ctrl+B) ", "sidebar.ctrl_b_file_explorer"},
               {" Docs ", "docs.open"},
               {" Notes                   (Ctrl+N) ", "notes.toggle"},
               {" Actions ", "actions.open"},
