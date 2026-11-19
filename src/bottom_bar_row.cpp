@@ -142,7 +142,7 @@ void BottomBarRowComponent::ActivateSegment(Segment segment) {
         return;
     }
     if (segment == Segment::Branch) {
-        callbacks_.run_command("git.open");
+        callbacks_.run_command("git.open_branches");
         return;
     }
     callbacks_.run_command("theme.open");

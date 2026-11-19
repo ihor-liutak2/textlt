@@ -141,6 +141,7 @@ private:
     void OpenRemoteFilesModal();
     void CloseRemoteFilesModal();
     void OpenGitModal();
+    void OpenGitBranchesModal();
     void CloseGitModal();
     void OpenGitSettingsModal();
     void CloseGitSettingsModal();

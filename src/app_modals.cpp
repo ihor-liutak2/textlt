@@ -506,6 +506,18 @@ void TextltApp::OpenGitModal() {
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
+void TextltApp::OpenGitBranchesModal() {
+    if (menu_bar_) {
+        menu_bar_->CloseDropdown();
+    }
+
+    git_manager_.RefreshNow();
+    git_modal_.OpenBranches();
+    active_action_ = "Opened Git Branches";
+    SetActiveLayer(UiLayer::Git);
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
 
 void TextltApp::CloseGitModal() {
     git_modal_.Close();

@@ -56,10 +56,16 @@ public:
 
     void SetTheme(const Theme* theme) { theme_ = theme; }
     void Open();
+    // Opens the modal with the Branches tab active, used by the footer branch
+    // label. Both entry points reset the tab button focus so reopening the
+    // modal never highlights the previously clicked tab as well.
+    void OpenBranches();
     void Close();
     bool HandleEvent(ftxui::Event event);
 
 private:
+    void OpenAtTab(int tab_index);
+    void FocusTabBody(int tab_index);
     enum class Tab {
         Status = 0,
         Logs = 1,
@@ -436,6 +442,7 @@ public:
 
     ftxui::Component View() const;
     void Open();
+    void OpenBranches();
     void Close();
     bool IsOpen() const;
     bool OnEvent(ftxui::Event event);

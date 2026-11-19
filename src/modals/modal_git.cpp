@@ -714,45 +714,64 @@ ftxui::Component GitModalContent::MakeTabButton(std::string label, int tab_index
     option.label = "  " + label + "  ";
     option.on_click = [this, tab_index] {
         selected_tab_ = tab_index;
-        if (selected_tab_ == static_cast<int>(Tab::Status) && status_list_component_) {
-            status_list_component_->TakeFocus();
-        } else if (selected_tab_ == static_cast<int>(Tab::Logs) && log_branch_component_) {
-            log_branch_component_->TakeFocus();
-        } else if (selected_tab_ == static_cast<int>(Tab::Branches) && branch_menu_) {
-            branch_menu_->TakeFocus();
-        } else if (selected_tab_ == static_cast<int>(Tab::Commit) && commit_file_menu_) {
-            commit_file_menu_->TakeFocus();
-        } else if (selected_tab_ == static_cast<int>(Tab::Remote) && remote_filter_input_component_) {
-            remote_filter_input_component_->TakeFocus();
-        } else if (selected_tab_ == static_cast<int>(Tab::Tags) && tag_filter_input_component_) {
-            tag_filter_input_component_->TakeFocus();
-        } else if (selected_tab_ == static_cast<int>(Tab::Compare) && compare_file_menu_) {
-            if (compare_refs_.empty()) {
-                RefreshCompareRefs();
-            }
-            if (compare_entries_.empty()) {
-                RefreshCompareFiles();
-            }
-            compare_file_menu_->TakeFocus();
-        }
+        FocusTabBody(tab_index);
     };
-    option.transform = [this, tab_index, label = std::move(label)](const ftxui::EntryState& state) {
+    option.transform = [this, tab_index, label = std::move(label)](
+        const ftxui::EntryState&) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
         return RenderModalTabButton(
             theme,
             label,
             selected_tab_ == tab_index,
-            state.focused || state.active);
+            false);
     };
     return ftxui::Button(option);
 }
 
+void GitModalContent::FocusTabBody(int tab_index) {
+    if (tab_index == static_cast<int>(Tab::Status) && status_list_component_) {
+        status_list_component_->TakeFocus();
+    } else if (tab_index == static_cast<int>(Tab::Logs) && log_branch_component_) {
+        log_branch_component_->TakeFocus();
+    } else if (tab_index == static_cast<int>(Tab::Branches) && branch_menu_) {
+        branch_menu_->TakeFocus();
+    } else if (tab_index == static_cast<int>(Tab::Commit) && commit_file_menu_) {
+        commit_file_menu_->TakeFocus();
+    } else if (tab_index == static_cast<int>(Tab::Remote) && remote_filter_input_component_) {
+        remote_filter_input_component_->TakeFocus();
+    } else if (tab_index == static_cast<int>(Tab::Tags) && tag_filter_input_component_) {
+        tag_filter_input_component_->TakeFocus();
+    } else if (tab_index == static_cast<int>(Tab::Compare) && compare_file_menu_) {
+        if (compare_refs_.empty()) {
+            RefreshCompareRefs();
+        }
+        if (compare_entries_.empty()) {
+            RefreshCompareFiles();
+        }
+        compare_file_menu_->TakeFocus();
+    }
+}
+
 void GitModalContent::Open() {
+    OpenAtTab(static_cast<int>(Tab::Status));
+}
+
+void GitModalContent::OpenBranches() {
+    OpenAtTab(static_cast<int>(Tab::Branches));
+}
+
+void GitModalContent::OpenAtTab(int tab_index) {
     confirm_active_ = false;
     branch_input_active_ = false;
     branch_input_callback_ = nullptr;
     confirm_layer_index_ = 0;
-    selected_tab_ = static_cast<int>(Tab::Status);
+    if (tab_buttons_ && tab_buttons_->ChildCount() > 0) {
+        tab_index = std::clamp(
+            tab_index, 0, static_cast<int>(tab_buttons_->ChildCount()) - 1);
+    } else {
+        tab_index = 0;
+    }
+    selected_tab_ = tab_index;
     status_ = "Ready";
     server_output_.clear();
     server_output_lines_.clear();
@@ -763,11 +782,14 @@ void GitModalContent::Open() {
     RefreshCompareRefs();
     RefreshCompareFiles();
     RefreshLogs();
-    if (status_list_component_) {
-        status_list_component_->TakeFocus();
-    } else if (log_branch_component_) {
-        log_branch_component_->TakeFocus();
+    // The tab button container keeps the child selected by the last click even
+    // when focus moves to the tab body. Re-point it at the active tab so only
+    // that tab renders as active after reopening the modal.
+    if (tab_buttons_ && tab_buttons_->ChildCount() > 0) {
+        tab_buttons_->SetActiveChild(
+            tab_buttons_->ChildAt(static_cast<size_t>(tab_index)));
     }
+    FocusTabBody(tab_index);
 }
 
 void GitModalContent::Close() {
@@ -1234,6 +1256,14 @@ void GitModal::Open() {
     if (content_) {
         content_->SetTheme(theme_);
         content_->Open();
+    }
+}
+
+void GitModal::OpenBranches() {
+    open_ = true;
+    if (content_) {
+        content_->SetTheme(theme_);
+        content_->OpenBranches();
     }
 }
 

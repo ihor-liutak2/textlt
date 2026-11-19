@@ -219,6 +219,7 @@ void TextltApp::InitializeCommands() {
     add("remote.connections", "Remote Connections", "Remote", "", [this] { OpenRemoteConnectionsModal(); });
 
     add("git.open", "Git", "Git", "", [this] { OpenGitModal(); });
+    add("git.open_branches", "Git Branches", "Git", "", [this] { OpenGitBranchesModal(); });
     add("git.settings", "Git Settings", "Git", "", [this] { OpenGitSettingsModal(); });
 
     add("app.about", "About textlt", "Help", "", [this] { OpenAboutDialog(); });
