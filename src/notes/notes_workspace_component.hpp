@@ -69,6 +69,27 @@ public:
     // permanently, everything else is moved to Trash.
     void DeleteSelection();
 
+    // Structured note-body search used by the shared Find/Replace sidebar.
+    struct NoteSearchResult {
+        size_t block = 0;
+        size_t byte = 0;
+        size_t length = 0;
+        std::string preview;
+        size_t preview_match_start = 0;
+        size_t preview_match_length = 0;
+    };
+    uint64_t NoteRevision() const;
+    const NoteDocument* EditingNote() const { return editing_ ? session_.Note() : nullptr; }
+    std::vector<NoteSearchResult> SearchNote(const std::string& query,
+        bool match_case, bool whole_word, size_t limit, bool& truncated);
+    void ActivateNoteSearchResult(size_t index);
+    bool ReplaceNoteSearchResult(size_t index, const std::string& replacement,
+        std::string& error);
+    bool ReplaceAllNoteText(const std::string& query,
+        const std::string& replacement, bool match_case, bool whole_word,
+        size_t& count, std::string& error);
+    void ClearNoteSearchHighlights();
+
 private:
     friend class NotesWorkspaceActionsTestAccess;
 
@@ -165,6 +186,8 @@ private:
     NoteSession session_;
     std::vector<SidebarEntry> sidebar_entries_;
     std::vector<size_t> visible_notes_;
+    std::vector<NoteSearchResult> note_search_matches_;
+    size_t note_search_active_ = 0;
     std::optional<ProjectContext> project_context_;
     std::vector<std::string> known_project_ids_;
     std::optional<std::string> active_project_section_id_;

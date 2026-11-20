@@ -81,6 +81,24 @@ namespace textlt {
         bool SearchWholeWord() const;
         size_t SearchMatchCount() const;
         size_t CurrentSearchMatchIndex() const;
+
+        // Structured result-list API used by the shared Find/Replace sidebar.
+        struct SearchResult {
+            size_t row = 0;
+            size_t column = 0;
+            size_t length = 0;
+            std::string preview;
+            size_t preview_match_start = 0;
+            size_t preview_match_length = 0;
+        };
+        std::vector<SearchResult> FindAll(const std::string& query,
+            bool match_case, bool whole_word, size_t limit, bool& truncated);
+        void ActivateSearchResult(size_t index);
+        bool ReplaceSearchResult(size_t index, const std::string& replacement,
+            std::string& error);
+        size_t ReplaceAllSearchMatches(const std::string& query,
+            const std::string& replacement, bool match_case, bool whole_word);
+        void SetSearchOptions(bool match_case, bool whole_word);
         std::optional<std::pair<size_t, size_t>> FindMatchingBracket() const;
 
         std::string GetCurrentLineText() const;

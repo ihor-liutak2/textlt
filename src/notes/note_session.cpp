@@ -79,6 +79,52 @@ bool NoteSession::DeleteSelection() {
     PushUndo(); const auto range = Selection(); DeleteRange(range.first, range.second); Changed(); return true;
 }
 
+bool NoteSession::ReplaceTextAt(size_t block, size_t byte, size_t length,
+    const std::string& replacement) {
+    if (!note_ || block >= note_->blocks.size()) return false;
+    PushUndo();
+    NoteBlock& target = note_->blocks[block];
+    const std::string text = BlockText(target);
+    const size_t from = std::min(byte, text.size());
+    const size_t to = std::min(text.size(), from + length);
+    target.runs = {{text.substr(0, from) + replacement + text.substr(to)}};
+    cursor_ = {block, from + replacement.size()};
+    selection_anchor_.reset();
+    Changed();
+    return true;
+}
+
+bool NoteSession::ReplaceTextRanges(const std::vector<NoteTextRange>& ranges,
+    const std::string& replacement) {
+    if (!note_ || ranges.empty()) return false;
+    std::vector<NoteTextRange> ordered = ranges;
+    std::sort(ordered.begin(), ordered.end(), [](const NoteTextRange& left,
+        const NoteTextRange& right) {
+        return left.block != right.block ? left.block > right.block
+                                         : left.byte > right.byte;
+    });
+    PushUndo();
+    for (const NoteTextRange& range : ordered) {
+        if (range.block >= note_->blocks.size()) continue;
+        NoteBlock& target = note_->blocks[range.block];
+        const std::string text = BlockText(target);
+        const size_t from = std::min(range.byte, text.size());
+        const size_t to = std::min(text.size(), from + range.length);
+        target.runs = {{text.substr(0, from) + replacement + text.substr(to)}};
+    }
+    const NoteTextRange& first = *std::min_element(ranges.begin(), ranges.end(),
+        [](const NoteTextRange& left, const NoteTextRange& right) {
+            return left.block != right.block ? left.block < right.block
+                                             : left.byte < right.byte;
+        });
+    cursor_ = {first.block,
+        std::min(first.byte + replacement.size(),
+            BlockText(note_->blocks[first.block]).size())};
+    selection_anchor_.reset();
+    Changed();
+    return true;
+}
+
 void NoteSession::SetCursor(const NotePosition& position, bool selecting) {
     if (!note_) return;
     BeginSelection(selecting);

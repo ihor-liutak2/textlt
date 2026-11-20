@@ -66,13 +66,6 @@ std::vector<std::string> BuiltInHelpLines() {
         "  Shift+Ctrl+Up Select to the previous paragraph",
         "  Shift+Ctrl+Down Select to the next paragraph",
         "",
-        "Search & Replace",
-        "  Ctrl+F        Open Find Panel",
-        "  Ctrl+R        Open Replace Panel",
-        "  F3            Find Next Match",
-        "  Shift+Enter   Find Previous Match",
-        "  Escape        Close Find/Replace Panel",
-        "",
         "Editing",
         "  Ctrl + /      Toggle Comment",
         "  Ctrl + T      Toggle Case",
@@ -882,7 +875,6 @@ void TextltApp::OpenGoToLinePanel() {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
-    current_search_mode_ = SearchMode::None;
     std::static_pointer_cast<EditorComponent>(text_editor_)->ClearSearchHighlights();
     navigation_popup_mode_ = NavigationPopupMode::GoToLine;
     show_goto_line_bar_ = true;

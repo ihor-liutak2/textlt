@@ -29,6 +29,7 @@ size_t EstimateWrappedLineRows(const std::string& line, size_t visible_width) {
 void EditorViewport::Reset() {
     scroll_x = 0;
     scroll_y = 0;
+    wrapped_scroll_offset = 0;
     mouse_selecting = false;
     is_dragging_scrollbar = false;
     drag_start_scroll_y = 0;
@@ -345,23 +346,24 @@ std::pair<size_t, size_t> EditorViewport::PositionAtMouse(
         size_t visual_row = 0;
         const size_t target_visual_row = static_cast<size_t>(std::max(0, relative_y));
         for (size_t row = scroll_y; row < session.lines.size(); ++row) {
-            const size_t segments_needed = target_visual_row >= visual_row
-                ? target_visual_row - visual_row + 1
-                : 1;
+            const size_t skip = row == scroll_y ? wrapped_scroll_offset : 0;
+            const size_t segments_needed = target_visual_row - visual_row + 1 + skip;
             const auto segments = utils::BuildUtf8WrapSegmentsLimited(
                 session.lines[row],
                 VisibleTextWidth(&session, config),
                 segments_needed);
-            if (segments.empty()) {
+            if (segments.size() <= skip) {
                 continue;
             }
-            if (target_visual_row < visual_row + segments.size()) {
+            const size_t visible_segments = segments.size() - skip;
+            if (target_visual_row < visual_row + visible_segments) {
                 clicked_row = row;
-                segment_start = segments[target_visual_row - visual_row].start;
-                segment_end = segments[target_visual_row - visual_row].end;
+                const auto& segment = segments[target_visual_row - visual_row + skip];
+                segment_start = segment.start;
+                segment_end = segment.end;
                 break;
             }
-            visual_row += segments.size();
+            visual_row += visible_segments;
             clicked_row = row;
             segment_start = segments.back().start;
             segment_end = segments.back().end;
@@ -435,6 +437,7 @@ bool EditorViewport::HandleMouseEvent(
         mouse.x >= scrollbar_x_min &&
         mouse.x <= box.x_max;
     auto clamp_cursor_to_visible_scroll = [&]() {
+        wrapped_scroll_offset = 0;
         if (session.lines.empty()) {
             return;
         }

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -52,6 +53,22 @@ int main() {
     Check(imported.size() == 4);
     Check(imported[2].title == "database.host" && imported[2].content == "localhost");
     Check(imported[3].title == "database.port" && imported[3].content == "5432");
+
+    // Find/Replace applies grouped text edits in one repository commit, with
+    // descending offsets preserving positions for repeated matches.
+    const auto revision_before_replace = reloaded.Revision();
+    Check(reloaded.ApplyTextEdits(group, page, {
+        {first, 2, 5, std::string("Привіт").size(), "Hello"},
+        {first, 2, 0, 4, "run"},
+        {first, 0, 0, std::string("Unicode").size(), "Localized"},
+    }, error));
+    Check(reloaded.Revision() == revision_before_replace + 1);
+    const auto& replaced = reloaded.Data().groups.front().pages.front().items;
+    const auto replaced_first = std::find_if(replaced.begin(), replaced.end(),
+        [&](const ActionItem& item) { return item.id == first; });
+    Check(replaced_first != replaced.end());
+    Check(replaced_first->title == "Localized");
+    Check(replaced_first->content == "run Hello\r\n第二行");
 
     const ActionsDocument before = reloaded.Data();
     ActionRepository failing(path, [](const auto&, const auto&, std::string& message) {

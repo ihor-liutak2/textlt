@@ -84,6 +84,7 @@ public:
 
     size_t scroll_x = 0;
     size_t scroll_y = 0;
+    size_t wrapped_scroll_offset = 0;
     bool mouse_selecting = false;
     bool is_dragging_scrollbar = false;
     size_t drag_start_scroll_y = 0;

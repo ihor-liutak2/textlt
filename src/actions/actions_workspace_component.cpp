@@ -1,6 +1,7 @@
 #include "actions/actions_workspace_component.hpp"
 
 #include <algorithm>
+#include <cctype>
 
 #include "ftxui/component/component.hpp"
 #include "ftxui/component/component_options.hpp"
@@ -26,6 +27,28 @@ constexpr size_t kActionMetadataFirstRowCharacters = 25;
 // Mask for items with "hide text": a solid large circle, shown 8 times in tiles.
 const std::string kHiddenContentMask = "⬤⬤⬤⬤⬤⬤⬤⬤";
 
+bool IsWordCharacter(char character) {
+    const unsigned char value = static_cast<unsigned char>(character);
+    return std::isalnum(value) != 0 || character == '_';
+}
+
+std::string LowerCopy(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+        [](unsigned char character) {
+            return static_cast<char>(std::tolower(character));
+        });
+    return value;
+}
+
+std::pair<size_t, size_t> LineBounds(const std::string& text, size_t offset) {
+    offset = std::min(offset, text.size());
+    const size_t start = text.rfind('\n', offset == 0 ? 0 : offset - 1);
+    const size_t line_start = start == std::string::npos ? 0 : start + 1;
+    size_t line_end = text.find('\n', offset);
+    if (line_end == std::string::npos) line_end = text.size();
+    return {line_start, line_end};
+}
+
 // Same thumb geometry as the notes editor scrollbar.
 struct ScrollThumb {
     bool needed = false;
@@ -50,14 +73,43 @@ ScrollThumb ComputeScrollThumb(
     return thumb;
 }
 
-ftxui::Element RenderActionMetadataColumn(const std::string& value) {
+ftxui::Element RenderHighlightedLine(const Theme& theme,
+    const std::string& line, size_t line_offset, size_t match_start,
+    size_t match_length) {
+    using namespace ftxui;
+    Elements parts;
+    parts.push_back(ftxui::text(" "));
+    const bool overlaps = match_length > 0 &&
+        match_start < line_offset + line.size() &&
+        match_start + match_length > line_offset;
+    if (!overlaps) {
+        parts.push_back(ftxui::text(line));
+        return hbox(std::move(parts));
+    }
+    const size_t begin = std::max(match_start, line_offset) - line_offset;
+    const size_t end = std::min(match_start + match_length,
+        line_offset + line.size()) - line_offset;
+    if (begin > 0) parts.push_back(ftxui::text(line.substr(0, begin)));
+    parts.push_back(ftxui::text(line.substr(begin, end - begin)) |
+        bgcolor(theme.active_match_bg) | color(theme.selection_fg));
+    if (end < line.size()) parts.push_back(ftxui::text(line.substr(end)));
+    return hbox(std::move(parts));
+}
+
+ftxui::Element RenderActionMetadataColumn(const Theme& theme,
+    const std::string& value, bool highlighted = false, size_t match_start = 0,
+    size_t match_length = 0) {
     using namespace ftxui;
     const std::string limited = LimitActionMetadata(value);
     const std::string first = LimitUtf8Characters(
         limited, kActionMetadataFirstRowCharacters);
     const std::string second = limited.substr(first.size());
-    Elements rows = {text(" " + first)};
-    if (!second.empty()) rows.push_back(text(" " + second));
+    Elements rows = {RenderHighlightedLine(theme, first, 0,
+        highlighted ? match_start : 0, highlighted ? match_length : 0)};
+    if (!second.empty()) {
+        rows.push_back(RenderHighlightedLine(theme, second, first.size(),
+            highlighted ? match_start : 0, highlighted ? match_length : 0));
+    }
     return vbox(std::move(rows)) | size(WIDTH, EQUAL, kActionMetadataColumnWidth);
 }
 
@@ -277,6 +329,169 @@ void ActionsWorkspaceComponent::CopyAllActions() {
 
 bool ActionsWorkspaceComponent::HasSelectedPage() const {
     return SelectedPage() != nullptr;
+}
+
+uint64_t ActionsWorkspaceComponent::Revision() const {
+    const size_t group_hash = std::hash<std::string>{}(selected_group_id_);
+    const size_t page_hash = std::hash<std::string>{}(selected_page_id_);
+    const uint64_t scope = static_cast<uint64_t>(group_hash) ^
+        (static_cast<uint64_t>(page_hash) + 0x9e3779b97f4a7c15ULL +
+            (static_cast<uint64_t>(group_hash) << 6) +
+            (static_cast<uint64_t>(group_hash) >> 2));
+    return repository_.Revision() ^ scope;
+}
+
+std::vector<ActionsWorkspaceComponent::ActionSearchResult>
+ActionsWorkspaceComponent::SearchActions(const std::string& query,
+    bool match_case, bool whole_word, size_t limit, bool& truncated) {
+    truncated = false;
+    action_search_matches_.clear();
+    action_search_active_ = 0;
+    std::vector<ActionSearchResult> results;
+    const ActionPage* page = SelectedPage();
+    if (!page || query.empty()) return results;
+
+    const std::string needle = match_case ? query : LowerCopy(query);
+    auto scan = [&](const ActionItem& item, const std::string& text, int field,
+                    const std::string& title_prefix) {
+        if (text.empty()) return;
+        const std::string searchable = match_case ? text : LowerCopy(text);
+        size_t position = searchable.find(needle);
+        while (position != std::string::npos) {
+            const bool word_before = position > 0 &&
+                IsWordCharacter(text[position - 1]);
+            const size_t after = position + needle.size();
+            const bool word_after = after < text.size() &&
+                IsWordCharacter(text[after]);
+            if (!whole_word || (!word_before && !word_after)) {
+                ActionSearchResult match;
+                match.item_id = item.id;
+                match.field = field;
+                match.byte = position;
+                match.length = needle.size();
+                match.label = title_prefix;
+                if (field == 2) {
+                    const auto bounds = LineBounds(text, position);
+                    match.preview = text.substr(
+                        bounds.first, bounds.second - bounds.first);
+                    match.preview_match_start = position - bounds.first;
+                    match.preview_match_length = needle.size();
+                    if (item.hide_text) {
+                        match.preview = kHiddenContentMask;
+                        match.preview_match_start = 0;
+                        match.preview_match_length = 0;
+                    }
+                } else {
+                    match.preview = text;
+                    match.preview_match_start = position;
+                    match.preview_match_length = needle.size();
+                }
+                action_search_matches_.push_back(match);
+                if (results.size() < limit) {
+                    results.push_back(std::move(match));
+                } else {
+                    truncated = true;
+                }
+            }
+            position = searchable.find(
+                needle, position + std::max<size_t>(1, needle.size()));
+        }
+    };
+
+    for (const ActionItem& item : page->items) {
+        const std::string short_title = LimitUtf8Characters(item.title, 12);
+        const std::string prefix = short_title.empty() ? "Action" : short_title;
+        scan(item, item.title, 0, prefix + " · title");
+        scan(item, item.description, 1, prefix + " · desc");
+        scan(item, item.content, 2, prefix + " · content");
+    }
+    return results;
+}
+
+void ActionsWorkspaceComponent::ActivateActionSearchResult(size_t index) {
+    const ActionPage* page = SelectedPage();
+    if (!page || index >= action_search_matches_.size()) return;
+    const ActionSearchResult& match = action_search_matches_[index];
+    const int item_index = IndexById(page->items, match.item_id);
+    if (item_index < 0) return;
+    action_search_active_ = index;
+    selected_item_id_ = match.item_id;
+    focus_ = FocusArea::Items;
+    const size_t target = static_cast<size_t>(item_index);
+    const size_t visible = items_visible_count_ ? items_visible_count_ : 1;
+    if (target < item_scroll_) {
+        item_scroll_ = target;
+    } else if (target >= item_scroll_ + visible) {
+        item_scroll_ = target + 1 - visible;
+    }
+}
+
+bool ActionsWorkspaceComponent::ReplaceActionSearchResult(size_t index,
+    const std::string& replacement, std::string& error) {
+    if (index >= action_search_matches_.size()) {
+        error = "No match to replace";
+        return false;
+    }
+    const ActionSearchResult match = action_search_matches_[index];
+    ActionTextEdit edit;
+    edit.item_id = match.item_id;
+    edit.field = match.field;
+    edit.byte = match.byte;
+    edit.length = match.length;
+    edit.replacement = replacement;
+    std::vector<ActionTextEdit> edits = {std::move(edit)};
+    if (!repository_.ApplyTextEdits(selected_group_id_, selected_page_id_,
+            std::move(edits), error)) {
+        return false;
+    }
+    NormalizeSelection();
+    action_search_matches_.clear();
+    action_search_active_ = 0;
+    if (groups_changed_) groups_changed_();
+    Notify("Replaced action text");
+    return true;
+}
+
+bool ActionsWorkspaceComponent::ReplaceAllActionsText(
+    const std::string& query, const std::string& replacement, bool match_case,
+    bool whole_word, size_t& count, std::string& error) {
+    count = 0;
+    if (query.empty()) {
+        error = "Enter text to replace";
+        return false;
+    }
+    bool truncated = false;
+    SearchActions(query, match_case, whole_word,
+        static_cast<size_t>(-1), truncated);
+    if (action_search_matches_.empty()) return true;
+    std::vector<ActionTextEdit> edits;
+    edits.reserve(action_search_matches_.size());
+    for (const ActionSearchResult& match : action_search_matches_) {
+        ActionTextEdit edit;
+        edit.item_id = match.item_id;
+        edit.field = match.field;
+        edit.byte = match.byte;
+        edit.length = match.length;
+        edit.replacement = replacement;
+        edits.push_back(std::move(edit));
+    }
+    const size_t applied = edits.size();
+    if (!repository_.ApplyTextEdits(selected_group_id_, selected_page_id_,
+            std::move(edits), error)) {
+        return false;
+    }
+    NormalizeSelection();
+    action_search_matches_.clear();
+    action_search_active_ = 0;
+    count = applied;
+    if (groups_changed_) groups_changed_();
+    Notify("Replaced " + std::to_string(count) + " action matches");
+    return true;
+}
+
+void ActionsWorkspaceComponent::ClearActionSearchHighlights() {
+    action_search_matches_.clear();
+    action_search_active_ = 0;
 }
 
 bool ActionsWorkspaceComponent::ImportActions(
@@ -503,19 +718,40 @@ ftxui::Element ActionsWorkspaceComponent::RenderItems() {
             const bool is_selected = static_cast<int>(i) == selected;
             const std::string title = LimitActionMetadata(item.title);
             const std::string description = LimitActionMetadata(item.description);
+            const ActionSearchResult* active_match =
+                action_search_active_ < action_search_matches_.size() &&
+                action_search_matches_[action_search_active_].item_id == item.id
+                    ? &action_search_matches_[action_search_active_] : nullptr;
             Element copy_button = hbox({
                     separator() | color(BorderColor(theme)),
                     text(" Copy "),
                 }) | reflect(copy_boxes_[i - start]) | notflex;
             Elements body = {dbox({
                 hbox({
-                    RenderActionMetadataColumn(title) | bold,
-                    RenderActionMetadataColumn(description) | dim,
+                    RenderActionMetadataColumn(theme, title,
+                        active_match && active_match->field == 0,
+                        active_match ? active_match->byte : 0,
+                        active_match ? active_match->length : 0) | bold,
+                    RenderActionMetadataColumn(theme, description,
+                        active_match && active_match->field == 1,
+                        active_match ? active_match->byte : 0,
+                        active_match ? active_match->length : 0) | dim,
                 }) | xframe,
                 hbox({filler(), std::move(copy_button)}),
             }) |
                 bgcolor(theme.modal_selected_item_bg) |
                 color(theme.modal_selected_item_fg)};
+            if (active_match && active_match->field == 2 && !item.hide_text) {
+                const auto bounds = LineBounds(item.content, active_match->byte);
+                const std::string line = item.content.substr(
+                    bounds.first, bounds.second - bounds.first);
+                body.push_back(hbox({
+                    text("     "),
+                    RenderHighlightedLine(theme, line, 0,
+                        active_match->byte - bounds.first,
+                        active_match->length) | xflex,
+                }));
+            }
             Element content = item.hide_text
                 ? hbox({text("     "), text(kHiddenContentMask) |
                     color(is_selected ? theme.modal_accent : theme.foreground)})

@@ -56,7 +56,6 @@ void TextltApp::SetEditorLayoutMode(EditorLayoutMode mode) {
 bool TextltApp::MainViewCanActivateEditorPane() const {
     return ActiveLayer() == UiLayer::Main &&
         (!menu_bar_ || !menu_bar_->IsDropdownOpen()) &&
-        current_search_mode_ == SearchMode::None &&
         !show_goto_line_bar_ &&
         !help_dialog_.IsOpen() &&
         !recent_files_modal_.IsOpen() &&

@@ -52,6 +52,28 @@ public:
     bool HasSelectedPage() const;
     bool ImportActions(std::vector<ActionItem> items, std::string& error);
 
+    // Structured action-list search used by the shared Find/Replace sidebar.
+    struct ActionSearchResult {
+        std::string item_id;
+        int field = 0; // 0 = title, 1 = description, 2 = content
+        size_t byte = 0;
+        size_t length = 0;
+        std::string label;
+        std::string preview;
+        size_t preview_match_start = 0;
+        size_t preview_match_length = 0;
+    };
+    uint64_t Revision() const;
+    std::vector<ActionSearchResult> SearchActions(const std::string& query,
+        bool match_case, bool whole_word, size_t limit, bool& truncated);
+    void ActivateActionSearchResult(size_t index);
+    bool ReplaceActionSearchResult(size_t index,
+        const std::string& replacement, std::string& error);
+    bool ReplaceAllActionsText(const std::string& query,
+        const std::string& replacement, bool match_case, bool whole_word,
+        size_t& count, std::string& error);
+    void ClearActionSearchHighlights();
+
 private:
     friend class ActionsWorkspaceModalTestAccess;
     enum class NavigatorTab { Groups, Pages };
@@ -118,6 +140,8 @@ private:
     size_t items_visible_rows_ = 0;
     size_t items_visible_count_ = 0;
     std::string items_layout_page_id_;
+    std::vector<ActionSearchResult> action_search_matches_;
+    size_t action_search_active_ = 0;
     bool items_scrollbar_dragging_ = false;
     int items_scrollbar_drag_y_ = 0;
     size_t items_scrollbar_drag_scroll_ = 0;

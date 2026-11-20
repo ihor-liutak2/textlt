@@ -50,6 +50,7 @@ bool ActionRepository::Save(std::string& error) const { return writer_(path_, da
 bool ActionRepository::Commit(ActionsDocument candidate, std::string& error) {
     if (!writer_(path_, candidate, error)) return false;
     data_ = std::move(candidate);
+    ++revision_;
     return true;
 }
 
@@ -222,6 +223,55 @@ bool ActionRepository::UpdateItem(const std::string& group_id, const std::string
     const auto found = std::find_if(page->items.begin(), page->items.end(), [&](const auto& value) { return value.id == item.id; });
     if (found == page->items.end()) { error = "Action was not found."; return false; }
     *found = item; return Commit(std::move(next), error);
+}
+
+bool ActionRepository::ApplyTextEdits(const std::string& group_id,
+    const std::string& page_id, std::vector<ActionTextEdit> edits,
+    std::string& error) {
+    if (edits.empty()) return true;
+    ActionsDocument next = data_;
+    ActionGroup* group = FindGroup(next, group_id);
+    ActionPage* page = group ? FindPage(*group, page_id) : nullptr;
+    if (!page) { error = "Page was not found."; return false; }
+
+    std::sort(edits.begin(), edits.end(), [](const ActionTextEdit& left,
+        const ActionTextEdit& right) {
+        if (left.item_id != right.item_id) return left.item_id > right.item_id;
+        if (left.field != right.field) return left.field > right.field;
+        return left.byte > right.byte;
+    });
+    for (const ActionTextEdit& edit : edits) {
+        if (edit.field < 0 || edit.field > 2) {
+            error = "Unknown action field.";
+            return false;
+        }
+        const auto found = std::find_if(page->items.begin(), page->items.end(),
+            [&](const auto& item) { return item.id == edit.item_id; });
+        if (found == page->items.end()) {
+            error = "Action was not found.";
+            return false;
+        }
+        std::string* value = edit.field == 0 ? &found->title
+            : edit.field == 1 ? &found->description : &found->content;
+        const size_t from = std::min(edit.byte, value->size());
+        const size_t to = std::min(value->size(), from + edit.length);
+        value->replace(from, to - from, edit.replacement);
+    }
+
+    for (const ActionItem& item : page->items) {
+        if (item.title.empty()) {
+            error = "Action title cannot be empty after replacement.";
+            return false;
+        }
+        if (LimitUtf8Characters(item.title, kActionMetadataCharacterLimit).size() !=
+                item.title.size() ||
+            LimitUtf8Characters(item.description, kActionMetadataCharacterLimit).size() !=
+                item.description.size()) {
+            error = "Action title and description are limited to 30 characters.";
+            return false;
+        }
+    }
+    return Commit(std::move(next), error);
 }
 
 bool ActionRepository::DeleteItem(const std::string& group_id, const std::string& page_id, const std::string& id, std::string& error) {

@@ -306,6 +306,8 @@ bool TextltApp::RunCommand(const std::string& command_id) {
             command_id == "file.save" ||
             command_id == "docs.open" ||
             command_id == "actions.open" ||
+            command_id == "edit.find" ||
+            command_id == "edit.replace" ||
             command_id == "sidebar.toggle_file_explorer" ||
             IsWorkspaceModalCommand(command_id);
         if (!allowed) {
@@ -320,6 +322,8 @@ bool TextltApp::RunCommand(const std::string& command_id) {
             command_id.rfind("app.", 0) == 0 || command_id == "notes.toggle" ||
             command_id == "file.save" ||
             command_id == "docs.open" ||
+            command_id == "edit.find" ||
+            command_id == "edit.replace" ||
             command_id == "sidebar.toggle_file_explorer" ||
             IsWorkspaceModalCommand(command_id);
         if (!allowed) {

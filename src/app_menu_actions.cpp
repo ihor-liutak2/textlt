@@ -254,16 +254,12 @@ void TextltApp::CommandEditConvertIndents2To4() {
 
 
 void TextltApp::CommandEditFind() {
-    CloseDropdown();
     OpenFindPanel(false);
-    active_action_ = "Find";
 }
 
 
 void TextltApp::CommandEditReplace() {
-    CloseDropdown();
     OpenFindPanel(true);
-    active_action_ = "Replace";
 }
 
 

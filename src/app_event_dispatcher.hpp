@@ -19,7 +19,6 @@ public:
 private:
     bool RestoreClosedModalFocus();
     bool HandleActiveModalEvent(const ftxui::Event& event);
-    bool HandleFindPanelEvent(const ftxui::Event& event);
     bool HandleMainEvent(const ftxui::Event& event);
     bool HandleSidebarEvent(const ftxui::Event& event);
     bool HandleEditorEvent(const ftxui::Event& event);

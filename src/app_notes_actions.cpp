@@ -12,7 +12,6 @@ void TextltApp::ShowNotesWorkspace() {
         SetDistractionEnabled(false);
     }
     CloseDropdown();
-    CloseFindPanel();
     workspace_mode_ = WorkspaceMode::Notes;
     workspace_mode_index_ = static_cast<int>(workspace_mode_);
     if (menu_bar_) {

@@ -44,35 +44,6 @@ public:
     }
 };
 
-ftxui::ButtonOption MakeFindPanelTextButtonOption(
-    std::string label,
-    std::function<void()> on_click,
-    const Theme* theme,
-    std::function<bool()> is_active = {},
-    ButtonRole role = ButtonRole::Default,
-    std::string icon = {}) {
-    ButtonSpec base_spec = ButtonSpecFromLabel(
-        std::move(label),
-        role,
-        ButtonVariant::AccentEdges,
-        ButtonSize::Compact,
-        std::move(icon));
-
-    ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
-    option.label = ButtonCaptionText(base_spec);
-    option.on_click = std::move(on_click);
-    option.transform = [theme,
-                        is_active = std::move(is_active),
-                        base_spec = std::move(base_spec)](const ftxui::EntryState& state) {
-        const Theme fallback_theme;
-        const Theme& resolved_theme = theme ? *theme : fallback_theme;
-        ButtonSpec spec = base_spec;
-        spec.selected = is_active && is_active();
-        return RenderButton(resolved_theme, spec, state.focused || state.active);
-    };
-    return option;
-}
-
 ftxui::ButtonOption MakePopupFlatButtonOption(
     std::string label,
     std::function<void()> on_click,
@@ -520,6 +491,26 @@ TextltApp::TextltApp()
         [this] { RefreshActionsSidebar(); });
     SyncActionsProjectContext();
 
+    editor_find_target_ = std::make_unique<EditorFindTarget>([this]() {
+        return std::static_pointer_cast<EditorComponent>(text_editor_).get();
+    });
+    notes_find_target_ = std::make_unique<NotesFindTarget>([this]() {
+        return std::static_pointer_cast<notes::NotesWorkspaceComponent>(
+            notes_workspace_component_).get();
+    });
+    actions_find_target_ = std::make_unique<ActionsFindTarget>([this]() {
+        return std::static_pointer_cast<actions::ActionsWorkspaceComponent>(
+            actions_workspace_component_).get();
+    });
+    find_replace_panel_ = std::make_unique<FindReplacePanel>(
+        &current_theme_,
+        [this](const std::string& message) {
+            active_action_ = message;
+            screen_.PostEvent(ftxui::Event::Custom);
+        },
+        [this] { screen_.PostEvent(ftxui::Event::Custom); },
+        [this] { CloseFindPanel(); });
+
     top_bar_row_ = ftxui::Make<TopBarRowComponent>(
         &current_theme_,
         TopBarRowComponent::Callbacks{
@@ -588,23 +579,6 @@ TextltApp::TextltApp()
         bottom_bar_row_,
     });
 
-    ftxui::InputOption find_input_option;
-    find_input_option.multiline = false;
-    find_input_option.on_change = [this] { RefreshFindMatches(); };
-    find_input_option.on_enter = [this] { FindNext(); };
-    find_input_option.cursor_position = &find_input_cursor_position_;
-    find_input_ = ftxui::Input(&find_query_, "find text", find_input_option);
-
-    ftxui::InputOption replace_find_input_option = find_input_option;
-    replace_find_input_option.cursor_position = &replace_find_input_cursor_position_;
-    replace_find_input_ = ftxui::Input(&find_query_, "find text", replace_find_input_option);
-
-    ftxui::InputOption replace_input_option;
-    replace_input_option.multiline = false;
-    replace_input_option.on_enter = [this] { FindNext(); };
-    replace_input_option.cursor_position = &replace_input_cursor_position_;
-    replace_input_ = ftxui::Input(&replace_text_, "replacement", replace_input_option);
-
     ftxui::InputOption goto_line_input_option;
     goto_line_input_option.multiline = false;
     goto_line_input_option.on_enter = [this] { SubmitGoToLine(); };
@@ -624,61 +598,6 @@ TextltApp::TextltApp()
         goto_line_cancel_button_,
     });
 
-    find_paste_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
-        "Paste", [this] { PasteIntoFindPanelInput(); }, &current_theme_, {}, ButtonRole::Navigation));
-    find_clear_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
-        "Clear", [this] { ClearFindPanelFields(); }, &current_theme_));
-    replace_paste_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
-        "Paste", [this] { PasteIntoFindPanelInput(); }, &current_theme_, {}, ButtonRole::Navigation));
-    replace_clear_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
-        "Clear", [this] { ClearFindPanelFields(); }, &current_theme_));
-    find_next_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
-        "Find Next", [this] { FindNext(); }, &current_theme_, {}, ButtonRole::Navigation));
-    find_previous_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
-        "Find Prev", [this] { FindPrevious(); }, &current_theme_));
-    replace_next_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
-        "Replace Next", [this] { ReplaceNext(); }, &current_theme_));
-    replace_all_button_ = ftxui::Button(MakeFindPanelTextButtonOption(
-        "Replace All", [this] { ReplaceAll(); }, &current_theme_));
-
-    auto search_filter_transform = [this](const ftxui::EntryState& state) {
-        ftxui::Element item = ftxui::text(
-            std::string(state.state ? "[X] " : "[ ] ") + state.label);
-        if (state.active) {
-            item = item | ftxui::bold;
-        }
-        if (state.focused) {
-            item = item |
-                ftxui::bgcolor(current_theme_.menu_foreground) |
-                ftxui::color(current_theme_.menu_background);
-        } else {
-            item = item | ftxui::color(current_theme_.menu_foreground);
-        }
-        return item;
-    };
-
-    ftxui::CheckboxOption match_case_option = ftxui::CheckboxOption::Simple();
-    match_case_option.transform = search_filter_transform;
-    match_case_option.on_change = [this] {
-        std::static_pointer_cast<EditorComponent>(text_editor_)->ToggleSearchMatchCase();
-        SaveConfig();
-        RefreshFindMatches();
-        screen_.PostEvent(ftxui::Event::Custom);
-    };
-    search_match_case_checkbox_ = ftxui::Checkbox(
-        "Match Case", &editor_config_.search_match_case, match_case_option);
-
-    ftxui::CheckboxOption whole_word_option = ftxui::CheckboxOption::Simple();
-    whole_word_option.transform = search_filter_transform;
-    whole_word_option.on_change = [this] {
-        std::static_pointer_cast<EditorComponent>(text_editor_)->ToggleSearchWholeWord();
-        SaveConfig();
-        RefreshFindMatches();
-        screen_.PostEvent(ftxui::Event::Custom);
-    };
-    search_whole_word_checkbox_ = ftxui::Checkbox(
-        "Whole Word", &editor_config_.search_whole_word, whole_word_option);
-
     // GitSettingsModal used to create its component lazily in Open(). Every
     // entry passed to Container::Tab must already be a valid, stable component.
     git_settings_modal_.Configure(
@@ -686,42 +605,6 @@ TextltApp::TextltApp()
         &git_manager_,
         [this](const std::string& text) { clipboard_controller_.WriteText(text); },
         [this] { CloseGitSettingsModal(); });
-
-    find_panel_find_container_ = ftxui::Container::Horizontal({
-        find_input_,
-        ftxui::Container::Vertical({
-            find_paste_button_,
-            find_clear_button_,
-        }),
-        ftxui::Container::Vertical({
-            find_next_button_,
-            find_previous_button_,
-        }),
-    });
-    find_panel_replace_container_ = ftxui::Container::Horizontal({
-        replace_find_input_,
-        replace_input_,
-        ftxui::Container::Vertical({
-            replace_paste_button_,
-            replace_clear_button_,
-        }),
-        ftxui::Container::Vertical({
-            replace_next_button_,
-            replace_all_button_,
-        }),
-    });
-    find_panel_fields_container_ = ftxui::Container::Tab({
-        find_panel_find_container_,
-        find_panel_replace_container_,
-    }, &search_panel_tab_index_);
-    find_panel_filters_container_ = ftxui::Container::Horizontal({
-        search_match_case_checkbox_,
-        search_whole_word_checkbox_,
-    });
-    find_panel_container_ = ftxui::Container::Vertical({
-        find_panel_fields_container_,
-        find_panel_filters_container_,
-    });
 
     root_container_ = ftxui::Container::Tab({
         main_container_,
@@ -731,7 +614,6 @@ TextltApp::TextltApp()
         custom_processor_builder_modal_.View(),
         theme_dialog_.View(),
         theme_colors_modal_.View(),
-        find_panel_container_,
         goto_line_popup_container_,
         unsaved_changes_dialog_.View(),
         recent_files_modal_.View(),

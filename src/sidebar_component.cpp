@@ -178,8 +178,37 @@ ftxui::Element SidebarPanel::OnRender() {
         reflect(panel_box_);
 }
 
-bool SidebarPanel::OnEvent(ftxui::Event event) {
-    // Action-view controls share the sidebar with the workspace tabs. Handle
+void SidebarPanel::ClearHitboxes() {
+    const ftxui::Box empty{1, 0, 1, 0};
+    panel_box_ = empty;
+    menu_box_ = empty;
+    opened_tab_box_ = empty;
+    project_tab_box_ = empty;
+    projects_tab_box_ = empty;
+    favorites_tab_box_ = empty;
+    notes_tab_box_ = empty;
+    actions_tab_box_ = empty;
+    documents_tab_box_ = empty;
+    action_primary_box_ = empty;
+    action_secondary_box_ = empty;
+    action_tertiary_box_ = empty;
+    action_quaternary_box_ = empty;
+    action_quinary_box_ = empty;
+    group_new_box_ = empty;
+    group_rename_box_ = empty;
+    group_delete_box_ = empty;
+    group_merge_box_ = empty;
+    page_new_box_ = empty;
+    page_rename_box_ = empty;
+    page_delete_box_ = empty;
+    item_add_box_ = empty;
+    item_edit_box_ = empty;
+    item_delete_box_ = empty;
+    item_move_up_box_ = empty;
+    item_move_down_box_ = empty;
+}
+
+bool SidebarPanel::OnEvent(ftxui::Event event) {    // Action-view controls share the sidebar with the workspace tabs. Handle
     // their hitboxes first so a stale/overlapping tab box cannot turn a Delete
     // click into a Documents workspace switch.
     if (mode_ == SidebarMode::Actions &&

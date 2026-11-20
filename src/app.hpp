@@ -53,6 +53,10 @@
 #include "layout_controller.hpp"
 #include "notes/notes_workspace_component.hpp"
 #include "actions/actions_workspace_component.hpp"
+#include "find_replace/actions_find_target.hpp"
+#include "find_replace/editor_find_target.hpp"
+#include "find_replace/find_replace_panel.hpp"
+#include "find_replace/notes_find_target.hpp"
 #include "project_store.hpp"
 
 namespace textlt {
@@ -70,17 +74,6 @@ private:
         Documents,
         Notes,
         Actions,
-    };
-
-    enum class SearchMode {
-        None,
-        Find,
-        Replace,
-    };
-
-    enum class SearchPanelInput {
-        Find,
-        Replace,
     };
 
     enum class NavigationPopupMode {
@@ -101,7 +94,6 @@ private:
         CustomProcessorBuilder,
         Theme,
         ThemeColors,
-        Find,
         GoToLine,
         UnsavedChanges,
         RecentFiles,
@@ -274,13 +266,10 @@ private:
     void RefreshProjectSidebar();
     void RunDropdownAction(int menu_index, int item_index);
     ftxui::Element Render();
-    ftxui::Element RenderFindPanel();
     ftxui::Element RenderGoToLinePanel();
     BottomBarRowState CurrentBottomBarRowState();
     bool HandleGlobalEvent(ftxui::Event event);
     int DropdownX() const;
-    void OpenFindPanel(bool replace_mode);
-    void CloseFindPanel();
     void OpenGoToLinePanel();
     void OpenDistractionPagePanel();
     void CloseGoToLinePanel();
@@ -316,15 +305,7 @@ private:
         const std::string& connection_id,
         std::string& error);
     bool CanDeleteRemoteConnection(const std::string& connection_id, std::string& error) const;
-    void RefreshFindMatches();
-    void FindNext();
-    void FindPrevious();
-    void ReplaceNext();
-    void ReplaceAll();
-    void PasteIntoFindPanelInput();
-    void ClearFindPanelFields();
     bool HandleTerminalBracketedPaste(ftxui::Event event);
-    std::string FindMatchStatus() const;
     
     // Built-in command actions. UI surfaces and shortcuts call these through command IDs.
     void CommandFileNew();
@@ -351,6 +332,10 @@ private:
     void CommandEditConvertIndents2To4();
     void CommandEditFind();
     void CommandEditReplace();
+    void OpenFindPanel(bool replace_tab);
+    void CloseFindPanel();
+    void SyncFindPanelTarget();
+    void RestoreNotesSidebarForFindPanel();
     void CommandSearchFiles();
     void CommandTextProcessors();
     void CommandCustomProcessorBuilder();
@@ -434,6 +419,14 @@ private:
     ftxui::Component sidebar_panel_;
     ftxui::Component notes_workspace_component_;
     ftxui::Component actions_workspace_component_;
+    std::unique_ptr<EditorFindTarget> editor_find_target_;
+    std::unique_ptr<NotesFindTarget> notes_find_target_;
+    std::unique_ptr<ActionsFindTarget> actions_find_target_;
+    std::unique_ptr<FindReplacePanel> find_replace_panel_;
+    bool find_panel_open_ = false;
+    bool find_panel_focus_ = false;
+    bool find_panel_notes_sidebar_visible_ = false;
+    bool find_panel_hid_notes_sidebar_ = false;
     HelpDialog help_dialog_;
     KeyboardShortcutsModal keyboard_shortcuts_modal_;
     SidebarShortcutModal sidebar_shortcuts_modal_;
@@ -459,18 +452,12 @@ private:
     ThemeColorsModal theme_colors_modal_;
     ThemeDialog theme_dialog_;
     UnsavedChangesDialog unsaved_changes_dialog_;
-    std::string find_query_;
-    std::string replace_text_;
     std::string goto_line_input_;
     std::string active_action_ = "Ready";
     TtsHeaderButton tts_header_active_button_ = TtsHeaderButton::Open;
 
     UiLayer active_layer_ = UiLayer::Main;
     int active_layer_index_ = static_cast<int>(UiLayer::Main);
-    int search_panel_tab_index_ = 0;
-    int find_input_cursor_position_ = 0;
-    int replace_find_input_cursor_position_ = 0;
-    int replace_input_cursor_position_ = 0;
     int goto_line_input_cursor_position_ = 0;
     bool sidebar_has_focus_ = false;
     bool show_goto_line_bar_ = false;
@@ -479,8 +466,6 @@ private:
     bool terminal_bracketed_paste_active_ = false;
     WorkspaceMode workspace_mode_ = WorkspaceMode::Documents;
     int workspace_mode_index_ = static_cast<int>(WorkspaceMode::Documents);
-    SearchMode current_search_mode_ = SearchMode::None;
-    SearchPanelInput active_search_panel_input_ = SearchPanelInput::Find;
     std::string terminal_bracketed_paste_buffer_;
     std::string workspace_project_id_;
     std::shared_ptr<MenuBarComponent> menu_bar_;
@@ -489,24 +474,6 @@ private:
     ftxui::Component body_container_;
     ftxui::Component main_container_;
     ftxui::Component root_container_;
-    ftxui::Component find_input_;
-    ftxui::Component replace_find_input_;
-    ftxui::Component replace_input_;
-    ftxui::Component find_paste_button_;
-    ftxui::Component find_clear_button_;
-    ftxui::Component replace_paste_button_;
-    ftxui::Component replace_clear_button_;
-    ftxui::Component find_next_button_;
-    ftxui::Component find_previous_button_;
-    ftxui::Component replace_next_button_;
-    ftxui::Component replace_all_button_;
-    ftxui::Component find_panel_find_container_;
-    ftxui::Component find_panel_replace_container_;
-    ftxui::Component find_panel_fields_container_;
-    ftxui::Component find_panel_filters_container_;
-    ftxui::Component find_panel_container_;
-    ftxui::Component search_match_case_checkbox_;
-    ftxui::Component search_whole_word_checkbox_;
     ftxui::Component goto_line_input_component_;
     ftxui::Component goto_line_go_button_;
     ftxui::Component goto_line_cancel_button_;

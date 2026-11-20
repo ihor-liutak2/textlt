@@ -34,7 +34,7 @@ void TextltApp::ShowActionsWorkspace() {
         if (!error.empty()) active_action_ = "Notes save failed: " + error;
     }
     if (layout_controller_.IsDistractionModeActive()) SetDistractionEnabled(false);
-    CloseDropdown(); CloseFindPanel();
+    CloseDropdown();
     workspace_mode_ = WorkspaceMode::Actions;
     workspace_mode_index_ = static_cast<int>(workspace_mode_);
     menu_bar_->SetNotesMenuVisible(false); menu_bar_->SetActionsMenuVisible(true);

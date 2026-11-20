@@ -14,6 +14,12 @@ struct NotePosition {
     size_t byte = 0;
 };
 
+struct NoteTextRange {
+    size_t block = 0;
+    size_t byte = 0;
+    size_t length = 0;
+};
+
 inline bool operator==(const NotePosition& left, const NotePosition& right) {
     return left.block == right.block && left.byte == right.byte;
 }
@@ -49,6 +55,13 @@ public:
     void SelectAll();
     std::string SelectedText() const;
     bool DeleteSelection();
+    // Replaces a byte range inside one block as one undoable operation.
+    bool ReplaceTextAt(size_t block, size_t byte, size_t length,
+        const std::string& replacement);
+    // Replaces several block-local ranges with one undo snapshot and one
+    // revision bump. Ranges must not overlap.
+    bool ReplaceTextRanges(const std::vector<NoteTextRange>& ranges,
+        const std::string& replacement);
     // Toggles the heading level on every block in the selection. When all
     // selected blocks already use this level, they return to a paragraph.
     bool ToggleHeading(int level);

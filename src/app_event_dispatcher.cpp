@@ -182,48 +182,6 @@ bool AppEventDispatcher::HandleActiveModalEvent(const ftxui::Event& event) {
         return false;
     }
 
-    if (app_.ActiveLayer() == TextltApp::UiLayer::Find) {
-        return HandleFindPanelEvent(event);
-    }
-
-    return false;
-}
-
-bool AppEventDispatcher::HandleFindPanelEvent(const ftxui::Event& event) {
-    const std::string& input = event.input();
-
-    if (app_.find_input_->Focused() || app_.replace_find_input_->Focused()) {
-        app_.active_search_panel_input_ = TextltApp::SearchPanelInput::Find;
-    } else if (app_.replace_input_->Focused()) {
-        app_.active_search_panel_input_ = TextltApp::SearchPanelInput::Replace;
-    }
-
-    if (event == ftxui::Event::Escape) {
-        app_.CloseFindPanel();
-        return true;
-    }
-
-    if (event == ftxui::Event::F3) {
-        app_.FindNext();
-        return true;
-    }
-
-    if (input == "\x1B[13;2u" || input == "\x1B[27;2;13~") {
-        app_.FindPrevious();
-        return true;
-    }
-
-    if (MatchesShortcut(event, ShortcutModifier::Ctrl, 'a')) {
-        if (app_.find_input_->Focused()) {
-            app_.find_input_cursor_position_ = static_cast<int>(app_.find_query_.size());
-        } else if (app_.replace_find_input_->Focused()) {
-            app_.replace_find_input_cursor_position_ = static_cast<int>(app_.find_query_.size());
-        } else if (app_.replace_input_->Focused()) {
-            app_.replace_input_cursor_position_ = static_cast<int>(app_.replace_text_.size());
-        }
-        return true;
-    }
-
     return false;
 }
 
@@ -238,6 +196,36 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
 
     if (app_.menu_bar_->IsDropdownOpen()) {
         return event.is_mouse() ? false : app_.menu_bar_->OnEvent(event);
+    }
+
+    if (app_.find_panel_open_ && app_.find_replace_panel_) {
+        if (event == ftxui::Event::Escape) {
+            app_.CloseFindPanel();
+            return true;
+        }
+        if (event.is_mouse()) {
+            // Event::mouse() is non-const, so inspect a copy of this event.
+            ftxui::Event mouse_event = event;
+            const auto& mouse = mouse_event.mouse();
+            if (app_.find_replace_panel_->Contains(mouse.x, mouse.y)) {
+                app_.find_panel_focus_ = true;
+                app_.find_replace_panel_->SetFocused(true);
+                app_.find_replace_panel_->OnEvent(mouse_event);
+                if (event != ftxui::Event::Custom) {
+                    app_.screen_.PostEvent(ftxui::Event::Custom);
+                }
+                return true;
+            }
+            if (IsPrimaryMousePress(event)) {
+                app_.find_panel_focus_ = false;
+                app_.find_replace_panel_->SetFocused(false);
+            }
+        } else if (event != ftxui::Event::Custom && app_.find_panel_focus_) {
+            if (app_.find_replace_panel_->OnEvent(event)) {
+                app_.screen_.PostEvent(ftxui::Event::Custom);
+                return true;
+            }
+        }
     }
 
     if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Notes) {

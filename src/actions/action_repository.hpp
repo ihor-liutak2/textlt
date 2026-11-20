@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <string>
@@ -7,6 +8,14 @@
 #include "actions/action_model.hpp"
 
 namespace textlt::actions {
+
+struct ActionTextEdit {
+    std::string item_id;
+    int field = 0; // 0 = title, 1 = description, 2 = content
+    std::size_t byte = 0;
+    std::size_t length = 0;
+    std::string replacement;
+};
 
 class ActionRepository {
 public:
@@ -17,6 +26,7 @@ public:
     bool Load(std::string& error);
     bool Save(std::string& error) const;
     const ActionsDocument& Data() const { return data_; }
+    std::uint64_t Revision() const { return revision_; }
 
     bool CreateGroup(const std::string& name, std::string& id, std::string& error);
     bool RenameGroup(const std::string& id, const std::string& name, std::string& error);
@@ -45,6 +55,8 @@ public:
         std::vector<ActionItem> items, std::string& error);
     bool UpdateItem(const std::string& group_id, const std::string& page_id,
         const ActionItem& item, std::string& error);
+    bool ApplyTextEdits(const std::string& group_id, const std::string& page_id,
+        std::vector<ActionTextEdit> edits, std::string& error);
     bool DeleteItem(const std::string& group_id, const std::string& page_id,
         const std::string& id, std::string& error);
     bool MoveItem(const std::string& group_id, const std::string& page_id,
@@ -61,6 +73,7 @@ private:
     std::filesystem::path path_;
     Writer writer_;
     ActionsDocument data_;
+    std::uint64_t revision_ = 0;
 };
 
 } // namespace textlt::actions

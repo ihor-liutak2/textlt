@@ -71,6 +71,14 @@ ftxui::Element TextltApp::Render() {
 
     const auto editor = std::static_pointer_cast<EditorComponent>(text_editor_);
     const bool distraction_mode = layout_controller_.IsDistractionModeActive();
+    SyncFindPanelTarget();
+    if (find_panel_open_ && find_replace_panel_) {
+        find_replace_panel_->Tick();
+    }
+    const bool find_open = find_panel_open_ && find_replace_panel_;
+    Element find_panel_element = find_open
+        ? find_replace_panel_->Render() | size(WIDTH, EQUAL, 28) | yflex
+        : emptyElement();
     UpdateFileMenuLabels();
     UpdateNotesMenuLabels();
     RefreshOpenedDocumentsSidebar();
@@ -82,13 +90,25 @@ ftxui::Element TextltApp::Render() {
         : text_editor_->Render() | xflex;
 
     Element workspace = workspace_mode_ == WorkspaceMode::Notes && notes_workspace_component_
-        ? notes_workspace_component_->Render() | flex
+        ? (find_open
+              ? hbox({find_panel_element, text("  "),
+                      notes_workspace_component_->Render() | xflex}) | flex
+              : notes_workspace_component_->Render() | flex)
         : workspace_mode_ == WorkspaceMode::Actions && actions_workspace_component_
-        ? (!distraction_mode && editor_config_.show_actions_sidebar
+        ? (find_open
+              ? hbox({find_panel_element, text("  "),
+                      actions_workspace_component_->Render() | xflex})
+              : !distraction_mode && editor_config_.show_actions_sidebar
               ? hbox({sidebar_panel_->Render() | size(WIDTH, EQUAL, 28),
                       text("  "),
                       actions_workspace_component_->Render() | xflex})
               : hbox({actions_workspace_component_->Render() | xflex}))
+        : find_open
+        ? hbox({
+              find_panel_element,
+              text("  "),
+              editor_workspace | xflex,
+          })
         : !distraction_mode && editor_config_.show_file_explorer
         ? hbox({
               sidebar_panel_->Render() | size(WIDTH, EQUAL, 28),
@@ -112,10 +132,6 @@ ftxui::Element TextltApp::Render() {
 
     base_rows.push_back(workspace | yflex);
 
-    if (current_search_mode_ != SearchMode::None) {
-        base_rows.push_back(separator() | color(MainWindowSeparatorColor(current_theme_)));
-        base_rows.push_back(RenderFindPanel());
-    }
     if (!distraction_mode) {
         base_rows.push_back(separator() | color(MainWindowSeparatorColor(current_theme_)));
         base_rows.push_back(
@@ -206,81 +222,6 @@ ftxui::Element TextltApp::Render() {
     return dbox(std::move(layers));
 }
 
-ftxui::Element TextltApp::RenderFindPanel() {
-    using namespace ftxui;
-
-    Element input_column = emptyElement();
-    Element utility_column = emptyElement();
-    Element action_column = emptyElement();
-    std::string mode = "Find";
-    if (current_search_mode_ == SearchMode::Replace) {
-        mode = "Replace";
-        input_column = vbox({
-            hbox({
-                text(" Find:    "),
-                replace_find_input_->Render() | size(WIDTH, GREATER_THAN, 34) | xflex,
-            }),
-            emptyElement(),
-            hbox({
-                text(" Replace: "),
-                replace_input_->Render() | size(WIDTH, GREATER_THAN, 34) | xflex,
-            }),
-        });
-        utility_column = vbox({
-            replace_paste_button_->Render(),
-            replace_clear_button_->Render(),
-        });
-        action_column = vbox({
-            replace_next_button_->Render(),
-            replace_all_button_->Render(),
-        });
-    } else {
-        input_column = vbox({
-            hbox({
-                text(" Find:    "),
-                find_input_->Render() | size(WIDTH, GREATER_THAN, 42) | xflex,
-            }),
-        });
-        utility_column = vbox({
-            find_paste_button_->Render(),
-            find_clear_button_->Render(),
-        });
-        action_column = vbox({
-            find_next_button_->Render(),
-            find_previous_button_->Render(),
-        });
-    }
-
-    // The search panel is split into three columns so text fields keep most
-    // horizontal space while actions and filters remain readable at small widths.
-    Element filter_column = vbox({
-        search_match_case_checkbox_->Render(),
-        search_whole_word_checkbox_->Render(),
-    });
-
-    return vbox({
-        hbox({
-            text(" " + mode + " ") | bold | color(current_theme_.menu_foreground),
-            separator() | color(MainWindowSeparatorColor(current_theme_)),
-            text(" " + FindMatchStatus() + " ") | color(current_theme_.menu_foreground),
-            filler(),
-            text(" Esc closes ") | dim | color(current_theme_.foreground),
-        }),
-        hbox({
-            input_column | xflex,
-            separator() | color(MainWindowSeparatorColor(current_theme_)),
-            utility_column | size(WIDTH, GREATER_THAN, 9),
-            text(" "),
-            action_column | size(WIDTH, GREATER_THAN, 16),
-            separator() | color(MainWindowSeparatorColor(current_theme_)),
-            filter_column | size(WIDTH, GREATER_THAN, 18),
-        }),
-    }) |
-        border |
-        bgcolor(current_theme_.menu_background) |
-        color(current_theme_.menu_foreground);
-}
-
 ftxui::Element TextltApp::RenderGoToLinePanel() {
     using namespace ftxui;
 
@@ -333,7 +274,6 @@ bool TextltApp::ActiveModalIsOpen() const {
         case UiLayer::CustomProcessorBuilder: return custom_processor_builder_modal_.IsOpen();
         case UiLayer::Theme: return theme_dialog_.IsOpen();
         case UiLayer::ThemeColors: return theme_colors_modal_.IsOpen();
-        case UiLayer::Find: return current_search_mode_ != SearchMode::None;
         case UiLayer::GoToLine: return show_goto_line_bar_;
         case UiLayer::UnsavedChanges: return unsaved_changes_dialog_.IsOpen();
         case UiLayer::RecentFiles: return recent_files_modal_.IsOpen();

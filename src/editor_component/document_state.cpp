@@ -236,10 +236,12 @@
 
     void EditorComponent::MoveCursorToSearchMatch(const SearchMatch& match) {
         if (!session_) return;
+        EditorCursorState* previous = BindViewportCursorState();
         session_->CursorRow() = match.y;
         session_->CursorCol() = match.x;
         ClearSelection();
         UpdateScroll();
+        session_->SetActiveCursorState(previous);
     }
 
     std::string EditorComponent::GetCommentPrefix() const {

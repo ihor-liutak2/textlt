@@ -113,6 +113,10 @@ public:
     bool Focusable() const override;
     void FocusMenu();
     void Refresh();
+    // Clears every reflected hitbox. Used when the shared Find/Replace panel
+    // temporarily replaces the sidebar and its last layout must not capture
+    // clicks in the reused area.
+    void ClearHitboxes();
     void SetOpenedFiles(std::vector<OpenedFileEntry> opened_files, size_t active_index);
     void ShowOpenedFiles();
     void ShowProject();

@@ -206,19 +206,22 @@ ftxui::Element EditorComponent::RenderViewport() {
                 syntax_token_ptr = &syntax_tokens;
             }
 
+            const size_t skip = smart_word_wrap && line_index == viewport_->scroll_y
+                ? viewport_->wrapped_scroll_offset : 0;
             const std::vector<utils::Utf8WrapSegment> segments = smart_word_wrap
                 ? utils::BuildUtf8WrapSegmentsLimited(
                     session_->lines[line_index],
                     visible_width,
-                    visible_height - rendered_content_rows)
+                    visible_height - rendered_content_rows + skip)
                 : std::vector<utils::Utf8WrapSegment>{utils::Utf8WrapSegment{
                     viewport_->scroll_x,
                     utils::Utf8ByteIndexAtDisplayColumn(
                         session_->lines[line_index], viewport_->scroll_x, visible_width)}};
 
-            for (const utils::Utf8WrapSegment& segment : segments) {
+            for (size_t index = skip; index < segments.size(); ++index) {
                 if (rendered_content_rows >= visible_height) break;
-                lines_elements.push_back(render_line_segment(line_index, segment, rendered_content_rows, syntax_token_ptr));
+                lines_elements.push_back(render_line_segment(
+                    line_index, segments[index], rendered_content_rows, syntax_token_ptr));
                 ++rendered_content_rows;
             }
         }
@@ -247,7 +250,63 @@ size_t EditorComponent::VisibleTextWidth() const {
 void EditorComponent::UpdateScroll() {
     ClampCursorToBuffer();
     if (!session_ || !viewport_) return;
+    const size_t previous_top = viewport_->scroll_y;
     viewport_->ScrollToCursor(*session_, config_);
+    if (viewport_->scroll_y != previous_top) viewport_->wrapped_scroll_offset = 0;
+
+    if (current_search_match_ >= search_matches_.size()) {
+        viewport_->wrapped_scroll_offset = 0;
+        return;
+    }
+    const SearchMatch& match = search_matches_[current_search_match_];
+    if (match.y != session_->CursorRow() || match.x != session_->CursorCol()) {
+        viewport_->wrapped_scroll_offset = 0;
+        return;
+    }
+
+    const std::string& line = session_->lines[match.y];
+    const size_t width = VisibleTextWidth();
+    if (viewport_->IsDistractionMode() || (config_ && config_->smart_word_wrap)) {
+        const size_t height = VisibleHeight();
+        const auto segments = utils::BuildUtf8WrapSegmentsLimited(line, width, line.size());
+        const auto match_segment = std::find_if(segments.begin(), segments.end(),
+            [&](const auto& segment) { return match.x < segment.end; });
+        if (match_segment == segments.end()) return;
+        const size_t match_offset = static_cast<size_t>(match_segment - segments.begin());
+        size_t remaining = height;
+        for (size_t row = viewport_->scroll_y; row <= match.y && remaining > 0; ++row) {
+            const size_t skip = row == viewport_->scroll_y
+                ? viewport_->wrapped_scroll_offset : 0;
+            if (row == match.y) {
+                if (match_offset >= skip && match_offset - skip < remaining) return;
+                break;
+            }
+            const auto preceding = utils::BuildUtf8WrapSegmentsLimited(
+                session_->lines[row], width, remaining + skip);
+            remaining -= preceding.size() - std::min(skip, preceding.size());
+        }
+        viewport_->scroll_y = match.y;
+        viewport_->wrapped_scroll_offset = match_offset >= height
+            ? match_offset : 0;
+        return;
+    }
+    viewport_->wrapped_scroll_offset = 0;
+    if (utils::Utf8ByteIndexAtDisplayColumn(line, viewport_->scroll_x, width) >=
+        match.x + match.length) {
+        return;
+    }
+
+    // Keep the whole match visible when it fits, starting at the match otherwise.
+    size_t start = std::min(match.x + match.length, line.size());
+    size_t remaining = width;
+    while (start > viewport_->scroll_x) {
+        const size_t previous = utils::PreviousUtf8CodepointStart(line, start);
+        const size_t glyph_width = utils::Utf8DisplayWidth(line, previous, start);
+        if (glyph_width > remaining) break;
+        remaining -= glyph_width;
+        start = previous;
+    }
+    viewport_->scroll_x = std::min(start, match.x);
 }
 
 } // namespace textlt

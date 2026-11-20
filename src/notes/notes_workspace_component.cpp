@@ -227,6 +227,127 @@ void NotesWorkspaceComponent::SetProjectContext(
 
 void NotesWorkspaceComponent::Notify(const std::string& message) { save_status_ = message; if (on_status_) on_status_(message); }
 
+uint64_t NotesWorkspaceComponent::NoteRevision() const {
+    const auto* note = session_.Note();
+    return note ? note->revision : 0;
+}
+
+std::vector<NotesWorkspaceComponent::NoteSearchResult>
+NotesWorkspaceComponent::SearchNote(const std::string& query,
+    bool match_case, bool whole_word, size_t limit, bool& truncated) {
+    truncated = false;
+    note_search_matches_.clear();
+    note_search_active_ = 0;
+    std::vector<NoteSearchResult> results;
+    auto* note = session_.Note();
+    if (!editing_ || !note || query.empty()) return results;
+
+    const std::string needle = match_case ? query : Lower(query);
+    for (size_t block_index = 0; block_index < note->blocks.size(); ++block_index) {
+        const NoteBlock& block = note->blocks[block_index];
+        const std::string text = BlockText(block);
+        if (text.empty()) continue;
+        const std::string searchable = match_case ? text : Lower(text);
+        size_t position = searchable.find(needle);
+        while (position != std::string::npos) {
+            const bool word_before = position > 0 &&
+                textlt::utils::IsWordCharacter(text[position - 1]);
+            const size_t after = position + needle.size();
+            const bool word_after = after < text.size() &&
+                textlt::utils::IsWordCharacter(text[after]);
+            if (!whole_word || (!word_before && !word_after)) {
+                NoteSearchResult match;
+                match.block = block_index;
+                match.byte = position;
+                match.length = needle.size();
+                match.preview = text;
+                match.preview_match_start = position;
+                match.preview_match_length = needle.size();
+                note_search_matches_.push_back(match);
+                if (results.size() < limit) {
+                    results.push_back(std::move(match));
+                } else {
+                    truncated = true;
+                }
+            }
+            position = searchable.find(
+                needle, position + std::max<size_t>(1, needle.size()));
+        }
+    }
+    return results;
+}
+
+void NotesWorkspaceComponent::ActivateNoteSearchResult(size_t index) {
+    auto* note = session_.Note();
+    if (!editing_ || !note || index >= note_search_matches_.size()) return;
+    const NoteSearchResult& match = note_search_matches_[index];
+    if (match.block >= note->blocks.size()) return;
+    note_search_active_ = index;
+    focus_ = FocusArea::Body;
+    session_.SetCursor({match.block, match.byte}, false);
+    has_last_editor_cursor_ = false;
+}
+
+bool NotesWorkspaceComponent::ReplaceNoteSearchResult(size_t index,
+    const std::string& replacement, std::string& error) {
+    auto* note = session_.Note();
+    if (!editing_ || !note) {
+        error = "Open a note in edit mode to replace text";
+        return false;
+    }
+    if (index >= note_search_matches_.size()) {
+        error = "No match to replace";
+        return false;
+    }
+    const NoteSearchResult match = note_search_matches_[index];
+    if (!session_.ReplaceTextAt(match.block, match.byte, match.length,
+            replacement)) {
+        error = "Could not replace the match";
+        return false;
+    }
+    note_search_matches_.clear();
+    note_search_active_ = 0;
+    TouchAndSave();
+    return true;
+}
+
+bool NotesWorkspaceComponent::ReplaceAllNoteText(const std::string& query,
+    const std::string& replacement, bool match_case, bool whole_word,
+    size_t& count, std::string& error) {
+    count = 0;
+    if (!editing_ || !session_.Note()) {
+        error = "Open a note in edit mode to replace text";
+        return false;
+    }
+    if (query.empty()) {
+        error = "Enter text to replace";
+        return false;
+    }
+    bool truncated = false;
+    SearchNote(query, match_case, whole_word,
+        static_cast<size_t>(-1), truncated);
+    if (note_search_matches_.empty()) return true;
+    std::vector<NoteTextRange> ranges;
+    ranges.reserve(note_search_matches_.size());
+    for (const auto& match : note_search_matches_) {
+        ranges.push_back({match.block, match.byte, match.length});
+    }
+    if (!session_.ReplaceTextRanges(ranges, replacement)) {
+        error = "Could not replace matches";
+        return false;
+    }
+    count = ranges.size();
+    note_search_matches_.clear();
+    note_search_active_ = 0;
+    TouchAndSave();
+    return true;
+}
+
+void NotesWorkspaceComponent::ClearNoteSearchHighlights() {
+    note_search_matches_.clear();
+    note_search_active_ = 0;
+}
+
 std::optional<size_t> NotesWorkspaceComponent::ActiveNoteIndex() const {
     if (!active_note_id_) return std::nullopt;
     const auto& notes = repository_.Notes();
@@ -652,6 +773,8 @@ void NotesWorkspaceComponent::OpenNote(size_t note_index) {
     active_note_id_ = repository_.Notes()[note_index].id;
     editing_ = true;
     session_.SetNote(&repository_.Notes()[note_index]);
+    note_search_matches_.clear();
+    note_search_active_ = 0;
     ResetEditorViewport();
     focus_ = FocusArea::Body;
 }
@@ -666,7 +789,7 @@ bool NotesWorkspaceComponent::Save(std::string& error) {
 
 void NotesWorkspaceComponent::TouchAndSave() { std::string error; Save(error); }
 
-void NotesWorkspaceComponent::CloseEditor() { TouchAndSave(); editing_ = false; session_.SetNote(nullptr); ResetEditorViewport(); active_note_id_.reset(); RebuildSidebar(); RebuildVisibleNotes(); focus_ = FocusArea::Cards; }
+void NotesWorkspaceComponent::CloseEditor() { TouchAndSave(); editing_ = false; session_.SetNote(nullptr); note_search_matches_.clear(); note_search_active_ = 0; ResetEditorViewport(); active_note_id_.reset(); RebuildSidebar(); RebuildVisibleNotes(); focus_ = FocusArea::Cards; }
 
 void NotesWorkspaceComponent::TogglePin() {
     if (!session_.Note() || session_.Note()->deleted_at) return;
@@ -1600,6 +1723,21 @@ ftxui::Element NotesWorkspaceComponent::RenderEditorRow(const EditorRow& row) {
                 if (!has_selection && row.block == cursor.block && absolute == cursor.byte) {
                     glyph = glyph | inverted;
                 }
+                if (!note_search_matches_.empty()) {
+                    for (size_t match_index = 0;
+                         match_index < note_search_matches_.size(); ++match_index) {
+                        const auto& match = note_search_matches_[match_index];
+                        if (match.block != row.block || absolute < match.byte ||
+                            absolute >= match.byte + match.length) {
+                            continue;
+                        }
+                        glyph = glyph |
+                            bgcolor(match_index == note_search_active_
+                                ? theme.active_match_bg : theme.match_bg) |
+                            color(theme.selection_fg);
+                        break;
+                    }
+                }
                 elements.push_back(std::move(glyph));
                 local = next;
             }
@@ -1703,6 +1841,9 @@ ftxui::Element NotesWorkspaceComponent::RenderEditor() {
     const size_t page_rows = column_rows * column_count;
     const EditorScrollMetrics metrics = ComputeEditorScrollMetrics(
         column_rows, page_rows, total_rows);
+    if (page_rows != editor_visible_rows_ && !note_search_matches_.empty()) {
+        has_last_editor_cursor_ = false;
+    }
     EnsureEditorCursorVisible(page_rows);
     editor_scroll_ = static_cast<int>(std::min<size_t>(
         static_cast<size_t>(std::max(0, editor_scroll_)), metrics.max_scroll));

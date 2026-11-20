@@ -184,7 +184,7 @@ add_executable(textlt
   src/app_command_registry.cpp
   src/app_event_dispatcher.cpp
   src/app_commands.cpp
-  src/app_find_replace.cpp
+  src/app_terminal_paste.cpp
   src/layout_controller.cpp
   src/app_modals.cpp
   src/app_menu_actions.cpp
@@ -198,6 +198,7 @@ add_executable(textlt
   src/app_view.cpp
   src/app_notes_actions.cpp
   src/app_actions_actions.cpp
+  src/app_find_replace.cpp
   src/shortcut_key.cpp
   src/shortcut_registry.cpp
   src/shortcut_store.cpp
@@ -241,6 +242,10 @@ add_executable(textlt
   src/actions/action_serializer.cpp
   src/actions/action_repository.cpp
   src/actions/actions_workspace_component.cpp
+  src/find_replace/editor_find_target.cpp
+  src/find_replace/notes_find_target.cpp
+  src/find_replace/actions_find_target.cpp
+  src/find_replace/find_replace_panel.cpp
   src/file_utils.cpp
   src/git_manager.cpp
   src/history_manager.cpp
