@@ -28,6 +28,7 @@ enum class FilesModalMode {
     SaveAs,
     Import,
     ImportActions,
+    ImportNotesMarkdown,
     OpenFolder,
     SelectDirectory,
 };

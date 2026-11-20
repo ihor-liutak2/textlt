@@ -7,10 +7,30 @@
 
 #include "ftxui/component/event.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "ftxui/dom/node.hpp"
 
 namespace textlt {
 
 namespace {
+
+class EqualWidthPane : public ftxui::Node {
+public:
+    explicit EqualWidthPane(ftxui::Element pane)
+        : Node(ftxui::unpack(std::move(pane))) {}
+
+private:
+    void ComputeRequirement() override {
+        Node::ComputeRequirement();
+        requirement_ = children_.front()->requirement();
+        // Let the horizontal container divide space independently of pane content.
+        requirement_.min_x = 0;
+    }
+
+    void SetBox(ftxui::Box box) override {
+        Node::SetBox(box);
+        children_.front()->SetBox(box);
+    }
+};
 
 std::string DocumentTitle(const std::shared_ptr<DocumentSession>& doc) {
     return doc ? doc->DisplayTitle() : "Untitled";
@@ -123,7 +143,7 @@ void TextltApp::FocusPreviousEditorPane() {
 
 void TextltApp::EqualizeEditorPaneWidths() {
     layout_controller_.EqualizePaneWidths();
-    active_action_ = "Editor pane widths reset";
+    active_action_ = "Editor pane widths equalized";
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
@@ -252,6 +272,10 @@ ftxui::Element TextltApp::RenderEditorPane(size_t pane_index) {
               borderStyled(active ? HEAVY : LIGHT, active ? theme.modal_accent : theme.gutter) |
               bgcolor(theme.background) |
               xflex;
+
+    if (layout_controller_.PaneWidthsEqualized()) {
+        pane = std::make_shared<EqualWidthPane>(std::move(pane));
+    }
 
     const size_t column_gap = layout_controller_.ColumnGapAfterPane(pane_index);
     if (column_gap > 0) {

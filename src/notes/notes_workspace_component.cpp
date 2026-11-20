@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <limits>
+#include <regex>
 #include <utility>
 
 #include "editor_utils.hpp"
@@ -158,6 +159,9 @@ void NotesWorkspaceComponent::SetSidebarVisible(bool visible) {
     documents_tab_box_ = empty_box;
     notes_tab_box_ = empty_box;
     actions_tab_box_ = empty_box;
+    sidebar_notes_tab_box_ = empty_box;
+    sidebar_content_tab_box_ = empty_box;
+    sidebar_content_box_ = empty_box;
     footer_new_note_box_ = empty_box;
     footer_delete_note_box_ = empty_box;
     footer_restore_note_box_ = empty_box;
@@ -183,6 +187,7 @@ void NotesWorkspaceComponent::SetEditorColumns(int columns) {
 
 void NotesWorkspaceComponent::FocusSidebar() {
     if (!sidebar_visible_) return;
+    sidebar_content_selected_ = false;
     focus_ = FocusArea::Sidebar;
 }
 
@@ -283,8 +288,12 @@ void NotesWorkspaceComponent::ActivateNoteSearchResult(size_t index) {
     const NoteSearchResult& match = note_search_matches_[index];
     if (match.block >= note->blocks.size()) return;
     note_search_active_ = index;
+    JumpToNotePosition({match.block, match.byte});
+}
+
+void NotesWorkspaceComponent::JumpToNotePosition(NotePosition position) {
     focus_ = FocusArea::Body;
-    session_.SetCursor({match.block, match.byte}, false);
+    session_.SetCursor(position, false);
     has_last_editor_cursor_ = false;
 }
 
@@ -745,6 +754,31 @@ void NotesWorkspaceComponent::NewNote() {
     RebuildSidebar(); RebuildVisibleNotes();
 }
 
+bool NotesWorkspaceComponent::ImportNote(
+    std::string title, std::vector<NoteBlock> blocks, std::string& error) {
+    if (!Save(error)) return false;
+
+    NoteDocument note = MakeNewNote(repository_.DeviceId());
+    note.title = std::move(title);
+    note.blocks = std::move(blocks);
+    if (!selected_section_id_.empty() && !trash_selected_) {
+        note.section_id = selected_section_id_;
+    }
+    if (!repository_.Save(note, error)) return false;
+
+    repository_.Notes().insert(repository_.Notes().begin(), std::move(note));
+    if (trash_selected_) {
+        trash_selected_ = false;
+        selected_section_id_.clear();
+        selected_sidebar_ = 0;
+    }
+    OpenNote(0);
+    save_status_ = "Saved";
+    RebuildSidebar();
+    RebuildVisibleNotes();
+    return true;
+}
+
 void NotesWorkspaceComponent::EditSelectedNote() {
     if (editing_) return;
     if (trash_selected_) {
@@ -836,7 +870,7 @@ bool NotesWorkspaceComponent::HandleTextFieldEvent(std::string& value, size_t& c
 }
 
 bool NotesWorkspaceComponent::HandleOverviewEvent(ftxui::Event event) {
-    if (!sidebar_visible_ &&
+    if ((!sidebar_visible_ || sidebar_content_selected_) &&
         (focus_ == FocusArea::Sidebar || focus_ == FocusArea::GroupName)) {
         focus_ = FocusArea::Cards;
     }
@@ -846,7 +880,7 @@ bool NotesWorkspaceComponent::HandleOverviewEvent(ftxui::Event event) {
         return HandleTextFieldEvent(group_name_input_, group_name_cursor_, event, [] {});
     }
     if (event == ftxui::Event::Tab) {
-        if (!sidebar_visible_) {
+        if (!sidebar_visible_ || sidebar_content_selected_) {
             focus_ = focus_ == FocusArea::Search ? FocusArea::Cards : FocusArea::Search;
             return true;
         }
@@ -997,6 +1031,34 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
         }
         return true;
     }
+    if (sidebar_visible_ && sidebar_content_selected_ && event.is_mouse() &&
+        sidebar_content_box_.Contain(event.mouse().x, event.mouse().y)) {
+        const auto& mouse = event.mouse();
+        if (mouse.button == ftxui::Mouse::WheelUp) {
+            if (heading_scroll_ > 0) --heading_scroll_;
+            return true;
+        }
+        if (mouse.button == ftxui::Mouse::WheelDown) {
+            if (heading_scroll_ + 1 < heading_blocks_.size() && !heading_boxes_.empty()) {
+                const auto& last = heading_boxes_.back();
+                if (last.y_max - last.y_min + 1 < last_heading_height_) {
+                    ++heading_scroll_;
+                }
+            }
+            return true;
+        }
+        if (mouse.button == ftxui::Mouse::Left &&
+            mouse.motion == ftxui::Mouse::Pressed) {
+            const size_t first_rendered = heading_blocks_.size() - heading_boxes_.size();
+            for (size_t i = 0; i < heading_boxes_.size(); ++i) {
+                if (heading_boxes_[i].Contain(mouse.x, mouse.y)) {
+                    JumpToNotePosition({heading_blocks_[first_rendered + i], 0});
+                    break;
+                }
+            }
+            return true;
+        }
+    }
     if (editing_ && event.is_mouse()) {
         const auto& mouse = event.mouse();
         const bool over_editor = editor_view_box_.Contain(mouse.x, mouse.y) ||
@@ -1086,6 +1148,19 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
         if (sidebar_visible_) {
             if (documents_tab_box_.Contain(mouse.x, mouse.y)) { if (on_documents_) on_documents_(); return true; }
             if (actions_tab_box_.Contain(mouse.x, mouse.y)) { if (on_actions_) on_actions_(); return true; }
+            if (sidebar_notes_tab_box_.Contain(mouse.x, mouse.y)) {
+                sidebar_content_selected_ = false;
+                if (!editing_) focus_ = FocusArea::Sidebar;
+                return true;
+            }
+            if (sidebar_content_tab_box_.Contain(mouse.x, mouse.y)) {
+                sidebar_content_selected_ = true;
+                FocusMainArea();
+                return true;
+            }
+            if (sidebar_content_selected_ && sidebar_box_.Contain(mouse.x, mouse.y)) {
+                return true;
+            }
             if (footer_new_note_box_.Contain(mouse.x, mouse.y)) { NewNote(); return true; }
             if (footer_delete_note_box_.Contain(mouse.x, mouse.y)) { DeleteSelectedNote(); return true; }
             if (footer_restore_note_box_.Contain(mouse.x, mouse.y)) { RestoreSelectedNote(); return true; }
@@ -1283,16 +1358,47 @@ void NotesWorkspaceComponent::CopyCurrentParagraph() {
         Notify("Clipboard unavailable");
         return;
     }
-    write_clipboard_(text);
-    Notify("Copied paragraph");
+    static const std::regex markdown_link(
+        R"link(\[(?:\\.|[^\[\]\\])*\]\(\s*(?:<(https?://[^<>\s]+)>|(https?://(?:\\.|[^\s()<>\\]|\([^\s()<>]*\))+))(?:\s+(?:"[^"]*"|'[^']*'|\([^()]*\)))?\s*\))link",
+        std::regex::icase);
+    std::smatch link;
+    if (std::regex_search(text, link, markdown_link)) {
+        write_clipboard_(link[1].matched ? link[1].str() : link[2].str());
+        Notify("Copied link address");
+    } else {
+        write_clipboard_(text);
+        Notify("Copied paragraph");
+    }
 }
 
 ftxui::Element NotesWorkspaceComponent::RenderSidebar() {
-    using namespace ftxui; const Theme& theme = theme_ ? *theme_ : FallbackTheme(); sidebar_row_boxes_.resize(sidebar_entries_.size()); Elements rows;
-    rows.push_back(RenderWorkspaceTabs(theme, WorkspaceTab::Notes,
-        documents_tab_box_, notes_tab_box_, actions_tab_box_));
-    rows.push_back(separator() | color(theme.gutter));
-    rows.push_back(text(" NOTES") | bold | color(theme.modal_accent));
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    auto tab = [&](const std::string& label, bool selected, Box& box) {
+        const ButtonSpec spec = TabButtonSpec(label, selected, "", ButtonSize::Compact);
+        return RenderModalFlatButton(theme, spec, selected) | reflect(box);
+    };
+    Elements rows = {
+        RenderWorkspaceTabs(theme, WorkspaceTab::Notes,
+            documents_tab_box_, notes_tab_box_, actions_tab_box_),
+        separator() | color(theme.gutter),
+        hbox({
+            tab("Notes", !sidebar_content_selected_, sidebar_notes_tab_box_),
+            text(" "),
+            tab("Content", sidebar_content_selected_, sidebar_content_tab_box_),
+        }),
+        separator() | color(theme.gutter),
+    };
+    auto render = [&] {
+        return vbox(std::move(rows)) | borderStyled(LIGHT, theme.gutter) |
+            size(WIDTH, EQUAL, kSidebarWidth) | reflect(sidebar_box_) |
+            bgcolor(theme.background);
+    };
+    if (sidebar_content_selected_) {
+        rows.push_back(RenderSidebarContents(theme));
+        return render();
+    }
+    sidebar_row_boxes_.resize(sidebar_entries_.size());
     for (size_t i = 0; i < sidebar_entries_.size(); ++i) {
         const auto& entry = sidebar_entries_[i];
         std::string label = "  ";
@@ -1382,9 +1488,57 @@ ftxui::Element NotesWorkspaceComponent::RenderSidebar() {
             footer_button("Open Notes", ButtonRole::Primary, true, footer_project_notes_box_),
         }));
     }
-    return vbox(std::move(rows)) | borderStyled(LIGHT, theme.gutter) |
-        size(WIDTH, EQUAL, kSidebarWidth) | reflect(sidebar_box_) |
-        bgcolor(theme.background);
+    return render();
+}
+
+ftxui::Element NotesWorkspaceComponent::RenderSidebarContents(const Theme& theme) {
+    using namespace ftxui;
+    heading_blocks_.clear();
+    heading_boxes_.clear();
+    const auto* note = editing_ ? session_.Note() : nullptr;
+    if (note) {
+        for (size_t i = 0; i < note->blocks.size(); ++i) {
+            const int heading = note->blocks[i].heading;
+            if (heading == 1 || heading == 2) heading_blocks_.push_back(i);
+        }
+    }
+    if (heading_blocks_.empty()) {
+        return vbox({
+            text(note ? " No H1 or H2 headings yet." : " Open a note to see"),
+            note ? emptyElement() : text(" its H1 and H2 headings."),
+            filler(),
+        }) | color(theme.foreground) | dim | yflex | reflect(sidebar_content_box_);
+    }
+
+    heading_scroll_ = std::min(heading_scroll_, heading_blocks_.size() - 1);
+    heading_boxes_.resize(heading_blocks_.size() - heading_scroll_);
+    Elements rows;
+    for (size_t i = heading_scroll_; i < heading_blocks_.size(); ++i) {
+        const size_t block_index = heading_blocks_[i];
+        const auto& block = note->blocks[block_index];
+        const std::string indent(block.heading == 1 ? 2 : 4, ' ');
+        const size_t width = kSidebarWidth - 3 - indent.size();
+        std::string label = TrimWhitespace(BlockText(block));
+        if (label.empty()) label = "Untitled heading";
+        const auto first = utils::BuildUtf8WrapSegmentsLimited(label, width, 1).front();
+        Elements lines = {text(indent + label.substr(0, first.end))};
+        if (first.end < label.size()) {
+            lines.push_back(text(indent + FitText(
+                TrimWhitespace(label.substr(first.end)), width)));
+        }
+        if (i + 1 == heading_blocks_.size()) {
+            last_heading_height_ = static_cast<int>(lines.size());
+        }
+        Element row = vbox(std::move(lines)) | color(theme.foreground);
+        if (block.heading == 1) row = row | bold;
+        if (session_.Cursor().block == block_index) {
+            row = row | bgcolor(theme.modal_selected_item_bg) |
+                color(theme.modal_selected_item_fg);
+        }
+        rows.push_back(row | reflect(heading_boxes_[i - heading_scroll_]));
+    }
+    return vbox({vbox(std::move(rows)), filler()}) | yframe | yflex |
+        reflect(sidebar_content_box_);
 }
 
 ftxui::Element NotesWorkspaceComponent::RenderCard(
@@ -1449,7 +1603,11 @@ ftxui::Element NotesWorkspaceComponent::RenderOverview() {
         sort_mode_ == SortMode::Title ? "Title" : "Pinned";
     Element sort = text(" Sort: " + sort_name + " ↻ ") | reflect(sort_box_) |
         color(theme.foreground) | borderStyled(LIGHT, theme.gutter);
-    Element add = text(" + New Note ") | bold | color(theme.modal_selected_item_fg) | bgcolor(theme.modal_selected_item_bg) | reflect(new_note_box_);
+    Element add = vbox({
+        text(""),
+        text(" + New Note ") | bold,
+    }) | color(theme.modal_selected_item_fg) |
+        bgcolor(theme.modal_selected_item_bg) | reflect(new_note_box_);
     Elements rows;
     Elements current_row;
     card_boxes_.resize(visible_notes_.size());
@@ -1504,6 +1662,9 @@ ftxui::Element NotesWorkspaceComponent::ToolbarItem(const std::string& label, bo
 }
 
 void NotesWorkspaceComponent::ResetEditorViewport() {
+    heading_scroll_ = 0;
+    heading_blocks_.clear();
+    heading_boxes_.clear();
     editor_rows_.clear();
     editor_column_boxes_.clear();
     editor_scroll_ = 0;

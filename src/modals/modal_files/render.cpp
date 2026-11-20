@@ -312,6 +312,8 @@ std::string FilesModalContent::ModeTitle() const {
             return "Import";
         case FilesModalMode::ImportActions:
             return "Import Actions";
+        case FilesModalMode::ImportNotesMarkdown:
+            return "Import Markdown into Notes";
         case FilesModalMode::OpenFolder:
             return "Open Folder";
         case FilesModalMode::SelectDirectory:
@@ -331,6 +333,7 @@ std::string FilesModalContent::FooterActionLabel() const {
         case FilesModalMode::Import:
             return "Import";
         case FilesModalMode::ImportActions:
+        case FilesModalMode::ImportNotesMarkdown:
             return "Import";
         case FilesModalMode::OpenFolder:
             return "Open Folder";

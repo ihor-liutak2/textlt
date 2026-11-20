@@ -113,6 +113,7 @@ MenuBarComponent::MenuBarComponent(
               {" New Note ", "notes.new"},
               {" Edit Note ", "notes.edit_selected"},
               {" Delete Note ", "notes.delete_selected"},
+              {" Import Markdown... ", "notes.import_markdown"},
               {" ───────────────────────── ", "", true},
               {" Heading 1 ", "notes.heading_1"},
               {" Heading 2 ", "notes.heading_2"},

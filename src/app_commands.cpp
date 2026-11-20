@@ -159,6 +159,8 @@ void TextltApp::InitializeCommands() {
     add("notes.toggle", "Notes", "Options", "", [this] { CommandNotesToggle(); });
     add("docs.open", "Docs", "Options", "", [this] { ShowDocumentsWorkspace(); });
     add("notes.new", "New Note", "Notes", "", [this] { CommandNotesNew(); });
+    add("notes.import_markdown", "Import Markdown", "Notes", "",
+        [this] { CommandNotesImportMarkdown(); });
     add("notes.edit_selected", "Edit Note", "Notes", "", [this] { CommandNotesEditSelected(); });
     add("notes.delete_selected", "Delete Note", "Notes", "", [this] { CommandNotesDeleteSelected(); });
     add("notes.heading_1", "Heading 1", "Notes", "", [this] { CommandNotesHeading1(); });

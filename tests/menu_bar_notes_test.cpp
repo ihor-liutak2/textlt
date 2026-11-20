@@ -82,11 +82,13 @@ int main() {
         "The Notes menu should expose Delete Note.");
     Expect(MenuBarTestAccess::ItemAt(menu_bar, notes_index, 2).label == " Delete Note ",
         "The delete action should be labelled Delete Note outside Trash.");
-    Expect(menu_bar.CommandIdAt(notes_index, 4) == "notes.heading_1",
+    Expect(menu_bar.CommandIdAt(notes_index, 3) == "notes.import_markdown",
+        "The Notes menu should show Import Markdown with the note actions.");
+    Expect(menu_bar.CommandIdAt(notes_index, 5) == "notes.heading_1",
         "The Notes menu should expose Heading 1 after the first separator.");
-    Expect(menu_bar.CommandIdAt(notes_index, 5) == "notes.heading_2",
+    Expect(menu_bar.CommandIdAt(notes_index, 6) == "notes.heading_2",
         "The Notes menu should expose Heading 2.");
-    Expect(menu_bar.CommandIdAt(notes_index, 6) == "notes.heading_3",
+    Expect(menu_bar.CommandIdAt(notes_index, 7) == "notes.heading_3",
         "The Notes menu should expose Heading 3.");
 
     menu_bar.OpenDropdown(notes_index);

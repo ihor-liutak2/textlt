@@ -81,6 +81,11 @@ void TextltApp::CommandNotesNew() {
     if (notes) notes->NewNote();
 }
 
+void TextltApp::CommandNotesImportMarkdown() {
+    if (workspace_mode_ != WorkspaceMode::Notes) ShowNotesWorkspace();
+    OpenFilesModal(FilesModalMode::ImportNotesMarkdown);
+}
+
 void TextltApp::CommandNotesEditSelected() {
     if (workspace_mode_ != WorkspaceMode::Notes) {
         ShowNotesWorkspace();

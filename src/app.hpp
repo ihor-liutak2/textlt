@@ -360,6 +360,7 @@ private:
 
     void CommandNotesToggle();
     void CommandNotesNew();
+    void CommandNotesImportMarkdown();
     void CommandNotesEditSelected();
     void CommandNotesDeleteSelected();
     void CommandNotesHeading1();

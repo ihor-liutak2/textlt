@@ -34,9 +34,6 @@ struct ViewLayoutSnapshot {
     int layout_index = 0;
     std::string layout_name;
     size_t active_pane_index = 0;
-    int two_left_width = 72;
-    int three_left_width = 48;
-    int three_right_width = 48;
     std::vector<ViewLayoutPaneInfo> panes;
     std::vector<ViewLayoutDocumentInfo> documents;
 };

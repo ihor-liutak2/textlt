@@ -42,9 +42,7 @@ public:
     bool FocusPreviousPane();
 
     void EqualizePaneWidths();
-    int TwoLeftWidth() const;
-    int ThreeLeftWidth() const;
-    int ThreeRightWidth() const;
+    bool PaneWidthsEqualized() const;
 
     bool IsDistractionModeActive() const;
     void EnsureVisiblePanesHaveSessions();
@@ -60,9 +58,7 @@ private:
     DocumentWorkspace& workspace_;
     const DistractionModeController* distraction_controller_ = nullptr;
     EditorLayoutMode mode_ = EditorLayoutMode::Single;
-    int two_left_width_ = 72;
-    int three_left_width_ = 48;
-    int three_right_width_ = 48;
+    bool pane_widths_equalized_ = false;
 };
 
 } // namespace textlt

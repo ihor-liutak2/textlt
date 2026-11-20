@@ -10,6 +10,8 @@
 
 #include "editor/document_session.hpp"
 #include "actions/action_config_importer.hpp"
+#include "notes/markdown_importer.hpp"
+#include "path_utils.hpp"
 #include "text_importer.hpp"
 #include "ftxui/component/event.hpp"
 
@@ -176,6 +178,23 @@ bool TextltApp::ConfirmFilesModalAction(
             active_action_ = "Imported " + std::to_string(result.values.size()) +
                 " actions from " + path.filename().string();
         }
+    } else if (mode == FilesModalMode::ImportNotesMarkdown) {
+        auto workspace = std::static_pointer_cast<notes::NotesWorkspaceComponent>(
+            notes_workspace_component_);
+        if (!workspace) {
+            error = "Notes workspace is not available.";
+            return false;
+        }
+        std::vector<notes::NoteBlock> blocks;
+        if (!notes::ReadMarkdownNote(path, blocks, error)) return false;
+        try {
+            success = workspace->ImportNote(
+                Utf8FromPath(path.stem()), std::move(blocks), error);
+        } catch (const std::exception& exception) {
+            error = std::string("Markdown import failed: ") + exception.what();
+            return false;
+        }
+        if (success) active_action_ = "Imported " + Utf8FromPath(path.filename()) + " into Notes";
     } else if (mode == FilesModalMode::OpenFolder) {
         success = OpenWorkspaceFolder(path, error);
     } else if (mode == FilesModalMode::SelectDirectory) {

@@ -149,7 +149,8 @@ void FilesModalContent::ActivateSelected(bool double_click) {
     }
 
     if (double_click || mode_ == FilesModalMode::Open ||
-        mode_ == FilesModalMode::Import || mode_ == FilesModalMode::ImportActions) {
+        mode_ == FilesModalMode::Import || mode_ == FilesModalMode::ImportActions ||
+        mode_ == FilesModalMode::ImportNotesMarkdown) {
         ConfirmSelected();
     }
 }
@@ -278,6 +279,9 @@ FileFilter FilesModalContent::FilterForMode() const {
             break;
         case FilesModalMode::ImportActions:
             filter.extensions = {".env", ".env.*", ".properties", ".yaml", ".yml"};
+            break;
+        case FilesModalMode::ImportNotesMarkdown:
+            filter.extensions = {".md", ".markdown", ".mdown", ".mkd", ".txt"};
             break;
         case FilesModalMode::SelectDirectory:
         case FilesModalMode::OpenFolder:

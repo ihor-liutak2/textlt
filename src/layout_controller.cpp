@@ -115,21 +115,11 @@ bool LayoutController::FocusPreviousPane() {
 }
 
 void LayoutController::EqualizePaneWidths() {
-    two_left_width_ = 72;
-    three_left_width_ = 48;
-    three_right_width_ = 48;
+    pane_widths_equalized_ = true;
 }
 
-int LayoutController::TwoLeftWidth() const {
-    return two_left_width_;
-}
-
-int LayoutController::ThreeLeftWidth() const {
-    return three_left_width_;
-}
-
-int LayoutController::ThreeRightWidth() const {
-    return three_right_width_;
+bool LayoutController::PaneWidthsEqualized() const {
+    return pane_widths_equalized_;
 }
 
 bool LayoutController::IsDistractionModeActive() const {
@@ -179,9 +169,6 @@ ViewLayoutSnapshot LayoutController::Snapshot() const {
         ? std::string("Distraction ") + (VisiblePaneCount() == 2 ? "2 columns" : "1 column")
         : ModeLabel();
     snapshot.active_pane_index = workspace_.ActiveEditorPaneIndex();
-    snapshot.two_left_width = two_left_width_;
-    snapshot.three_left_width = three_left_width_;
-    snapshot.three_right_width = three_right_width_;
 
     const auto& sessions = workspace_.OpenSessions();
     for (size_t session_index = 0; session_index < sessions.size(); ++session_index) {

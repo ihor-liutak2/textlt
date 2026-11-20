@@ -233,6 +233,7 @@ add_executable(textlt
   src/editor/document_file_controller.cpp
   src/editor/clipboard_controller.cpp
   src/notes/note_document.cpp
+  src/notes/markdown_importer.cpp
   src/notes/note_serializer.cpp
   src/notes/note_repository.cpp
   src/notes/note_session.cpp

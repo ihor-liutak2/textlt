@@ -803,6 +803,15 @@ int main() {
     Expect(copied_text == "padded paragraph",
         "Copy should place the cursor paragraph on the clipboard with trimmed spaces.");
 
+    NotesWorkspaceActionsTestAccess::SetFirstBlockText(copy_component,
+        "See [the article](https://example.com/wiki/Topic_(details) \"Article\").");
+    Expect(NotesWorkspaceActionsTestAccess::MouseAt(
+            copy_component, ftxui::Mouse::Left, ftxui::Mouse::Pressed,
+            copy_button.x_min + 1, copy_button.y_min),
+        "Clicking Copy on a Markdown link should be handled.");
+    Expect(copied_text == "https://example.com/wiki/Topic_(details)",
+        "Copy should extract the Markdown link address without its label or title.");
+
     fs::remove_all(copy_root, cleanup_error);
 
     // Cards in one overview row must have identical widths. Otherwise long

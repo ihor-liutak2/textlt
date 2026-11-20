@@ -62,6 +62,7 @@ public:
     void SetBlockType(NoteBlockType type);
     void CopyCurrentParagraph();
     void NewNote();
+    bool ImportNote(std::string title, std::vector<NoteBlock> blocks, std::string& error);
     // Opens the card selected in the overview. Does nothing (with a status
     // message) when there is no editable note selection.
     void EditSelectedNote();
@@ -152,6 +153,7 @@ private:
     bool HandleEditorEvent(ftxui::Event event);
     bool HandleTextFieldEvent(std::string& value, size_t& cursor, ftxui::Event event, std::function<void()> on_change);
     ftxui::Element RenderSidebar();
+    ftxui::Element RenderSidebarContents(const Theme& theme);
     ftxui::Element RenderOverview();
     ftxui::Element RenderEditor();
     ftxui::Element RenderConfirmationPopup();
@@ -171,6 +173,7 @@ private:
     std::optional<NotePosition> NotePositionAt(int x, int y) const;
     void ScrollEditor(int delta);
     void EnsureEditorCursorVisible(size_t page_rows);
+    void JumpToNotePosition(NotePosition position);
     void ResetEditorViewport();
     ftxui::Element ToolbarItem(const std::string& text, bool active, ftxui::Box& box);
     std::string SectionName(const NoteDocument& note) const;
@@ -196,6 +199,11 @@ private:
     SortMode sort_mode_ = SortMode::Updated;
     bool editing_ = false;
     bool sidebar_visible_ = true;
+    bool sidebar_content_selected_ = false;
+    size_t heading_scroll_ = 0;
+    std::vector<size_t> heading_blocks_;
+    std::vector<ftxui::Box> heading_boxes_;
+    int last_heading_height_ = 0;
     int selected_sidebar_ = 0;
     int selected_card_ = 0;
     std::optional<std::string> active_note_id_;
@@ -233,6 +241,9 @@ private:
     ftxui::Box documents_tab_box_;
     ftxui::Box notes_tab_box_;
     ftxui::Box actions_tab_box_;
+    ftxui::Box sidebar_notes_tab_box_;
+    ftxui::Box sidebar_content_tab_box_;
+    ftxui::Box sidebar_content_box_;
     ftxui::Box footer_new_note_box_;
     ftxui::Box footer_delete_note_box_;
     ftxui::Box footer_restore_note_box_;
