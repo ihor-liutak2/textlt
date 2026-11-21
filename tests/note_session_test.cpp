@@ -1,3 +1,4 @@
+#include <iostream>
 #include "notes/note_session.hpp"
 
 #include <cassert>
@@ -33,6 +34,7 @@ static void Check(bool condition) {
 int main() {
     namespace notes = textlt::notes;
     notes::NoteDocument note = notes::MakeNewNote("test-device");
+    std::cerr << "Unicode editing\n";
     notes::NoteSession session(&note);
 
     assert(session.Insert("Привіт"));
@@ -76,6 +78,7 @@ int main() {
 
     // Replace All across blocks is a single undoable operation.
     session.SelectAll();
+    std::cerr << "Heading and block edits\n";
     const bool cleared = session.DeleteSelection();
     Check(cleared);
     const bool inserted_heading = session.Insert("Заголовок");

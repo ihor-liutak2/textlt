@@ -85,9 +85,9 @@ try {
     if ($VersionOutput -notmatch [regex]::Escape($ExpectedVersion)) {
         throw "Installed executable version mismatch: $VersionOutput"
     }
-    $StartupOutput = & $InstalledExe --startup-check
-    if ($LASTEXITCODE -ne 0 -or $StartupOutput -ne "TextLT startup check passed.") {
-        throw "Installed textlt.exe failed its application startup check: $StartupOutput"
+    & $InstalledExe --startup-check
+    if ($LASTEXITCODE -ne 0) {
+        throw "Installed textlt.exe failed its application startup check (exit $LASTEXITCODE)"
     }
 
     $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")

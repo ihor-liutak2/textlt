@@ -79,11 +79,11 @@ jobs:
 
       - name: Run tests
         run: |
-          ctest --test-dir build -C Release --output-on-failure
+          ctest --test-dir build -C Release --verbose
 
       - name: Test external curl mode
         run: |
-          ctest --test-dir build -R "textlt_no_embedded_curl_test|textlt_remote_http_client_test" --output-on-failure
+          ctest --test-dir build -R "textlt_no_embedded_curl_test|textlt_remote_http_client_test" --verbose
           command -v curl
           command -v ssh
           command -v sftp
@@ -224,15 +224,11 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $versionOutput -ne "textlt $expectedVersion") {
             throw "Windows executable smoke check failed: $versionOutput"
           }
-          $startupOutput = & $textltExe --startup-check
-          if ($LASTEXITCODE -ne 0 -or $startupOutput -ne "TextLT startup check passed.") {
-            throw "Windows application startup check failed: $startupOutput"
-          }
 
       - name: Run tests
         shell: pwsh
         run: |
-          ctest --test-dir build -C Release --output-on-failure
+          ctest --test-dir build -C Release --verbose
 
       - name: Package
         shell: pwsh
@@ -252,6 +248,15 @@ jobs:
           if (Test-Path docs/registries) {
             New-Item -ItemType Directory -Force package/textlt/resources | Out-Null
             Copy-Item docs/registries package/textlt/resources/registries -Recurse
+          }
+
+          $packagedExe = (Resolve-Path package/textlt/textlt.exe).Path
+          Push-Location $env:RUNNER_TEMP
+          try {
+            & $packagedExe --startup-check
+            if ($LASTEXITCODE -ne 0) { throw "Packaged startup check failed (exit $LASTEXITCODE)" }
+          } finally {
+            Pop-Location
           }
 
           Compress-Archive -Path package/textlt -DestinationPath textlt-windows-x64.zip -Force
@@ -288,7 +293,7 @@ jobs:
 
       - name: Run tests
         run: |
-          ctest --test-dir build -C Release --output-on-failure
+          ctest --test-dir build -C Release --verbose
 
       - name: Package macOS ARM64
         run: |

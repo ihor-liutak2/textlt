@@ -51,6 +51,7 @@ void RequireContains(const std::filesystem::path& root,
                      const std::filesystem::path& relative,
                      const std::string& needle,
                      bool& ok) {
+    std::cerr << "Checking " << relative << " for " << needle << '\n';
     const std::filesystem::path path = root / relative;
     if (!std::filesystem::exists(path)) {
         std::cerr << "Missing file: " << relative.string() << "\n";

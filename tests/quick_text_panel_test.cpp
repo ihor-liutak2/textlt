@@ -7,6 +7,7 @@
 #include <iostream>
 #include <stdexcept>
 
+#include "app_resources.hpp"
 #include "ftxui/component/mouse.hpp"
 #include "ftxui/screen/screen.hpp"
 #include "json_utils.hpp"
@@ -14,18 +15,10 @@
 namespace {
 
 void Require(bool condition, const char* message) {
+    std::cerr << "Check: " << message << '\n';
     if (!condition) {
-        std::cerr << message << '\n';
         throw std::runtime_error(message);
     }
-}
-
-void SetPath(const char* variable, const std::filesystem::path& path) {
-#ifdef _WIN32
-    _putenv_s(variable, path.string().c_str());
-#else
-    setenv(variable, path.string().c_str(), 1);
-#endif
 }
 
 void Click(textlt::TextProcessorsModal& modal, const std::string& label) {
@@ -49,15 +42,19 @@ void Click(textlt::TextProcessorsModal& modal, const std::string& label) {
 
 } // namespace
 
-int main() {
+int main() try {
     namespace fs = std::filesystem;
     const auto root = fs::temp_directory_path() /
         ("textlt-quick-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     const auto defaults = root / "defaults";
     fs::create_directories(defaults / "text_parsers");
-    SetPath("XDG_CONFIG_HOME", root);
-    SetPath("APPDATA", root);
-    SetPath("TEXTLT_DATA_DIR", defaults);
+#ifdef _WIN32
+    Require(_wputenv_s(L"APPDATA", root.c_str()) == 0, "Set test APPDATA");
+    Require(_wputenv_s(L"TEXTLT_DATA_DIR", defaults.c_str()) == 0, "Set test resource path");
+#else
+    Require(setenv("XDG_CONFIG_HOME", root.c_str(), 1) == 0, "Set test XDG_CONFIG_HOME");
+    Require(setenv("TEXTLT_DATA_DIR", defaults.c_str(), 1) == 0, "Set test resource path");
+#endif
     std::ofstream(defaults / "default_text_parsers.json") << R"({
         "parsers": [{"id":"append","name":"Append","scope":"text","script":"text_parsers/append.lua",
         "pinned":true,"repeat_default":2,"params":[{"id":"suffix","label":"Suffix","type":"string","default":"!"}]}]
@@ -65,16 +62,20 @@ int main() {
     std::ofstream(defaults / "text_parsers" / "append.lua")
         << "function transform(text, params) return text .. params.suffix end";
 
+    const auto resources = textlt::FindTextProcessorsDirectory();
+    std::cerr << "Processor resources: " << resources << '\n';
+    Require(resources == defaults, "Expected the test processor resources");
+
     auto expected_target = textlt::ProcessorTarget::Selection;
     std::string result;
     textlt::TextProcessorsModal modal(nullptr,
         [&](textlt::ProcessorTarget target, std::string& text, std::string&) {
-            Require(target == expected_target, "Wrong read scope");
+            Require(target == expected_target, "Read scope matches the target");
             text = target == textlt::ProcessorTarget::Paragraph ? "paragraph" : "selection";
             return true;
         },
         [&](textlt::ProcessorTarget target, const std::string& text, std::string&) {
-            Require(target == expected_target, "Wrong replacement scope");
+            Require(target == expected_target, "Replacement scope matches the target");
             result = text;
             return true;
         });
@@ -87,7 +88,10 @@ int main() {
         for (int x = 1; x < panel.dimx() - 1; ++x) row += panel.PixelAt(x, y).character;
         return row;
     };
-    Require(row_text(13).find_first_not_of(' ') == std::string::npos, "Missing footer padding");
+    for (int y = 13; y <= 17; ++y) {
+        std::cerr << "Footer row " << y << " [" << row_text(y) << "]\n";
+    }
+    Require(row_text(13).find_first_not_of(' ') == std::string::npos, "Footer padding is blank");
     Require(row_text(14).find("────") != std::string::npos &&
             row_text(15).find("Press 1") != std::string::npos &&
             row_text(16).find("────") != std::string::npos, "Status must appear between dividers");
@@ -95,10 +99,10 @@ int main() {
             row_text(17).find("Close") != std::string::npos, "Actions must occupy the bottom row");
     const auto initial = textlt::LoadJsonValue(path);
     Require(initial.is_array() && initial.size() == 10, "Expected ten starter commands");
-    for (const auto& slot : initial) Require(slot.is_object(), "Empty starter slot");
+    for (const auto& slot : initial) Require(slot.is_object(), "Starter slot contains a command");
     modal.View()->OnEvent(ftxui::Event::Character('6'));
     Require(!modal.IsOpen() && result.find("selection") != std::string::npos &&
-        result != "selection", "Starter bullet list command failed");
+        result != "selection", "Starter bullet list transforms the selection");
 
     // Removing the starter set must leave a saved empty panel available for customization.
     modal.OpenQuick(false);
@@ -116,18 +120,18 @@ int main() {
     auto config = textlt::LoadJsonValue(user_config);
     config["parsers"][0]["params"][0]["default"] = "?";
     config["parsers"][0]["repeat_default"] = 3;
-    Require(textlt::WriteJsonAtomically(user_config, config), "Cannot update test processor");
+    Require(textlt::WriteJsonAtomically(user_config, config), "Save updated test processor");
     modal.Open();
     for (int i = 0; i < 10; ++i) Click(modal, "Add to Quick Panel");
     auto slots = textlt::LoadJsonValue(path);
     Require(slots.size() == 10 && slots.at(9).at("id") == "append", "Ten saved slots expected");
-    Require(slots.at(0).at("params").at("suffix") == "!", "Parameter not saved");
-    Require(slots.at(0).at("repeat") == 2, "Repeat count not saved");
+    Require(slots.at(0).at("params").at("suffix") == "!", "First slot retains its suffix");
+    Require(slots.at(0).at("repeat") == 2, "First slot retains its repeat count");
     modal.Close();
 
     modal.OpenQuick(false);
     modal.View()->OnEvent(ftxui::Event::Character('1'));
-    Require(!modal.IsOpen() && result == "selection!!", "Selection command failed");
+    Require(!modal.IsOpen() && result == "selection!!", "Selection command appends the saved suffix twice");
 
     expected_target = textlt::ProcessorTarget::Paragraph;
     modal.OpenQuick(true);
@@ -135,8 +139,11 @@ int main() {
     modal.View()->OnEvent(ftxui::Event::Character('2'));
     modal.View()->OnEvent(ftxui::Event::Return);
     slots = textlt::LoadJsonValue(path);
-    Require(!slots.at(0).is_null() && slots.at(1).is_null() && !slots.at(2).is_null(), "Removal renumbered another command");
+    Require(!slots.at(0).is_null() && slots.at(1).is_null() && !slots.at(2).is_null(), "Removal preserves neighboring slot numbers");
     modal.View()->OnEvent(ftxui::Event::Character('0'));
-    Require(!modal.IsOpen() && result == "paragraph???", "Slot ten failed");
+    Require(!modal.IsOpen() && result == "paragraph???", "Slot ten applies its saved settings to the paragraph");
     fs::remove_all(root);
+} catch (const std::exception& error) {
+    std::cerr << "Quick panel test failed: " << error.what() << '\n';
+    return 1;
 }

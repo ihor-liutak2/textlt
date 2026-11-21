@@ -1,3 +1,4 @@
+#include <iostream>
 #include <cassert>
 #include <map>
 #include <string>
@@ -9,6 +10,7 @@
 int main() {
     ftxui::Terminal::SetColorSupport(ftxui::Terminal::Color::TrueColor);
 
+    std::cerr << "Parsing theme colors\n";
     ftxui::Color parsed;
     assert(textlt::ParseThemeColor("#123ABC", parsed));
     assert(parsed == ftxui::Color::RGB(0x12, 0x3A, 0xBC));
@@ -17,6 +19,7 @@ int main() {
     assert(parsed == ftxui::Color::Cyan);
     assert(!textlt::ParseThemeColor("#12ZZ00", parsed));
 
+    std::cerr << "Applying theme overrides\n";
     textlt::Theme theme;
     std::string error;
     assert(textlt::ApplyThemeColorOverrides(

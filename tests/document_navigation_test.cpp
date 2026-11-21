@@ -1,3 +1,4 @@
+#include <iostream>
 #include "editor/document_session.hpp"
 #include "editor_utils.hpp"
 
@@ -25,6 +26,7 @@ int main() {
            line.size() - three.size());
     assert(textlt::utils::FindWordDeleteEnd(line, 0) == one.size());
 
+    std::cerr << "Word navigation\n";
     DocumentSession doc;
     EditorCursorState doc_cursor;
     doc.SetActiveCursorState(&doc_cursor);
@@ -45,6 +47,7 @@ int main() {
     doc.MoveCursorToNextWord();
     assert(doc.CursorCol() == one.size() + 1);
 
+    std::cerr << "Vertical navigation\n";
     DocumentSession vertical;
     EditorCursorState vertical_cursor;
     vertical.SetActiveCursorState(&vertical_cursor);
@@ -58,6 +61,7 @@ int main() {
     assert(vertical.CursorRow() == 2);
     assert(vertical.CursorCol() == 3);
 
+    std::cerr << "Selected text processing\n";
     DocumentSession selected_processor;
     EditorCursorState selected_processor_cursor;
     selected_processor.SetActiveCursorState(&selected_processor_cursor);
@@ -108,6 +112,7 @@ int main() {
     assert(!whole_document_processor.Undo());
 
 
+    std::cerr << "Selection navigation\n";
     DocumentSession selection_navigation;
     EditorCursorState selection_cursor;
     selection_navigation.SetActiveCursorState(&selection_cursor);

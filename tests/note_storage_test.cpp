@@ -1,3 +1,4 @@
+#include <iostream>
 #include "notes/note_repository.hpp"
 #include "notes/note_serializer.hpp"
 
@@ -33,6 +34,7 @@ int main() {
     const std::filesystem::path root =
         std::filesystem::temp_directory_path() / ("textlt-note-test-" + notes::GenerateUuid());
 
+    std::cerr << "Creating note repository\n";
     notes::NoteRepository repository(root);
     std::string warning;
     assert(repository.Load(warning));
@@ -59,6 +61,7 @@ int main() {
     repository.Notes().push_back(note);
     assert(repository.Save(repository.Notes().back(), error));
 
+    std::cerr << "Reloading notes\n";
     notes::NoteRepository reloaded(root);
     assert(reloaded.Load(warning));
     assert(reloaded.Sections().size() == 1);
@@ -209,6 +212,7 @@ int main() {
     assert(!legacy.Sections().front().project_id);
     assert(!legacy.Sections().front().auto_named);
     assert(legacy.SaveSections(error));
+    std::cerr << "Reloading legacy notes\n";
     notes::NoteRepository legacy_reloaded(legacy_root);
     assert(legacy_reloaded.Load(warning));
     assert(legacy_reloaded.Sections().size() == 1);

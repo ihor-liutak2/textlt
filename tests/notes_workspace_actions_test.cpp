@@ -380,6 +380,7 @@ public:
 namespace {
 
 void Expect(bool value, const std::string& message) {
+    std::cerr << "Check: " << message << '\n';
     if (!value) {
         std::cerr << message << '\n';
         std::exit(1);

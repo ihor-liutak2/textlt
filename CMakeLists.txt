@@ -18,6 +18,7 @@ if(POLICY CMP0135)
 endif()
 
 if(MSVC)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/utf-8>)
   # Match the static vcpkg triplet used in CI so the executable and bundled
   # dependencies do not mix `/MT` and `/MD` runtimes.
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -273,6 +274,7 @@ add_executable(textlt
   src/lexers/database_lexer.cpp
   src/lexers/web_lexer.cpp
   src/main.cpp
+  src/startup_check.cpp
   src/menu_bar.cpp
   src/modals/assistant_modals.cpp
   src/modals/assistant_download_progress.cpp
@@ -877,3 +879,8 @@ add_test(NAME textlt_remote_ssh_config_test COMMAND textlt_remote_ssh_config_tes
 add_test(NAME textlt_remote_sftp_provider_test COMMAND textlt_remote_sftp_provider_test)
 add_test(NAME textlt_no_embedded_curl_test COMMAND textlt_no_embedded_curl_test)
 add_test(NAME textlt_remote_dropbox_provider_test COMMAND textlt_remote_dropbox_provider_test)
+
+add_test(NAME textlt_startup_check_test COMMAND ${CMAKE_COMMAND}
+  "-Dexe=$<TARGET_FILE:textlt>"
+  "-Dresources=${CMAKE_CURRENT_SOURCE_DIR}/text_processors"
+  -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/startup_check.cmake")

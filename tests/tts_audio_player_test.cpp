@@ -7,6 +7,7 @@
 namespace {
 
 void Expect(bool condition, const std::string& message) {
+    std::cerr << "Check: " << message << '\n';
     if (!condition) {
         std::cerr << "FAIL: " << message << "\n";
         std::exit(1);
@@ -14,6 +15,7 @@ void Expect(bool condition, const std::string& message) {
 }
 
 void TestCandidatePlayersAreDefined() {
+    std::cerr << "TestCandidatePlayersAreDefined\n";
     const auto players = textlt::TtsAudioPlayer::CandidatePlayers();
     Expect(!players.empty(), "candidate player list must not be empty");
     for (const auto& player : players) {
@@ -24,6 +26,7 @@ void TestCandidatePlayersAreDefined() {
 }
 
 void TestShellQuoting() {
+    std::cerr << "TestShellQuoting\n";
     const std::string quoted = textlt::TtsAudioPlayer::QuoteShellArgument("a b'c");
     Expect(!quoted.empty(), "quoted shell argument must not be empty");
 #ifndef _WIN32
@@ -34,10 +37,12 @@ void TestShellQuoting() {
 }
 
 void TestDependencyHelp() {
+    std::cerr << "TestDependencyHelp\n";
     Expect(!textlt::TtsAudioPlayer::DependencyHelpText().empty(), "dependency help must not be empty");
 }
 
 void TestPlayerStatusesIncludeCustom() {
+    std::cerr << "TestPlayerStatusesIncludeCustom\n";
     textlt::TtsAudioPlayer::PlayerSettings settings;
     settings.selected_player_id = "custom";
     settings.custom_command = "echo {file}";
@@ -57,6 +62,7 @@ void TestPlayerStatusesIncludeCustom() {
 }
 
 void TestAutoSettingsAreValid() {
+    std::cerr << "TestAutoSettingsAreValid\n";
     const textlt::TtsAudioPlayer::PlayerSettings settings;
     const auto statuses = textlt::TtsAudioPlayer::PlayerStatuses(settings);
     Expect(!statuses.empty(), "player status list must not be empty");

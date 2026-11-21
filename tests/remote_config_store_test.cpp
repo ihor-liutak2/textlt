@@ -14,12 +14,14 @@ void Fail(const std::string& message) {
 }
 
 void Expect(bool value, const std::string& message) {
+    std::cerr << "Check: " << message << '\n';
     if (!value) {
         Fail(message);
     }
 }
 
 void ExpectEqual(const std::string& actual, const std::string& expected, const std::string& message) {
+    std::cerr << "Check: " << message << '\n';
     if (actual != expected) {
         Fail(message + " expected [" + expected + "] but got [" + actual + "]");
     }

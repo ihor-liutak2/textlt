@@ -1,3 +1,4 @@
+#include <iostream>
 #include <cassert>
 #include <string>
 
@@ -8,6 +9,7 @@ int main() {
     session.LoadContent("First line\nSecond line\n\nThird paragraph", "test.txt");
     session.SetCursorPosition(1, 3);
 
+    std::cerr << "Paragraph replacement\n";
     textlt::DocumentTransformTarget paragraph;
     std::string error;
     assert(session.CaptureAiTransformTarget(false, paragraph, error));
@@ -19,6 +21,7 @@ int main() {
     assert(session.Undo());
     assert(session.ToContent() == "First line\nSecond line\n\nThird paragraph");
 
+    std::cerr << "Stale transformation target\n";
     textlt::DocumentTransformTarget stale;
     assert(session.CaptureAiTransformTarget(true, stale, error));
     session.SetCursorPosition(0, 0);
@@ -27,6 +30,7 @@ int main() {
     assert(error.find("changed") != std::string::npos);
 
     session.SetCursorPosition(2, 0);
+    std::cerr << "Blank target\n";
     textlt::DocumentTransformTarget blank;
     error.clear();
     assert(!session.CaptureAiTransformTarget(false, blank, error));
@@ -38,6 +42,7 @@ int main() {
         "cursor-test.txt");
     // The session fallback cursor intentionally remains in the first paragraph.
     visible_cursor.SetCursorPosition(0, 0);
+    std::cerr << "Paragraph at cursor\n";
     textlt::DocumentTransformTarget cursor_paragraph;
     error.clear();
     assert(visible_cursor.CaptureAiTransformTargetAt(

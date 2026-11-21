@@ -13,6 +13,11 @@ shared_library_is_missing() {
     grep -Eq "${library_pattern}[^[:space:]]*[[:space:]]+=>[[:space:]]+not found"
 }
 
+# Diagnostics must run as the invoking user, even when a tool is missing.
+if [ "${1:-}" = "--startup-check" ] && [ "$#" -eq 1 ]; then
+  exec "$BINARY" "$@"
+fi
+
 missing=""
 for tool in curl ssh sftp; do
   if ! command -v "$tool" >/dev/null 2>&1; then

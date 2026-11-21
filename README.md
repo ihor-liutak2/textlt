@@ -43,6 +43,15 @@ Optimized to run perfectly in native Linux environments (**MX Linux**, **Ubuntu*
 
 ## Getting Started
 
+### Check an installation
+
+Run `textlt --startup-check` from the account that will use the editor. On Windows,
+open a regular PowerShell window after an administrator installs TextLT. The
+report tests local tools, bundled processors, and the account’s access to its
+configuration, data, cache, and temporary directories. Each failed check names
+the tool or path. Exit code zero means the checks and editor initialization passed.
+Piper is an optional download. The checks run offline.
+
 ### Install from Release
 
 Installing or upgrading resets TextLT configuration, custom themes, text-parser

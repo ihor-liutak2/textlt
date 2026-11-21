@@ -1,3 +1,4 @@
+#include <iostream>
 #include "piper_manager.hpp"
 
 #include <cassert>
@@ -8,6 +9,7 @@
 namespace {
 
 void TestShellQuoting() {
+    std::cerr << "TestShellQuoting\n";
     const std::string quoted = textlt::PiperManager::QuoteShellPath(
         std::filesystem::path("folder name") / "voice's file.onnx");
     assert(!quoted.empty());
@@ -20,6 +22,7 @@ void TestShellQuoting() {
 }
 
 void TestRuntimePathsAreConsistent() {
+    std::cerr << "TestRuntimePathsAreConsistent\n";
     const std::filesystem::path runtime = textlt::PiperManager::RuntimeDirectory();
     const std::filesystem::path models = textlt::PiperManager::ModelsDirectory();
     if (!runtime.empty()) {
@@ -31,12 +34,14 @@ void TestRuntimePathsAreConsistent() {
 }
 
 void TestAssetPathFromUrl() {
+    std::cerr << "TestAssetPathFromUrl\n";
     const std::filesystem::path path = textlt::PiperManager::AssetPathFromUrl(
         "https://example.com/assets/a/b/file.onnx");
     assert(path == std::filesystem::path("assets/a/b/file.onnx"));
 }
 
 void TestVoicePathsUseRegistryIdDirectory() {
+    std::cerr << "TestVoicePathsUseRegistryIdDirectory\n";
     textlt::Json voice = textlt::Json::object();
     voice["id"] = "en_US-lessac-medium";
     voice["model_url"] =
@@ -68,6 +73,7 @@ void TestVoicePathsUseRegistryIdDirectory() {
 }
 
 void TestRuntimeUrlAndArchiveNameMatchPlatform() {
+    std::cerr << "TestRuntimeUrlAndArchiveNameMatchPlatform\n";
     const std::filesystem::path archive = textlt::PiperManager::RuntimeDownloadArchivePath();
     if (!archive.empty()) {
 #ifdef _WIN32

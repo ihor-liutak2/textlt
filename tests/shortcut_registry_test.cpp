@@ -1,3 +1,4 @@
+#include <iostream>
 #include "shortcut_registry.hpp"
 
 #include <algorithm>
@@ -9,6 +10,7 @@
 int main() {
     using namespace textlt;
 
+    std::cerr << "Default bindings\n";
     ShortcutRegistry registry;
     registry.RegisterDefault({ShortcutContext::Menu, "file.save", "Save", "File", "Ctrl+S"});
     registry.RegisterDefault({ShortcutContext::Text, "editor.move_line_up", "Move line up", "Lines", "Alt+Up"});
@@ -45,6 +47,7 @@ int main() {
     ShortcutKey reserved{ShortcutKeyModifier::Ctrl, "D"};
     assert(IsTerminalReservedShortcut(reserved));
 
+    std::cerr << "Modifier choices\n";
     const auto modifier_choices = ShortcutModifierChoices();
     assert(std::find(modifier_choices.begin(), modifier_choices.end(), ShortcutKeyModifier::None) !=
            modifier_choices.end());

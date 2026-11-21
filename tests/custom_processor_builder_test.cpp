@@ -1,3 +1,4 @@
+#include <iostream>
 #include "custom_processor_builder.hpp"
 #include "text_parser_manager.hpp"
 
@@ -52,6 +53,7 @@ int CountProcessorEntries(const fs::path& config_path, const std::string& id) {
 }
 
 void TestPromptMentionsTransformAndSandbox() {
+    std::cerr << "TestPromptMentionsTransformAndSandbox\n";
     textlt::CustomProcessorPromptRequest request;
     request.user_request = "Report lines longer than 120 characters and keep dialogue.";
     request.group = "User";
@@ -82,6 +84,7 @@ void TestPromptMentionsTransformAndSandbox() {
 }
 
 void TestRepairPromptContainsValidationErrorAndBadJson() {
+    std::cerr << "TestRepairPromptContainsValidationErrorAndBadJson\n";
     textlt::CustomProcessorPromptRequest request;
     request.user_request = "Remove page numbers but keep dialogue.";
     request.group = "User";
@@ -108,6 +111,7 @@ void TestRepairPromptContainsValidationErrorAndBadJson() {
 }
 
 void TestInstallAndApplyCustomProcessor() {
+    std::cerr << "TestInstallAndApplyCustomProcessor\n";
     const fs::path root = fs::temp_directory_path() / "textlt_custom_processor_builder_test";
     fs::remove_all(root);
     fs::create_directories(root);
@@ -146,6 +150,7 @@ void TestInstallAndApplyCustomProcessor() {
 }
 
 void TestManageEditableCustomProcessors() {
+    std::cerr << "TestManageEditableCustomProcessors\n";
     const fs::path root = fs::temp_directory_path() / "textlt_custom_processor_manage_test";
     fs::remove_all(root);
     fs::create_directories(root);
@@ -211,6 +216,7 @@ void TestManageEditableCustomProcessors() {
 }
 
 void TestRejectLockedAndNonUserProcessorManagement() {
+    std::cerr << "TestRejectLockedAndNonUserProcessorManagement\n";
     const fs::path root = fs::temp_directory_path() / "textlt_custom_processor_reject_test";
     fs::remove_all(root);
     fs::create_directories(root);
@@ -267,6 +273,7 @@ void TestRejectLockedAndNonUserProcessorManagement() {
 }
 
 void TestForbiddenLuaRejected() {
+    std::cerr << "TestForbiddenLuaRejected\n";
     const std::string json = R"json({
   "id": "user_bad",
   "name": "Bad",

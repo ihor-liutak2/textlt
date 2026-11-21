@@ -1,5 +1,5 @@
 #include <algorithm>
-#include <cstdlib>
+#include <stdexcept>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -11,14 +11,12 @@
 
 using namespace textlt::actions;
 
-static void CheckAt(bool condition, int line) {
-    if (!condition) {
-        std::cerr << "Action repository test check failed at line " << line << '\n';
-        std::abort();
-    }
-}
-
-#define Check(condition) CheckAt((condition), __LINE__)
+#define Check(condition) do { \
+    std::cerr << "Line " << __LINE__ << ": " << #condition << '\n'; \
+    if (!(condition)) { \
+        throw std::runtime_error(std::string(#condition) + " (" + error + ")"); \
+    } \
+} while (false)
 
 static void CheckMerge(ActionRepository& repo, const std::string& source, const std::string& target,
     bool expect_ok, std::size_t expect_group_count, const std::string& expect_target_name,
@@ -36,7 +34,7 @@ static void CheckMerge(ActionRepository& repo, const std::string& source, const 
     }
 }
 
-int main() {
+int main() try {
     const auto root = std::filesystem::temp_directory_path() / ("textlt-actions-" + GenerateActionId());
     const auto path = root / "actions.json";
     ActionRepository repository(path);
@@ -190,10 +188,12 @@ int main() {
         Check(migrated_item.tabs.front().caption == "Old caption");
         Check(migrated_item.tabs.front().content == "legacy body");
         Check(migrated_item.tabs.front().hide_text);
-        std::ifstream converted_file(migration_path, std::ios::binary);
-        const textlt::Json converted_json = textlt::Json::parse(converted_file);
-        Check(converted_json["schema_version"] == 2);
-        Check(converted_json["groups"][0]["pages"][0]["items"][0]["tabs"].size() == 1);
+        {
+            std::ifstream converted_file(migration_path, std::ios::binary);
+            const textlt::Json converted_json = textlt::Json::parse(converted_file);
+            Check(converted_json["schema_version"] == 2);
+            Check(converted_json["groups"][0]["pages"][0]["items"][0]["tabs"].size() == 1);
+        }
 
         ActionsDocument two_tab_document;
         two_tab_document.groups.push_back({"g2", "Four tabs", std::nullopt,
@@ -227,4 +227,7 @@ int main() {
     }
 
     std::filesystem::remove_all(root);
+} catch (const std::exception& error) {
+    std::cerr << "Action repository test failed: " << error.what() << '\n';
+    return 1;
 }

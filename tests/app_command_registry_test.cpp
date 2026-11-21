@@ -1,3 +1,4 @@
+#include <iostream>
 #include "app_command_registry.hpp"
 
 #include <cassert>
@@ -7,6 +8,7 @@ int main() {
     textlt::AppCommandRegistry registry;
     int runs = 0;
 
+    std::cerr << "Register and run a command\n";
     textlt::AppCommand command;
     command.id = "test.run";
     command.title = "Run Test";
@@ -26,6 +28,7 @@ int main() {
     assert(found->title == "Run Test");
     assert(found->shortcut == "Ctrl+T");
 
+    std::cerr << "Disabled command\n";
     textlt::AppCommand disabled;
     disabled.id = "test.disabled";
     disabled.title = "Disabled";

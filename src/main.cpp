@@ -1,6 +1,7 @@
 #include "app_resources.hpp"
 #include "app.hpp"
 #include "terminal_flow_control_guard.hpp"
+#include "startup_check.hpp"
 
 #include "ftxui/screen/terminal.hpp"
 
@@ -37,7 +38,7 @@ int main(int argc, char* argv[]) {
                 << "textlt " TEXTLT_VERSION " - Native Non-Modal Text Editor\n"
                 << "Usage: textlt [file ...]\n"
                 << "       textlt --version\n"
-                << "       textlt --startup-check\n";
+                << "       textlt --startup-check  (check runtime dependencies and user storage)\n";
             return 0;
         }
         startup_check = option == "--startup-check";
@@ -55,6 +56,10 @@ int main(int argc, char* argv[]) {
     ftxui::Terminal::SetColorSupport(ftxui::Terminal::Color::TrueColor);
 
     try {
+        if (startup_check && !textlt::CheckStartupEnvironment()) {
+            std::cerr << "TextLT startup check failed. See [FAIL] entries above.\n";
+            return 1;
+        }
         textlt::EnsureStartupResources();
 
         // TextltApp owns the complete UI and all modal/workspace state. Keep it

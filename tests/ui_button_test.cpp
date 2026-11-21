@@ -1,3 +1,4 @@
+#include <iostream>
 #include "ui_button.hpp"
 
 #include <cassert>
@@ -6,6 +7,7 @@
 int main() {
     using namespace textlt;
 
+    std::cerr << "Button labels and roles\n";
     assert(std::string(ToString(ButtonRole::Primary)) == "Primary");
     assert(std::string(ToString(ButtonVariant::AccentBar)) == "AccentBar");
     assert(std::string(ToString(ButtonVariant::AccentEdges)) == "AccentEdges");
@@ -32,6 +34,7 @@ int main() {
     assert(inferred_button.role == ButtonRole::Danger);
     assert(inferred_button.variant == ButtonVariant::AccentEdges);
 
+    std::cerr << "Button states\n";
     ButtonSpec save_button;
     save_button.caption = "Save";
     save_button.role = ButtonRole::Primary;
@@ -57,6 +60,7 @@ int main() {
     const ButtonStyle normal = ResolveButtonStyle(theme, ButtonRole::Primary, ButtonState::Normal);
     const ButtonStyle focused = ResolveButtonStyle(theme, ButtonRole::Primary, ButtonState::Focused);
     const ButtonStyle selected = ResolveButtonStyle(theme, ButtonRole::Primary, ButtonState::Selected);
+    std::cerr << "Disabled button style\n";
     const ButtonStyle disabled = ResolveButtonStyle(theme, ButtonRole::Primary, ButtonState::Disabled);
 
     ButtonSpec icon_button;

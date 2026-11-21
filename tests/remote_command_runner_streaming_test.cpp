@@ -34,6 +34,7 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    std::cerr << "Streaming child output\n";
     textlt::RemoteCommandRunner runner;
     std::string streamed;
     const textlt::RemoteCommandResult output_result = runner.RunStreaming(
@@ -53,6 +54,7 @@ int main(int argc, char** argv) {
     assert(missing_command_result.exit_code == 127);
     assert(missing_command_result.error == "Cannot execute command.\n");
 
+    std::cerr << "Cancellation during output\n";
     std::atomic<bool> cancel_requested{false};
     std::thread cancel_thread([&] {
         std::this_thread::sleep_for(std::chrono::milliseconds(120));
@@ -128,6 +130,7 @@ int main(int argc, char** argv) {
     assert(!active_stream_result.timed_out);
     assert(active_stream_result.output.size() == 15);
 
+    std::cerr << "Idle timeout\n";
     const auto idle_timeout_started = std::chrono::steady_clock::now();
     const textlt::RemoteCommandResult idle_timeout_result = runner.RunStreaming(
         {argv[0], "--child-stalled-stream"},
@@ -141,6 +144,7 @@ int main(int argc, char** argv) {
     assert(std::chrono::steady_clock::now() - idle_timeout_started <
            std::chrono::seconds(3));
 
+    std::cerr << "Absolute timeout\n";
     const auto timeout_started = std::chrono::steady_clock::now();
     const textlt::RemoteCommandResult timeout_result = runner.RunStreaming(
         {argv[0], "--child-slow"},

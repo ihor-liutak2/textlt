@@ -1,3 +1,4 @@
+#include <iostream>
 #include "builtin_text_processors.hpp"
 
 #include <cassert>
@@ -29,6 +30,7 @@ std::string Apply(
 }
 
 void TestPunctuationPack() {
+  std::cerr << "TestPunctuationPack\n";
   assert(Apply("builtin_punctuation_normalize_ellipsis", "Так...") == "Так…");
   assert(Apply("builtin_punctuation_normalize_dashes", "а -- б") == "а — б");
   assert(Apply("builtin_punctuation_fix_spaces", "Привіт ,світе !") == "Привіт, світе!");
@@ -37,6 +39,7 @@ void TestPunctuationPack() {
 }
 
 void TestTablesPack() {
+  std::cerr << "TestTablesPack\n";
   assert(Apply("builtin_table_normalize_semicolon_rows", " A ;  B  ; C \nD;E; F") == "A; B; C\nD; E; F");
   assert(Apply("builtin_table_tabs_to_semicolon_rows", "A\tB\tC") == "A; B; C");
   assert(Apply("builtin_table_multispace_to_semicolon_rows", "A  B   C", {{"min_spaces", "2"}}) == "A; B; C");
@@ -46,6 +49,7 @@ void TestTablesPack() {
 }
 
 void TestMarkdownPack() {
+  std::cerr << "TestMarkdownPack\n";
   assert(Apply("builtin_markdown_add_heading", "Title", {{"level", "2"}}) == "## Title");
   assert(Apply("builtin_markdown_remove_headings", "## Title") == "Title");
   assert(Apply("builtin_markdown_bullet_list", "one\ntwo") == "- one\n- two");
@@ -62,6 +66,7 @@ void TestMarkdownPack() {
 }
 
 void TestAnalysisPack2() {
+  std::cerr << "TestAnalysisPack2\n";
   const std::string mixed = Apply("builtin_analysis_mixed_cyrillic_latin", "Тext Cloud Сloud");
   assert(mixed.find("Тext") != std::string::npos);
   assert(mixed.find("Сloud") != std::string::npos);

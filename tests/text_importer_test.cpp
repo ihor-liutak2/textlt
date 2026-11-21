@@ -1,3 +1,4 @@
+#include <iostream>
 #include "text_importer.hpp"
 
 #include <archive.h>
@@ -111,6 +112,7 @@ int main() {
     using textlt::TextImportFormat;
     using textlt::TextImporter;
 
+    std::cerr << "Format detection\n";
     assert(TextImporter::DetectFormat("book.fb2.zip") == TextImportFormat::Fb2Zip);
     assert(TextImporter::DetectFormat("BOOK.FB2.ZIP") == TextImportFormat::Fb2Zip);
     assert(TextImporter::DetectFormat("book.zip") == TextImportFormat::Unsupported);
@@ -121,6 +123,7 @@ int main() {
     assert(TextImporter::DetectFormat("google_doc.gdoc") == TextImportFormat::GoogleDocShortcut);
 
     // FB2 zip test
+    std::cerr << "FB2 ZIP import\n";
     const std::filesystem::path archive_path =
         std::filesystem::temp_directory_path() / "textlt_text_importer_test.fb2.zip";
     WriteFb2Zip(
@@ -286,6 +289,7 @@ int main() {
 
 
     // RTF: unicode text, paragraphs, tabs, and ignored metadata
+    std::cerr << "RTF import\n";
     const std::filesystem::path rtf_path =
         std::filesystem::temp_directory_path() / "textlt_text_importer_test.rtf";
     {

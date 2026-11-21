@@ -1,3 +1,4 @@
+#include <iostream>
 #include <cstdlib>
 #include <filesystem>
 #include <string>
@@ -24,6 +25,7 @@ const std::string* Find(const ActionConfigImportResult& result,
 } // namespace
 
 int main() {
+    std::cerr << "Parsing dotenv\n";
     const auto env = ActionConfigImporter::Parse(".env.local",
         "# local config\nexport API_URL=https://example.test # endpoint\n"
         "TOKEN=\"secret value\"\nEMPTY=\n");
@@ -32,6 +34,7 @@ int main() {
     Check(Find(env, "TOKEN") && *Find(env, "TOKEN") == "secret value");
     Check(Find(env, "EMPTY") && Find(env, "EMPTY")->empty());
 
+    std::cerr << "Parsing Java properties\n";
     const auto properties = ActionConfigImporter::Parse("app.properties",
         "server.port = 8080\nmessage=hello\\\n world\npath=C:\\\\data\n");
     Check(properties.success && properties.values.size() == 3);
@@ -39,6 +42,7 @@ int main() {
     Check(Find(properties, "message") && *Find(properties, "message") == "hello world");
     Check(Find(properties, "path") && *Find(properties, "path") == "C:\\data");
 
+    std::cerr << "Parsing YAML\n";
     const auto yaml = ActionConfigImporter::Parse("config.yaml",
         "database:\n"
         "  connection:\n"

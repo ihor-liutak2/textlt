@@ -1,3 +1,4 @@
+#include <iostream>
 #include "keyboard_shortcuts.hpp"
 
 #include <cassert>
@@ -7,6 +8,7 @@ int main() {
     using textlt::MatchesShortcut;
     using textlt::ShortcutModifier;
 
+    std::cerr << "Plain shortcut keys\n";
     assert(MatchesPlainShortcutKey(ftxui::Event::Character("w"), 'w'));
     assert(MatchesPlainShortcutKey(ftxui::Event::Character("W"), 'w'));
     assert(MatchesPlainShortcutKey(ftxui::Event::Character("ц"), 'w'));
@@ -14,6 +16,7 @@ int main() {
     assert(MatchesPlainShortcutKey(ftxui::Event::Character("і"), 's'));
     assert(!MatchesPlainShortcutKey(ftxui::Event::Character("ц"), 'q'));
 
+    std::cerr << "Modified shortcut keys\n";
     assert(MatchesShortcut(ftxui::Event::Special("\x17"), ShortcutModifier::Ctrl, 'w'));
     assert(MatchesShortcut(ftxui::Event::Special("\x1B[1094;5u"), ShortcutModifier::Ctrl, 'w'));
     assert(MatchesShortcut(ftxui::Event::Special("\x1B[27;5;1094~"), ShortcutModifier::Ctrl, 'w'));

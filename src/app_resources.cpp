@@ -8,6 +8,8 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#elif defined(__APPLE__)
+#include <mach-o/dyld.h>
 #endif
 
 #include "editor_config.hpp"
@@ -133,6 +135,13 @@ std::filesystem::path ExecutableDirectory() {
     }
     buffer.resize(length);
     return std::filesystem::path(buffer).parent_path();
+#elif defined(__APPLE__)
+    uint32_t size = 0;
+    _NSGetExecutablePath(nullptr, &size);
+    std::vector<char> buffer(size);
+    if (_NSGetExecutablePath(buffer.data(), &size) != 0) return {};
+    std::error_code error;
+    return std::filesystem::canonical(buffer.data(), error).parent_path();
 #else
     std::error_code error;
     const std::filesystem::path executable =
@@ -155,15 +164,18 @@ bool IsTextProcessorsDirectory(const std::filesystem::path& path) {
 std::filesystem::path FindTextProcessorsDirectory() {
     std::vector<std::filesystem::path> candidates;
 
-#ifndef _WIN32
-    if (const char* data_directory = std::getenv("TEXTLT_DATA_DIR")) {
-        if (*data_directory != '\0') {
-            const std::filesystem::path root(data_directory);
-            candidates.push_back(root / "text_processors");
-            candidates.push_back(root);
-        }
+#ifdef _WIN32
+    const auto root = WindowsEnvironmentPath(L"TEXTLT_DATA_DIR");
+#else
+    const char* data_directory = std::getenv("TEXTLT_DATA_DIR");
+    const std::filesystem::path root(data_directory ? data_directory : "");
+#endif
+    if (!root.empty()) {
+        candidates.push_back(root / "text_processors");
+        candidates.push_back(root);
     }
 
+#ifndef _WIN32
     if (const char* appdir = std::getenv("APPDIR")) {
         if (*appdir != '\0') {
             candidates.emplace_back(

@@ -1,3 +1,4 @@
+#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -18,6 +19,7 @@ std::vector<ftxui::Event> Parse(const std::string& input) {
 }
 
 void AssertSingleSpecialEvent(const std::string& input) {
+    std::cerr << "Parsing Alt with " << input.substr(1) << '\n';
     const std::vector<ftxui::Event> events = Parse(input);
     if (events.size() != 1) {
         throw std::runtime_error("Alt+UTF-8 must produce exactly one event");

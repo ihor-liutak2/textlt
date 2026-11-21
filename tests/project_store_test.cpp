@@ -10,6 +10,7 @@
 namespace {
 
 void Expect(bool condition, const std::string& message) {
+    std::cerr << "Check: " << message << '\n';
     if (!condition) {
         std::cerr << message << '\n';
         std::exit(1);

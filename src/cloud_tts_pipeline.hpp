@@ -152,6 +152,9 @@ public:
     size_t FindChunkIndexForLine(const std::string& book_id, size_t line) const;
     std::string GetChunkText(const std::string& book_id, size_t chunk_index) const;
 
+    static std::filesystem::path LibraryDirectory();
+    static std::filesystem::path RegistryDirectory();
+
 private:
     static std::vector<PreparedChunk> BuildPreparedChunks(
         const std::string& text,
@@ -163,9 +166,7 @@ private:
     static SourcePosition AdvancePosition(SourcePosition position, const std::string& text);
     static std::string CleanseText(const std::string& text);
     static std::filesystem::path UserDataDirectory();
-    static std::filesystem::path LibraryDirectory();
     static std::filesystem::path BookDirectory(const std::string& book_id);
-    static std::filesystem::path RegistryDirectory();
     static std::filesystem::path ChunkAudioPath(
         const std::string& book_id,
         size_t chunk_index,

@@ -6,6 +6,7 @@
 namespace {
 
 bool ExpectEqual(const std::string& label, const std::string& actual, const std::string& expected) {
+    std::cerr << "Check: " << label << '\n';
     if (actual == expected) {
         return true;
     }
@@ -19,6 +20,7 @@ bool ExpectType(
     const std::string& label,
     textlt::RemoteConnectionType actual,
     textlt::RemoteConnectionType expected) {
+    std::cerr << "Check: " << label << '\n';
     if (actual == expected) {
         return true;
     }

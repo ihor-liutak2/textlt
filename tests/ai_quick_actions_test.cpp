@@ -1,3 +1,4 @@
+#include <iostream>
 #include "modals/modal_ai_quick_actions.hpp"
 #include "modals/modal_window.hpp"
 
@@ -37,6 +38,7 @@ int main() {
     int edit_count = 0;
     int stop_count = 0;
     int close_count = 0;
+    std::cerr << "Preparing model status\n";
     AiQuickStatusSnapshot status;
     status.model_label = "Gemma test";
     status.language_label = "Russian -> Ukrainian";
@@ -45,6 +47,7 @@ int main() {
     status.paragraph_available = true;
     status.ready = true;
 
+    std::cerr << "Keyboard actions\n";
     AiQuickActionsModalContent content(
         nullptr,
         [&](AiActionType action, std::string& error) {
@@ -111,6 +114,7 @@ int main() {
     assert(translate_count == 1);
     status.paragraph_available = true;
 
+    std::cerr << "Mouse actions\n";
     ftxui::Mouse mouse;
     mouse.button = ftxui::Mouse::Left;
     mouse.motion = ftxui::Mouse::Pressed;

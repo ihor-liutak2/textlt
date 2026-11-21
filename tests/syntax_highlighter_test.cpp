@@ -1,3 +1,4 @@
+#include <iostream>
 #include "syntax_highlighter.hpp"
 
 #include <cassert>
@@ -26,6 +27,7 @@ bool ContainsStyledText(const std::string& line,
 int main() {
     using Style = textlt::SyntaxHighlighter::Style;
 
+    std::cerr << "Kotlin syntax\n";
     assert(ContainsStyledText("fun greet(name: String) = println(\"Hi\")",
                               "sample.kt",
                               "fun",
@@ -35,6 +37,7 @@ int main() {
                               "String",
                               Style::Type));
 
+    std::cerr << "Swift syntax\n";
     assert(ContainsStyledText("let greeting: String = \"Hi\"",
                               "sample.swift",
                               "let",
@@ -44,6 +47,7 @@ int main() {
                               "String",
                               Style::Type));
 
+    std::cerr << "Dart syntax\n";
     assert(ContainsStyledText("final count = 42;",
                               "sample.dart",
                               "final",

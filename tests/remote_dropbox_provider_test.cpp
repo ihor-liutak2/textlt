@@ -7,6 +7,7 @@
 namespace {
 
 void ExpectEqual(const std::string& actual, const std::string& expected, const char* label) {
+    std::cerr << "Check: " << label << '\n';
     if (actual == expected) {
         return;
     }

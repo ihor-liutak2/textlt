@@ -1,9 +1,11 @@
+#include <iostream>
 #include <cassert>
 #include <string>
 
 #include "ai/ai_prompts.hpp"
 
 int main() {
+    std::cerr << "Translation prompt\n";
     textlt::AiPromptRequest translate;
     translate.action = textlt::AiActionType::Translate;
     translate.source_language = "English";
@@ -24,6 +26,7 @@ int main() {
     assert(textlt::BuildAiSystemPrompt(translate).find(
         "output was still English") != std::string::npos);
 
+    std::cerr << "Russian to Ukrainian prompt\n";
     textlt::AiPromptRequest russian_to_ukrainian;
     russian_to_ukrainian.action = textlt::AiActionType::Translate;
     russian_to_ukrainian.source_language = "Russian";
@@ -44,6 +47,7 @@ int main() {
         error));
     assert(error.find("source language") != std::string::npos);
 
+    std::cerr << "Editing prompt\n";
     textlt::AiPromptRequest edit;
     edit.action = textlt::AiActionType::Edit;
     edit.edit_style = textlt::AiEditStyle::Business;

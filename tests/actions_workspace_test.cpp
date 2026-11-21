@@ -217,6 +217,7 @@ public:
 
 #define Check(condition)                                                        \
     do {                                                                        \
+        std::fprintf(stderr, "Line %d: %s\n", __LINE__, #condition);            \
         if (!(condition)) {                                                     \
             std::fprintf(stderr, "Check failed at %s:%d: %s\n",               \
                 __FILE__, __LINE__, #condition);                                \

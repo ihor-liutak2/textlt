@@ -68,6 +68,7 @@ textlt::CloudTtsPipeline::BookInfo PrepareTestBook(const std::filesystem::path& 
 }
 
 void TestChunkPositionsStartAtDocumentStart() {
+    std::cerr << "TestChunkPositionsStartAtDocumentStart\n";
     const std::filesystem::path root = TestDataRoot();
     std::filesystem::remove_all(root);
     std::filesystem::create_directories(root);
@@ -92,6 +93,7 @@ void TestChunkPositionsStartAtDocumentStart() {
 }
 
 void TestClearBookAudioCacheResetsChunks() {
+    std::cerr << "TestClearBookAudioCacheResetsChunks\n";
     const std::filesystem::path root = TestDataRoot();
     std::filesystem::remove_all(root);
     std::filesystem::create_directories(root);
@@ -129,6 +131,7 @@ void TestClearBookAudioCacheResetsChunks() {
 }
 
 void TestDeleteBookRemovesOnlyTtsBookFiles() {
+    std::cerr << "TestDeleteBookRemovesOnlyTtsBookFiles\n";
     const std::filesystem::path root = TestDataRoot();
     std::filesystem::remove_all(root);
     std::filesystem::create_directories(root);
@@ -153,6 +156,7 @@ void TestDeleteBookRemovesOnlyTtsBookFiles() {
 }
 
 void TestPreparationCompletionPreservesMetadata() {
+    std::cerr << "TestPreparationCompletionPreservesMetadata\n";
     const std::filesystem::path root = TestDataRoot();
     std::filesystem::remove_all(root);
     std::filesystem::create_directories(root);
@@ -205,6 +209,7 @@ void TestPreparationCompletionPreservesMetadata() {
 }
 
 void TestAudioLookaheadReusesExistingWav() {
+    std::cerr << "TestAudioLookaheadReusesExistingWav\n";
     const std::filesystem::path root = TestDataRoot();
     std::filesystem::remove_all(root);
     std::filesystem::create_directories(root);

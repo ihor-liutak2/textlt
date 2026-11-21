@@ -1,3 +1,4 @@
+#include <iostream>
 #include <cassert>
 #include <string>
 
@@ -8,6 +9,7 @@ int main() {
     using textlt::AiPromptRequest;
     using textlt::AiProvider;
 
+    std::cerr << "Server URL normalization\n";
     assert(AiBackend::NormalizeServerUrl(" http://127.0.0.1:11434/api/ ") ==
            "http://127.0.0.1:11434");
     assert(AiBackend::NormalizeServerUrl("http://localhost:1234/v1") ==
@@ -16,6 +18,7 @@ int main() {
     assert(AiBackend::IsSupportedServerUrl("https://example.test/v1"));
     assert(!AiBackend::IsSupportedServerUrl("file:///tmp/server"));
 
+    std::cerr << "Provider configuration\n";
     assert(AiBackend::ProviderFromConfig("ollama") == AiProvider::Ollama);
     assert(AiBackend::ProviderFromConfig("openai") ==
            AiProvider::OpenAiCompatible);
@@ -38,6 +41,7 @@ int main() {
                "The literal [end of text] label remains inside the sentence.") ==
            "The literal [end of text] label remains inside the sentence.");
 
+    std::cerr << "Output token limits\n";
     AiPromptRequest request;
     request.text = "text";
     assert(AiBackend::RecommendedMaxOutputTokens(request) >= 64);
