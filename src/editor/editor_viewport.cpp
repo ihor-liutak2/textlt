@@ -373,9 +373,10 @@ std::pair<size_t, size_t> EditorViewport::PositionAtMouse(
         const int raw_clicked_row = static_cast<int>(scroll_y) + relative_y;
         clicked_row = std::clamp(
             static_cast<size_t>(std::max(0, raw_clicked_row)), size_t{0}, max_row);
+        segment_end = session.lines[clicked_row].size();
     }
 
-    const size_t clicked_col = std::min(segment_end, relative_x <= 0
+    const size_t clicked_col = std::min(segment_end, relative_x < 0
         ? segment_start
         : utils::Utf8ByteIndexAtDisplayColumn(
             session.lines[clicked_row], segment_start, static_cast<size_t>(relative_x)));

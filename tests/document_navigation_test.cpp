@@ -1,5 +1,6 @@
 #include <iostream>
 #include "editor/document_session.hpp"
+#include "editor/editor_viewport.hpp"
 #include "editor_utils.hpp"
 
 #include <cassert>
@@ -25,6 +26,32 @@ int main() {
     assert(textlt::utils::FindWordDeleteStart(line, line.size()) ==
            line.size() - three.size());
     assert(textlt::utils::FindWordDeleteEnd(line, 0) == one.size());
+
+    {
+        DocumentSession mouse_doc;
+        textlt::EditorViewport viewport;
+        mouse_doc.SetActiveCursorState(&viewport.CursorState());
+        mouse_doc.lines = {std::string(71, 'a'), std::string(81, 'b'), "\tfirst"};
+        viewport.SetBox({0, 99, 0, 9});
+
+        auto click = [&](int x, int y) {
+            ftxui::Mouse mouse{};
+            mouse.button = ftxui::Mouse::Left;
+            mouse.motion = ftxui::Mouse::Pressed;
+            mouse.x = x;
+            mouse.y = y;
+            return viewport.HandleMouseEvent(mouse_doc, nullptr, ftxui::Event::Mouse("", mouse), {});
+        };
+
+        if (!click(75, 1) || mouse_doc.CursorRow() != 1 || mouse_doc.CursorCol() != 75) {
+            std::cerr << "Click on a longer row should reach column 76\n";
+            return 1;
+        }
+        if (!click(0, 2) || mouse_doc.CursorRow() != 2 || mouse_doc.CursorCol() != 1) {
+            std::cerr << "Click on the first visible cell should skip a leading zero-width tab\n";
+            return 1;
+        }
+    }
 
     std::cerr << "Word navigation\n";
     DocumentSession doc;

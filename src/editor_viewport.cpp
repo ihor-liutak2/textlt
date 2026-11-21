@@ -119,7 +119,9 @@ ftxui::Element EditorComponent::RenderViewport() {
         }
         const bool is_cursor_line = (session_ && line_index == session_->CursorRow());
         const bool has_selection = session_ && session_->HasSelection();
-        const size_t cursor_x = is_cursor_line ? std::min(session_->CursorCol(), line_content.size()) : line_content.size();
+        const size_t cursor_x = is_cursor_line
+            ? utils::Utf8ByteIndexAtDisplayColumn(line_content, session_->CursorCol(), 0)
+            : line_content.size();
         const size_t render_start = smart_word_wrap ? segment.start : viewport_->scroll_x;
         const size_t render_end = smart_word_wrap
             ? segment.end
@@ -176,7 +178,7 @@ ftxui::Element EditorComponent::RenderViewport() {
 
             if (!has_selection && is_cursor_line && x == cursor_x) {
                 character = ftxui::text(glyph) | ftxui::bgcolor(theme.selection_bg) |
-                    ftxui::color(theme.selection_fg) | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 1);
+                    ftxui::color(theme.selection_fg);
             }
             line_parts.push_back(std::move(character));
             x = glyph_end;

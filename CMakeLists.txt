@@ -389,6 +389,7 @@ endif()
 
 add_executable(textlt_document_navigation_test
   tests/document_navigation_test.cpp
+  src/editor/editor_viewport.cpp
   src/editor/document_session.cpp
   src/editor/document_session_content.cpp
   src/editor/document_session_cursor.cpp
@@ -816,7 +817,7 @@ target_include_directories(textlt_document_ai_transform_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(textlt_document_navigation_test PRIVATE ftxui::screen)
+target_link_libraries(textlt_document_navigation_test PRIVATE ftxui::component)
 target_link_libraries(textlt_theme_customization_test PRIVATE
   ftxui::screen
   ftxui::dom
