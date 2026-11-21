@@ -42,8 +42,8 @@ BottomBarRowState TextltApp::CurrentBottomBarRowState() {
     state.total_lines = editor ? editor->GetLineCount() : 1;
     state.document_percent = 100;
     if (state.total_lines > 1) {
-        state.document_percent =
-            (cursor_row_index * 100) / static_cast<int>(state.total_lines - 1);
+        state.document_percent = static_cast<int>(
+            (cursor_row_index * 100) / (state.total_lines - 1));
     }
     state.git_branch = git_manager_.GetCurrentBranch();
     state.theme_name = current_theme_.name;

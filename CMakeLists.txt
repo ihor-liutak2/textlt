@@ -1,12 +1,20 @@
 cmake_minimum_required(VERSION 3.14)
+
+# CMP0091 must be set before enabling C/C++ so CMAKE_MSVC_RUNTIME_LIBRARY is
+# honored by Visual Studio generators.
+if(POLICY CMP0091)
+  cmake_policy(SET CMP0091 NEW)
+endif()
+
 project(textlt VERSION 1.0.0 LANGUAGES C CXX)
 
 include(GNUInstallDirs)
 
 enable_testing()
 
-if(POLICY CMP0091)
-  cmake_policy(SET CMP0091 NEW)
+# Use extraction-time timestamps for URL-based FetchContent downloads.
+if(POLICY CMP0135)
+  cmake_policy(SET CMP0135 NEW)
 endif()
 
 if(MSVC)
@@ -70,11 +78,7 @@ FetchContent_Declare(lua55
   URL ${CMAKE_CURRENT_SOURCE_DIR}/third_party/lua-5.5.1.tar.gz
   URL_HASH SHA256=1c4b4068d67061f2a2231ad2b5422e77acea1487ea9890f6320af614f4373dce
 )
-
-FetchContent_GetProperties(lua55)
-if(NOT lua55_POPULATED)
-  FetchContent_Populate(lua55)
-endif()
+FetchContent_MakeAvailable(lua55)
 
 set(LUA55_SRC_DIR ${lua55_SOURCE_DIR}/src)
 
@@ -129,18 +133,32 @@ else()
 endif()
 
 # Embedded localhost HTTP server for the persistent Piper service.
-FetchContent_Declare(civetweb
-  GIT_REPOSITORY https://github.com/civetweb/civetweb.git
-  GIT_TAG v1.16
-  PATCH_COMMAND
-    ${CMAKE_COMMAND}
-      -DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/patches/civetweb-v1.16-default-init-return.patch
-      -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_patch_once.cmake
-)
-
-FetchContent_GetProperties(civetweb)
-if(NOT civetweb_POPULATED)
-  FetchContent_Populate(civetweb)
+if(CMAKE_VERSION VERSION_LESS 3.18)
+  # SOURCE_SUBDIR, used below to populate without adding CivetWeb's own CMake
+  # project, was added in CMake 3.18. Keep the legacy path for older CMake.
+  FetchContent_Declare(civetweb
+    GIT_REPOSITORY https://github.com/civetweb/civetweb.git
+    GIT_TAG v1.16
+    PATCH_COMMAND
+      ${CMAKE_COMMAND}
+        -DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/patches/civetweb-v1.16-default-init-return.patch
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_patch_once.cmake
+  )
+  FetchContent_GetProperties(civetweb)
+  if(NOT civetweb_POPULATED)
+    FetchContent_Populate(civetweb)
+  endif()
+else()
+  FetchContent_Declare(civetweb
+    GIT_REPOSITORY https://github.com/civetweb/civetweb.git
+    GIT_TAG v1.16
+    SOURCE_SUBDIR textlt-populate-only
+    PATCH_COMMAND
+      ${CMAKE_COMMAND}
+        -DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/patches/civetweb-v1.16-default-init-return.patch
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_patch_once.cmake
+  )
+  FetchContent_MakeAvailable(civetweb)
 endif()
 
 add_library(textlt_civetweb STATIC

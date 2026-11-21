@@ -4,6 +4,8 @@
 #include <cctype>
 #include <cstdlib>
 #include <fstream>
+#include <memory>
+#include <optional>
 #include <system_error>
 
 #include "notes/note_serializer.hpp"
@@ -18,6 +20,20 @@ std::string Lower(std::string value) {
     return value;
 }
 
+std::optional<std::string> EnvironmentVariable(const char* name) {
+#ifdef _MSC_VER
+    char* raw_value = nullptr;
+    std::size_t value_size = 0;
+    const auto result = _dupenv_s(&raw_value, &value_size, name);
+    const std::unique_ptr<char, decltype(&std::free)> value(raw_value, &std::free);
+    if (result != 0 || !value) return std::nullopt;
+    return std::string(value.get());
+#else
+    if (const char* value = std::getenv(name)) return std::string(value);
+    return std::nullopt;
+#endif
+}
+
 } // namespace
 
 NoteRepository::NoteRepository(std::filesystem::path root)
@@ -25,12 +41,13 @@ NoteRepository::NoteRepository(std::filesystem::path root)
 
 std::filesystem::path NoteRepository::DefaultRoot() {
 #ifdef _WIN32
-    if (const char* value = std::getenv("LOCALAPPDATA")) return std::filesystem::path(value) / "textlt" / "notes";
+    if (const auto local_app_data = EnvironmentVariable("LOCALAPPDATA"))
+        return std::filesystem::path(*local_app_data) / "textlt" / "notes";
 #elif defined(__APPLE__)
-    if (const char* home = std::getenv("HOME")) return std::filesystem::path(home) / "Library" / "Application Support" / "textlt" / "notes";
+    if (const auto home = EnvironmentVariable("HOME")) return std::filesystem::path(*home) / "Library" / "Application Support" / "textlt" / "notes";
 #else
-    if (const char* value = std::getenv("XDG_DATA_HOME")) return std::filesystem::path(value) / "textlt" / "notes";
-    if (const char* home = std::getenv("HOME")) return std::filesystem::path(home) / ".local" / "share" / "textlt" / "notes";
+    if (const auto value = EnvironmentVariable("XDG_DATA_HOME")) return std::filesystem::path(*value) / "textlt" / "notes";
+    if (const auto home = EnvironmentVariable("HOME")) return std::filesystem::path(*home) / ".local" / "share" / "textlt" / "notes";
 #endif
     return std::filesystem::current_path() / ".textlt" / "notes";
 }

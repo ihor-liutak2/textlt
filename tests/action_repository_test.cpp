@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <iterator>
 
 #include "actions/action_repository.hpp"
@@ -10,7 +11,14 @@
 
 using namespace textlt::actions;
 
-static void Check(bool condition) { if (!condition) std::abort(); }
+static void CheckAt(bool condition, int line) {
+    if (!condition) {
+        std::cerr << "Action repository test check failed at line " << line << '\n';
+        std::abort();
+    }
+}
+
+#define Check(condition) CheckAt((condition), __LINE__)
 
 static void CheckMerge(ActionRepository& repo, const std::string& source, const std::string& target,
     bool expect_ok, std::size_t expect_group_count, const std::string& expect_target_name,

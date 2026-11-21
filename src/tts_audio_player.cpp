@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <memory>
+#include <optional>
 #include <sstream>
 #include <system_error>
 #include <thread>
@@ -17,10 +19,24 @@
 namespace textlt {
 namespace {
 
+std::optional<std::string> EnvironmentVariable(const char* name) {
+#ifdef _MSC_VER
+    char* raw_value = nullptr;
+    std::size_t value_size = 0;
+    const auto result = _dupenv_s(&raw_value, &value_size, name);
+    const std::unique_ptr<char, decltype(&std::free)> value(raw_value, &std::free);
+    if (result != 0 || !value) return std::nullopt;
+    return std::string(value.get());
+#else
+    if (const char* value = std::getenv(name)) return std::string(value);
+    return std::nullopt;
+#endif
+}
+
 std::vector<std::filesystem::path> PathDirectories() {
     std::vector<std::filesystem::path> directories;
-    const char* path_env = std::getenv("PATH");
-    if (!path_env || std::string(path_env).empty()) {
+    const auto path_env = EnvironmentVariable("PATH");
+    if (!path_env || path_env->empty()) {
         return directories;
     }
 
@@ -30,7 +46,7 @@ std::vector<std::filesystem::path> PathDirectories() {
     constexpr char separator = ':';
 #endif
 
-    std::string path(path_env);
+    const std::string& path = *path_env;
     size_t start = 0;
     while (start <= path.size()) {
         const size_t end = path.find(separator, start);

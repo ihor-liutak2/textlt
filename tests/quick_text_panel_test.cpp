@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <stdexcept>
 
 #include "ftxui/component/mouse.hpp"
@@ -13,7 +14,10 @@
 namespace {
 
 void Require(bool condition, const char* message) {
-    if (!condition) throw std::runtime_error(message);
+    if (!condition) {
+        std::cerr << message << '\n';
+        throw std::runtime_error(message);
+    }
 }
 
 void SetPath(const char* variable, const std::filesystem::path& path) {
@@ -30,7 +34,7 @@ void Click(textlt::TextProcessorsModal& modal, const std::string& label) {
     for (int y = frame.dimy() - 1; y >= 0; --y) {
         for (int x = 0; x + static_cast<int>(label.size()) <= frame.dimx(); ++x) {
             size_t i = 0;
-            while (i < label.size() && frame.PixelAt(x + i, y).character == label.substr(i, 1)) ++i;
+            while (i < label.size() && frame.PixelAt(x + static_cast<int>(i), y).character == label.substr(i, 1)) ++i;
             if (i != label.size()) continue;
             ftxui::Mouse mouse;
             mouse.x = x;
@@ -52,6 +56,7 @@ int main() {
     const auto defaults = root / "defaults";
     fs::create_directories(defaults / "text_parsers");
     SetPath("XDG_CONFIG_HOME", root);
+    SetPath("APPDATA", root);
     SetPath("TEXTLT_DATA_DIR", defaults);
     std::ofstream(defaults / "default_text_parsers.json") << R"({
         "parsers": [{"id":"append","name":"Append","scope":"text","script":"text_parsers/append.lua",
