@@ -208,7 +208,7 @@ std::string EditorConfig::NormalizeDirectoryPath(const std::string& path) {
 
     std::error_code error;
     std::filesystem::path normalized_path =
-        std::filesystem::absolute(std::filesystem::path(path), error);
+        std::filesystem::absolute(PathFromUtf8(path), error);
     if (error) {
         return {};
     }

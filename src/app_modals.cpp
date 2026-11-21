@@ -12,6 +12,7 @@
 #include "editor/document_session.hpp"
 #include "ftxui/component/event.hpp"
 #include "theme.hpp"
+#include "path_utils.hpp"
 
 namespace textlt {
 namespace {
@@ -300,8 +301,8 @@ void TextltApp::OpenFilesModal(FilesModalMode mode) {
         if (!current_path.empty() &&
             current_path != "Untitled" &&
             current_path != "untitled.txt") {
-            const std::filesystem::path current_file_path(current_path);
-            suggested_file_name = current_file_path.filename().string();
+            const auto current_file_path = PathFromUtf8(current_path);
+            suggested_file_name = Utf8FromPath(current_file_path.filename());
             if (!current_file_path.parent_path().empty()) {
                 start_path = current_file_path.parent_path();
             }
@@ -635,7 +636,7 @@ std::vector<FileSearchRoot> TextltApp::CurrentSearchFileRoots() const {
 
 
 bool TextltApp::OpenSearchFileMatch(const FileSearchMatch& match, std::string& error) {
-    if (!OpenFile(match.path.string(), error)) {
+    if (!OpenFile(Utf8FromPath(match.path), error)) {
         return false;
     }
 
@@ -827,7 +828,7 @@ void TextltApp::ShowExitConfirmationDialog() {
 
     const auto editor = std::static_pointer_cast<EditorComponent>(text_editor_);
     const std::string file_path = editor->CurrentFilePath();
-    const std::string filename = std::filesystem::path(file_path).filename().string();
+    const std::string filename = Utf8FromPath(PathFromUtf8(file_path).filename());
     const std::string display_name = filename.empty() ? file_path : filename;
 
     unsaved_changes_dialog_.Open(display_name);

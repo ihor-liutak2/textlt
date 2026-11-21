@@ -1,5 +1,7 @@
 #include "app.hpp"
 
+#include "path_utils.hpp"
+
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -92,7 +94,7 @@ TextltApp::TextltApp()
           [this](const std::filesystem::path& path) {
               document_file_controller_.RemoveFavorite(path);
               UpdateFileMenuLabels();
-              active_action_ = "Removed favorite " + path.string();
+              active_action_ = "Removed favorite " + Utf8FromPath(path);
               screen_.PostEvent(ftxui::Event::Custom);
           },
           [this] { AddActiveFavoriteFromSidebar(); },
@@ -186,7 +188,7 @@ TextltApp::TextltApp()
           &current_theme_,
           &document_file_controller_,
           [this](const std::filesystem::path& path, std::string& error) {
-              const bool opened = OpenFile(path.string(), error);
+              const bool opened = OpenFile(Utf8FromPath(path), error);
               if (opened) {
                   FocusEditor();
                   screen_.PostEvent(ftxui::Event::Custom);
@@ -267,7 +269,7 @@ TextltApp::TextltApp()
           &file_manager_,
           [this] { return CurrentSidebarDirectory(); },
           [this](const std::filesystem::path& path, std::string& error) {
-              const bool opened = OpenFile(path.string(), error);
+              const bool opened = OpenFile(Utf8FromPath(path), error);
               if (opened) {
                   FocusEditor();
                   screen_.PostEvent(ftxui::Event::Custom);
@@ -281,7 +283,7 @@ TextltApp::TextltApp()
           &current_theme_,
           &git_manager_,
           [this](const std::filesystem::path& path, std::string& error) {
-              const bool opened = OpenFile(path.string(), error);
+              const bool opened = OpenFile(Utf8FromPath(path), error);
               if (opened) {
                   FocusEditor();
                   screen_.PostEvent(ftxui::Event::Custom);

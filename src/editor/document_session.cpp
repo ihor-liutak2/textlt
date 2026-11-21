@@ -1,5 +1,7 @@
 #include "editor/document_session.hpp"
 
+#include "path_utils.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <iterator>
@@ -146,8 +148,8 @@ const Selection& DocumentSession::SelectionState() const {
 }
 
 DocumentType DocumentSession::DetermineDocumentType(const std::filesystem::path& path) {
-    const std::string lower_ext = ToLowerCopy(path.extension().string());
-    const std::string lower_filename = ToLowerCopy(path.filename().string());
+    const std::string lower_ext = ToLowerCopy(Utf8FromPath(path.extension()));
+    const std::string lower_filename = ToLowerCopy(Utf8FromPath(path.filename()));
 
     if (lower_filename.find(".blade.php") != std::string::npos) {
         return DocumentType::Blade;
@@ -209,18 +211,18 @@ void DocumentSession::RefreshLexer() {
 
 
 bool DocumentSession::IsMemoryOnly() const {
-    const std::string value = path.string();
+    const std::string value = Utf8FromPath(path);
     return path.empty() || value == "Untitled" || value == "untitled.txt";
 }
 
 std::string DocumentSession::CurrentFilePath() const {
-    return path.string();
+    return Utf8FromPath(path);
 }
 
 std::string DocumentSession::DisplayTitle() const {
-    std::string title = path.filename().string();
+    std::string title = Utf8FromPath(path.filename());
     if (title.empty()) {
-        title = path.string();
+        title = Utf8FromPath(path);
     }
     if (title.empty()) {
         title = "Untitled";
@@ -283,8 +285,8 @@ std::string DocumentSession::LexerId() const {
 }
 
 std::string DocumentSession::CommentPrefix() const {
-    const std::string filename = path.filename().string();
-    const std::string extension = path.extension().string();
+    const std::string filename = Utf8FromPath(path.filename());
+    const std::string extension = Utf8FromPath(path.extension());
 
     if (extension == ".sql" || extension == ".graphql" || extension == ".gql") {
         return "--";

@@ -47,7 +47,8 @@ bool AtomicWrite(const std::filesystem::path& path, const std::string& content, 
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
     if (ec) { error = "Could not create notes directory: " + ec.message(); return false; }
-    const auto temporary = path.string() + ".tmp";
+    auto temporary = path;
+    temporary += ".tmp";
     {
         std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
         if (!output) { error = "Could not open temporary note file."; return false; }

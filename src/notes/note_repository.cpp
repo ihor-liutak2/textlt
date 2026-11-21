@@ -1,5 +1,7 @@
 #include "notes/note_repository.hpp"
 
+#include "path_utils.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
@@ -78,7 +80,7 @@ bool NoteRepository::Load(std::string& warning) {
         if (!entry.is_regular_file() || entry.path().extension() != ".tlnote") continue;
         NoteDocument note; std::string note_error;
         if (NoteSerializer::LoadNote(entry.path(), note, note_error)) notes_.push_back(std::move(note));
-        else if (warning.empty()) warning = entry.path().filename().string() + ": " + note_error;
+        else if (warning.empty()) warning = Utf8FromPath(entry.path().filename()) + ": " + note_error;
     }
     std::sort(notes_.begin(), notes_.end(), [](const auto& left, const auto& right) { return left.updated_at > right.updated_at; });
     return true;

@@ -1,5 +1,7 @@
 #include "layout_controller.hpp"
 
+#include "path_utils.hpp"
+
 #include <algorithm>
 #include <memory>
 #include <utility>
@@ -179,7 +181,7 @@ ViewLayoutSnapshot LayoutController::Snapshot() const {
 
         ViewLayoutDocumentInfo info;
         info.title = ShortSessionTitle(session);
-        info.path = session->path.string();
+        info.path = Utf8FromPath(session->path);
         info.dirty = session->is_dirty;
         info.memory_only = DocumentWorkspace::IsMemoryOnlySession(session.get());
         info.active = session_index == workspace_.ActiveSessionIndex();
@@ -194,7 +196,7 @@ ViewLayoutSnapshot LayoutController::Snapshot() const {
         if (info.session_index < sessions.size()) {
             const auto& session = sessions[info.session_index];
             info.title = ShortSessionTitle(session);
-            info.path = session ? session->path.string() : "";
+            info.path = session ? Utf8FromPath(session->path) : "";
         }
         if (info.title.empty()) {
             info.title = "Untitled";

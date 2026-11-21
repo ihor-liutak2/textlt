@@ -1,5 +1,7 @@
 #include "sidebar_component.hpp"
 
+#include "path_utils.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <map>
@@ -15,7 +17,7 @@ namespace textlt {
 namespace {
 
 std::string DisplayName(const std::filesystem::path& path) {
-    return path.filename().empty() ? path.string() : path.filename().string();
+    return Utf8FromPath(path.filename().empty() ? path : path.filename());
 }
 
 ftxui::Color SidebarTextColor(const Theme& theme) {
@@ -1102,10 +1104,10 @@ void SidebarPanel::RebuildFavoriteEntries() {
             continue;
         }
         unique_favorites.push_back(favorite_path);
-        const std::string filename = favorite_path.filename().string();
+        const std::string filename = Utf8FromPath(favorite_path.filename());
         AddEntry(
             favorite_path,
-            " " + (filename.empty() ? favorite_path.string() : filename),
+            " " + (filename.empty() ? Utf8FromPath(favorite_path) : filename),
             EntryKind::FavoriteFile);
     }
 }

@@ -1,5 +1,7 @@
 #include "git_manager.hpp"
 
+#include "path_utils.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cstdio>
@@ -14,11 +16,16 @@ namespace {
 
 constexpr auto kGitRefreshInterval = std::chrono::milliseconds(1200);
 
-FILE* OpenPipe(const std::string& command, const char* mode) {
+FILE* OpenPipe(const std::string& command) {
 #ifdef _WIN32
-    return _popen(command.c_str(), mode);
+    const int size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, command.c_str(), -1, nullptr, 0);
+    if (size == 0) return nullptr;
+    std::wstring wide_command(size, L'\0');
+    if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, command.c_str(), -1,
+                             wide_command.data(), size)) return nullptr;
+    return _wpopen(wide_command.c_str(), L"r");
 #else
-    return popen(command.c_str(), mode);
+    return popen(command.c_str(), "r");
 #endif
 }
 
@@ -694,7 +701,7 @@ GitManager::CommandResult GitManager::ExecuteCommandWithStatus(const std::string
     std::array<char, 256> buffer{};
     CommandResult result;
 
-    FILE* pipe = OpenPipe(command, "r");
+    FILE* pipe = OpenPipe(command);
     if (!pipe) {
         result.exit_code = -1;
         return result;
@@ -711,12 +718,12 @@ GitManager::CommandResult GitManager::ExecuteCommandWithStatus(const std::string
 GitManager::Snapshot GitManager::CollectSnapshot(std::filesystem::path working_directory) {
     Snapshot snapshot;
     snapshot.working_directory = working_directory;
-    const std::string quoted_directory = ShellQuote(working_directory.string());
+    const std::string quoted_directory = ShellQuote(Utf8FromPath(working_directory));
     const std::string git_prefix = "git -C " + quoted_directory + " ";
 
     snapshot.branch = Trim(ExecuteCommand(git_prefix + "branch --show-current " + StderrToNull()));
-    snapshot.repository_root = Trim(ExecuteCommand(
-        git_prefix + "rev-parse --show-toplevel " + StderrToNull()));
+    snapshot.repository_root = PathFromUtf8(Trim(ExecuteCommand(
+        git_prefix + "rev-parse --show-toplevel " + StderrToNull())));
 
     const std::string status_output = ExecuteCommand(
         git_prefix + "status --porcelain " + StderrToNull());
@@ -875,7 +882,7 @@ std::string GitManager::GitCommandPrefix() {
     const std::filesystem::path directory = cached_repository_root_.empty()
         ? working_directory_
         : cached_repository_root_;
-    return "git -C " + ShellQuote(directory.string());
+    return "git -C " + ShellQuote(Utf8FromPath(directory));
 }
 
 } // namespace textlt

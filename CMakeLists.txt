@@ -382,6 +382,9 @@ if(WIN32)
     _CRT_SECURE_NO_WARNINGS
   )
   target_link_libraries(textlt PRIVATE shell32 ole32)
+  if(MINGW)
+    target_link_options(textlt PRIVATE -municode)
+  endif()
 endif()
 
 add_executable(textlt_document_navigation_test

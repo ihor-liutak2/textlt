@@ -1,5 +1,7 @@
 #include "app.hpp"
 
+#include "path_utils.hpp"
+
 #include <filesystem>
 #include <optional>
 #include <system_error>
@@ -92,7 +94,7 @@ void TextltApp::ActivateProject(const std::string& id) {
     }
     std::error_code filesystem_error;
     if (!std::filesystem::is_directory(project->local_root, filesystem_error)) {
-        active_action_ = "Project folder is missing: " + project->local_root.string();
+        active_action_ = "Project folder is missing: " + Utf8FromPath(project->local_root);
         screen_.PostEvent(ftxui::Event::Custom);
         return;
     }
@@ -191,7 +193,7 @@ bool TextltApp::OpenWorkspaceFolder(
     workspace_project_id_.clear();
     SyncNotesProjectContext();
     SyncActionsProjectContext();
-    active_action_ = "Opened folder: " + root.string();
+    active_action_ = "Opened folder: " + Utf8FromPath(root);
     error.clear();
     return true;
 }

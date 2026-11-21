@@ -21,7 +21,7 @@ namespace textlt {
     
 bool TextltApp::SaveFile(const std::string& path, std::string& error) {
     try {
-        if (!document_file_controller_.SaveActiveSessionAs(path, error)) {
+        if (!document_file_controller_.SaveActiveSessionAs(PathFromUtf8(path), error)) {
             throw std::runtime_error(error);
         }
         RefreshOpenedDocumentsSidebar();
@@ -40,7 +40,7 @@ bool TextltApp::SaveFile(const std::string& path, std::string& error) {
 
 bool TextltApp::OpenFile(const std::string& path, std::string& error) {
     try {
-        if (!document_file_controller_.OpenSession(path, error)) {
+        if (!document_file_controller_.OpenSession(PathFromUtf8(path), error)) {
             throw std::runtime_error(error);
         }
 
@@ -64,14 +64,14 @@ void TextltApp::InitializeWithFiles(const std::vector<std::string>& files_to_ope
 
     std::string error;
     for (size_t index = 0; index < files_to_open.size(); ++index) {
-        const std::filesystem::path path = files_to_open[index];
+        const std::filesystem::path path = PathFromUtf8(files_to_open[index]);
         if (!document_file_controller_.OpenOrCreateSession(path, error)) {
-            active_action_ = error.empty() ? "Could not open " + path.string() : error;
+            active_action_ = error.empty() ? "Could not open " + Utf8FromPath(path) : error;
             continue;
         }
         active_action_ = std::filesystem::exists(path)
-            ? "Opened " + path.string()
-            : "New file " + path.string();
+            ? "Opened " + Utf8FromPath(path)
+            : "New file " + Utf8FromPath(path);
     }
 
     BindEditorComponentsToWorkspace();
@@ -83,7 +83,7 @@ void TextltApp::InitializeWithFiles(const std::vector<std::string>& files_to_ope
 
 void TextltApp::OpenSidebarFile(const std::filesystem::path& path) {
     std::string error;
-    if (OpenFile(path.string(), error)) {
+    if (OpenFile(Utf8FromPath(path), error)) {
         FocusEditor();
         screen_.PostEvent(ftxui::Event::Custom);
     }
@@ -107,7 +107,7 @@ void TextltApp::SaveCurrentFile() {
     RefreshOpenedDocumentsSidebar();
     RefreshProjectSidebar();
     git_manager_.Invalidate();
-    active_action_ = "Saved " + document->path.string();
+    active_action_ = "Saved " + Utf8FromPath(document->path);
 }
 
 
@@ -139,9 +139,9 @@ bool TextltApp::ConfirmFilesModalAction(
     bool success = false;
 
     if (mode == FilesModalMode::Open) {
-        success = OpenFile(path.string(), error);
+        success = OpenFile(Utf8FromPath(path), error);
     } else if (mode == FilesModalMode::SaveAs) {
-        success = SaveFile(path.string(), error);
+        success = SaveFile(Utf8FromPath(path), error);
     } else if (mode == FilesModalMode::Import) {
         TextImporter importer;
         TextImportResult result = importer.ImportFile(path);
@@ -176,7 +176,7 @@ bool TextltApp::ConfirmFilesModalAction(
         success = workspace->ImportActions(std::move(items), error);
         if (success) {
             active_action_ = "Imported " + std::to_string(result.values.size()) +
-                " actions from " + path.filename().string();
+                " actions from " + Utf8FromPath(path.filename());
         }
     } else if (mode == FilesModalMode::ImportNotesMarkdown) {
         auto workspace = std::static_pointer_cast<notes::NotesWorkspaceComponent>(
@@ -231,7 +231,7 @@ std::vector<std::filesystem::path> TextltApp::FileModalFavoriteDirectories() con
     directories.reserve(editor_config_.file_modal_directories_.size());
     for (const std::string& path : editor_config_.file_modal_directories_) {
         if (!path.empty()) {
-            directories.emplace_back(path);
+            directories.push_back(PathFromUtf8(path));
         }
     }
     return directories;
@@ -242,14 +242,14 @@ bool TextltApp::AddFileModalDirectory(
     const std::filesystem::path& directory,
     std::string& error) {
     const std::string normalized_path =
-        EditorConfig::NormalizeDirectoryPath(directory.string());
+        EditorConfig::NormalizeDirectoryPath(Utf8FromPath(directory));
     if (normalized_path.empty()) {
         error = "Directory path is empty.";
         return false;
     }
 
     std::error_code status_error;
-    if (!std::filesystem::is_directory(normalized_path, status_error)) {
+    if (!std::filesystem::is_directory(PathFromUtf8(normalized_path), status_error)) {
         error = "Directory does not exist.";
         return false;
     }
@@ -270,7 +270,7 @@ bool TextltApp::AddFileModalDirectory(
 bool TextltApp::RemoveFileModalDirectory(
     const std::filesystem::path& directory,
     std::string& error) {
-    const std::string path = directory.string();
+    const std::string path = Utf8FromPath(directory);
     if (!editor_config_.IsFileModalDirectory(path)) {
         error = "Current directory is not in the added list.";
         return false;

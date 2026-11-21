@@ -1,5 +1,6 @@
 #include "app_resources.hpp"
 #include "app.hpp"
+#include "path_utils.hpp"
 #include "terminal_flow_control_guard.hpp"
 #include "startup_check.hpp"
 
@@ -18,7 +19,11 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+int wmain(int argc, wchar_t* argv[]) {
+#else
 int main(int argc, char* argv[]) {
+#endif
 #ifdef _WIN32
     // TextLT renders UTF-8. Do not inherit PowerShell 5.1's legacy console
     // code page, which cannot represent all interface characters.
@@ -28,7 +33,7 @@ int main(int argc, char* argv[]) {
 
     bool startup_check = false;
     if (argc == 2) {
-        const std::string option = argv[1];
+        const std::string option = textlt::Utf8FromPath(argv[1]);
         if (option == "--version" || option == "-v") {
             std::cout << "textlt " TEXTLT_VERSION "\n";
             return 0;
@@ -47,7 +52,7 @@ int main(int argc, char* argv[]) {
     std::vector<std::string> files_to_open;
     if (!startup_check) {
         for (int i = 1; i < argc; ++i) {
-            files_to_open.emplace_back(argv[i]);
+            files_to_open.push_back(textlt::Utf8FromPath(argv[i]));
         }
     }
 
@@ -60,6 +65,7 @@ int main(int argc, char* argv[]) {
             std::cerr << "TextLT startup check failed. See [FAIL] entries above.\n";
             return 1;
         }
+        if (startup_check) std::cout << "[INFO] Initializing editor and workspace" << std::endl;
         textlt::EnsureStartupResources();
 
         // TextltApp owns the complete UI and all modal/workspace state. Keep it
