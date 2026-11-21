@@ -81,9 +81,6 @@ void RemoteConnectionsModalContent::ApplyTypeDefaults(RemoteConnectionType type)
                 ftps_tls_mode_value_ = "explicit";
             }
             break;
-        case RemoteConnectionType::GoogleDrive:
-        case RemoteConnectionType::MicrosoftDrive:
-            break;
     }
 }
 
@@ -333,7 +330,7 @@ void RemoteConnectionsModalContent::TestSelected() {
         SetStatus("No connection selected for testing.", true);
         return;
     }
-    if (config.type != RemoteConnectionType::Dropbox && config.token_file.empty()) {
+    if (config.type == RemoteConnectionType::Dropbox && config.token_file.empty()) {
         config.token_file = SuggestedTokenFile(config.type);
         token_file_value_ = config.token_file;
     }
@@ -396,7 +393,7 @@ void RemoteConnectionsModalContent::TestSelected() {
 void RemoteConnectionsModalContent::SaveCloudAccessToken() {
     RemoteConnectionConfig config = FormConfig();
     if (config.type != RemoteConnectionType::Dropbox) {
-        SetStatus("SFTP does not use OAuth access tokens.", true);
+        SetStatus("Only Dropbox uses OAuth access tokens.", true);
         return;
     }
     if (config.name.empty()) {
@@ -437,8 +434,8 @@ void RemoteConnectionsModalContent::SaveCloudAccessToken() {
 void RemoteConnectionsModalContent::PrepareTokenFile() {
     RemoteConnectionConfig config = ActionConfig();
     if (config.type != RemoteConnectionType::Dropbox) {
-        output_ = "SFTP uses OpenSSH config, keys, and ssh-agent and does not need an OAuth token file.";
-        SetStatus("Token files are only used by Dropbox.");
+        output_ = "Token files are only used by Dropbox connections.";
+        SetStatus("This connection does not use an OAuth token file.");
         return;
     }
     if (config.token_file.empty()) {

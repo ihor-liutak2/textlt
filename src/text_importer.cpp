@@ -669,7 +669,7 @@ TextImportResult TextImporter::ImportGoogleDocShortcut(const std::filesystem::pa
         return {
             false,
             "",
-            "Local .gdoc files are shortcuts, not document content. Open the Google Drive connection in Remote Files and open the Google Doc there; TextLT will export it as plain text."};
+            "Local .gdoc files are shortcuts, not document content. Export the document as a supported file type before importing it."};
     } catch (const std::exception& e) {
         return {false, "", e.what()};
     }

@@ -218,12 +218,13 @@ jobs:
         shell: pwsh
         run: |
           cmake --build build --config Release --parallel 2
-          $versionOutput = & build/Release/textlt.exe --version
+          $textltExe = Join-Path $PWD "build/Release/textlt.exe"
+          $versionOutput = & $textltExe --version
           $expectedVersion = $env:GITHUB_REF_NAME -replace '^v', ''
           if ($LASTEXITCODE -ne 0 -or $versionOutput -ne "textlt $expectedVersion") {
             throw "Windows executable smoke check failed: $versionOutput"
           }
-          $startupOutput = & build/Release/textlt.exe --startup-check
+          $startupOutput = & $textltExe --startup-check
           if ($LASTEXITCODE -ne 0 -or $startupOutput -ne "TextLT startup check passed.") {
             throw "Windows application startup check failed: $startupOutput"
           }
@@ -238,7 +239,8 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force package/textlt | Out-Null
 
-          Copy-Item build/Release/textlt.exe package/textlt/
+          $textltExe = Join-Path $PWD "build/Release/textlt.exe"
+          Copy-Item $textltExe package/textlt/
           Copy-Item scripts/textlt-install-runtime-deps.ps1 package/textlt/
           Copy-Item themes package/textlt/themes -Recurse
           Copy-Item text_processors package/textlt/text_processors -Recurse

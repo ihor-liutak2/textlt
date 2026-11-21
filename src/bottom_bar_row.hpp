@@ -12,8 +12,8 @@
 namespace textlt {
 
 struct BottomBarRowState {
-    int cursor_row = 1;
-    int cursor_col = 1;
+    std::size_t cursor_row = 1;
+    std::size_t cursor_col = 1;
     std::size_t total_lines = 1;
     int document_percent = 100;
     bool show_cursor_position = true;

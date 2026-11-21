@@ -1,6 +1,7 @@
 #include "remote/remote_config_store.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <system_error>
 #include <utility>
@@ -10,25 +11,50 @@
 namespace textlt {
 namespace {
 
+std::string GetEnvironmentVariableValue(const char* name) {
+#if defined(_MSC_VER)
+    char* value = nullptr;
+    size_t size = 0;
+    if (_dupenv_s(&value, &size, name) != 0 || value == nullptr) {
+        return {};
+    }
+    std::string result(value);
+    std::free(value);
+    return result;
+#else
+    const char* value = std::getenv(name);
+    return value ? value : "";
+#endif
+}
+
 std::filesystem::path DefaultRemoteConfigPath() {
 #ifdef _WIN32
-    const char* app_data = std::getenv("APPDATA");
-    if (app_data && std::string(app_data).size() > 0) {
+    const std::string app_data = GetEnvironmentVariableValue("APPDATA");
+    if (!app_data.empty()) {
         return std::filesystem::path(app_data) / "textlt" / "remote_connections.json";
     }
-    const char* user_profile = std::getenv("USERPROFILE");
-    if (user_profile && std::string(user_profile).size() > 0) {
+    const std::string user_profile = GetEnvironmentVariableValue("USERPROFILE");
+    if (!user_profile.empty()) {
         return std::filesystem::path(user_profile) / "AppData" / "Roaming" / "textlt" /
             "remote_connections.json";
     }
     return "remote_connections.json";
 #else
-    const char* home = std::getenv("HOME");
-    if (!home || std::string(home).empty()) {
+    const std::string home = GetEnvironmentVariableValue("HOME");
+    if (home.empty()) {
         return "remote_connections.json";
     }
     return std::filesystem::path(home) / ".config" / "textlt" / "remote_connections.json";
 #endif
+}
+
+bool IsRemovedCloudConnectionType(std::string type) {
+    std::transform(type.begin(), type.end(), type.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return type == "google" || type == "google_drive" || type == "google-drive" ||
+        type == "microsoft" || type == "microsoft_drive" || type == "microsoft-drive" ||
+        type == "onedrive" || type == "one_drive" || type == "sharepoint";
 }
 
 RemoteConnectionConfig ParseConnection(const Json& object) {
@@ -49,16 +75,9 @@ RemoteConnectionConfig ParseConnection(const Json& object) {
     config.key_passphrase = JsonString(object, "key_passphrase");
     config.known_hosts_file = JsonString(object, "known_hosts_file");
     config.ssh_config_host = JsonString(object, "ssh_config_host");
-    config.client_id = JsonString(object, "client_id");
-    config.client_secret = JsonString(object, "client_secret");
-    config.tenant_id = JsonString(object, "tenant_id");
     config.token_file = JsonString(object, "token_file");
-    config.root_folder_id = JsonString(object, "root_folder_id");
-    config.site_id = JsonString(object, "site_id");
-    config.drive_id = JsonString(object, "drive_id");
     config.app_key = JsonString(object, "app_key");
     config.app_secret = JsonString(object, "app_secret");
-    config.scope = JsonString(object, "scope");
     config.ftps_tls_mode = JsonString(object, "ftps_tls_mode", "explicit");
     config.ftps_passive = JsonBool(object, "ftps_passive", true);
 
@@ -86,16 +105,9 @@ Json SerializeConnection(const RemoteConnectionConfig& config) {
     object["key_passphrase"] = config.key_passphrase;
     object["known_hosts_file"] = config.known_hosts_file;
     object["ssh_config_host"] = config.ssh_config_host;
-    object["client_id"] = config.client_id;
-    object["client_secret"] = config.client_secret;
-    object["tenant_id"] = config.tenant_id;
     object["token_file"] = config.token_file;
-    object["root_folder_id"] = config.root_folder_id;
-    object["site_id"] = config.site_id;
-    object["drive_id"] = config.drive_id;
     object["app_key"] = config.app_key;
     object["app_secret"] = config.app_secret;
-    object["scope"] = config.scope;
     object["ftps_tls_mode"] = config.ftps_tls_mode.empty() ? "explicit" : config.ftps_tls_mode;
     object["ftps_passive"] = config.ftps_passive;
     return object;
@@ -130,9 +142,12 @@ bool RemoteConfigStore::Load(std::string& error) {
         if (!object.is_object()) {
             continue;
         }
+        if (IsRemovedCloudConnectionType(JsonString(object, "type"))) {
+            continue;
+        }
         RemoteConnectionConfig config = ParseConnection(object);
         if (!config.name.empty() || !config.host.empty() || !config.ssh_config_host.empty() ||
-            !config.client_id.empty() || !config.app_key.empty()) {
+            !config.app_key.empty()) {
             connections_.push_back(std::move(config));
         }
     }

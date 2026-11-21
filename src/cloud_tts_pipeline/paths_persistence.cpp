@@ -1,21 +1,41 @@
+namespace {
+
+std::string EnvironmentVariable(const char* name) {
+#ifdef _WIN32
+    char* value = nullptr;
+    size_t value_size = 0;
+    if (_dupenv_s(&value, &value_size, name) != 0 || value == nullptr) {
+        return {};
+    }
+    std::string result(value);
+    std::free(value);
+    return result;
+#else
+    const char* value = std::getenv(name);
+    return value ? value : "";
+#endif
+}
+
+} // namespace
+
 std::filesystem::path CloudTtsPipeline::UserDataDirectory() {
 #ifdef _WIN32
-    const char* local_app_data = std::getenv("LOCALAPPDATA");
-    if (local_app_data && !std::string(local_app_data).empty()) {
+    const std::string local_app_data = EnvironmentVariable("LOCALAPPDATA");
+    if (!local_app_data.empty()) {
         return std::filesystem::path(local_app_data) / "textlt";
     }
-    const char* user_profile = std::getenv("USERPROFILE");
-    if (user_profile && !std::string(user_profile).empty()) {
+    const std::string user_profile = EnvironmentVariable("USERPROFILE");
+    if (!user_profile.empty()) {
         return std::filesystem::path(user_profile) / "AppData" / "Local" / "textlt";
     }
     return {};
 #else
-    const char* xdg_data_home = std::getenv("XDG_DATA_HOME");
-    if (xdg_data_home && !std::string(xdg_data_home).empty()) {
+    const std::string xdg_data_home = EnvironmentVariable("XDG_DATA_HOME");
+    if (!xdg_data_home.empty()) {
         return std::filesystem::path(xdg_data_home) / "textlt";
     }
-    const char* home = std::getenv("HOME");
-    if (!home || std::string(home).empty()) {
+    const std::string home = EnvironmentVariable("HOME");
+    if (home.empty()) {
         return {};
     }
     return std::filesystem::path(home) / ".local" / "share" / "textlt";

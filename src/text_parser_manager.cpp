@@ -16,6 +16,10 @@
 
 #include "path_utils.hpp"
 
+#ifdef ReplaceText
+#undef ReplaceText
+#endif
+
 namespace textlt {
 namespace fs = std::filesystem;
 namespace {

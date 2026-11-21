@@ -57,7 +57,6 @@ int main() {
         second.name = "Second";
         second.type = RemoteConnectionType::Dropbox;
         second.app_key = "app-key";
-        second.scope = "files.content.write";
         store.AddOrUpdate(second);
 
         RemoteConnectionConfig third;
@@ -84,7 +83,7 @@ int main() {
         ExpectEqual(store.ActiveConnectionId(), "second", "Active connection id must persist.");
         Expect(store.FindActiveConnection() != nullptr, "Persisted active connection must be found.");
         ExpectEqual(store.FindActiveConnection()->name, "Second", "Persisted active connection mismatch.");
-        ExpectEqual(store.FindActiveConnection()->scope, "files.content.write", "Persisted cloud scope mismatch.");
+        ExpectEqual(store.FindActiveConnection()->app_key, "app-key", "Persisted Dropbox app key mismatch.");
         const RemoteConnectionConfig* ftps = store.FindById("third");
         Expect(ftps != nullptr, "Persisted FTPS connection must be found.");
         Expect(ftps->type == RemoteConnectionType::Ftps, "Persisted FTPS type mismatch.");
@@ -109,6 +108,17 @@ int main() {
         RemoteConfigStore store(config_path);
         ExpectEqual(store.ActiveConnectionId(), "legacy", "Legacy config without active id should select the first connection.");
         Expect(store.FindActiveConnection() != nullptr, "Legacy active connection must be available.");
+    }
+
+    {
+        std::ofstream legacy(config_path, std::ios::binary);
+        legacy << R"({"connections":[{"id":"google","name":"Old Google","type":"google_drive"},{"id":"microsoft","name":"Old Microsoft","type":"onedrive"},{"id":"sftp","name":"Current SFTP","type":"sftp","host":"sftp.example.com"}]})";
+        legacy.close();
+
+        RemoteConfigStore store(config_path);
+        Expect(store.FindById("google") == nullptr, "Removed Google Drive profiles should be ignored.");
+        Expect(store.FindById("microsoft") == nullptr, "Removed Microsoft Drive profiles should be ignored.");
+        Expect(store.FindById("sftp") != nullptr, "Supported profiles should still load.");
     }
 
     std::filesystem::remove_all(temp_dir, cleanup_error);

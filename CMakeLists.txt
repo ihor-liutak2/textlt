@@ -294,9 +294,6 @@ add_executable(textlt
   src/remote/remote_oauth_token_store.cpp
   src/remote/remote_http_client.cpp
   src/remote/remote_dropbox_provider.cpp
-  src/remote/remote_oauth_flow.cpp
-  src/remote/remote_google_drive_provider.cpp
-  src/remote/remote_microsoft_drive_provider.cpp
   src/remote/remote_command_runner.cpp
   src/remote/remote_local_provider.cpp
   src/remote/remote_sftp_provider.cpp
@@ -674,37 +671,6 @@ target_include_directories(textlt_remote_dropbox_provider_test PRIVATE
 )
 
 
-add_executable(textlt_remote_google_drive_provider_test
-  tests/remote_google_drive_provider_test.cpp
-  src/remote/remote_connection_config.cpp
-  src/remote/remote_google_drive_provider.cpp
-  src/remote/remote_oauth_token_store.cpp
-  src/remote/remote_http_client.cpp
-  src/remote/remote_command_runner.cpp
-)
-
-target_include_directories(textlt_remote_google_drive_provider_test PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/src
-  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
-)
-
-
-add_executable(textlt_remote_microsoft_drive_provider_test
-  tests/remote_microsoft_drive_provider_test.cpp
-  src/remote/remote_connection_config.cpp
-  src/remote/remote_microsoft_drive_provider.cpp
-  src/remote/remote_oauth_token_store.cpp
-  src/remote/remote_http_client.cpp
-  src/remote/remote_command_runner.cpp
-)
-
-target_include_directories(textlt_remote_microsoft_drive_provider_test PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/src
-  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
-)
-
-
-
 add_executable(textlt_tts_pipeline_test
   tests/tts_pipeline_test.cpp
   src/cloud_tts_pipeline.cpp
@@ -893,5 +859,3 @@ add_test(NAME textlt_remote_ssh_config_test COMMAND textlt_remote_ssh_config_tes
 add_test(NAME textlt_remote_sftp_provider_test COMMAND textlt_remote_sftp_provider_test)
 add_test(NAME textlt_no_embedded_curl_test COMMAND textlt_no_embedded_curl_test)
 add_test(NAME textlt_remote_dropbox_provider_test COMMAND textlt_remote_dropbox_provider_test)
-add_test(NAME textlt_remote_google_drive_provider_test COMMAND textlt_remote_google_drive_provider_test)
-add_test(NAME textlt_remote_microsoft_drive_provider_test COMMAND textlt_remote_microsoft_drive_provider_test)

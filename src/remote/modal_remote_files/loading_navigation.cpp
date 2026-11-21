@@ -80,12 +80,6 @@ void RemoteFilesModalContent::ConnectRemote() {
         case RemoteConnectionType::Dropbox:
             provider = std::make_unique<RemoteDropboxProvider>();
             break;
-        case RemoteConnectionType::GoogleDrive:
-            provider = std::make_unique<RemoteGoogleDriveProvider>();
-            break;
-        case RemoteConnectionType::MicrosoftDrive:
-            provider = std::make_unique<RemoteMicrosoftDriveProvider>();
-            break;
     }
 
     std::string error;

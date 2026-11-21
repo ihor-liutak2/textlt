@@ -13,10 +13,6 @@ std::string RemoteConnectionTypeToString(RemoteConnectionType type) {
     switch (type) {
         case RemoteConnectionType::Sftp:
             return "sftp";
-        case RemoteConnectionType::GoogleDrive:
-            return "google_drive";
-        case RemoteConnectionType::MicrosoftDrive:
-            return "microsoft_drive";
         case RemoteConnectionType::Dropbox:
             return "dropbox";
         case RemoteConnectionType::Ftps:
@@ -31,13 +27,6 @@ RemoteConnectionType RemoteConnectionTypeFromString(const std::string& value) {
         return static_cast<char>(std::tolower(ch));
     });
 
-    if (normalized == "google" || normalized == "google_drive" || normalized == "google-drive") {
-        return RemoteConnectionType::GoogleDrive;
-    }
-    if (normalized == "microsoft" || normalized == "microsoft_drive" ||
-        normalized == "microsoft-drive" || normalized == "onedrive" || normalized == "one_drive") {
-        return RemoteConnectionType::MicrosoftDrive;
-    }
     if (normalized == "dropbox") {
         return RemoteConnectionType::Dropbox;
     }

@@ -50,20 +50,12 @@ int main() {
 
     ok &= ExpectEqual(
         "type to string",
-        textlt::RemoteConnectionTypeToString(textlt::RemoteConnectionType::MicrosoftDrive),
-        "microsoft_drive");
+        textlt::RemoteConnectionTypeToString(textlt::RemoteConnectionType::Dropbox),
+        "dropbox");
     ok &= ExpectType(
         "type sftp",
         textlt::RemoteConnectionTypeFromString("sftp"),
         textlt::RemoteConnectionType::Sftp);
-    ok &= ExpectType(
-        "type google alias",
-        textlt::RemoteConnectionTypeFromString("google-drive"),
-        textlt::RemoteConnectionType::GoogleDrive);
-    ok &= ExpectType(
-        "type onedrive alias",
-        textlt::RemoteConnectionTypeFromString("onedrive"),
-        textlt::RemoteConnectionType::MicrosoftDrive);
     ok &= ExpectType(
         "type dropbox",
         textlt::RemoteConnectionTypeFromString("dropbox"),

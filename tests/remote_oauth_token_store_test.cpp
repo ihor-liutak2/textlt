@@ -30,8 +30,6 @@ void ExpectEqual(const std::string& actual, const std::string& expected, const s
 int main() {
     using namespace textlt;
 
-    Expect(IsCloudRemoteConnectionType(RemoteConnectionType::GoogleDrive), "Google Drive must be a cloud type.");
-    Expect(IsCloudRemoteConnectionType(RemoteConnectionType::MicrosoftDrive), "Microsoft Drive must be a cloud type.");
     Expect(IsCloudRemoteConnectionType(RemoteConnectionType::Dropbox), "Dropbox must be a cloud type.");
     Expect(!IsCloudRemoteConnectionType(RemoteConnectionType::Sftp), "SFTP must not be an OAuth cloud type.");
 
@@ -40,17 +38,16 @@ int main() {
     std::filesystem::remove_all(temp_dir, cleanup_error);
     std::filesystem::create_directories(temp_dir);
 
-    const std::filesystem::path token_path = temp_dir / "google-token.json";
+    const std::filesystem::path token_path = temp_dir / "dropbox-token.json";
     RemoteOAuthTokenStore store(token_path);
     std::string error;
     Expect(!store.Exists(), "Token should not exist before saving.");
 
     RemoteOAuthToken token;
-    token.provider = RemoteTokenProviderName(RemoteConnectionType::GoogleDrive);
+    token.provider = RemoteTokenProviderName(RemoteConnectionType::Dropbox);
     token.display_name = "user@example.com";
     token.access_token = "access";
     token.refresh_token = "refresh";
-    token.scope = "drive.file";
     token.expires_at_unix = 123456;
 
     Expect(store.Save(token, error), "Saving token failed: " + error);
@@ -58,14 +55,14 @@ int main() {
 
     RemoteOAuthToken loaded;
     Expect(store.Load(loaded, error), "Loading token failed: " + error);
-    ExpectEqual(loaded.provider, "Google Drive", "Provider mismatch.");
+    ExpectEqual(loaded.provider, "Dropbox", "Provider mismatch.");
     ExpectEqual(loaded.display_name, "user@example.com", "Display name mismatch.");
     ExpectEqual(loaded.access_token, "access", "Access token mismatch.");
     ExpectEqual(loaded.refresh_token, "refresh", "Refresh token mismatch.");
     Expect(loaded.HasUsableToken(), "Loaded token should be usable.");
 
     RemoteConnectionConfig config;
-    config.type = RemoteConnectionType::GoogleDrive;
+    config.type = RemoteConnectionType::Dropbox;
     config.token_file = token_path.string();
     const std::string description = DescribeRemoteOAuthTokenStatus(config);
     Expect(description.find("Token file exists") != std::string::npos, "Description should mention existing token file.");

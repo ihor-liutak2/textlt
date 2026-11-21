@@ -23,7 +23,7 @@ bool IsLightTheme(const Theme& theme) {
 
 ftxui::Color MainWindowSeparatorColor(const Theme& theme) {
     if (IsLightTheme(theme)) {
-        return ftxui::Color::RGB(70, 70, 70);
+        return (ftxui::Color::RGB)(70, 70, 70);
     }
     return theme.gutter;
 }
@@ -36,7 +36,7 @@ BottomBarRowState TextltApp::CurrentBottomBarRowState() {
 
     BottomBarRowState state;
     state.show_cursor_position = workspace_mode_ == WorkspaceMode::Documents;
-    const int cursor_row_index = editor ? editor->GetCursorRow() : 0;
+    const size_t cursor_row_index = editor ? editor->GetCursorRow() : 0;
     state.cursor_row = cursor_row_index + 1;
     state.cursor_col = editor ? editor->GetCursorCol() + 1 : 1;
     state.total_lines = editor ? editor->GetLineCount() : 1;

@@ -13,6 +13,22 @@
 namespace textlt {
 namespace {
 
+std::string GetEnvironmentVariableValue(const char* name) {
+#if defined(_MSC_VER)
+    char* value = nullptr;
+    size_t size = 0;
+    if (_dupenv_s(&value, &size, name) != 0 || value == nullptr) {
+        return {};
+    }
+    std::string result(value);
+    std::free(value);
+    return result;
+#else
+    const char* value = std::getenv(name);
+    return value ? value : "";
+#endif
+}
+
 std::string Trim(std::string value) {
     while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front()))) {
         value.erase(value.begin());
@@ -56,10 +72,6 @@ std::string SlugPart(std::string value) {
 
 std::string ProviderSlug(RemoteConnectionType type) {
     switch (type) {
-        case RemoteConnectionType::GoogleDrive:
-            return "google-drive";
-        case RemoteConnectionType::MicrosoftDrive:
-            return "microsoft-drive";
         case RemoteConnectionType::Dropbox:
             return "dropbox";
         case RemoteConnectionType::Sftp:
@@ -106,17 +118,11 @@ bool RemoteOAuthToken::HasUsableToken() const {
 }
 
 bool IsCloudRemoteConnectionType(RemoteConnectionType type) {
-    return type == RemoteConnectionType::GoogleDrive ||
-        type == RemoteConnectionType::MicrosoftDrive ||
-        type == RemoteConnectionType::Dropbox;
+    return type == RemoteConnectionType::Dropbox;
 }
 
 std::string RemoteTokenProviderName(RemoteConnectionType type) {
     switch (type) {
-        case RemoteConnectionType::GoogleDrive:
-            return "Google Drive";
-        case RemoteConnectionType::MicrosoftDrive:
-            return "Microsoft OneDrive / SharePoint";
         case RemoteConnectionType::Dropbox:
             return "Dropbox";
         case RemoteConnectionType::Sftp:
@@ -133,11 +139,11 @@ std::filesystem::path ExpandRemoteUserPath(const std::string& path) {
     }
     if (path == "~" || path.rfind("~/", 0) == 0 || path.rfind("~\\", 0) == 0) {
 #ifdef _WIN32
-        const char* home = std::getenv("USERPROFILE");
+        const std::string home = GetEnvironmentVariableValue("USERPROFILE");
 #else
-        const char* home = std::getenv("HOME");
+        const std::string home = GetEnvironmentVariableValue("HOME");
 #endif
-        if (home && std::string(home).size() > 0) {
+        if (!home.empty()) {
             if (path.size() == 1) {
                 return std::filesystem::path(home);
             }
@@ -149,18 +155,18 @@ std::filesystem::path ExpandRemoteUserPath(const std::string& path) {
 
 std::filesystem::path DefaultRemoteTokenDirectory() {
 #ifdef _WIN32
-    const char* app_data = std::getenv("APPDATA");
-    if (app_data && std::string(app_data).size() > 0) {
+    const std::string app_data = GetEnvironmentVariableValue("APPDATA");
+    if (!app_data.empty()) {
         return std::filesystem::path(app_data) / "textlt" / "remote_tokens";
     }
-    const char* user_profile = std::getenv("USERPROFILE");
-    if (user_profile && std::string(user_profile).size() > 0) {
+    const std::string user_profile = GetEnvironmentVariableValue("USERPROFILE");
+    if (!user_profile.empty()) {
         return std::filesystem::path(user_profile) / "AppData" / "Roaming" / "textlt" / "remote_tokens";
     }
     return std::filesystem::path("remote_tokens");
 #else
-    const char* home = std::getenv("HOME");
-    if (!home || std::string(home).empty()) {
+    const std::string home = GetEnvironmentVariableValue("HOME");
+    if (home.empty()) {
         return std::filesystem::path("remote_tokens");
     }
     return std::filesystem::path(home) / ".config" / "textlt" / "remote_tokens";

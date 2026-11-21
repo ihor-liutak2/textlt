@@ -338,7 +338,7 @@ int main() {
     assert(odt_result.text.find("Cell A; Cell B") != std::string::npos);
     assert(odt_result.text.find("After table") != std::string::npos);
 
-    // Local .gdoc files are shortcuts. Real Google Docs import works through Google Drive export.
+    // Local .gdoc files are shortcuts, not document content.
     const std::filesystem::path gdoc_path =
         std::filesystem::temp_directory_path() / "textlt_text_importer_test.gdoc";
     {
@@ -350,7 +350,7 @@ int main() {
     std::filesystem::remove(gdoc_path);
 
     assert(!gdoc_result.success);
-    assert(gdoc_result.error.find("Google Drive connection") != std::string::npos);
+    assert(gdoc_result.error.find("supported file type") != std::string::npos);
 
     return 0;
 }

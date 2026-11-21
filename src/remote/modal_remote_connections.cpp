@@ -56,10 +56,6 @@ std::string TypeDisplayName(RemoteConnectionType type) {
             return "Dropbox";
         case RemoteConnectionType::Ftps:
             return "FTPS";
-        case RemoteConnectionType::GoogleDrive:
-            return "Google Drive";
-        case RemoteConnectionType::MicrosoftDrive:
-            return "Microsoft Drive";
     }
     return "Remote";
 }
@@ -72,10 +68,6 @@ std::string DefaultNameForType(RemoteConnectionType type) {
             return "New Dropbox";
         case RemoteConnectionType::Ftps:
             return "New FTPS";
-        case RemoteConnectionType::GoogleDrive:
-            return "New Google Drive";
-        case RemoteConnectionType::MicrosoftDrive:
-            return "New Microsoft Drive";
     }
     return "New Remote";
 }
@@ -88,9 +80,6 @@ std::string ConnectionTargetSummary(const RemoteConnectionConfig& config) {
             return config.remote_root.empty() ? "/" : config.remote_root;
         case RemoteConnectionType::Ftps:
             break;
-        case RemoteConnectionType::GoogleDrive:
-        case RemoteConnectionType::MicrosoftDrive:
-            return config.remote_root.empty() ? "/" : config.remote_root;
     }
     {
         std::string target = config.ssh_config_host.empty() ? config.host : config.ssh_config_host;
@@ -109,10 +98,6 @@ std::string ConnectionKindLabel(const RemoteConnectionConfig& config) {
             return "Dropbox";
         case RemoteConnectionType::Ftps:
             return "FTPS";
-        case RemoteConnectionType::GoogleDrive:
-            return "Google Drive";
-        case RemoteConnectionType::MicrosoftDrive:
-            return "Microsoft Drive";
     }
     return "Remote";
 }

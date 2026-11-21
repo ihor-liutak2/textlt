@@ -16,25 +16,6 @@ The connection modal has real type switching and separate fields for each suppor
   - explicit or implicit TLS
   - passive or active data mode
   - automatic certificate acceptance
-- Google Drive
-  - OAuth client id
-  - OAuth client secret
-  - token file
-  - access token input
-  - refresh token input
-  - scope
-  - root folder id
-- Microsoft OneDrive / SharePoint
-  - tenant id
-  - OAuth client id
-  - OAuth client secret
-  - token file
-  - access token input
-  - refresh token input
-  - scope
-  - SharePoint site id
-  - drive id
-  - remote root
 - Dropbox
   - app key
   - app secret
@@ -47,7 +28,7 @@ Connection name/type and provider settings are persisted in `remote_connections.
 
 ## Active file-manager backends
 
-SFTP, FTPS, Dropbox, Google Drive, and Microsoft OneDrive/SharePoint are active file-manager backends in this version. SFTP delegates connection resolution to OpenSSH config and uses the external `sftp` program for remote file operations. FTPS and cloud backends use the external `curl` executable; no curl development library is linked.
+SFTP, FTPS, and Dropbox are active file-manager backends in this version. SFTP delegates connection resolution to OpenSSH config and uses the external `sftp` program for remote file operations. FTPS and Dropbox use the external `curl` executable; no curl development library is linked.
 
 ## Supported for SFTP
 
@@ -94,7 +75,7 @@ The SFTP provider checks for external `ssh` and `sftp` executables during connec
 
 ## OAuth token files
 
-Google Drive, Microsoft OneDrive/SharePoint, and Dropbox share a small token-file layer:
+Dropbox uses a small token-file layer:
 
 - token files live under `~/.config/textlt/remote_tokens/` by default on Linux;
 - the connection modal can save pasted access/refresh tokens from the provider tab;
@@ -125,69 +106,6 @@ Supported Dropbox operations:
 Dropbox root path is represented as `/` in TextLT and as an empty path string in the Dropbox API. The provider converts this internally.
 
 To use Dropbox files before a full OAuth login modal exists, the configured token file must contain an `access_token` value. The placeholder token created by the connection modal is not enough by itself.
-
-Google Drive is active after patch 11. Microsoft OneDrive/SharePoint is active after patch 12.
-
-## Patch 11 Google Drive backend
-
-Google Drive is now an active cloud file-manager backend alongside SFTP and Dropbox.
-
-The Google Drive provider uses Google Drive API v3 endpoints through `RemoteHttpClient`, which calls the external `curl` executable. It does not require linking TextLT against a curl development library.
-
-Supported Google Drive operations:
-
-- list folder;
-- download ordinary binary files with `alt=media`;
-- export Google Docs (`application/vnd.google-apps.document`) as `text/plain` when opening or downloading from the remote panel;
-- upload new files with multipart upload;
-- overwrite existing ordinary files with media upload;
-- recursive folder download;
-- recursive folder upload;
-- rename files or folders;
-- delete files or folders;
-- create folders;
-- open remote file through the same local cache used by SFTP and Dropbox;
-- manual `Sync Last` upload for cached Google Drive files.
-
-Google Workspace files other than Google Docs, such as Sheets, Slides, and Forms, still need separate export rules.
-
-Google Drive root path is represented as `/` in TextLT. If `Root folder ID` is empty, the provider uses the Drive `root` alias. If `Root folder ID` is set, `/` in the TextLT remote panel maps to that configured folder.
-
-To use Google Drive files before a full OAuth login modal exists, the configured token file must contain an `access_token` value. The placeholder token created by the connection modal is not enough by itself.
-
-Google Workspace native files such as Docs, Sheets, and Slides are shown as non-ordinary entries. They can be renamed or deleted, but download/export support is intentionally left for a later patch.
-
-Microsoft OneDrive/SharePoint is active after patch 12.
-
-## Patch 12 Microsoft OneDrive / SharePoint backend
-
-Microsoft OneDrive/SharePoint is now an active cloud file-manager backend alongside SFTP, Dropbox, and Google Drive.
-
-The Microsoft provider uses Microsoft Graph driveItem endpoints through `RemoteHttpClient`, which calls the external `curl` executable. It does not require linking TextLT against a curl development library.
-
-Supported Microsoft operations:
-
-- list folder;
-- download ordinary files with the driveItem `/content` endpoint;
-- upload or replace small/medium files with the driveItem `/content` endpoint;
-- recursive folder download;
-- recursive folder upload;
-- rename files or folders inside the same parent folder;
-- delete files or folders;
-- create folders;
-- open remote file through the same local cache used by SFTP, Dropbox, and Google Drive;
-- manual `Sync Last` upload for cached Microsoft files.
-
-Microsoft remote root is represented as `/` in TextLT. Connection target selection works like this:
-
-- if `Drive ID` is set, the provider uses `/drives/{drive_id}`;
-- otherwise, if `Site ID` is set, it uses `/sites/{site_id}/drive`;
-- otherwise, it uses `/me/drive`.
-
-To use Microsoft files before a full OAuth login modal exists, the configured token file must contain an `access_token` value. The placeholder token created by the connection modal is not enough by itself.
-
-The first Microsoft provider version intentionally supports rename inside the same folder only. Cross-folder move support can be added later by updating `parentReference`.
-
 
 ## External curl runtime dependency
 
