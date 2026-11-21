@@ -29,6 +29,8 @@ int main() {
     Expect(entries[0].type == RemoteEntryType::Directory, "SFTP directory type mismatch.");
     Expect(entries[0].name == "Folder One", "SFTP directory name mismatch.");
     Expect(entries[0].path == "/docs/Folder One", "SFTP directory path mismatch.");
+    Expect(entries[1].modified == "Jan 10 2025", "File modification date mismatch.");
+    Expect(entries[0].modified == "Jan 10 12:30", "Listing time should retain its reported precision.");
     Expect(entries[1].size == 123, "SFTP file size mismatch.");
     Expect(entries[2].type == RemoteEntryType::Symlink, "SFTP symlink type mismatch.");
     Expect(entries[2].name == "current", "SFTP symlink name mismatch.");

@@ -45,6 +45,16 @@ int main() {
 
     MenuBarComponent menu_bar([](int, int) {}, nullptr);
 
+    menu_bar.SetShortcutProvider([](const std::string& command_id) {
+        return command_id == "edit.undo" ? std::string("Ctrl+U") : std::string();
+    });
+    menu_bar.RefreshShortcutLabels();
+    const int edit_index = MenuBarTestAccess::MenuIndex(menu_bar, " Edit ");
+    Expect(edit_index >= 0, "The Edit menu should be present.");
+    Expect(MenuBarTestAccess::ItemAt(menu_bar, edit_index, 0).label.find("(Ctrl+U)") !=
+            std::string::npos,
+        "The Edit menu should render the effective shortcut from the shortcut provider.");
+
     Expect(MenuBarTestAccess::MenuIndex(menu_bar, " Format ") < 0,
         "The Format menu must no longer be part of the menu bar.");
     Expect(MenuBarTestAccess::MenuIndex(menu_bar, " Notes ") < 0,
@@ -53,11 +63,14 @@ int main() {
         "The Actions menu should be hidden outside the actions workspace.");
     const int options_index = MenuBarTestAccess::MenuIndex(menu_bar, " Options ");
     Expect(options_index >= 0, "The Options menu should always be present.");
-    Expect(menu_bar.CommandIdAt(options_index, 2) == "docs.open",
+    Expect(menu_bar.CommandIdAt(options_index, 1) == "sidebar.ctrl_b_file_explorer" &&
+        menu_bar.CommandIdAt(options_index, 2) == "text_processors.quick",
+        "Quick Text Formatting should immediately follow Quick Commands.");
+    Expect(menu_bar.CommandIdAt(options_index, 3) == "docs.open",
         "The Options menu should expose the Docs view above Notes.");
-    Expect(menu_bar.CommandIdAt(options_index, 3) == "notes.toggle",
+    Expect(menu_bar.CommandIdAt(options_index, 4) == "notes.toggle",
         "The Options menu should keep Notes right after Docs.");
-    Expect(menu_bar.CommandIdAt(options_index, 4) == "actions.open",
+    Expect(menu_bar.CommandIdAt(options_index, 5) == "actions.open",
         "The Options menu should expose the Actions view after Notes.");
     menu_bar.SetActionsMenuVisible(true);
     const int actions_index = MenuBarTestAccess::MenuIndex(menu_bar, " Actions ");

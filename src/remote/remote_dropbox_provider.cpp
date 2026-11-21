@@ -142,19 +142,21 @@ RemoteEntryType DropboxEntryType(const Json& entry) {
     return RemoteEntryType::Other;
 }
 
-std::uintmax_t DropboxEntrySize(const Json& entry) {
+std::optional<std::uintmax_t> DropboxEntrySize(const Json& entry) {
     const auto iter = entry.find("size");
     if (iter == entry.end()) {
-        return 0;
+        return std::nullopt;
     }
     if (iter->is_number_unsigned()) {
         return static_cast<std::uintmax_t>(iter->get<unsigned long long>());
     }
     if (iter->is_number_integer()) {
         const long long value = iter->get<long long>();
-        return value > 0 ? static_cast<std::uintmax_t>(value) : 0;
+        if (value >= 0) {
+            return static_cast<std::uintmax_t>(value);
+        }
     }
-    return 0;
+    return std::nullopt;
 }
 
 void SortRemoteEntries(std::vector<RemoteEntry>& entries) {
@@ -298,6 +300,7 @@ bool RemoteDropboxProvider::List(
                 }
                 entry.type = DropboxEntryType(object);
                 entry.size = DropboxEntrySize(object);
+                entry.modified = JsonString(object, "client_modified");
                 entry.hidden = !entry.name.empty() && entry.name.front() == '.';
                 if (!entry.name.empty() && entry.type != RemoteEntryType::Other) {
                     entries.push_back(std::move(entry));

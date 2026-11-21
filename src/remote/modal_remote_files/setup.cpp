@@ -17,40 +17,40 @@ RemoteFilesModalContent::RemoteFilesModalContent(
     local_panel_.title = "Local";
     remote_panel_.title = "Remote";
 
-    prev_connection_button_ = MakeTextButton("Prev Conn", [this] { PreviousConnection(); },
+    MakeTextButton(prev_connection_button_, "Prev Conn", [this] { PreviousConnection(); },
         ButtonRole::Navigation, ButtonVariant::AccentEdges, "‹");
-    next_connection_button_ = MakeTextButton("Next Conn", [this] { NextConnection(); },
+    MakeTextButton(next_connection_button_, "Next Conn", [this] { NextConnection(); },
         ButtonRole::Navigation, ButtonVariant::AccentEdges, "›");
-    refresh_button_ = MakeTextButton("Refresh", [this] { RefreshAll(); },
+    MakeTextButton(refresh_button_, "Refresh", [this] { RefreshAll(); },
         ButtonRole::Cancel, ButtonVariant::AccentEdges, "⟳");
-    connect_button_ = MakeTextButton("Connect", [this] { ConnectRemote(); },
+    MakeTextButton(connect_button_, "Connect", [this] { ConnectRemote(); },
         ButtonRole::Primary, ButtonVariant::AccentEdges);
-    disconnect_button_ = MakeTextButton("Disconnect", [this] { DisconnectRemote(); },
+    MakeTextButton(disconnect_button_, "Disconnect", [this] { DisconnectRemote(); },
         ButtonRole::Cancel, ButtonVariant::AccentEdges);
-    copy_to_remote_button_ = MakeTextButton("Copy", [this] { CopyToRemote(); },
+    MakeTextButton(copy_to_remote_button_, "Copy", [this] { CopyToRemote(); },
         ButtonRole::Cancel, ButtonVariant::AccentEdges, "→");
-    copy_to_local_button_ = MakeTextButton("Copy", [this] { CopyToLocal(); },
+    MakeTextButton(copy_to_local_button_, "Copy", [this] { CopyToLocal(); },
         ButtonRole::Cancel, ButtonVariant::AccentEdges, "←");
-    open_button_ = MakeTextButton("Open", [this] { OpenSelectedFile(); },
+    MakeTextButton(open_button_, "Open", [this] { OpenSelectedFile(); },
         ButtonRole::Primary, ButtonVariant::AccentEdges);
-    sync_opened_button_ = MakeTextButton("Sync Last", [this] { UploadLastOpenedRemoteFile(); },
+    MakeTextButton(sync_opened_button_, "Sync Last", [this] { UploadLastOpenedRemoteFile(); },
         ButtonRole::Cancel, ButtonVariant::AccentEdges, "↑");
-    clear_cache_button_ = MakeTextButton("Clear Cache", [this] { ClearCachedRemoteFiles(); },
+    MakeTextButton(clear_cache_button_, "Clear Cache", [this] { ClearCachedRemoteFiles(); },
         ButtonRole::Danger, ButtonVariant::AccentEdges, "!");
-    copy_path_button_ = MakeTextButton("Copy Path", [this] { CopySelectedPath(); },
+    MakeTextButton(copy_path_button_, "Copy Path", [this] { CopySelectedPath(); },
         ButtonRole::Cancel, ButtonVariant::AccentEdges, "⧉");
-    mkdir_button_ = MakeTextButton("Mkdir", [this] { StartMakeDirectory(); },
+    MakeTextButton(mkdir_button_, "Mkdir", [this] { StartMakeDirectory(); },
         ButtonRole::Primary, ButtonVariant::AccentEdges, "+");
-    rename_button_ = MakeTextButton("Rename", [this] { StartRename(); },
+    MakeTextButton(rename_button_, "Rename", [this] { StartRename(); },
         ButtonRole::Cancel, ButtonVariant::AccentEdges);
-    delete_button_ = MakeTextButton("Delete", [this] { StartDelete(); },
+    MakeTextButton(delete_button_, "Delete", [this] { StartDelete(); },
         ButtonRole::Danger, ButtonVariant::AccentEdges, "!");
-    close_button_ = MakeTextButton("Close", [this] {
+    MakeTextButton(close_button_, "Close", [this] {
         if (on_close_) {
             on_close_();
         }
     }, ButtonRole::Cancel, ButtonVariant::AccentEdges);
-    copy_error_button_ = MakeTextButton("Copy Error", [this] {
+    MakeTextButton(copy_error_button_, "Copy Error", [this] {
         if (error_footer_.empty()) {
             SetStatus("No error to copy.");
             return;
@@ -86,9 +86,9 @@ RemoteFilesModalContent::RemoteFilesModalContent(
         return RemoteDialogInputTransform(theme, std::move(state));
     };
     operation_input_ = ftxui::Input(&pending_input_value_, "name", operation_option);
-    confirm_button_ = MakeTextButton("Confirm", [this] { ConfirmPendingOperation(); },
+    MakeTextButton(confirm_button_, "Confirm", [this] { ConfirmPendingOperation(); },
         ButtonRole::Primary, ButtonVariant::AccentEdges);
-    cancel_button_ = MakeTextButton("Cancel", [this] { CancelPendingOperation(); },
+    MakeTextButton(cancel_button_, "Cancel", [this] { CancelPendingOperation(); },
         ButtonRole::Cancel, ButtonVariant::AccentEdges);
 
     container_inner_ = ftxui::Container::Vertical({
@@ -98,6 +98,19 @@ RemoteFilesModalContent::RemoteFilesModalContent(
             connect_button_,
             disconnect_button_,
         }),
+        ftxui::Container::Horizontal({
+            local_path_input_,
+            remote_path_input_,
+        }),
+        ftxui::Container::Horizontal({
+            local_list_component_,
+            remote_list_component_,
+        }),
+        ftxui::Maybe(ftxui::Container::Horizontal({
+            operation_input_,
+            confirm_button_,
+            cancel_button_,
+        }), [this] { return pending_operation_ != PendingOperation::None; }),
         ftxui::Container::Horizontal({
             copy_to_remote_button_,
             copy_to_local_button_,
@@ -109,26 +122,14 @@ RemoteFilesModalContent::RemoteFilesModalContent(
             delete_button_,
             clear_cache_button_,
         }),
-        ftxui::Container::Horizontal({
-            local_path_input_,
-            remote_path_input_,
-        }),
-        ftxui::Container::Horizontal({
-            local_list_component_,
-            remote_list_component_,
-        }),
-        ftxui::Container::Horizontal({
-            operation_input_,
-            confirm_button_,
-            cancel_button_,
-        }),
     });
     container_ = ftxui::CatchEvent(
         container_inner_,
         [this](ftxui::Event event) { return HandleGlobalContentEvent(std::move(event)); });
 }
 
-ftxui::Component RemoteFilesModalContent::MakeTextButton(
+void RemoteFilesModalContent::MakeTextButton(
+    ftxui::Component& button,
     std::string label,
     std::function<void()> on_click,
     ButtonRole role,
@@ -144,11 +145,11 @@ ftxui::Component RemoteFilesModalContent::MakeTextButton(
     ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
     option.label = ButtonCaptionText(spec);
     option.on_click = std::move(on_click);
-    option.transform = [this, spec = std::move(spec)](const ftxui::EntryState& state) {
+    option.transform = [this, &button, spec = std::move(spec)](const ftxui::EntryState&) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return RenderModalFlatButton(theme, spec, state.focused || state.active);
+        return RenderModalFlatButton(theme, spec, button->Focused());
     };
-    return ftxui::Button(option);
+    button = ftxui::Button(option);
 }
 
 ftxui::Component RemoteFilesModalContent::MakePathInput(PanelSide side) {
@@ -197,7 +198,9 @@ void RemoteFilesModalContent::Open(
     if (local_list_component_) {
         local_list_component_->TakeFocus();
     }
-    SetStatus("Remote is disconnected. Press Connect to open the active connection.");
+    if (!connections_.empty() && !local_panel_.status_is_error) {
+        SetStatus("Remote is disconnected. Press Connect to open the active connection.");
+    }
     if (connect_immediately && !connections_.empty()) {
         ConnectRemote();
     }

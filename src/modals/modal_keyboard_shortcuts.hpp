@@ -38,6 +38,9 @@ public:
     ModalSizePreference GetModalSizePreference() const override { return {108, 32}; }
     ModalFrameStyle GetModalFrameStyle() const override { return ModalFrameStyle::TitleInBorder; }
     std::string GetFooterText() const override { return status_; }
+    bool HasCustomFooter() const override { return true; }
+    int GetCustomFooterHeight() const override { return 3; }
+    ftxui::Element RenderCustomFooter() override;
 
     void SetTheme(const Theme* theme) { theme_ = theme; }
     void Open();
@@ -46,6 +49,7 @@ public:
 
 private:
     ftxui::Component MakeTextButton(std::string label, std::function<void()> on_click);
+    ftxui::Component MakeFooterButton(std::string label, std::function<void()> on_click);
     ShortcutContext CurrentContext() const;
     std::vector<ShortcutKeyModifier> CurrentModifierChoices() const;
     std::vector<ShortcutBindingView> CurrentBindings() const;
@@ -66,7 +70,6 @@ private:
     ftxui::Element RenderTabs() const;
     ftxui::Element RenderActionList() const;
     ftxui::Element RenderPicker() const;
-    ftxui::Element RenderHelpLine() const;
 
     const Theme* theme_ = nullptr;
     ShortcutRegistry* shortcut_registry_ = nullptr;

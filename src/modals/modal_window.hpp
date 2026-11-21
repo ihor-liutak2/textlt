@@ -44,7 +44,8 @@ public:
     void SetFooterVisible(bool visible);
     void SetHeaderCloseVisible(bool visible);
     void SetFooterText(std::string text);
-    void SetFooterButtons(std::vector<FooterButton> buttons, size_t left_aligned_count = 0);
+    void SetFooterButtons(std::vector<FooterButton> buttons, size_t left_aligned_count = 0,
+                          bool separate_status = false);
     void SetBodyHeightLimit(int rows) { max_body_height_ = rows; }
     void SetBodyWidth(int columns);
     void SetModalSize(int columns, int rows);
@@ -81,6 +82,7 @@ private:
     std::string footer_text_;
     bool show_header_ = true;
     bool show_footer_ = true;
+    bool separate_footer_status_ = false;
     bool show_header_close_ = true;
     int max_body_height_ = 18;
     int modal_width_ = 60;

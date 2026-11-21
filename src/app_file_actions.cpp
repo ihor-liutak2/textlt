@@ -164,7 +164,7 @@ bool TextltApp::ConfirmFilesModalAction(
         for (auto& value : result.values) {
             actions::ActionItem item;
             item.title = std::move(value.name);
-            item.content = std::move(value.value);
+            item.tabs.push_back({{}, std::move(value.value), false});
             items.push_back(std::move(item));
         }
         auto workspace = std::static_pointer_cast<actions::ActionsWorkspaceComponent>(

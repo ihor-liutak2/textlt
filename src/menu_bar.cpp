@@ -31,12 +31,35 @@ ftxui::Color MenuBorderColor(const Theme& theme) {
     return theme.menu_foreground;
 }
 
+std::string ShortcutMenuLabel(std::string base_label, const std::string& shortcut) {
+    if (shortcut.empty()) {
+        return base_label;
+    }
+    if (base_label.empty()) {
+        base_label = " ";
+    }
+    if (base_label.front() != ' ') {
+        base_label.insert(base_label.begin(), ' ');
+    }
+    while (!base_label.empty() && base_label.back() == ' ') {
+        base_label.pop_back();
+    }
+    base_label += " ";
+    constexpr size_t kShortcutColumn = 20;
+    if (base_label.size() < kShortcutColumn) {
+        base_label.append(kShortcutColumn - base_label.size(), ' ');
+    }
+    base_label += "(" + shortcut + ") ";
+    return base_label;
+}
+
 } // namespace
 
 MenuBarComponent::MenuBarComponent(
 
     ActionCallback on_action,
-    const Theme* theme)
+    const Theme* theme,
+    ShortcutProvider shortcut_provider)
     : menu_entries_({
           " File ",
           " Project ",
@@ -51,17 +74,17 @@ MenuBarComponent::MenuBarComponent(
       dropdown_items_({
           {
               {" New ", "file.new"},
-              {" Open...            (Ctrl+O) ", "file.open"},
+              {" Open... ", "file.open"},
               {" Open Folder... ", "file.open_folder"},
               {" Save As... ", "file.save_as"},
               {" Import... ", "file.import"},
               {" Recent Files ", "file.recent"},
-              {" Close       (Alt+W / Ctrl+W) ", "file.close"},
+              {" Close ", "file.close"},
               {" Close All ", "file.close_all"},
-              {" Save               (Ctrl+S) ", "file.save"},
+              {" Save ", "file.save"},
               {" Save All ", "file.save_all"},
               {" [ ] Add to Favorites ", "file.toggle_favorite"},
-              {" Exit               (Ctrl+Q) ", "app.exit"},
+              {" Exit ", "app.exit"},
           },
           {
               {" Projects Sidebar ", "project.show"},
@@ -77,27 +100,28 @@ MenuBarComponent::MenuBarComponent(
               {" Manage Connections... ", "remote.connections"},
           },
           {
-              {" Undo               (Ctrl+Z) ", "edit.undo"},
-              {" Redo               (Ctrl+Y) ", "edit.redo"},
-              {" Select All         (Ctrl+A) ", "edit.select_all"},
-              {" Cut                (Ctrl+X) ", "edit.cut"},
-              {" Copy               (Ctrl+C) ", "edit.copy"},
-              {" Paste              (Ctrl+V) ", "edit.paste"},
-              {" Toggle Comment     (Ctrl+/) ", "edit.toggle_comment"},
-              {" Toggle Case        (Ctrl+T) ", "edit.toggle_case"},
+              {" Undo ", "edit.undo"},
+              {" Redo ", "edit.redo"},
+              {" Select All ", "edit.select_all"},
+              {" Cut ", "edit.cut"},
+              {" Copy ", "edit.copy"},
+              {" Paste ", "edit.paste"},
+              {" Toggle Comment ", "edit.toggle_comment"},
+              {" Toggle Case ", "edit.toggle_case"},
               {" Convert Indents: 4 -> 2 Spaces ", "edit.convert_indents_4_to_2"},
               {" Convert Indents: 2 -> 4 Spaces ", "edit.convert_indents_2_to_4"},
-              {" Find...            (Ctrl+F) ", "edit.find"},
-              {" Replace...         (Ctrl+R) ", "edit.replace"},
-              {" Go to Line...      (Alt+T) ", "editor.go_to_line"},
+              {" Find... ", "edit.find"},
+              {" Replace... ", "edit.replace"},
+              {" Go to Line... ", "editor.go_to_line"},
               {" Search in Files...", "search.files"},
               {" Text Processors...", "text_processors.open"},
           },
           {
               {" Toggle Line Numbers ", "view.toggle_line_numbers"},
-              {" Quick Commands          (Ctrl+B) ", "sidebar.ctrl_b_file_explorer"},
+              {" Quick Commands ", "sidebar.ctrl_b_file_explorer"},
+              {" Quick Text Formatting ", "text_processors.quick"},
               {" Docs ", "docs.open"},
-              {" Notes                   (Ctrl+N) ", "notes.toggle"},
+              {" Notes ", "notes.toggle"},
               {" Actions ", "actions.open"},
               {" Smart Word Wrap [ ] ", "editor.toggle_smart_word_wrap"},
               {" Syntax Highlighting [X] ", "editor.toggle_syntax_highlighting"},
@@ -145,11 +169,11 @@ MenuBarComponent::MenuBarComponent(
               {" Copy All Actions ", "actions.copy_all"},
           },
           {
-              {" TTS                 (Alt+H) ", "tts.open_modal"},
-              {" TTS Settings  (Alt+S) ", "assistant.open_settings"},
+              {" TTS ", "tts.open_modal"},
+              {" TTS Settings ", "assistant.open_settings"},
               {" ───────────────────────── ", "", true},
-              {" Quick AI            (Alt+M) ", "ai.quick_actions"},
-              {" AI Actions          (Alt+J) ", "ai.open_actions"},
+              {" Quick AI ", "ai.quick_actions"},
+              {" AI Actions ", "ai.open_actions"},
               {" AI Settings... ", "ai.open_settings"},
               {" ───────────────────────── ", "", true},
               {" Remote Files... ", "remote.files"},
@@ -171,8 +195,16 @@ MenuBarComponent::MenuBarComponent(
           },
       }),
       on_action_(std::move(on_action)),
+      shortcut_provider_(std::move(shortcut_provider)),
       theme_(theme) {
-    
+    for (auto& menu : dropdown_items_) {
+        for (DropdownItem& item : menu) {
+            if (!item.separator) {
+                item.base_label = item.label;
+            }
+        }
+    }
+
     // Initialize the dropdown entries for the default menu item
     RefreshCurrentDropdownEntries();
 
@@ -390,6 +422,42 @@ std::string MenuBarComponent::CommandIdAt(int menu_index, int item_index) const 
 
     
     
+void MenuBarComponent::SetShortcutProvider(ShortcutProvider provider) {
+    shortcut_provider_ = std::move(provider);
+}
+
+std::string MenuBarComponent::ComposeLabel(const DropdownItem& item) const {
+    if (item.separator) {
+        return item.label;
+    }
+    const std::string& base = item.base_label.empty() ? item.label : item.base_label;
+    if (!shortcut_provider_ || item.command_id.empty()) {
+        return base;
+    }
+    return ShortcutMenuLabel(base, shortcut_provider_(item.command_id));
+}
+
+void MenuBarComponent::RefreshShortcutLabels() {
+    const auto refresh = [this](std::vector<DropdownItem>& items) {
+        for (DropdownItem& item : items) {
+            if (item.separator) {
+                continue;
+            }
+            if (item.base_label.empty()) {
+                item.base_label = item.label;
+            }
+            item.label = ComposeLabel(item);
+        }
+    };
+
+    for (auto& menu : dropdown_items_) {
+        refresh(menu);
+    }
+    refresh(notes_dropdown_items_);
+    refresh(actions_dropdown_items_);
+    RefreshCurrentDropdownEntries();
+}
+
 void MenuBarComponent::SetFileFavoriteLabel(bool is_favorite) {
     SetItemLabel("file.toggle_favorite", is_favorite
         ? " [X] Remove from Favorites "
@@ -481,22 +549,24 @@ void MenuBarComponent::SetOptionLabels(
 
 bool MenuBarComponent::SetItemLabel(const std::string& command_id, std::string label) {
     bool updated = false;
+    const auto apply_label = [this, &label, &command_id](DropdownItem& item) {
+        if (item.command_id != command_id) {
+            return false;
+        }
+        item.base_label = label;
+        item.label = ComposeLabel(item);
+        return true;
+    };
     for (auto& menu : dropdown_items_) {
         for (DropdownItem& item : menu) {
-            if (item.command_id == command_id) {
-                item.label = label;
-                updated = true;
-            }
+            updated = apply_label(item) || updated;
         }
     }
     // The Notes menu is stored separately so it can be removed from the menu
     // bar outside the notes workspace. Keep its labels current even while the
     // menu is hidden.
     for (DropdownItem& item : notes_dropdown_items_) {
-        if (item.command_id == command_id) {
-            item.label = std::move(label);
-            updated = true;
-        }
+        updated = apply_label(item) || updated;
     }
     return updated;
 }

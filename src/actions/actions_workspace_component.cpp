@@ -22,10 +22,111 @@ constexpr int kMouseWheelScrollItems = 3;
 constexpr int kMouseWheelScrollNavigator = 3;
 constexpr size_t kItemsScrollbarColumns = 2;
 constexpr int kActionContentPreviewRows = 5;
-constexpr int kActionMetadataColumnWidth = 30;
+constexpr int kActionActiveMarkerWidth = 2;
 constexpr size_t kActionMetadataFirstRowCharacters = 25;
 // Mask for items with "hide text": a solid large circle, shown 8 times in tiles.
 const std::string kHiddenContentMask = "⬤⬤⬤⬤⬤⬤⬤⬤";
+
+class ActionEndMarkerNode final : public ftxui::Node {
+public:
+    ActionEndMarkerNode(ftxui::Element content, bool active,
+        ftxui::Color color, ftxui::Color title_background,
+        std::shared_ptr<std::vector<int>> header_rows, size_t header_index)
+        : ftxui::Node({std::move(content)}), active_(active), color_(color),
+          title_background_(title_background),
+          header_rows_(std::move(header_rows)), header_index_(header_index) {}
+
+    void ComputeRequirement() override {
+        children_.front()->ComputeRequirement();
+        requirement_ = children_.front()->requirement();
+        requirement_.min_x += kActionActiveMarkerWidth;
+    }
+
+    void SetBox(ftxui::Box box) override {
+        ftxui::Node::SetBox(box);
+        ftxui::Box content_box = box;
+        content_box.x_max -= kActionActiveMarkerWidth;
+        children_.front()->SetBox(content_box);
+        if (header_index_ < header_rows_->size())
+            (*header_rows_)[header_index_] = box.y_min;
+    }
+
+    void Render(ftxui::Screen& screen) override {
+        children_.front()->Render(screen);
+        // Continue the title-row background through the marker column, so it
+        // reaches the card's right edge instead of stopping at the content.
+        for (int x = box_.x_max - kActionActiveMarkerWidth + 1;
+             x <= box_.x_max; ++x) {
+            if (!screen.stencil.Contain(x, box_.y_min)) continue;
+            screen.CellAt(x, box_.y_min).background_color = title_background_;
+        }
+        if (!active_) return;
+        for (int y = box_.y_min; y <= box_.y_max; ++y) {
+            for (int x = box_.x_max - kActionActiveMarkerWidth + 1;
+                 x <= box_.x_max; ++x) {
+                if (!screen.stencil.Contain(x, y)) continue;
+                ftxui::Cell& cell = screen.CellAt(x, y);
+                cell.character = "█";
+                cell.foreground_color = color_;
+            }
+        }
+    }
+
+private:
+    bool active_ = false;
+    ftxui::Color color_;
+    ftxui::Color title_background_;
+    std::shared_ptr<std::vector<int>> header_rows_;
+    size_t header_index_ = 0;
+};
+
+ftxui::Element WithActionEndMarker(
+    ftxui::Element content, bool active, ftxui::Color color,
+    ftxui::Color title_background,
+    const std::shared_ptr<std::vector<int>>& header_rows, size_t header_index) {
+    return std::make_shared<ActionEndMarkerNode>(
+        std::move(content), active, color, title_background, header_rows,
+        header_index);
+}
+
+class HeaderBackgroundNode final : public ftxui::Node {
+public:
+    HeaderBackgroundNode(ftxui::Element scrollbar,
+        std::shared_ptr<std::vector<int>> header_rows, ftxui::Color color)
+        : ftxui::Node({std::move(scrollbar)}),
+          header_rows_(std::move(header_rows)), color_(color) {}
+
+    void ComputeRequirement() override {
+        children_.front()->ComputeRequirement();
+        requirement_ = children_.front()->requirement();
+    }
+
+    void SetBox(ftxui::Box box) override {
+        ftxui::Node::SetBox(box);
+        children_.front()->SetBox(box);
+    }
+
+    void Render(ftxui::Screen& screen) override {
+        children_.front()->Render(screen);
+        for (const int y : *header_rows_) {
+            if (y < box_.y_min || y > box_.y_max) continue;
+            for (int x = box_.x_min; x <= box_.x_max; ++x) {
+                if (screen.stencil.Contain(x, y))
+                    screen.CellAt(x, y).background_color = color_;
+            }
+        }
+    }
+
+private:
+    std::shared_ptr<std::vector<int>> header_rows_;
+    ftxui::Color color_;
+};
+
+ftxui::Element ExtendHeaderBackground(ftxui::Element scrollbar,
+    const std::shared_ptr<std::vector<int>>& header_rows, ftxui::Color color) {
+    return std::make_shared<HeaderBackgroundNode>(
+        std::move(scrollbar), header_rows, color);
+}
 
 bool IsWordCharacter(char character) {
     const unsigned char value = static_cast<unsigned char>(character);
@@ -96,23 +197,6 @@ ftxui::Element RenderHighlightedLine(const Theme& theme,
     return hbox(std::move(parts));
 }
 
-ftxui::Element RenderActionMetadataColumn(const Theme& theme,
-    const std::string& value, bool highlighted = false, size_t match_start = 0,
-    size_t match_length = 0) {
-    using namespace ftxui;
-    const std::string limited = LimitActionMetadata(value);
-    const std::string first = LimitUtf8Characters(
-        limited, kActionMetadataFirstRowCharacters);
-    const std::string second = limited.substr(first.size());
-    Elements rows = {RenderHighlightedLine(theme, first, 0,
-        highlighted ? match_start : 0, highlighted ? match_length : 0)};
-    if (!second.empty()) {
-        rows.push_back(RenderHighlightedLine(theme, second, first.size(),
-            highlighted ? match_start : 0, highlighted ? match_length : 0));
-    }
-    return vbox(std::move(rows)) | size(WIDTH, EQUAL, kActionMetadataColumnWidth);
-}
-
 template <typename T>
 int IndexById(const std::vector<T>& values, const std::string& id) {
     const auto found = std::find_if(values.begin(), values.end(),
@@ -169,6 +253,7 @@ ActionsWorkspaceComponent::ActionsWorkspaceComponent(const Theme* theme,
     Add(action_editor_modal_->View());
     std::string error;
     if (!repository_.Load(error)) Notify("Actions load failed: " + error);
+    else if (!repository_.LastWarning().empty()) Notify(repository_.LastWarning());
     NormalizeSelection();
 }
 
@@ -316,14 +401,26 @@ void ActionsWorkspaceComponent::MovePage(int delta) {
 void ActionsWorkspaceComponent::MoveAction(int delta) {
     std::string error; if (!repository_.MoveItem(selected_group_id_, selected_page_id_, selected_item_id_, delta, error)) Notify("Action move failed: " + error); else AfterMutation("Action moved");
 }
-void ActionsWorkspaceComponent::CopySelectedAction() {
+void ActionsWorkspaceComponent::CopySelectedAction(int tab_index) {
     const ActionItem* item = SelectedItem(); if (!item) { Notify("No action selected"); return; }
-    Notify(clipboard_ && clipboard_(item->content) ? "Copied action: " + item->title : "Could not copy action to the system clipboard");
+    if (item->tabs.empty()) { Notify("Action has no content"); return; }
+    const size_t index = std::min(static_cast<size_t>(std::max(0, tab_index)),
+        item->tabs.size() - 1);
+    Notify(clipboard_ && clipboard_(item->tabs[index].content)
+        ? "Copied action: " + item->title
+        : "Could not copy action to the system clipboard");
 }
 void ActionsWorkspaceComponent::CopyAllActions() {
     const ActionPage* page = SelectedPage(); if (!page || page->items.empty()) { Notify("No actions to copy"); return; }
     std::string text;
-    for (size_t i = 0; i < page->items.size(); ++i) { if (i) text += "\n\n"; text += page->items[i].content; }
+    bool first = true;
+    for (const ActionItem& item : page->items) {
+        for (const ActionTab& tab : item.tabs) {
+            if (!first) text += "\n\n";
+            text += tab.content;
+            first = false;
+        }
+    }
     Notify(clipboard_ && clipboard_(text) ? "Copied all actions" : "Could not copy actions to the system clipboard");
 }
 
@@ -352,7 +449,8 @@ ActionsWorkspaceComponent::SearchActions(const std::string& query,
     if (!page || query.empty()) return results;
 
     const std::string needle = match_case ? query : LowerCopy(query);
-    auto scan = [&](const ActionItem& item, const std::string& text, int field,
+    auto scan = [&](const ActionItem& item, const std::string& text,
+                    ActionField field, int tab_index,
                     const std::string& title_prefix) {
         if (text.empty()) return;
         const std::string searchable = match_case ? text : LowerCopy(text);
@@ -367,16 +465,19 @@ ActionsWorkspaceComponent::SearchActions(const std::string& query,
                 ActionSearchResult match;
                 match.item_id = item.id;
                 match.field = field;
+                match.tab_index = tab_index;
                 match.byte = position;
                 match.length = needle.size();
                 match.label = title_prefix;
-                if (field == 2) {
+                if (field == ActionField::Content) {
                     const auto bounds = LineBounds(text, position);
                     match.preview = text.substr(
                         bounds.first, bounds.second - bounds.first);
                     match.preview_match_start = position - bounds.first;
                     match.preview_match_length = needle.size();
-                    if (item.hide_text) {
+                    if (tab_index >= 0 &&
+                        static_cast<size_t>(tab_index) < item.tabs.size() &&
+                        item.tabs[static_cast<size_t>(tab_index)].hide_text) {
                         match.preview = kHiddenContentMask;
                         match.preview_match_start = 0;
                         match.preview_match_length = 0;
@@ -401,9 +502,16 @@ ActionsWorkspaceComponent::SearchActions(const std::string& query,
     for (const ActionItem& item : page->items) {
         const std::string short_title = LimitUtf8Characters(item.title, 12);
         const std::string prefix = short_title.empty() ? "Action" : short_title;
-        scan(item, item.title, 0, prefix + " · title");
-        scan(item, item.description, 1, prefix + " · desc");
-        scan(item, item.content, 2, prefix + " · content");
+        scan(item, item.title, ActionField::Title, 0, prefix + " · title");
+        for (size_t tab_index = 0; tab_index < item.tabs.size(); ++tab_index) {
+            const ActionTab& tab = item.tabs[tab_index];
+            const std::string tab_label = tab_index == 0
+                ? std::string{} : " · tab " + std::to_string(tab_index + 1);
+            scan(item, tab.caption, ActionField::Caption,
+                static_cast<int>(tab_index), prefix + tab_label + " · caption");
+            scan(item, tab.content, ActionField::Content,
+                static_cast<int>(tab_index), prefix + tab_label + " · content");
+        }
     }
     return results;
 }
@@ -435,6 +543,7 @@ bool ActionsWorkspaceComponent::ReplaceActionSearchResult(size_t index,
     const ActionSearchResult match = action_search_matches_[index];
     ActionTextEdit edit;
     edit.item_id = match.item_id;
+    edit.tab_index = match.tab_index;
     edit.field = match.field;
     edit.byte = match.byte;
     edit.length = match.length;
@@ -469,6 +578,7 @@ bool ActionsWorkspaceComponent::ReplaceAllActionsText(
     for (const ActionSearchResult& match : action_search_matches_) {
         ActionTextEdit edit;
         edit.item_id = match.item_id;
+        edit.tab_index = match.tab_index;
         edit.field = match.field;
         edit.byte = match.byte;
         edit.length = match.length;
@@ -700,6 +810,7 @@ ftxui::Element ActionsWorkspaceComponent::RenderItems() {
     items_visible_rows_ = visible_rows;
 
     Elements cards; item_boxes_.clear(); copy_boxes_.clear();
+    auto header_rows = std::make_shared<std::vector<int>>();
     std::string header = page ? page->name : "Actions";
     const size_t total_items = page ? page->items.size() : 0;
     const size_t visible_items = items_visible_count_ ? items_visible_count_ : total_items;
@@ -713,37 +824,83 @@ ftxui::Element ActionsWorkspaceComponent::RenderItems() {
         // Same stable-address requirement for reflect() as in RenderPages.
         item_boxes_.assign(page->items.size() - start, {});
         copy_boxes_.assign(page->items.size() - start, {});
+        header_rows = std::make_shared<std::vector<int>>(
+            page->items.size() - start, -1);
         for (size_t i = start; i < page->items.size(); ++i) {
             const auto& item = page->items[i];
             const bool is_selected = static_cast<int>(i) == selected;
             const std::string title = LimitActionMetadata(item.title);
-            const std::string description = LimitActionMetadata(item.description);
             const ActionSearchResult* active_match =
                 action_search_active_ < action_search_matches_.size() &&
                 action_search_matches_[action_search_active_].item_id == item.id
                     ? &action_search_matches_[action_search_active_] : nullptr;
-            Element copy_button = hbox({
-                    separator() | color(BorderColor(theme)),
-                    text(" Copy "),
-                }) | reflect(copy_boxes_[i - start]) | notflex;
-            Elements body = {dbox({
-                hbox({
-                    RenderActionMetadataColumn(theme, title,
-                        active_match && active_match->field == 0,
-                        active_match ? active_match->byte : 0,
-                        active_match ? active_match->length : 0) | bold,
-                    RenderActionMetadataColumn(theme, description,
-                        active_match && active_match->field == 1,
-                        active_match ? active_match->byte : 0,
-                        active_match ? active_match->length : 0) | dim,
-                }) | xframe,
-                hbox({filler(), std::move(copy_button)}),
-            }) |
+            Elements action_buttons;
+            for (size_t tab_index = 0; tab_index < item.tabs.size() && tab_index < 4;
+                 ++tab_index) {
+                if (tab_index > 0 && item.tabs[tab_index].caption.empty() &&
+                    item.tabs[tab_index].content.empty() &&
+                    !item.tabs[tab_index].hide_text) continue;
+                const std::string button_caption = item.tabs[tab_index].caption.empty()
+                    ? (tab_index == 0 ? "Copy" : "Copy " + std::to_string(tab_index + 1))
+                    : LimitActionCaption(item.tabs[tab_index].caption);
+                ButtonSpec copy_spec = ButtonSpecFromLabel(
+                    button_caption, ButtonRole::Secondary,
+                    ButtonVariant::Minimal, ButtonSize::Compact);
+                Element button = RenderButton(theme, copy_spec);
+                if (active_match && active_match->field == ActionField::Caption &&
+                    active_match->tab_index == static_cast<int>(tab_index)) {
+                    const size_t begin = active_match->byte;
+                    const size_t end = std::min(button_caption.size(),
+                        begin + active_match->length);
+                    if (begin < end) {
+                        const ButtonStyle style = ResolveButtonStyle(
+                            theme, copy_spec.role, ButtonState::Normal);
+                        Elements parts = {text(" ")};
+                        if (begin > 0) parts.push_back(text(button_caption.substr(0, begin)) |
+                            color(style.accent));
+                        parts.push_back(text(button_caption.substr(begin, end - begin)) |
+                            bgcolor(theme.active_match_bg) | color(theme.selection_fg));
+                        if (end < button_caption.size())
+                            parts.push_back(text(button_caption.substr(end)) | color(style.accent));
+                        parts.push_back(text(" "));
+                        button = hbox(std::move(parts));
+                    }
+                }
+                Element button_slot = hbox({filler(), std::move(button), filler()}) |
+                    size(WIDTH, EQUAL, 14);
+                action_buttons.push_back(std::move(button_slot) |
+                    reflect(copy_boxes_[i - start][tab_index]) | notflex);
+            }
+            const size_t preview_tab = active_match &&
+                active_match->field == ActionField::Content &&
+                active_match->tab_index >= 0 &&
+                static_cast<size_t>(active_match->tab_index) < item.tabs.size()
+                    ? static_cast<size_t>(active_match->tab_index) : 0;
+            const ActionTab empty_tab{};
+            const ActionTab& tab = item.tabs.empty() ? empty_tab : item.tabs[preview_tab];
+            const bool highlighted_content = active_match &&
+                active_match->field == ActionField::Content &&
+                static_cast<size_t>(std::max(0, active_match->tab_index)) == preview_tab;
+            const std::string title_preview = LimitUtf8Characters(
+                title, kActionMetadataFirstRowCharacters);
+            Element title_row = hbox({
+                    RenderHighlightedLine(theme, title_preview, 0,
+                        active_match && active_match->field == ActionField::Title
+                            ? active_match->byte : 0,
+                        active_match && active_match->field == ActionField::Title
+                            ? active_match->length : 0) | bold | xflex,
+                    filler(),
+                }) |
                 bgcolor(theme.modal_selected_item_bg) |
-                color(theme.modal_selected_item_fg)};
-            if (active_match && active_match->field == 2 && !item.hide_text) {
-                const auto bounds = LineBounds(item.content, active_match->byte);
-                const std::string line = item.content.substr(
+                color(theme.modal_selected_item_fg) |
+                xflex;
+            Element buttons_row = hbox({
+                filler(), hbox(std::move(action_buttons)), text(" "),
+            }) | xflex;
+            Elements body = {std::move(title_row), std::move(buttons_row)};
+            if (highlighted_content && !tab.hide_text) {
+                const auto bounds = LineBounds(tab.content, active_match->byte);
+                const std::string line = tab.content.substr(
                     bounds.first, bounds.second - bounds.first);
                 body.push_back(hbox({
                     text("     "),
@@ -752,18 +909,22 @@ ftxui::Element ActionsWorkspaceComponent::RenderItems() {
                         active_match->length) | xflex,
                 }));
             }
-            Element content = item.hide_text
+            Element content = tab.hide_text
                 ? hbox({text("     "), text(kHiddenContentMask) |
                     color(is_selected ? theme.modal_accent : theme.foreground)})
                 : hbox({text("     "),
-                    paragraph(item.content) |
+                    paragraph(tab.content) |
                         color(is_selected ? theme.modal_accent : theme.foreground) |
                         yframe |
                         size(HEIGHT, LESS_THAN, kActionContentPreviewRows) | xflex}) |
                     yframe |
                     size(HEIGHT, LESS_THAN, kActionContentPreviewRows);
             body.push_back(std::move(content));
-            Element card = vbox(std::move(body)) | reflect(item_boxes_[i - start]);
+            Element card_content = vbox(std::move(body)) | xflex;
+            Element card = WithActionEndMarker(
+                std::move(card_content), is_selected, theme.modal_accent,
+                theme.modal_selected_item_bg, header_rows, i - start) |
+                xflex | reflect(item_boxes_[i - start]);
             cards.push_back(card);
             if (i + 1 < page->items.size()) cards.push_back(text(""));
         }
@@ -778,8 +939,9 @@ ftxui::Element ActionsWorkspaceComponent::RenderItems() {
     });
     Element list = hbox({
         vbox(std::move(cards)) | yframe | xflex,
-        RenderItemsScrollbar(
-            visible_rows, total_items, visible_items, item_scroll_, max_scroll, theme),
+        ExtendHeaderBackground(RenderItemsScrollbar(
+            visible_rows, total_items, visible_items, item_scroll_, max_scroll,
+            theme, header_rows), header_rows, theme.modal_selected_item_bg),
     }) | yflex | reflect(items_view_box_);
     return vbox({title_row, separator() | color(BorderColor(theme)), list}) |
         borderStyled(ftxui::LIGHT, BorderColor(theme)) |
@@ -806,7 +968,8 @@ void ActionsWorkspaceComponent::UpdateItemsVisibleCountFromLayout() {
 
 ftxui::Element ActionsWorkspaceComponent::RenderItemsScrollbar(
     size_t visible_rows, size_t total_items, size_t visible_items, size_t scroll,
-    size_t max_scroll, const Theme& theme) {
+    size_t max_scroll, const Theme& theme,
+    const std::shared_ptr<std::vector<int>>& header_rows) {
     using namespace ftxui;
     if (visible_rows == 0) return emptyElement();
     const ScrollThumb thumb = ComputeScrollThumb(
@@ -1036,7 +1199,21 @@ bool ActionsWorkspaceComponent::OnEvent(ftxui::Event event) {
             const auto& groups = repository_.Data().groups;
             for (size_t i = 0; i < group_boxes_.size(); ++i) if (group_boxes_[i].Contain(mouse.x, mouse.y) && !groups.empty()) { SelectGroup(groups[std::min(group_scroll_, groups.size() - 1) + i].id); return true; }
             for (size_t i = 0; i < page_boxes_.size(); ++i) if (page_boxes_[i].Contain(mouse.x, mouse.y) && group && !group->pages.empty()) { selected_page_id_ = group->pages[std::min(page_scroll_, group->pages.size() - 1) + i].id; selected_item_id_.clear(); NormalizeSelection(); focus_ = FocusArea::Navigator; return true; }
-            for (size_t i = 0; i < item_boxes_.size(); ++i) if (item_boxes_[i].Contain(mouse.x, mouse.y) && page && !page->items.empty()) { selected_item_id_ = page->items[std::min(item_scroll_, page->items.size() - 1) + i].id; focus_ = FocusArea::Items; if (copy_boxes_[i].Contain(mouse.x, mouse.y)) CopySelectedAction(); return true; }
+            for (size_t i = 0; i < item_boxes_.size(); ++i) {
+                if (!item_boxes_[i].Contain(mouse.x, mouse.y) || !page ||
+                    page->items.empty()) continue;
+                const ActionItem& clicked = page->items[
+                    std::min(item_scroll_, page->items.size() - 1) + i];
+                selected_item_id_ = clicked.id;
+                focus_ = FocusArea::Items;
+                for (size_t tab = 0; tab < copy_boxes_[i].size(); ++tab) {
+                    if (copy_boxes_[i][tab].Contain(mouse.x, mouse.y)) {
+                        CopySelectedAction(static_cast<int>(tab));
+                        break;
+                    }
+                }
+                return true;
+            }
         }
     }
     return false;

@@ -52,8 +52,7 @@ public:
     ModalFrameStyle GetModalFrameStyle() const override {
         return ModalFrameStyle::TitleInBorder;
     }
-    std::string GetFooterText() const override { return status_; }
-    bool HasCustomFooter() const override { return !error_footer_.empty(); }
+    bool HasCustomFooter() const override { return true; }
     int GetCustomFooterHeight() const override;
     ftxui::Element RenderCustomFooter() override;
 
@@ -82,6 +81,7 @@ private:
         int path_cursor = 0;
         std::vector<RemoteEntry> entries;
         std::vector<std::string> entry_labels;
+        ftxui::Box bounds;
         std::vector<ftxui::Box> boxes;
         int selected = 0;
         int scroll_offset = 0;
@@ -91,7 +91,8 @@ private:
         std::chrono::steady_clock::time_point last_click_time{};
     };
 
-    ftxui::Component MakeTextButton(
+    void MakeTextButton(
+        ftxui::Component& button,
         std::string label,
         std::function<void()> on_click,
         ButtonRole role = ButtonRole::Default,
@@ -123,7 +124,7 @@ private:
     void CopyToLocal();
     void CopyToRemoteConfirmed(const RemoteEntry& entry, const std::string& remote_target);
     void CopyToLocalConfirmed(const RemoteEntry& entry, const std::string& local_target);
-    void StartOverwriteConfirmation(PendingOperation operation, const RemoteEntry& entry, const std::string& target_path);
+    void StartOverwriteConfirmation(PendingOperation operation, const RemoteEntry& entry, const std::string& target_path, const RemoteEntry& remote_entry);
     void CopyActiveToOtherPanel();
     void OpenSelectedFile();
     bool UploadCachedLocalFile(const std::filesystem::path& local_path, std::string& status, std::string& error);
@@ -150,7 +151,6 @@ private:
     static std::string EntrySizeLabel(const RemoteEntry& entry);
     static std::string TrimForDisplay(const std::string& value, size_t width);
     static bool IsParentEntry(const RemoteEntry& entry);
-    bool PanelContainsName(PanelSide side, const std::string& name) const;
     static std::string LocalPathKey(const std::filesystem::path& path);
     std::filesystem::path TempDownloadPath(const std::string& name) const;
     void RememberCachedRemoteFile(
@@ -185,6 +185,8 @@ private:
     std::string pending_input_value_;
     int pending_input_cursor_ = 0;
     RemoteEntry pending_copy_entry_;
+    std::string pending_source_details_;
+    std::string pending_target_details_;
     std::string pending_copy_target_path_;
 
     struct CachedRemoteFile {

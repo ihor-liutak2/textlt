@@ -30,6 +30,8 @@ int main() {
     Expect(entries[0].type == RemoteEntryType::Directory, "Unix directory type mismatch.");
     Expect(entries[0].name == "Folder One", "Unix directory name mismatch.");
     Expect(entries[0].path == "/docs/Folder One", "Unix directory path mismatch.");
+    Expect(entries[1].modified == "Jan 10 2025", "File modification date mismatch.");
+    Expect(entries[0].modified == "Jan 10 12:30", "Listing time should retain its reported precision.");
     Expect(entries[1].size == 123, "Unix file size mismatch.");
     Expect(entries[2].type == RemoteEntryType::Symlink, "Unix symlink type mismatch.");
     Expect(entries[2].name == "current", "Unix symlink name mismatch.");
@@ -41,6 +43,7 @@ int main() {
         "Windows FTPS listing should parse.");
     Expect(entries.size() == 2, "Windows FTPS listing entry count mismatch.");
     Expect(entries[0].type == RemoteEntryType::Directory, "Windows directory type mismatch.");
+    Expect(entries[1].modified == "01-10-2025  12:31PM", "Windows modification date mismatch.");
     Expect(entries[1].size == 456, "Windows file size mismatch.");
 
     RemoteFtpsProvider provider;

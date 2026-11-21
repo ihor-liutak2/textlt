@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <string>
+#include <unordered_map>
 #include <utility>
 
 #include "ftxui/component/event.hpp"
@@ -150,6 +151,7 @@ void TextltApp::InitializeCommands() {
     add("view.toggle_line_numbers", "Toggle Line Numbers", "Options", "", [this] { CommandViewToggleLineNumbers(); });
     add("sidebar.toggle_file_explorer", "Toggle File Explorer", "Options", "", [this] { CommandSidebarToggleFileExplorer(); });
     add("sidebar.ctrl_b_file_explorer", "Quick Commands", "Options", "Ctrl+B", [this] { OpenSidebarShortcutModal(); });
+    add("text_processors.quick", "Quick Text Formatting", "Options", "Alt+B", [this] { OpenTextProcessorsModal(true); });
     add("sidebar.show_project", "Folder Sidebar", "Options", "", [this] { ShowProjectSidebar(); });
     add("sidebar.show_projects", "Projects Sidebar", "Options", "", [this] { ShowProjectsSidebar(); });
     add("sidebar.show_favorites", "Favorites Sidebar", "Options", "", [this] { ShowFavoritesSidebar(); });
@@ -257,7 +259,24 @@ void TextltApp::InitializeTextShortcuts() {
 }
 
 bool TextltApp::SaveShortcutOverrides(std::string& error) {
-    return shortcut_store_.Save(shortcut_registry_.Overrides(), &error);
+    std::unordered_map<std::string, std::string> all_shortcuts;
+    for (ShortcutContext context : {ShortcutContext::Menu, ShortcutContext::Text}) {
+        for (const ShortcutBindingView& binding : shortcut_registry_.Bindings(context)) {
+            if (binding.effective_shortcut.empty()) {
+                continue;
+            }
+            const std::string key =
+                ShortcutContextStoragePrefix(context) + ":" + binding.definition.action_id;
+            all_shortcuts[key] = binding.effective_shortcut;
+        }
+    }
+
+    const bool saved = shortcut_store_.Save(
+        shortcut_registry_.Overrides(), &error, &all_shortcuts);
+    if (menu_bar_) {
+        menu_bar_->RefreshShortcutLabels();
+    }
+    return saved;
 }
 
 bool TextltApp::RunMenuShortcut(ftxui::Event event) {

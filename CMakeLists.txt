@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(textlt VERSION 0.9.9 LANGUAGES C CXX)
+project(textlt VERSION 1.0.0 LANGUAGES C CXX)
 
 include(GNUInstallDirs)
 
@@ -444,6 +444,22 @@ add_executable(textlt_syntax_highlighter_test
   src/lexers/database_lexer.cpp
   src/lexers/web_lexer.cpp
 )
+
+add_executable(textlt_quick_text_panel_test
+  tests/quick_text_panel_test.cpp
+  src/modals/modal_text_processors.cpp
+  src/modals/modal_window.cpp
+  src/text_parser_manager.cpp
+  src/text_parser_lua_engine.cpp
+  src/builtin_text_processors.cpp
+  src/text_transformer.cpp
+  src/app_resources.cpp
+  src/editor_config.cpp
+  src/theme.cpp
+)
+target_include_directories(textlt_quick_text_panel_test PRIVATE src third_party)
+target_link_libraries(textlt_quick_text_panel_test PRIVATE ftxui::component lua55)
+add_test(NAME textlt_quick_text_panel_test COMMAND textlt_quick_text_panel_test)
 
 add_executable(textlt_builtin_text_processors_test
   tests/builtin_text_processors_test.cpp

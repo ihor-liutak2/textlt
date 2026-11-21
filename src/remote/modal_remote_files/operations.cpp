@@ -35,14 +35,14 @@ void RemoteFilesModalContent::StartDelete() {
     }
     pending_operation_ = PendingOperation::Delete;
     pending_panel_ = active_panel_;
-    pending_input_label_ = "Type DELETE";
+    pending_input_label_ = "Delete from " + Panel(pending_panel_).title + " — type DELETE";
     pending_input_value_.clear();
     pending_input_cursor_ = 0;
     pending_copy_target_path_ = entry->path;
     if (operation_input_) {
         operation_input_->TakeFocus();
     }
-    SetStatus("Delete " + TrimForDisplay(entry->path, 80) + "? Type DELETE and press Confirm.", true);
+    SetStatus("Delete from " + Panel(pending_panel_).title + ": " + TrimForDisplay(entry->path, 68) + "? Type DELETE and press Confirm.", true);
 }
 
 void RemoteFilesModalContent::ConfirmPendingOperation() {
@@ -56,10 +56,17 @@ void RemoteFilesModalContent::ConfirmPendingOperation() {
         return;
     }
 
+    const auto matches_confirmation = [this](const char* word) {
+        std::string confirmation = pending_input_value_;
+        std::transform(confirmation.begin(), confirmation.end(), confirmation.begin(),
+            [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
+        return confirmation == word;
+    };
+
     if (pending_operation_ == PendingOperation::CopyToRemoteOverwrite ||
         pending_operation_ == PendingOperation::CopyToLocalOverwrite) {
-        if (pending_input_value_ != "OVERWRITE") {
-            SetStatus("Type OVERWRITE to replace the existing target.", true);
+        if (!matches_confirmation("OVERWRITE")) {
+            SetStatus("Type OVERWRITE in any letter case to replace the existing target.", true);
             return;
         }
 
@@ -124,8 +131,13 @@ void RemoteFilesModalContent::ConfirmPendingOperation() {
     }
 
     if (pending_operation_ == PendingOperation::Delete) {
-        if (pending_input_value_ != "DELETE") {
-            SetStatus("Type DELETE to confirm deletion.", true);
+        if (entry->path != pending_copy_target_path_) {
+            CancelPendingOperation();
+            SetStatus("Selection changed. Choose Delete again to confirm the new target.", true);
+            return;
+        }
+        if (!matches_confirmation("DELETE")) {
+            SetStatus("Type DELETE in any letter case to confirm deletion.", true);
             return;
         }
         const bool success = entry->type == RemoteEntryType::Directory

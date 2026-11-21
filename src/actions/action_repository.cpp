@@ -40,8 +40,32 @@ std::filesystem::path ActionRepository::DefaultPath() {
 
 bool ActionRepository::Load(std::string& error) {
     ActionsDocument candidate;
-    if (!ActionSerializer::Load(path_, candidate, error)) return false;
+    bool migrated = false;
+    warning_.clear();
+    if (!ActionSerializer::Load(path_, candidate, error, &migrated)) return false;
     data_ = std::move(candidate);
+    if (migrated) {
+        std::filesystem::path backup_path = path_;
+        backup_path += ".v1.bak";
+        std::error_code fs_error;
+        const bool backup_exists = std::filesystem::exists(backup_path, fs_error);
+        if (fs_error) {
+            warning_ = "Actions were migrated in memory, but the backup path could not be checked; the source file was not rewritten.";
+        } else if (!backup_exists) {
+            fs_error.clear();
+            std::filesystem::copy_file(path_, backup_path,
+                std::filesystem::copy_options::none, fs_error);
+            if (fs_error) {
+                warning_ = "Actions were migrated in memory, but the v1 backup could not be created; the source file was not rewritten.";
+            }
+        }
+        if (warning_.empty()) {
+            std::string migration_error;
+            if (!writer_(path_, data_, migration_error)) {
+                warning_ = "Actions were migrated in memory, but the v2 file could not be written: " + migration_error;
+            }
+        }
+    }
     return true;
 }
 
@@ -195,6 +219,14 @@ bool ActionRepository::MovePage(const std::string& group_id, const std::string& 
 
 bool ActionRepository::CreateItem(const std::string& group_id, const std::string& page_id, ActionItem item, std::string& id, std::string& error) {
     if (item.title.empty()) { error = "Action title is required."; return false; }
+    if (item.tabs.empty()) item.tabs.push_back({});
+    if (item.tabs.size() > 4) { error = "An action can have at most four tabs."; return false; }
+    for (const ActionTab& tab : item.tabs) {
+        if (LimitActionCaption(tab.caption).size() != tab.caption.size()) {
+            error = "Action captions are limited to 12 characters.";
+            return false;
+        }
+    }
     ActionsDocument next = data_; ActionGroup* group = FindGroup(next, group_id); ActionPage* page = group ? FindPage(*group, page_id) : nullptr;
     if (!page) { error = "Page was not found."; return false; }
     id = GenerateActionId(); item.id = id; page->items.push_back(std::move(item)); return Commit(std::move(next), error);
@@ -210,6 +242,14 @@ bool ActionRepository::AppendItems(const std::string& group_id,
     if (!page) { error = "Select an Actions page before importing."; return false; }
     for (ActionItem& item : items) {
         if (item.title.empty()) { error = "Imported action title is empty."; return false; }
+        if (item.tabs.empty()) item.tabs.push_back({});
+        if (item.tabs.size() > 4) { error = "An action can have at most four tabs."; return false; }
+        for (const ActionTab& tab : item.tabs) {
+            if (LimitActionCaption(tab.caption).size() != tab.caption.size()) {
+                error = "Action captions are limited to 12 characters.";
+                return false;
+            }
+        }
         item.id = GenerateActionId();
         page->items.push_back(std::move(item));
     }
@@ -218,6 +258,16 @@ bool ActionRepository::AppendItems(const std::string& group_id,
 
 bool ActionRepository::UpdateItem(const std::string& group_id, const std::string& page_id, const ActionItem& item, std::string& error) {
     if (item.title.empty()) { error = "Action title is required."; return false; }
+    if (item.tabs.empty() || item.tabs.size() > 4) {
+        error = "An action must have one to four tabs.";
+        return false;
+    }
+    for (const ActionTab& tab : item.tabs) {
+        if (LimitActionCaption(tab.caption).size() != tab.caption.size()) {
+            error = "Action captions are limited to 12 characters.";
+            return false;
+        }
+    }
     ActionsDocument next = data_; ActionGroup* group = FindGroup(next, group_id); ActionPage* page = group ? FindPage(*group, page_id) : nullptr;
     if (!page) { error = "Page was not found."; return false; }
     const auto found = std::find_if(page->items.begin(), page->items.end(), [&](const auto& value) { return value.id == item.id; });
@@ -241,18 +291,25 @@ bool ActionRepository::ApplyTextEdits(const std::string& group_id,
         return left.byte > right.byte;
     });
     for (const ActionTextEdit& edit : edits) {
-        if (edit.field < 0 || edit.field > 2) {
-            error = "Unknown action field.";
-            return false;
-        }
         const auto found = std::find_if(page->items.begin(), page->items.end(),
             [&](const auto& item) { return item.id == edit.item_id; });
         if (found == page->items.end()) {
             error = "Action was not found.";
             return false;
         }
-        std::string* value = edit.field == 0 ? &found->title
-            : edit.field == 1 ? &found->description : &found->content;
+        std::string* value = nullptr;
+        if (edit.field == ActionField::Title) {
+            value = &found->title;
+        } else {
+            if (edit.tab_index < 0 ||
+                static_cast<size_t>(edit.tab_index) >= found->tabs.size()) {
+                error = "Action tab was not found.";
+                return false;
+            }
+            ActionTab& tab = found->tabs[static_cast<size_t>(edit.tab_index)];
+            value = edit.field == ActionField::Caption
+                ? &tab.caption : &tab.content;
+        }
         const size_t from = std::min(edit.byte, value->size());
         const size_t to = std::min(value->size(), from + edit.length);
         value->replace(from, to - from, edit.replacement);
@@ -263,11 +320,14 @@ bool ActionRepository::ApplyTextEdits(const std::string& group_id,
             error = "Action title cannot be empty after replacement.";
             return false;
         }
+        bool invalid_caption = false;
+        for (const ActionTab& tab : item.tabs) {
+            if (LimitActionCaption(tab.caption).size() !=
+                tab.caption.size()) invalid_caption = true;
+        }
         if (LimitUtf8Characters(item.title, kActionMetadataCharacterLimit).size() !=
-                item.title.size() ||
-            LimitUtf8Characters(item.description, kActionMetadataCharacterLimit).size() !=
-                item.description.size()) {
-            error = "Action title and description are limited to 30 characters.";
+                item.title.size() || invalid_caption) {
+            error = "Action title is limited to 30 characters and captions to 12.";
             return false;
         }
     }

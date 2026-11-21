@@ -28,7 +28,7 @@ public:
         std::string id;
         std::string name;
         std::string mime_type;
-        std::uintmax_t size = 0;
+        std::optional<std::uintmax_t> size;
         std::string parent_id;
     };
 

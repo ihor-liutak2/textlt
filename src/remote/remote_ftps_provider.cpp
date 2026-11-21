@@ -138,13 +138,14 @@ bool ParseUnixListLine(const std::string& line, RemoteEntry& entry) {
         return false;
     }
     entry.name = name;
+    entry.modified = month + " " + day + " " + time_or_year;
     entry.type = permissions[0] == 'd'
         ? RemoteEntryType::Directory
         : permissions[0] == 'l' ? RemoteEntryType::Symlink : RemoteEntryType::File;
     try {
         entry.size = static_cast<std::uintmax_t>(std::stoull(size));
     } catch (...) {
-        entry.size = 0;
+        entry.size.reset();
     }
     return true;
 }
@@ -157,6 +158,7 @@ bool ParseWindowsListLine(const std::string& line, RemoteEntry& entry) {
     if (!std::regex_match(line, match, pattern)) {
         return false;
     }
+    entry.modified = Trim(line.substr(0, match.position(1)));
     entry.name = match[2].str();
     if (entry.name == "." || entry.name == "..") {
         return false;
@@ -168,7 +170,7 @@ bool ParseWindowsListLine(const std::string& line, RemoteEntry& entry) {
         try {
             entry.size = static_cast<std::uintmax_t>(std::stoull(match[1].str()));
         } catch (...) {
-            entry.size = 0;
+            entry.size.reset();
         }
     }
     return true;

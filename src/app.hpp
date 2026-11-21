@@ -126,7 +126,7 @@ private:
     void CloseSearchFilesModal();
     void OpenFilesModal(FilesModalMode mode);
     void CloseFilesModal();
-    void OpenTextProcessorsModal();
+    void OpenTextProcessorsModal(bool quick = false);
     void CloseTextProcessorsModal();
     void OpenRemoteConnectionsModal();
     void CloseRemoteConnectionsModal();
@@ -163,11 +163,11 @@ private:
         std::string& error);
     void CopyFileModalPathText(const std::string& text);
     bool GetTextProcessorTargetText(
-        bool whole_document,
+        ProcessorTarget target,
         std::string& text,
         std::string& error);
     bool ReplaceTextProcessorTargetText(
-        bool whole_document,
+        ProcessorTarget target,
         const std::string& text,
         std::string& error);
 

@@ -25,9 +25,25 @@ ftxui::Component MakeTabButton(
                            const ftxui::EntryState& state) mutable {
         const Theme& resolved = theme && *theme ? **theme : FallbackTheme();
         spec.selected = selected && selected();
-        return RenderModalFlatButton(resolved, spec, state.focused || state.active);
+        return RenderModalTabButton(resolved, spec.caption, spec.selected,
+            state.focused || state.active);
     };
     return ftxui::Button(option);
+}
+
+ftxui::Component MakeFooterButton(
+    const Theme** theme, std::string label, std::function<void()> on_click) {
+    ButtonSpec spec = ButtonSpecFromLabel(std::move(label));
+    ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
+    option.label = ButtonCaptionText(spec);
+    option.on_click = std::move(on_click);
+    option.transform = [theme, spec = std::move(spec)](
+                           const ftxui::EntryState& state) {
+        const Theme& resolved = theme && *theme ? **theme : FallbackTheme();
+        return RenderModalFlatButton(resolved, spec,
+            state.focused || state.active);
+    };
+    return ftxui::Button(std::move(option));
 }
 
 } // namespace
@@ -45,16 +61,16 @@ ThemeColorsModalContent::ThemeColorsModalContent(
     BuildComponents();
     LoadValuesFromTheme();
 
-    apply_button_ = MakePrimaryButton(
-        theme_, "Apply", [this] { Apply(); });
-    reset_button_ = MakeWarningButton(
-        theme_, "Reset Default", [this] { ResetToDefault(); });
-    close_button_ = MakeCancelButton(
-        theme_, [this] {
+    apply_button_ = MakeFooterButton(
+        &theme_, "Apply", [this] { Apply(); });
+    reset_button_ = MakeFooterButton(
+        &theme_, "Reset Default", [this] { ResetToDefault(); });
+    close_button_ = MakeFooterButton(
+        &theme_, "Close", [this] {
             if (close_callback_) {
                 close_callback_();
             }
-        }, "Close");
+        });
 }
 
 void ThemeColorsModalContent::BuildFields() {

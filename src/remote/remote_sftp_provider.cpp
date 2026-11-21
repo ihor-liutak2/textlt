@@ -69,13 +69,14 @@ bool ParseLongListLine(const std::string& line, RemoteEntry& entry) {
         return false;
     }
     entry.name = name;
+    entry.modified = month + " " + day + " " + time_or_year;
     entry.type = permissions.front() == 'd'
         ? RemoteEntryType::Directory
         : permissions.front() == 'l' ? RemoteEntryType::Symlink : RemoteEntryType::File;
     try {
         entry.size = static_cast<std::uintmax_t>(std::stoull(size));
     } catch (...) {
-        entry.size = 0;
+        entry.size.reset();
     }
     return true;
 }

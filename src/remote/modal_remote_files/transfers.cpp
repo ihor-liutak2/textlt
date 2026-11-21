@@ -1,4 +1,5 @@
 void RemoteFilesModalContent::CopyToRemote() {
+    CancelPendingOperation();
     const RemoteEntry* entry = SelectedEntry(PanelSide::Local);
     if (!entry || IsParentEntry(*entry)) {
         SetStatus("Select a local file or folder to upload.", true);
@@ -10,8 +11,10 @@ void RemoteFilesModalContent::CopyToRemote() {
     }
 
     const std::string remote_target = JoinRemotePath(remote_panel_.path, entry->name);
-    if (PanelContainsName(PanelSide::Remote, entry->name)) {
-        StartOverwriteConfirmation(PendingOperation::CopyToRemoteOverwrite, *entry, remote_target);
+    const auto target = std::find_if(remote_panel_.entries.begin(), remote_panel_.entries.end(),
+        [&](const RemoteEntry& candidate) { return candidate.name == entry->name; });
+    if (target != remote_panel_.entries.end()) {
+        StartOverwriteConfirmation(PendingOperation::CopyToRemoteOverwrite, *entry, remote_target, *target);
         return;
     }
     CopyToRemoteConfirmed(*entry, remote_target);
@@ -45,6 +48,7 @@ void RemoteFilesModalContent::CopyToRemoteConfirmed(
 }
 
 void RemoteFilesModalContent::CopyToLocal() {
+    CancelPendingOperation();
     const RemoteEntry* entry = SelectedEntry(PanelSide::Remote);
     if (!entry || IsParentEntry(*entry)) {
         SetStatus("Select a remote file or folder to download.", true);
@@ -64,7 +68,7 @@ void RemoteFilesModalContent::CopyToLocal() {
         return;
     }
     if (target_exists) {
-        StartOverwriteConfirmation(PendingOperation::CopyToLocalOverwrite, *entry, local_target);
+        StartOverwriteConfirmation(PendingOperation::CopyToLocalOverwrite, *entry, local_target, *entry);
         return;
     }
     CopyToLocalConfirmed(*entry, local_target);
@@ -100,7 +104,14 @@ void RemoteFilesModalContent::CopyToLocalConfirmed(
 void RemoteFilesModalContent::StartOverwriteConfirmation(
     PendingOperation operation,
     const RemoteEntry& entry,
-    const std::string& target_path) {
+    const std::string& target_path,
+    const RemoteEntry& remote_entry) {
+    const bool uploading = operation == PendingOperation::CopyToRemoteOverwrite;
+    const auto local = LocalOverwriteMetadata(FileManager::PathFromUtf8(uploading ? entry.path : target_path));
+    const auto local_details = "Local   " + OverwriteDetails(local);
+    const auto remote_details = "Remote  " + OverwriteDetails(remote_entry);
+    pending_source_details_ = "Source    " + (uploading ? local_details : remote_details);
+    pending_target_details_ = "Existing  " + (uploading ? remote_details : local_details);
     pending_operation_ = operation;
     pending_panel_ = operation == PendingOperation::CopyToRemoteOverwrite
         ? PanelSide::Remote

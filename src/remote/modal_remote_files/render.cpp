@@ -3,6 +3,16 @@ ftxui::Element RemoteFilesModalContent::Render() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     const std::string connection_label = CurrentConnectionLabel(connections_, selected_connection_);
 
+    if (local_list_component_->Focused() || local_path_input_->Focused()) {
+        active_panel_ = PanelSide::Local;
+    } else if (remote_list_component_->Focused() || remote_path_input_->Focused()) {
+        active_panel_ = PanelSide::Remote;
+    }
+    const auto panel_border = [&](PanelSide side) {
+        return side == active_panel_ ? borderStyled(HEAVY, theme.modal_accent)
+                                     : borderStyled(LIGHT, theme.modal_border);
+    };
+
     return vbox({
         hbox({
             text(" Active connection: ") | color(theme.modal_accent),
@@ -12,17 +22,6 @@ ftxui::Element RemoteFilesModalContent::Render() {
             copy_error_button_->Render(), text(" "),
             connect_button_->Render(), text(" "),
             disconnect_button_->Render(),
-        }),
-        hbox({
-            copy_to_remote_button_->Render(), text(" "),
-            copy_to_local_button_->Render(), text(" "),
-            mkdir_button_->Render(), text(" "),
-            open_button_->Render(), text(" "),
-            sync_opened_button_->Render(), text(" "),
-            copy_path_button_->Render(), text(" "),
-            rename_button_->Render(), text(" "),
-            delete_button_->Render(), text(" "),
-            clear_cache_button_->Render(),
         }),
         separator() | color(theme.modal_border),
         hbox({
@@ -35,17 +34,12 @@ ftxui::Element RemoteFilesModalContent::Render() {
             }) | size(WIDTH, EQUAL, 58),
         }),
         hbox({
-            local_list_component_->Render() | size(WIDTH, EQUAL, 58) | border,
-            remote_list_component_->Render() | size(WIDTH, EQUAL, 58) | border,
+            local_list_component_->Render() | reflect(local_panel_.bounds) | size(WIDTH, EQUAL, 58) | panel_border(PanelSide::Local),
+            remote_list_component_->Render() | reflect(remote_panel_.bounds) | size(WIDTH, EQUAL, 58) | panel_border(PanelSide::Remote),
         }),
         RenderOperationRow(),
         hbox({
             text(" " + LastCachedLabel()) | dim | color(theme.modal_text_color),
-            filler(),
-        }),
-        hbox({
-            text(" " + status_) |
-                (status_is_error_ ? color(ftxui::Color::Red) : color(theme.modal_text_color)),
             filler(),
             text(" Active: " + std::string(active_panel_ == PanelSide::Local ? "Local" : "Remote") + " ") |
                 dim | color(theme.modal_text_color),
@@ -61,14 +55,12 @@ ftxui::Element RemoteFilesModalContent::RenderPanel(PanelSide side) {
 
     Elements rows;
     rows.push_back(hbox({
-        text(" " + panel.title + " ") | bold |
-            (active ? bgcolor(theme.modal_selected_item_bg) : bgcolor(theme.modal_background)) |
-            (active ? color(theme.modal_selected_item_fg) : color(theme.modal_accent)),
+        text(" " + panel.title + (active ? " (active) " : " ")) | bold,
         filler(),
         text(panel.status.empty() ? " " : TrimForDisplay(panel.status, 36)) |
-            dim |
-            (panel.status_is_error ? color(ftxui::Color::Red) : color(theme.modal_text_color)),
-    }));
+            (panel.status_is_error ? color(ftxui::Color::Red) : nothing),
+    }) | bgcolor(active ? theme.modal_selected_item_bg : theme.modal_background) |
+         color(active ? theme.modal_selected_item_fg : theme.modal_text_color));
     rows.push_back(separator() | color(theme.modal_border));
 
     if (panel.entries.empty()) {
@@ -108,10 +100,12 @@ ftxui::Element RemoteFilesModalContent::RenderEntryRow(PanelSide side, size_t in
         text(EntrySizeLabel(entry)) | dim | size(WIDTH, EQUAL, 10),
     }) | reflect(panel.boxes[index]);
 
-    if (selected) {
+    if (selected && side == active_panel_) {
         row = row |
             bgcolor(theme.modal_selected_item_bg) |
             color(theme.modal_selected_item_fg);
+    } else if (selected) {
+        row = row | underlined | color(theme.modal_text_color);
     } else {
         row = row | color(theme.modal_text_color);
     }
@@ -129,45 +123,43 @@ ftxui::Element RemoteFilesModalContent::RenderOperationRow() {
         });
     }
 
+    const bool overwrite = pending_operation_ == PendingOperation::CopyToLocalOverwrite ||
+        pending_operation_ == PendingOperation::CopyToRemoteOverwrite;
     return hbox({
-        RenderRemoteDialogInputFrame(theme, pending_input_label_, operation_input_) | size(WIDTH, EQUAL, 44),
+        RenderRemoteDialogInputFrame(theme, pending_input_label_, operation_input_) | size(WIDTH, EQUAL, overwrite ? 24 : 44),
         text(" "),
-        confirm_button_->Render(),
+        vbox({
+            text(""),
+            text(""),
+            hbox({confirm_button_->Render(), text(" "), cancel_button_->Render()}),
+            filler(),
+        }),
         text(" "),
-        cancel_button_->Render(),
+        overwrite ? vbox({text(pending_source_details_), text(pending_target_details_)}) : filler(),
     });
 }
 
 int RemoteFilesModalContent::GetCustomFooterHeight() const {
-    if (error_footer_.empty()) {
-        return 1;
-    }
-    // Count newlines plus one for the first line
-    int lines = 1;
-    for (char ch : error_footer_) {
-        if (ch == '\n') {
-            ++lines;
-        }
-    }
-    return lines;
+    return 3;
 }
 
 ftxui::Element RemoteFilesModalContent::RenderCustomFooter() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    if (error_footer_.empty()) {
-        return text(" " + status_ + " ") |
-            dim |
-            color(theme.modal_text_color);
-    }
-    Elements lines;
-    std::istringstream stream(error_footer_);
-    std::string line;
-    while (std::getline(stream, line)) {
-        lines.push_back(text(" " + line + " ") |
-            color(ftxui::Color::Red));
-    }
-    const int width = GetModalSizePreference().width - 2;
-    return vbox(std::move(lines)) |
-        size(WIDTH, EQUAL, std::max(1, width));
+    return vbox({
+        text(" " + status_.substr(0, status_.find_first_of("\r\n"))) |
+            color(status_is_error_ ? Color::Red : theme.modal_text_color),
+        separator() | color(theme.modal_border),
+        hbox({
+            copy_to_remote_button_->Render(), text(" "),
+            copy_to_local_button_->Render(), text(" "),
+            mkdir_button_->Render(), text(" "),
+            open_button_->Render(), text(" "),
+            sync_opened_button_->Render(), text(" "),
+            copy_path_button_->Render(), text(" "),
+            rename_button_->Render(), text(" "),
+            delete_button_->Render(), text(" "),
+            clear_cache_button_->Render(),
+        }),
+    });
 }

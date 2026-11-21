@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <functional>
 #include <memory>
 #include <string>
@@ -23,15 +24,14 @@ public:
     ftxui::Component GetMainComponent() override { return container_; }
     std::string GetTitle() override;
     ftxui::Element RenderTitle() override;
-    ModalSizePreference GetModalSizePreference() const override { return {82, 29}; }
+    ModalSizePreference GetModalSizePreference() const override { return {82, 32}; }
     ModalFrameStyle GetModalFrameStyle() const override {
         return ModalFrameStyle::TitleInBorder;
     }
     std::string GetFooterText() const override { return status_; }
     bool FooterTextAboveButtons() const override { return !status_.empty(); }
 
-    void Begin(std::string id, std::string title, std::string description,
-        std::string content, bool hide_text = false);
+    void Begin(const actions::ActionItem* item = nullptr);
     bool EditingExisting() const { return !id_.empty(); }
     bool Submit();
     bool HandleEvent(ftxui::Event event);
@@ -40,25 +40,33 @@ public:
 
 private:
     friend class ActionEditorModalTestAccess;
+    void SelectTab(int index);
+
     const Theme* theme_ = nullptr;
     SubmitCallback on_submit_;
     std::string id_;
     std::string title_;
-    std::string description_;
-    std::string content_;
-    bool hide_text_ = false;
+    int active_tab_ = 0;
+    std::array<std::string, 4> captions_;
+    std::array<std::string, 4> contents_;
+    std::array<bool, 4> hide_text_{};
     std::string status_;
     int title_cursor_ = 0;
-    int description_cursor_ = 0;
-    int content_cursor_ = 0;
+    std::array<int, 4> caption_cursors_{};
+    std::array<int, 4> content_cursors_{};
     ftxui::Component title_input_;
-    ftxui::Component description_input_;
-    ftxui::Component content_input_;
-    ftxui::Component hide_text_checkbox_;
+    std::array<ftxui::Component, 4> caption_inputs_;
+    std::array<ftxui::Component, 4> content_inputs_;
+    std::array<ftxui::Component, 4> hide_text_checkboxes_;
+    std::array<ftxui::Component, 4> tab_forms_;
+    std::array<ftxui::Component, 4> tab_buttons_;
+    ftxui::Component tab_button_row_;
+    ftxui::Component tab_container_;
     ftxui::Component container_;
     ftxui::Box title_clear_box_;
-    ftxui::Box description_clear_box_;
-    ftxui::Box content_clear_box_;
+    std::array<ftxui::Box, 4> caption_clear_boxes_;
+    std::array<ftxui::Box, 4> content_clear_boxes_;
+    std::array<ftxui::Box, 4> tab_boxes_;
 };
 
 class ActionEditorModal {

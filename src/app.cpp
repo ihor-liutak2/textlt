@@ -235,16 +235,16 @@ TextltApp::TextltApp()
       text_processors_modal_(
           &current_theme_,
           [this](
-              bool whole_document,
+              ProcessorTarget target,
               std::string& text,
               std::string& error) {
-              return GetTextProcessorTargetText(whole_document, text, error);
+              return GetTextProcessorTargetText(target, text, error);
           },
           [this](
-              bool whole_document,
+              ProcessorTarget target,
               const std::string& text,
               std::string& error) {
-              return ReplaceTextProcessorTargetText(whole_document, text, error);
+              return ReplaceTextProcessorTargetText(target, text, error);
           }),
       remote_connections_modal_(
           &current_theme_,
@@ -464,6 +464,10 @@ TextltApp::TextltApp()
     InitializeMenuShortcuts();
     InitializeTextShortcuts();
     shortcut_registry_.SetOverrides(shortcut_store_.Load());
+    menu_bar_->SetShortcutProvider([this](const std::string& command_id) {
+        return shortcut_registry_.EffectiveShortcut(ShortcutContext::Menu, command_id);
+    });
+    menu_bar_->RefreshShortcutLabels();
     InitializeProjects();
 
     notes_workspace_component_ = ftxui::Make<notes::NotesWorkspaceComponent>(

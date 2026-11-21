@@ -50,7 +50,7 @@ std::string RemoteFilesModalContent::EntrySizeLabel(const RemoteEntry& entry) {
     if (entry.type == RemoteEntryType::Directory) {
         return "";
     }
-    return FileManager::FormatFileSize(entry.size);
+    return entry.size ? FileManager::FormatFileSize(*entry.size) : "Unknown";
 }
 
 std::string RemoteFilesModalContent::TrimForDisplay(const std::string& value, size_t width) {
@@ -69,13 +69,6 @@ std::string RemoteFilesModalContent::TrimForDisplay(const std::string& value, si
 
 bool RemoteFilesModalContent::IsParentEntry(const RemoteEntry& entry) {
     return entry.name == "..";
-}
-
-bool RemoteFilesModalContent::PanelContainsName(PanelSide side, const std::string& name) const {
-    const PanelState& panel = Panel(side);
-    return std::any_of(panel.entries.begin(), panel.entries.end(), [&name](const RemoteEntry& entry) {
-        return !IsParentEntry(entry) && entry.name == name;
-    });
 }
 
 std::string RemoteFilesModalContent::LocalPathKey(const std::filesystem::path& path) {
@@ -144,6 +137,9 @@ std::string RemoteFilesModalContent::LastCachedLabel() const {
 void RemoteFilesModalContent::SetStatus(std::string status, bool is_error) {
     status_ = std::move(status);
     status_is_error_ = is_error;
+    if (is_error) {
+        error_footer_ = status_;
+    }
 }
 
 void RemoteFilesModalContent::SetPanelStatus(PanelSide side, std::string status, bool is_error) {
@@ -151,7 +147,7 @@ void RemoteFilesModalContent::SetPanelStatus(PanelSide side, std::string status,
     panel.status = std::move(status);
     panel.status_is_error = is_error;
     if (is_error) {
-        error_footer_ = panel.status;
+        SetStatus(panel.status, true);
     } else if (side == PanelSide::Remote) {
         error_footer_.clear();
     }

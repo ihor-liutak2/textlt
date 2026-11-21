@@ -3,6 +3,7 @@
 #include <array>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -19,14 +20,16 @@
 
 namespace textlt {
 
+enum class ProcessorTarget { Selection, Paragraph, Document };
+
 class TextProcessorsModalContent : public IModalContent {
 public:
     using TargetTextProvider = std::function<bool(
-        bool whole_document,
+        ProcessorTarget target,
         std::string& text,
         std::string& error)>;
     using ReplaceTargetCallback = std::function<bool(
-        bool whole_document,
+        ProcessorTarget target,
         const std::string& text,
         std::string& error)>;
     using CloseCallback = std::function<void()>;
@@ -38,18 +41,23 @@ public:
         CloseCallback on_close);
 
     ftxui::Element Render() override;
-    ftxui::Component GetMainComponent() override { return container_; }
-    std::string GetTitle() override { return "Text Processors"; }
+    ftxui::Component GetMainComponent() override { return quick_mode_ ? quick_controls_ : container_; }
+    std::string GetTitle() override { return quick_mode_ ? "Quick Text Formatting" : "Text Processors"; }
     ftxui::Element RenderTitle() override;
-    ModalSizePreference GetModalSizePreference() const override { return {104, 34}; }
+    ModalSizePreference GetModalSizePreference() const override;
     ModalFrameStyle GetModalFrameStyle() const override {
         return ModalFrameStyle::TitleInBorder;
     }
-    std::string GetFooterText() const override { return ""; }
+    std::string GetFooterText() const override { return quick_mode_ ? status_ : ""; }
+    bool FooterTextAboveButtons() const override { return quick_mode_; }
 
     void SetTheme(const Theme* theme) { theme_ = theme; }
     void Open();
     void Close();
+    void OpenQuick(bool use_paragraph);
+    void AddToQuickPanel();
+    void PromptRemoveQuick();
+    bool HandleQuickKey(ftxui::Event event);
     void Reload();
     void ApplySelected();
     void TogglePinned();
@@ -95,6 +103,32 @@ private:
     std::string NormalizedParamType(const std::string& type) const;
     std::string ParamHintText() const;
 
+    struct QuickCommand {
+        std::string id;
+        std::string name;
+        std::unordered_map<std::string, std::string> params;
+        int repeat = 1;
+    };
+    using QuickSlots = std::array<std::optional<QuickCommand>, 10>;
+    void BuildQuickControls();
+    bool LoadQuickSlots();
+    bool SaveQuickSlots(const QuickSlots& slots);
+    void RefreshQuickLabels();
+    void RunQuick(int index);
+    void RemoveQuick();
+    ftxui::Element RenderQuick();
+    void ApplyConfigured(const TextParserDefinition& parser,
+        const std::unordered_map<std::string, std::string>& params, int repeat_count, ProcessorTarget target);
+    QuickSlots quick_slots_;
+    std::vector<std::string> quick_labels_;
+    int quick_selected_ = 0;
+    bool quick_mode_ = false;
+    ProcessorTarget quick_target_ = ProcessorTarget::Selection;
+    bool removing_ = false;
+    std::string remove_number_;
+    ftxui::Component quick_menu_;
+    ftxui::Component remove_input_;
+    ftxui::Component quick_controls_;
     const Theme* theme_ = nullptr;
     TargetTextProvider target_text_provider_;
     ReplaceTargetCallback replace_target_text_;
@@ -145,11 +179,14 @@ public:
     ftxui::Component View() const;
 
     void Open();
+    void OpenQuick(bool use_paragraph);
     void Close();
     bool IsOpen() const;
     bool OnEvent(ftxui::Event event);
 
 private:
+    void SetProcessorFooter();
+    ftxui::Component view_;
     bool open_ = false;
     const Theme* theme_ = nullptr;
 

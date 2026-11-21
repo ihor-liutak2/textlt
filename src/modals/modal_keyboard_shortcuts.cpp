@@ -55,10 +55,10 @@ KeyboardShortcutsModalContent::KeyboardShortcutsModalContent(
     key_menu_ = ftxui::Menu(&key_labels_, &selected_key_);
     action_menu_ = ftxui::Menu(&action_labels_, &selected_action_);
 
-    apply_button_ = MakeTextButton("Apply", [this] { ApplySelectedShortcut(); });
-    reset_button_ = MakeTextButton("Reset", [this] { ResetSelectedShortcut(); });
-    reset_all_button_ = MakeTextButton("Reset All", [this] { ResetAllShortcuts(); });
-    close_button_ = MakeTextButton("Close", [this] {
+    apply_button_ = MakeFooterButton("Apply", [this] { ApplySelectedShortcut(); });
+    reset_button_ = MakeFooterButton("Reset", [this] { ResetSelectedShortcut(); });
+    reset_all_button_ = MakeFooterButton("Reset All", [this] { ResetAllShortcuts(); });
+    close_button_ = MakeFooterButton("Close", [this] {
         if (close_callback_) {
             close_callback_();
         }
@@ -91,6 +91,20 @@ ftxui::Component KeyboardShortcutsModalContent::MakeTextButton(
             (state.label == "Menu shortcuts" && tab_index_ == 0) ||
             (state.label == "Text shortcuts" && tab_index_ == 1);
         return TextButtonElement(state.label, theme, state.focused || state.active, selected);
+    };
+    return ftxui::Button(std::move(option));
+}
+
+ftxui::Component KeyboardShortcutsModalContent::MakeFooterButton(
+    std::string label,
+    std::function<void()> on_click) {
+    ButtonSpec spec = ButtonSpecFromLabel(std::move(label));
+    ftxui::ButtonOption option = ftxui::ButtonOption::Simple();
+    option.label = ButtonCaptionText(spec);
+    option.on_click = std::move(on_click);
+    option.transform = [this, spec = std::move(spec)](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        return RenderModalFlatButton(theme, spec, state.focused || state.active);
     };
     return ftxui::Button(std::move(option));
 }
@@ -513,10 +527,29 @@ ftxui::Element KeyboardShortcutsModalContent::RenderPicker() const {
     }) | border | size(WIDTH, EQUAL, 42);
 }
 
-ftxui::Element KeyboardShortcutsModalContent::RenderHelpLine() const {
+ftxui::Element KeyboardShortcutsModalContent::RenderCustomFooter() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    return text(status_) | color(status_is_error_ ? ftxui::Color::Red : theme.modal_text_color);
+    Elements actions;
+    const auto add = [&actions](const ftxui::Component& button) {
+        if (!actions.empty()) {
+            actions.push_back(text(" "));
+        }
+        actions.push_back(button->Render());
+    };
+
+    add(apply_button_);
+    add(reset_button_);
+    add(reset_all_button_);
+    add(close_button_);
+
+    return vbox({
+        text(" " + status_ + " ") |
+            dim |
+            color(status_is_error_ ? Color::Red : theme.modal_text_color),
+        separator() | color(theme.modal_border),
+        hbox(std::move(actions)),
+    });
 }
 
 ftxui::Element KeyboardShortcutsModalContent::Render() {
@@ -531,17 +564,6 @@ ftxui::Element KeyboardShortcutsModalContent::Render() {
             separator(),
             RenderPicker(),
         }),
-        separator(),
-        hbox({
-            apply_button_->Render(),
-            text(" "),
-            reset_button_->Render(),
-            text(" "),
-            reset_all_button_->Render(),
-            filler(),
-            close_button_->Render(),
-        }),
-        RenderHelpLine(),
     }) | color(theme.modal_text_color);
 }
 

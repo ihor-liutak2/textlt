@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -47,7 +48,7 @@ public:
     void EditAction();
     void DeleteAction();
     void MoveAction(int delta);
-    void CopySelectedAction();
+    void CopySelectedAction(int tab_index = 0);
     void CopyAllActions();
     bool HasSelectedPage() const;
     bool ImportActions(std::vector<ActionItem> items, std::string& error);
@@ -55,7 +56,8 @@ public:
     // Structured action-list search used by the shared Find/Replace sidebar.
     struct ActionSearchResult {
         std::string item_id;
-        int field = 0; // 0 = title, 1 = description, 2 = content
+        ActionField field = ActionField::Title;
+        int tab_index = 0;
         size_t byte = 0;
         size_t length = 0;
         std::string label;
@@ -91,11 +93,13 @@ private:
     void AfterMutation(const std::string& status);
     ftxui::Element RenderNavigator();
     ftxui::Element RenderItems();
-    ftxui::Element RenderItemsScrollbar(size_t visible_rows, size_t total_items,
-        size_t visible_items, size_t scroll, size_t max_scroll, const Theme& theme);
     void UpdateItemsVisibleCountFromLayout();
     void ScrollItems(int delta);
     ftxui::Element RenderDialog();
+    ftxui::Element RenderItemsScrollbar(size_t visible_rows,
+        size_t total_items, size_t visible_items, size_t scroll,
+        size_t max_scroll, const Theme& theme,
+        const std::shared_ptr<std::vector<int>>& header_rows);
     ftxui::Component ActiveChild() override;
 
     const Theme* theme_;
@@ -132,7 +136,7 @@ private:
     std::vector<ftxui::Box> group_boxes_;
     std::vector<ftxui::Box> page_boxes_;
     std::vector<ftxui::Box> item_boxes_;
-    std::vector<ftxui::Box> copy_boxes_;
+    std::vector<std::array<ftxui::Box, 4>> copy_boxes_;
     bool pages_view_known_ = false;
     bool items_view_known_ = false;
     size_t groups_visible_count_ = 0;

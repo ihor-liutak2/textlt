@@ -1,6 +1,7 @@
 #include "modal_text_processors.hpp"
 
 #include "app_resources.hpp"
+#include "json_utils.hpp"
 
 #include <algorithm>
 #include <array>
@@ -204,6 +205,7 @@ TextProcessorsModalContent::TextProcessorsModalContent(
     controls.insert(controls.end(), param_inputs_.begin(), param_inputs_.end());
 
     container_ = ftxui::Container::Vertical(controls);
+    BuildQuickControls();
 }
 
 ftxui::Component TextProcessorsModalContent::MakeTextButton(
@@ -221,6 +223,7 @@ ftxui::Component TextProcessorsModalContent::MakeTextButton(
     return ftxui::Button(option);
 }
 
+#include "modal_text_processors/quick.cpp"
 #include "modal_text_processors/behavior.cpp"
 #include "modal_text_processors/render.cpp"
 #include "modal_text_processors/display_utils.cpp"

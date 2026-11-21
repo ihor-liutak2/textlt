@@ -1,8 +1,15 @@
+ModalSizePreference TextProcessorsModalContent::GetModalSizePreference() const {
+    if (!quick_mode_) return {104, 34};
+    if (!report_text_.empty()) return {80, 26};
+    return {80, removing_ ? 20 : 19};
+}
+
 ftxui::Element TextProcessorsModalContent::RenderTitle() {
     return ftxui::text(GetTitle());
 }
 
 ftxui::Element TextProcessorsModalContent::Render() {
+    if (quick_mode_) return RenderQuick();
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 

@@ -105,7 +105,8 @@ void ModalWindow::RebuildChildren() {
     }
 }
 
-void ModalWindow::SetFooterButtons(std::vector<FooterButton> buttons, size_t left_aligned_count) {
+void ModalWindow::SetFooterButtons(std::vector<FooterButton> buttons, size_t left_aligned_count, bool separate_status) {
+    separate_footer_status_ = separate_status;
     footer_buttons_.clear();
     footer_button_enabled_.clear();
     const size_t count = std::min(buttons.size(), kMaximumFooterButtons);
@@ -264,13 +265,15 @@ ftxui::Element ModalWindow::RenderFooter(const Theme& theme) {
     };
 
     if (content_ && content_->FooterTextAboveButtons() && !footer_text.empty()) {
-        return vbox({
+        Elements rows = {
             footer_style(hbox({
                 text(" " + footer_text + " ") | dim | color(theme.modal_text_color),
                 filler(),
             })),
-            footer_style(hbox(std::move(button_row))),
-        });
+        };
+        if (separate_footer_status_) rows.push_back(separator() | color(theme.modal_border));
+        rows.push_back(footer_style(hbox(std::move(button_row))));
+        return vbox(std::move(rows));
     }
 
     Elements row;
@@ -320,7 +323,7 @@ int ModalWindow::BodyHeight() const {
         if (show_footer_) {
             used_rows += 1 + (content_ && content_->HasCustomFooter()
                 ? std::max(1, content_->GetCustomFooterHeight())
-                : content_ && content_->FooterTextAboveButtons() ? 2 : 1);
+                : content_ && content_->FooterTextAboveButtons() ? 2 + int(separate_footer_status_) : 1);
         }
         return std::max(1, modal_height - used_rows);
     }

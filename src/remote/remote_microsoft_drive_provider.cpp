@@ -141,19 +141,21 @@ std::vector<std::string> SplitRemotePath(const std::string& path) {
     return parts;
 }
 
-std::uintmax_t GraphEntrySize(const Json& entry) {
+std::optional<std::uintmax_t> GraphEntrySize(const Json& entry) {
     const auto iter = entry.find("size");
     if (iter == entry.end()) {
-        return 0;
+        return std::nullopt;
     }
     if (iter->is_number_unsigned()) {
         return static_cast<std::uintmax_t>(iter->get<unsigned long long>());
     }
     if (iter->is_number_integer()) {
         const long long value = iter->get<long long>();
-        return value > 0 ? static_cast<std::uintmax_t>(value) : 0;
+        if (value >= 0) {
+            return static_cast<std::uintmax_t>(value);
+        }
     }
-    return 0;
+    return std::nullopt;
 }
 
 RemoteMicrosoftDriveProvider::DriveItem ParseDriveItem(const Json& object) {
@@ -276,7 +278,7 @@ bool RemoteMicrosoftDriveProvider::List(
     }
 
     const std::string display_path = MicrosoftRemotePathFromDisplayPath(path.empty() ? config_.remote_root : path);
-    std::string url = ChildrenUrlForPath(display_path) + "?$select=id,name,size,file,folder&$top=999";
+    std::string url = ChildrenUrlForPath(display_path) + "?$select=id,name,size,file,folder,lastModifiedDateTime&$top=999";
     for (;;) {
         HttpResult result = HttpRequest("GET", url, access_token_, token_type_);
         if (!result.ok) {
@@ -305,6 +307,7 @@ bool RemoteMicrosoftDriveProvider::List(
                 entry.path = JoinRemotePath(display_path, item.name);
                 entry.type = MicrosoftEntryType(item);
                 entry.size = item.size;
+                entry.modified = JsonString(object, "lastModifiedDateTime");
                 entry.hidden = !entry.name.empty() && entry.name.front() == '.';
                 entries.push_back(std::move(entry));
             }

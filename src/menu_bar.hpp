@@ -14,10 +14,12 @@ namespace textlt {
 class MenuBarComponent : public ftxui::ComponentBase {
 public:
     using ActionCallback = std::function<void(int menu_index, int item_index)>;
+    using ShortcutProvider = std::function<std::string(const std::string& command_id)>;
 
     MenuBarComponent(
         ActionCallback on_action,
-        const Theme* theme = nullptr);
+        const Theme* theme = nullptr,
+        ShortcutProvider shortcut_provider = {});
 
     ftxui::Element OnRender() override;
     ftxui::Element RenderDropdown();
@@ -25,6 +27,8 @@ public:
     bool Focusable() const override { return true; }
 
     void SetTheme(const Theme* theme) { theme_ = theme; }
+    void SetShortcutProvider(ShortcutProvider provider);
+    void RefreshShortcutLabels();
     void SetNotesMenuVisible(bool visible);
     void SetActionsMenuVisible(bool visible);
     void SetNotesTrashSelected(bool trash_selected);
@@ -50,6 +54,7 @@ private:
         std::string label;
         std::string command_id;
         bool separator = false;
+        std::string base_label;
     };
 
     void ActivateTopMenu();
@@ -57,6 +62,7 @@ private:
     void RefreshCurrentDropdownEntries();
     void RebuildDropdownComponents();
     bool SetItemLabel(const std::string& command_id, std::string label);
+    std::string ComposeLabel(const DropdownItem& item) const;
     int MenuIndex(const std::string& label) const;
     bool IsCurrentSeparator(int item_index) const;
     int DropdownX() const;
@@ -69,6 +75,7 @@ private:
     std::vector<std::string> current_dropdown_command_ids_;
     std::vector<bool> current_dropdown_separators_;
     ActionCallback on_action_;
+    ShortcutProvider shortcut_provider_;
     const Theme* theme_ = nullptr;
 
     int selected_menu_item_ = 0;

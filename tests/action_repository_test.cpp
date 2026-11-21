@@ -2,8 +2,11 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 
 #include "actions/action_repository.hpp"
+#include "actions/action_serializer.hpp"
+#include "json_utils.hpp"
 
 using namespace textlt::actions;
 
@@ -43,7 +46,7 @@ int main() {
     ActionRepository reloaded(path); Check(reloaded.Load(error));
     const auto& loaded = reloaded.Data().groups.front().pages.front();
     Check(loaded.items.front().title == "Edited");
-    Check(loaded.items.back().content == "echo Привіт\r\n第二行");
+    Check(loaded.items.back().tabs.front().content == "echo Привіт\r\n第二行");
 
     Check(reloaded.AppendItems(group, page, {
         {"", "database.host", "", "localhost"},
@@ -51,16 +54,16 @@ int main() {
     }, error));
     const auto& imported = reloaded.Data().groups.front().pages.front().items;
     Check(imported.size() == 4);
-    Check(imported[2].title == "database.host" && imported[2].content == "localhost");
-    Check(imported[3].title == "database.port" && imported[3].content == "5432");
+    Check(imported[2].title == "database.host" && imported[2].tabs.front().content == "localhost");
+    Check(imported[3].title == "database.port" && imported[3].tabs.front().content == "5432");
 
     // Find/Replace applies grouped text edits in one repository commit, with
     // descending offsets preserving positions for repeated matches.
     const auto revision_before_replace = reloaded.Revision();
     Check(reloaded.ApplyTextEdits(group, page, {
-        {first, 2, 5, std::string("Привіт").size(), "Hello"},
-        {first, 2, 0, 4, "run"},
-        {first, 0, 0, std::string("Unicode").size(), "Localized"},
+        {first, 0, ActionField::Content, 5, std::string("Привіт").size(), "Hello"},
+        {first, 0, ActionField::Content, 0, 4, "run"},
+        {first, 0, ActionField::Title, 0, std::string("Unicode").size(), "Localized"},
     }, error));
     Check(reloaded.Revision() == revision_before_replace + 1);
     const auto& replaced = reloaded.Data().groups.front().pages.front().items;
@@ -68,7 +71,7 @@ int main() {
         [&](const ActionItem& item) { return item.id == first; });
     Check(replaced_first != replaced.end());
     Check(replaced_first->title == "Localized");
-    Check(replaced_first->content == "run Hello\r\n第二行");
+    Check(replaced_first->tabs.front().content == "run Hello\r\n第二行");
 
     const ActionsDocument before = reloaded.Data();
     ActionRepository failing(path, [](const auto&, const auto&, std::string& message) {
@@ -109,7 +112,8 @@ int main() {
         for (const auto& page_entry : entry.pages)
             for (const auto& item_entry : page_entry.items)
                 if (item_entry.id == hidden)
-                    hidden_ok = item_entry.hide_text && item_entry.content == "token";
+                    hidden_ok = item_entry.tabs.front().hide_text &&
+                        item_entry.tabs.front().content == "token";
     Check(hidden_ok);
 
     // Merge: source pages move into target; clashing page names are renumbered
@@ -136,8 +140,8 @@ int main() {
         bool main_has_b = false, main1_has_a = false;
         for (const auto& pg : merged.pages) {
             for (const auto& item : pg.items) {
-                if (pg.name == "Main" && item.content == "two") main_has_b = true;
-                if (pg.name == "Main (1)" && item.content == "one") main1_has_a = true;
+                if (pg.name == "Main" && item.tabs.front().content == "two") main_has_b = true;
+                if (pg.name == "Main (1)" && item.tabs.front().content == "one") main1_has_a = true;
             }
         }
         Check(main_has_b && main1_has_a);
@@ -145,6 +149,73 @@ int main() {
         // Merging into itself fails.
         Check(!repo.MergeGroups(g2, g2, error));
         std::filesystem::remove_all(merge_root);
+    }
+
+    // A legacy file with no schema_version is migrated immediately, with its
+    // original bytes retained in a one-time backup.
+    {
+        const auto migration_root = std::filesystem::temp_directory_path() /
+            ("textlt-actions-migration-" + GenerateActionId());
+        const auto migration_path = migration_root / "actions.json";
+        std::filesystem::create_directories(migration_root);
+        {
+            std::ofstream legacy(migration_path, std::ios::binary);
+            legacy << R"({
+                "format": "textlt-actions",
+                "groups": [{"id":"g","name":"Legacy","pages":[
+                    {"id":"p","name":"Commands","items":[
+                        {"id":"i","title":"Legacy action","description":"Old caption","content":"legacy body","hide_text":true}
+                    ]}
+                ]}]
+            })";
+        }
+        const auto backup_path = std::filesystem::path(
+            migration_path.string() + ".v1.bak");
+        ActionRepository migrated_repo(migration_path);
+        Check(migrated_repo.Load(error));
+        Check(migrated_repo.LastWarning().empty());
+        Check(std::filesystem::exists(backup_path));
+        const auto& migrated_item =
+            migrated_repo.Data().groups.front().pages.front().items.front();
+        Check(migrated_repo.Data().schema_version == 2);
+        Check(migrated_item.tabs.size() == 1);
+        Check(migrated_item.tabs.front().caption == "Old caption");
+        Check(migrated_item.tabs.front().content == "legacy body");
+        Check(migrated_item.tabs.front().hide_text);
+        std::ifstream converted_file(migration_path, std::ios::binary);
+        const textlt::Json converted_json = textlt::Json::parse(converted_file);
+        Check(converted_json["schema_version"] == 2);
+        Check(converted_json["groups"][0]["pages"][0]["items"][0]["tabs"].size() == 1);
+
+        ActionsDocument two_tab_document;
+        two_tab_document.groups.push_back({"g2", "Four tabs", std::nullopt,
+            false, {{"p2", "Page", {ActionItem::WithTabs("i2", "Deploy", {
+                {"Debug", "make debug", false},
+                {"Release", "make release", true},
+                {"Test", "make test", false},
+                {"Prod", "make prod", false},
+            })}}}});
+        const auto two_tab_path = migration_root / "four-tabs.json";
+        Check(ActionSerializer::Save(two_tab_path, two_tab_document, error));
+        ActionsDocument two_tab_loaded;
+        Check(ActionSerializer::Load(two_tab_path, two_tab_loaded, error));
+        const auto& two_tab_item = two_tab_loaded.groups.front().pages.front().items.front();
+        Check(two_tab_item.tabs.size() == 4);
+        Check(two_tab_item.tabs[1].caption == "Release");
+        Check(two_tab_item.tabs[1].content == "make release");
+        Check(two_tab_item.tabs[1].hide_text);
+        Check(two_tab_item.tabs[3].caption == "Prod");
+        ActionRepository two_tab_repo(two_tab_path);
+        Check(two_tab_repo.Load(error));
+        Check(two_tab_repo.ApplyTextEdits("g2", "p2", {
+            {"i2", 1, ActionField::Caption, 0, 7, "Production"},
+            {"i2", 1, ActionField::Content, 5, 7, "production"},
+        }, error));
+        const auto& edited_tabs = two_tab_repo.Data().groups.front().pages.front().items.front().tabs;
+        Check(edited_tabs[0].caption == "Debug");
+        Check(edited_tabs[1].caption == "Production");
+        Check(edited_tabs[1].content == "make production");
+        std::filesystem::remove_all(migration_root);
     }
 
     std::filesystem::remove_all(root);

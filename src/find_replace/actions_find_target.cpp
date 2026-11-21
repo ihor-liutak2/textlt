@@ -40,8 +40,9 @@ std::vector<FindResult> ActionsFindTarget::Find(const std::string& query,
     for (const auto& match : actions->SearchActions(query, options.match_case,
              options.whole_word, limit, truncated)) {
         FindResult result;
-        result.key = match.item_id + ":" + std::to_string(match.field) + ":" +
-            std::to_string(match.byte);
+        result.key = match.item_id + ":" +
+            std::to_string(static_cast<int>(match.field)) + ":" +
+            std::to_string(match.tab_index) + ":" + std::to_string(match.byte);
         result.label = match.label;
         result.preview = match.preview;
         result.preview_match_start = match.preview_match_start;

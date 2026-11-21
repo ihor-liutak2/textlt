@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace textlt {
@@ -16,8 +17,9 @@ struct RemoteEntry {
     std::string path;
     std::string name;
     RemoteEntryType type = RemoteEntryType::Other;
-    std::uintmax_t size = 0;
+    std::optional<std::uintmax_t> size;
     bool hidden = false;
+    std::string modified;
 };
 
 } // namespace textlt

@@ -10,6 +10,14 @@ TextProcessorsModal::TextProcessorsModal(
         [this] { Close(); });
 
     modal_ = std::make_shared<ModalWindow>(content_, theme_, [this] { Close(); });
+    view_ = ftxui::CatchEvent(modal_, [this](ftxui::Event event) {
+        return content_->HandleQuickKey(std::move(event));
+    });
+    modal_->SetBodyFrameScrolling(false);
+    SetProcessorFooter();
+}
+
+void TextProcessorsModal::SetProcessorFooter() {
     modal_->SetFooterButtons({
         {"Apply", [this] {
             if (content_) {
@@ -26,13 +34,13 @@ TextProcessorsModal::TextProcessorsModal(
                 content_->TogglePinned();
             }
         }, ButtonRole::Cancel},
+        {"Add to Quick Panel", [this] { content_->AddToQuickPanel(); }},
         {"Close", [this] { Close(); }},
     });
-    modal_->SetBodyFrameScrolling(false);
 }
 
 ftxui::Component TextProcessorsModal::View() const {
-    return modal_;
+    return view_;
 }
 
 void TextProcessorsModal::Open() {
@@ -40,11 +48,22 @@ void TextProcessorsModal::Open() {
     if (content_) {
         content_->SetTheme(theme_);
         content_->Open();
+        SetProcessorFooter();
         content_->GetMainComponent()->TakeFocus();
     }
     if (modal_) {
         modal_->SetTheme(theme_);
     }
+}
+
+void TextProcessorsModal::OpenQuick(bool use_paragraph) {
+    open_ = true;
+    content_->OpenQuick(use_paragraph);
+    modal_->SetFooterButtons({
+        {"Remove", [this] { content_->PromptRemoveQuick(); }, ButtonRole::Danger},
+        {"Close", [this] { Close(); }},
+    }, 1, true);
+    content_->GetMainComponent()->TakeFocus();
 }
 
 void TextProcessorsModal::Close() {
@@ -63,6 +82,7 @@ bool TextProcessorsModal::OnEvent(ftxui::Event event) {
         return false;
     }
 
+    if (content_->HandleQuickKey(event)) return true;
     if (event == ftxui::Event::Escape) {
         Close();
         return true;

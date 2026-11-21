@@ -17,12 +17,17 @@ namespace textlt {
 class ActionEditorModalTestAccess {
 public:
     static actions::ActionItem Draft(const ActionEditorModal& modal) {
-        return {
-            modal.content_->id_,
-            modal.content_->title_,
-            modal.content_->description_,
-            modal.content_->content_,
-        };
+        return actions::ActionItem::WithTabs(modal.content_->id_,
+            modal.content_->title_, {
+                {modal.content_->captions_[0], modal.content_->contents_[0],
+                    modal.content_->hide_text_[0]},
+                {modal.content_->captions_[1], modal.content_->contents_[1],
+                    modal.content_->hide_text_[1]},
+                {modal.content_->captions_[2], modal.content_->contents_[2],
+                    modal.content_->hide_text_[2]},
+                {modal.content_->captions_[3], modal.content_->contents_[3],
+                    modal.content_->hide_text_[3]},
+            });
     }
     static bool TitleFocused(const ActionEditorModal& modal) {
         return modal.content_->title_input_->Focused();
@@ -44,10 +49,30 @@ public:
         return ClickClear(modal, modal.content_->title_clear_box_);
     }
     static bool ClearDescription(ActionEditorModal& modal) {
-        return ClickClear(modal, modal.content_->description_clear_box_);
+        return ClickClear(modal, modal.content_->caption_clear_boxes_[
+            static_cast<size_t>(modal.content_->active_tab_)]);
     }
     static bool ClearContent(ActionEditorModal& modal) {
-        return ClickClear(modal, modal.content_->content_clear_box_);
+        return ClickClear(modal, modal.content_->content_clear_boxes_[
+            static_cast<size_t>(modal.content_->active_tab_)]);
+    }
+    static void FocusCaption(ActionEditorModal& modal) {
+        modal.content_->caption_inputs_[static_cast<size_t>(
+            modal.content_->active_tab_)]->TakeFocus();
+    }
+    static void FocusContent(ActionEditorModal& modal) {
+        modal.content_->content_inputs_[static_cast<size_t>(
+            modal.content_->active_tab_)]->TakeFocus();
+    }
+    static void SelectTab(ActionEditorModal& modal, int tab) {
+        modal.content_->SelectTab(tab);
+    }
+    static bool ContentFocused(const ActionEditorModal& modal) {
+        return modal.content_->content_inputs_[static_cast<size_t>(
+            modal.content_->active_tab_)]->Focused();
+    }
+    static bool Submit(ActionEditorModal& modal) {
+        return modal.content_->Submit();
     }
 };
 } // namespace textlt
@@ -95,11 +120,74 @@ public:
         const ftxui::Box& box = workspace.item_boxes_.front();
         return box.y_max - box.y_min + 1;
     }
+    static bool FirstItemFillsCardWidth(
+        const ActionsWorkspaceComponent& workspace) {
+        if (workspace.item_boxes_.empty()) return false;
+        const ftxui::Box& item = workspace.item_boxes_.front();
+        return item.x_max >= workspace.items_view_box_.x_max - 3;
+    }
+    static bool FirstActionMarkerAndHeaderStyleAreCorrect(
+        ActionsWorkspaceComponent& workspace) {
+        auto screen = ftxui::Screen::Create(
+            ftxui::Dimension::Fixed(100), ftxui::Dimension::Fixed(24));
+        ftxui::Render(screen, workspace.Render());
+        if (workspace.item_boxes_.empty()) return false;
+        const ftxui::Box& item = workspace.item_boxes_.front();
+        const Theme& theme = FallbackTheme();
+        if (screen.CellAt(item.x_min + 1, item.y_min).background_color !=
+            theme.modal_selected_item_bg) return false;
+        if (screen.CellAt(item.x_min + 1, item.y_min + 1).background_color ==
+            theme.modal_selected_item_bg) return false;
+        const ftxui::Box& scrollbar = workspace.items_scrollbar_box_;
+        if (!scrollbar.Contain(scrollbar.x_min, item.y_min) ||
+            screen.CellAt(scrollbar.x_min, item.y_min).background_color !=
+                theme.modal_selected_item_bg) return false;
+        for (int y = item.y_min; y <= item.y_max; ++y) {
+            for (int x = item.x_max - 1; x <= item.x_max; ++x) {
+                const ftxui::Cell& marker = screen.CellAt(x, y);
+                if (marker.character != "█" ||
+                    marker.foreground_color != theme.modal_accent) return false;
+                if (y == item.y_min &&
+                    marker.background_color != theme.modal_selected_item_bg) return false;
+            }
+        }
+        return true;
+    }
     static bool FirstCopyButtonVisible(const ActionsWorkspaceComponent& workspace) {
         if (workspace.copy_boxes_.empty()) return false;
-        const ftxui::Box& box = workspace.copy_boxes_.front();
+        const ftxui::Box& box = workspace.copy_boxes_.front()[0];
         return workspace.items_box_.Contain(box.x_min, box.y_min) &&
             workspace.items_box_.Contain(box.x_max, box.y_max);
+    }
+    static size_t FirstActionCopyButtonCount(
+        const ActionsWorkspaceComponent& workspace) {
+        if (workspace.copy_boxes_.empty()) return 0;
+        size_t count = 0;
+        for (const ftxui::Box& box : workspace.copy_boxes_.front())
+            if (!box.IsEmpty()) ++count;
+        return count;
+    }
+    static bool FirstActionCopyButtonsEqualWidth(
+        const ActionsWorkspaceComponent& workspace) {
+        if (workspace.copy_boxes_.empty()) return false;
+        const auto& boxes = workspace.copy_boxes_.front();
+        const int width = boxes[0].x_max - boxes[0].x_min + 1;
+        for (const ftxui::Box& box : boxes) {
+            if (box.IsEmpty() || box.x_max - box.x_min + 1 != width) return false;
+        }
+        return true;
+    }
+    static bool ClickFirstActionCopyButton(
+        ActionsWorkspaceComponent& workspace, size_t tab_index) {
+        if (workspace.copy_boxes_.empty() || tab_index >= 4) return false;
+        const ftxui::Box box = workspace.copy_boxes_.front()[tab_index];
+        if (box.IsEmpty()) return false;
+        ftxui::Mouse mouse;
+        mouse.button = ftxui::Mouse::Left;
+        mouse.motion = ftxui::Mouse::Pressed;
+        mouse.x = (box.x_min + box.x_max) / 2;
+        mouse.y = (box.y_min + box.y_max) / 2;
+        return workspace.OnEvent(ftxui::Event::Mouse("", mouse));
     }
     static size_t ItemScroll(const ActionsWorkspaceComponent& workspace) {
         return workspace.item_scroll_;
@@ -137,8 +225,12 @@ public:
     } while (false)
 
 int main() {
+    ActionItem submitted;
     textlt::ActionEditorModal editor(nullptr,
-        [](const ActionItem&, std::string&) { return true; });
+        [&](const ActionItem& item, std::string&) {
+            submitted = item;
+            return true;
+        });
     editor.Open();
     Check(textlt::ActionEditorModalTestAccess::TitleFocused(editor));
     Check(editor.OnEvent(ftxui::Event::Character("Build")));
@@ -151,24 +243,53 @@ int main() {
     Check(textlt::ActionEditorModalTestAccess::Draft(editor).title.empty());
     Check(textlt::ActionEditorModalTestAccess::TitleFocused(editor));
     Check(editor.OnEvent(ftxui::Event::Character("Build")));
-    Check(editor.OnEvent(ftxui::Event::Tab));
-    Check(editor.OnEvent(ftxui::Event::Character("Description")));
-    Check(textlt::ActionEditorModalTestAccess::Draft(editor).description == "Description");
+    textlt::ActionEditorModalTestAccess::FocusCaption(editor);
+    Check(editor.OnEvent(ftxui::Event::Character(std::string(80, 'C'))));
+    Check(textlt::ActionEditorModalTestAccess::Draft(editor).tabs[0].caption.size() ==
+        kActionCaptionCharacterLimit);
     textlt::ActionEditorModalTestAccess::Render(editor);
     Check(textlt::ActionEditorModalTestAccess::ClearDescription(editor));
-    Check(textlt::ActionEditorModalTestAccess::Draft(editor).description.empty());
     Check(editor.OnEvent(ftxui::Event::Character("Description")));
-    Check(editor.OnEvent(ftxui::Event::Tab));
+    Check(textlt::ActionEditorModalTestAccess::Draft(editor).tabs[0].caption == "Description");
+    textlt::ActionEditorModalTestAccess::Render(editor);
+    Check(textlt::ActionEditorModalTestAccess::ClearDescription(editor));
+    Check(textlt::ActionEditorModalTestAccess::Draft(editor).tabs[0].caption.empty());
+    Check(editor.OnEvent(ftxui::Event::Character("Description")));
+    textlt::ActionEditorModalTestAccess::FocusContent(editor);
     Check(editor.OnEvent(ftxui::Event::Character("echo Привіт")));
     Check(editor.OnEvent(ftxui::Event::Return));
     Check(editor.OnEvent(ftxui::Event::Character("第二行")));
-    Check(textlt::ActionEditorModalTestAccess::Draft(editor).content ==
+    Check(textlt::ActionEditorModalTestAccess::Draft(editor).tabs[0].content ==
         "echo Привіт\n第二行");
     textlt::ActionEditorModalTestAccess::Render(editor);
     Check(textlt::ActionEditorModalTestAccess::ClearContent(editor));
-    Check(textlt::ActionEditorModalTestAccess::Draft(editor).content.empty());
+    Check(textlt::ActionEditorModalTestAccess::Draft(editor).tabs[0].content.empty());
     Check(editor.OnEvent(ftxui::Event::Character("Replacement")));
-    Check(textlt::ActionEditorModalTestAccess::Draft(editor).content == "Replacement");
+    Check(textlt::ActionEditorModalTestAccess::Draft(editor).tabs[0].content == "Replacement");
+    textlt::ActionEditorModalTestAccess::SelectTab(editor, 1);
+    textlt::ActionEditorModalTestAccess::FocusCaption(editor);
+    Check(editor.OnEvent(ftxui::Event::Character("Alternate")));
+    textlt::ActionEditorModalTestAccess::FocusContent(editor);
+    Check(editor.OnEvent(ftxui::Event::Character("alternate content")));
+    textlt::ActionEditorModalTestAccess::SelectTab(editor, 2);
+    textlt::ActionEditorModalTestAccess::FocusCaption(editor);
+    Check(editor.OnEvent(ftxui::Event::Character("Test")));
+    textlt::ActionEditorModalTestAccess::FocusContent(editor);
+    Check(editor.OnEvent(ftxui::Event::Character("test content")));
+    textlt::ActionEditorModalTestAccess::SelectTab(editor, 3);
+    textlt::ActionEditorModalTestAccess::FocusCaption(editor);
+    Check(editor.OnEvent(ftxui::Event::Character("Production")));
+    textlt::ActionEditorModalTestAccess::FocusContent(editor);
+    Check(editor.OnEvent(ftxui::Event::Character("production content")));
+    Check(textlt::ActionEditorModalTestAccess::Draft(editor).tabs[1].caption == "Alternate");
+    Check(textlt::ActionEditorModalTestAccess::Draft(editor).tabs[1].content == "alternate content");
+    Check(textlt::ActionEditorModalTestAccess::Submit(editor));
+    Check(submitted.tabs.size() == 4);
+    editor.Close();
+    const ActionItem single_tab("one", "Single", "Only", "one body");
+    editor.Open(&single_tab);
+    Check(textlt::ActionEditorModalTestAccess::Submit(editor));
+    Check(submitted.tabs.size() == 1);
     editor.Close();
 
     const auto root = std::filesystem::temp_directory_path() / ("textlt-actions-ui-" + GenerateActionId());
@@ -193,7 +314,12 @@ int main() {
     }});
     data.groups.push_back({"group-two", "Second", std::nullopt, false, {
         {"page-two", "Second page", {
-            {"long", long_title, long_description, long_content},
+            ActionItem::WithTabs("long", long_title, {
+                {long_description, long_content, false},
+                {"Release", "release content", false},
+                {"Test", "test content", false},
+                {"Production", "production content", false},
+            }),
             {"more-1", "More 1", "", "content 1"},
             {"more-2", "More 2", "", "content 2"},
             {"more-3", "More 3", "", "content 3"},
@@ -249,7 +375,26 @@ int main() {
     Check(rendered.find("line 5") != std::string::npos);
     Check(rendered.find("line 6") == std::string::npos);
     Check(ActionsWorkspaceModalTestAccess::FirstItemHeight(workspace) <= 7);
+    Check(ActionsWorkspaceModalTestAccess::FirstItemFillsCardWidth(workspace));
+    Check(ActionsWorkspaceModalTestAccess::FirstActionMarkerAndHeaderStyleAreCorrect(workspace));
     Check(ActionsWorkspaceModalTestAccess::FirstCopyButtonVisible(workspace));
+    Check(ActionsWorkspaceModalTestAccess::FirstActionCopyButtonCount(workspace) == 4);
+    Check(ActionsWorkspaceModalTestAccess::FirstActionCopyButtonsEqualWidth(workspace));
+    Check(ActionsWorkspaceModalTestAccess::ClickFirstActionCopyButton(workspace, 1));
+    Check(copied == "release content");
+    bool search_truncated = false;
+    auto tab_matches = workspace.SearchActions("Release", true, false, 10,
+        search_truncated);
+    Check(!search_truncated && tab_matches.size() == 1);
+    Check(tab_matches.front().field == ActionField::Caption);
+    Check(tab_matches.front().tab_index == 1);
+    Check(tab_matches.front().label.find("tab 2") != std::string::npos);
+    tab_matches = workspace.SearchActions("release content", true, false, 10,
+        search_truncated);
+    Check(tab_matches.size() == 1);
+    Check(tab_matches.front().field == ActionField::Content);
+    Check(tab_matches.front().tab_index == 1);
+    workspace.ClearActionSearchHighlights();
     const std::string narrow_rendered =
         ActionsWorkspaceModalTestAccess::RenderText(workspace, 58);
     Check(ActionsWorkspaceModalTestAccess::FirstCopyButtonVisible(workspace));
@@ -307,8 +452,8 @@ int main() {
         bool has_one = false, has_two = false;
         for (const auto& pg : merged.pages) {
             for (const auto& item : pg.items) {
-                if (pg.name == "Main" && item.content == "content one") has_one = true;
-                if (pg.name == "Main (1)" && item.content == "content two") has_two = true;
+                if (pg.name == "Main" && item.tabs.front().content == "content one") has_one = true;
+                if (pg.name == "Main (1)" && item.tabs.front().content == "content two") has_two = true;
             }
         }
         Check(has_one && has_two);

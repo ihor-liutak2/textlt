@@ -1,6 +1,18 @@
 bool RemoteFilesModalContent::HandlePanelEvent(PanelSide side, ftxui::Event event) {
-    SelectPanel(side);
     PanelState& panel = Panel(side);
+    if (event.is_mouse() && !panel.bounds.Contain(event.mouse().x, event.mouse().y)) {
+        return false;
+    }
+    if (event.is_mouse() && event.mouse().button != ftxui::Mouse::WheelUp &&
+        event.mouse().button != ftxui::Mouse::WheelDown &&
+        !(event.mouse().button == ftxui::Mouse::Left && event.mouse().motion == ftxui::Mouse::Pressed)) {
+        return true;
+    }
+    if (event == ftxui::Event::ArrowLeft || event == ftxui::Event::ArrowRight) {
+        SelectPanel(event == ftxui::Event::ArrowLeft ? PanelSide::Local : PanelSide::Remote);
+        return true;
+    }
+    SelectPanel(side);
 
     if (event == ftxui::Event::ArrowDown) {
         SelectEntry(side, panel.selected + 1);
@@ -79,7 +91,9 @@ bool RemoteFilesModalContent::HandleGlobalContentEvent(ftxui::Event event) {
 int RemoteFilesModalContent::EntryIndexAtMouse(
     const PanelState& panel,
     const ftxui::Mouse& mouse) const {
-    for (size_t index = 0; index < panel.boxes.size(); ++index) {
+    const size_t start = static_cast<size_t>(panel.scroll_offset);
+    const size_t end = std::min(panel.entries.size(), start + kVisibleRows);
+    for (size_t index = start; index < end; ++index) {
         if (panel.boxes[index].Contain(mouse.x, mouse.y)) {
             return static_cast<int>(index);
         }

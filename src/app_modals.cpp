@@ -105,6 +105,7 @@ std::vector<std::string> BuiltInHelpLines() {
         "  Alt+Left      Switch to the previous editor pane",
         "  Alt+Right     Switch to the next editor pane",
         "  Ctrl+B        Open Quick Commands",
+        "  Alt+B         Open Quick Text Formatting",
         "  B             Toggle sidebar",
         "  O             Open the Opened files tab in Docs",
         "  F             Open the Favorites tab in Docs",
@@ -334,13 +335,18 @@ void TextltApp::CloseFilesModal() {
 }
 
 
-void TextltApp::OpenTextProcessorsModal() {
+void TextltApp::OpenTextProcessorsModal(bool quick) {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
 
-    text_processors_modal_.Open();
-    active_action_ = "Opened Text Processors";
+    if (quick) {
+        auto editor = std::static_pointer_cast<EditorComponent>(text_editor_);
+        text_processors_modal_.OpenQuick(!editor || !editor->HasSelection());
+    } else {
+        text_processors_modal_.Open();
+    }
+    active_action_ = quick ? "Opened Quick Text Formatting" : "Opened Text Processors";
     SetActiveLayer(UiLayer::TextProcessors);
     screen_.PostEvent(ftxui::Event::Custom);
 }
@@ -392,7 +398,7 @@ void TextltApp::CloseRemoteFilesModal() {
 
 
 bool TextltApp::GetTextProcessorTargetText(
-    bool whole_document,
+    ProcessorTarget target,
     std::string& text,
     std::string& error) {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
@@ -405,7 +411,13 @@ bool TextltApp::GetTextProcessorTargetText(
     }
 
     auto& session = *document;
-    if (!session.GetTextProcessorTargetText(whole_document, text, error)) {
+    if (target == ProcessorTarget::Paragraph) {
+        DocumentTransformTarget paragraph;
+        if (!session.CaptureAiTransformTarget(false, paragraph, error)) return false;
+        text = std::move(paragraph.original_text);
+        return true;
+    }
+    if (!session.GetTextProcessorTargetText(target == ProcessorTarget::Document, text, error)) {
         active_action_ = error;
         screen_.PostEvent(ftxui::Event::Custom);
         return false;
@@ -415,7 +427,7 @@ bool TextltApp::GetTextProcessorTargetText(
 
 
 bool TextltApp::ReplaceTextProcessorTargetText(
-    bool whole_document,
+    ProcessorTarget target,
     const std::string& text,
     std::string& error) {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
@@ -428,7 +440,15 @@ bool TextltApp::ReplaceTextProcessorTargetText(
     }
 
     auto& session = *document;
-    if (!session.ReplaceTextProcessorTargetText(whole_document, text, error)) {
+    bool applied;
+    if (target == ProcessorTarget::Paragraph) {
+        DocumentTransformTarget paragraph;
+        applied = session.CaptureAiTransformTarget(false, paragraph, error) &&
+            (paragraph.original_text == text || session.ReplaceAiTransformTarget(paragraph, text, error));
+    } else {
+        applied = session.ReplaceTextProcessorTargetText(target == ProcessorTarget::Document, text, error);
+    }
+    if (!applied) {
         active_action_ = error;
         screen_.PostEvent(ftxui::Event::Custom);
         return false;
@@ -438,9 +458,11 @@ bool TextltApp::ReplaceTextProcessorTargetText(
         editor_ptr->SetSession(document);
     }
 
-    active_action_ = whole_document
-        ? "Applied text processor to whole document"
-        : "Applied text processor to selected text";
+    switch (target) {
+        case ProcessorTarget::Document: active_action_ = "Applied text processor to whole document"; break;
+        case ProcessorTarget::Paragraph: active_action_ = "Applied text processor to current paragraph"; break;
+        case ProcessorTarget::Selection: active_action_ = "Applied text processor to selected text"; break;
+    }
     FocusEditor();
     screen_.PostEvent(ftxui::Event::Custom);
     return true;

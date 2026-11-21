@@ -9,9 +9,16 @@
 
 namespace textlt::actions {
 
+enum class ActionField {
+    Title,
+    Caption,
+    Content,
+};
+
 struct ActionTextEdit {
     std::string item_id;
-    int field = 0; // 0 = title, 1 = description, 2 = content
+    int tab_index = 0; // ignored for Title
+    ActionField field = ActionField::Title;
     std::size_t byte = 0;
     std::size_t length = 0;
     std::string replacement;
@@ -27,6 +34,9 @@ public:
     bool Save(std::string& error) const;
     const ActionsDocument& Data() const { return data_; }
     std::uint64_t Revision() const { return revision_; }
+    // Non-fatal message from the last Load, for example when a v1 file was
+    // migrated in memory but could not be rewritten immediately.
+    const std::string& LastWarning() const { return warning_; }
 
     bool CreateGroup(const std::string& name, std::string& id, std::string& error);
     bool RenameGroup(const std::string& id, const std::string& name, std::string& error);
@@ -74,6 +84,7 @@ private:
     Writer writer_;
     ActionsDocument data_;
     std::uint64_t revision_ = 0;
+    std::string warning_;
 };
 
 } // namespace textlt::actions

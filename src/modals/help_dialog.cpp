@@ -17,9 +17,9 @@ constexpr int kHelpBodyWidth = kHelpModalWidth - 2;
 constexpr size_t kHelpVisibleRows = 22;
 
 constexpr int kAboutModalWidth = 60;
-constexpr int kAboutModalHeight = 14;
+constexpr int kAboutModalHeight = 16;
 constexpr int kAboutBodyWidth = kAboutModalWidth - 2;
-constexpr size_t kAboutVisibleRows = 8;
+constexpr size_t kAboutVisibleRows = 10;
 
 } // namespace
 

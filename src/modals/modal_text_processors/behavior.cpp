@@ -1,4 +1,5 @@
 void TextProcessorsModalContent::Open() {
+    quick_mode_ = false;
     Reload();
     if (processor_grid_component_) {
         processor_grid_component_->TakeFocus();
@@ -63,16 +64,23 @@ void TextProcessorsModalContent::ApplySelected() {
         return;
     }
 
+    ApplyConfigured(*parser, params, repeat_count,
+        whole_document_ ? ProcessorTarget::Document : ProcessorTarget::Selection);
+}
+
+void TextProcessorsModalContent::ApplyConfigured(const TextParserDefinition& parser,
+    const std::unordered_map<std::string, std::string>& params, int repeat_count, ProcessorTarget target) {
+    std::string error;
     std::string input_text;
     if (!target_text_provider_ ||
-        !target_text_provider_(whole_document_, input_text, error)) {
+        !target_text_provider_(target, input_text, error)) {
         status_ = error.empty() ? "Cannot read target text." : error;
         status_is_error_ = true;
         return;
     }
 
     const TextParserApplyResult result = manager_.ApplyParser(
-        parser->id,
+        parser.id,
         input_text,
         params,
         repeat_count);
@@ -82,23 +90,22 @@ void TextProcessorsModalContent::ApplySelected() {
         return;
     }
 
-    if (parser->output == TextParserOutput::Report || result.output == TextParserOutput::Report) {
+    if (parser.output == TextParserOutput::Report || result.output == TextParserOutput::Report) {
         report_text_ = result.text;
-        status_ = "Analysis completed: " + parser->name + ".";
+        status_ = "Analysis completed: " + parser.name + ".";
         status_is_error_ = false;
         return;
     }
 
     report_text_.clear();
     if (!replace_target_text_ ||
-        !replace_target_text_(whole_document_, result.text, error)) {
+        !replace_target_text_(target, result.text, error)) {
         status_ = error.empty() ? "Cannot replace target text." : error;
         status_is_error_ = true;
         return;
     }
 
-    status_ = "Applied " + parser->name + " to " +
-        (whole_document_ ? "whole document." : "selected text.");
+    status_ = "Applied " + parser.name + ".";
     status_is_error_ = false;
 
     if (on_close_) {
@@ -141,6 +148,7 @@ void TextProcessorsModalContent::TogglePinned() {
 }
 
 bool TextProcessorsModalContent::HandleEvent(ftxui::Event event) {
+    if (quick_mode_) return false;
     bool input_focused = repeat_input_ && repeat_input_->Focused();
     input_focused = input_focused || (whole_document_checkbox_ && whole_document_checkbox_->Focused());
     for (const auto& input : param_inputs_) {

@@ -4,6 +4,21 @@
 #include <utility>
 
 namespace textlt {
+namespace {
+
+bool DiffersFromDefault(const std::string& value, const std::string& default_value) {
+    if (value == default_value) {
+        return false;
+    }
+    const auto parsed = ParseShortcutKey(value);
+    const auto parsed_default = ParseShortcutKey(default_value);
+    if (!parsed || !parsed_default) {
+        return true;
+    }
+    return !ShortcutKeysEqual(*parsed, *parsed_default);
+}
+
+} // namespace
 
 void ShortcutRegistry::RegisterDefault(ShortcutBindingDefinition definition) {
     if (definition.action_id.empty()) {
@@ -36,7 +51,7 @@ std::vector<ShortcutBindingView> ShortcutRegistry::Bindings(ShortcutContext cont
         if (override_it != overrides_.end()) {
             view.override_shortcut = override_it->second;
             view.effective_shortcut = override_it->second;
-            view.custom = true;
+            view.custom = DiffersFromDefault(override_it->second, definition.default_shortcut);
         } else {
             view.effective_shortcut = definition.default_shortcut;
         }
@@ -63,7 +78,7 @@ std::optional<ShortcutBindingView> ShortcutRegistry::Binding(ShortcutContext con
     if (override_it != overrides_.end()) {
         view.override_shortcut = override_it->second;
         view.effective_shortcut = override_it->second;
-        view.custom = true;
+        view.custom = DiffersFromDefault(override_it->second, definition->default_shortcut);
     } else {
         view.effective_shortcut = definition->default_shortcut;
     }

@@ -27,7 +27,7 @@ public:
     struct DriveItem {
         std::string id;
         std::string name;
-        std::uintmax_t size = 0;
+        std::optional<std::uintmax_t> size;
         bool is_folder = false;
         bool is_file = false;
     };

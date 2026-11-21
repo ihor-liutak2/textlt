@@ -162,16 +162,16 @@ std::vector<std::string> SplitRemotePath(const std::string& path) {
     return parts;
 }
 
-std::uintmax_t GoogleEntrySize(const Json& entry) {
+std::optional<std::uintmax_t> GoogleEntrySize(const Json& entry) {
     const auto iter = entry.find("size");
     if (iter == entry.end()) {
-        return 0;
+        return std::nullopt;
     }
     if (iter->is_string()) {
         try {
             return static_cast<std::uintmax_t>(std::stoull(iter->get<std::string>()));
         } catch (...) {
-            return 0;
+            return std::nullopt;
         }
     }
     if (iter->is_number_unsigned()) {
@@ -179,9 +179,11 @@ std::uintmax_t GoogleEntrySize(const Json& entry) {
     }
     if (iter->is_number_integer()) {
         const long long value = iter->get<long long>();
-        return value > 0 ? static_cast<std::uintmax_t>(value) : 0;
+        if (value >= 0) {
+            return static_cast<std::uintmax_t>(value);
+        }
     }
-    return 0;
+    return std::nullopt;
 }
 
 RemoteEntryType GoogleEntryType(const std::string& mime_type) {
@@ -343,7 +345,7 @@ bool RemoteGoogleDriveProvider::List(
         const std::string query = "'" + EscapeDriveQueryString(folder_id) + "' in parents and trashed = false";
         std::string url = std::string(kDriveApiHost) + "/files?pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true";
         url = WithParameter(url, "q", query);
-        url = WithParameter(url, "fields", "nextPageToken,files(id,name,mimeType,size,parents)");
+        url = WithParameter(url, "fields", "nextPageToken,files(id,name,mimeType,size,modifiedTime,parents)");
         if (!page_token.empty()) {
             url = WithParameter(url, "pageToken", page_token);
         }
@@ -375,6 +377,7 @@ bool RemoteGoogleDriveProvider::List(
                 entry.path = JoinRemotePath(display_path, item.name);
                 entry.type = GoogleEntryType(item.mime_type);
                 entry.size = item.size;
+                entry.modified = JsonString(object, "modifiedTime");
                 entry.hidden = !entry.name.empty() && entry.name.front() == '.';
                 entries.push_back(std::move(entry));
             }
