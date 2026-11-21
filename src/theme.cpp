@@ -12,7 +12,7 @@
 #include <string_view>
 
 #include "json_utils.hpp"
-#include "path_utils.hpp"
+#include "windows_environment_path.hpp"
 
 #ifdef _WIN32
 #ifndef NOMINMAX

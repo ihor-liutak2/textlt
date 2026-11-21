@@ -13,7 +13,7 @@
 #endif
 
 #include "editor_config.hpp"
-#include "path_utils.hpp"
+#include "windows_environment_path.hpp"
 
 namespace textlt {
 namespace {

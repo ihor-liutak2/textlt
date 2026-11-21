@@ -29,6 +29,13 @@
 #include "remote/remote_oauth_token_store.hpp"
 #include "text_parser_manager.hpp"
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace textlt {
 namespace {
 namespace fs = std::filesystem;

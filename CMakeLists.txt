@@ -381,7 +381,7 @@ if(WIN32)
     WIN32_LEAN_AND_MEAN
     _CRT_SECURE_NO_WARNINGS
   )
-  target_link_libraries(textlt PRIVATE shell32 ole32)
+  target_link_libraries(textlt PRIVATE shell32 ole32 advapi32)
   if(MINGW)
     target_link_options(textlt PRIVATE -municode)
   endif()

@@ -8,6 +8,7 @@
 
 #include "json_utils.hpp"
 #include "path_utils.hpp"
+#include "windows_environment_path.hpp"
 
 namespace textlt {
 namespace {

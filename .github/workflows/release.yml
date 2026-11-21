@@ -218,6 +218,9 @@ jobs:
         shell: pwsh
         run: |
           cmake --build build --config Release --parallel 2
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows compilation failed (exit $LASTEXITCODE)"
+          }
           $textltExe = Join-Path $PWD "build/Release/textlt.exe"
           $versionOutput = & $textltExe --version
           $expectedVersion = $env:GITHUB_REF_NAME -replace '^v', ''
