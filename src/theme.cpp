@@ -6,8 +6,10 @@
 #include <cstdint>
 #include <iomanip>
 #include <map>
-#include <cstdio> // Used by sscanf for hexadecimal RGB parsing.
+#include <charconv>
+#include <cstdio>
 #include <sstream>
+#include <string_view>
 
 #include "json_utils.hpp"
 #include "path_utils.hpp"
@@ -60,7 +62,12 @@ namespace textlt {
         bool TryParseRgb(const std::string& name, Rgb* rgb) {
             if (name.size() == 7 && name[0] == '#') {
                 unsigned int red = 0, green = 0, blue = 0;
-                if (std::sscanf(name.c_str(), "#%2x%2x%2x", &red, &green, &blue) == 3) {
+                const auto parse_hex = [&](size_t offset, unsigned int& value) {
+                    const char* first = name.data() + offset;
+                    const auto result = std::from_chars(first, first + 2, value, 16);
+                    return result.ec == std::errc{} && result.ptr == first + 2;
+                };
+                if (parse_hex(1, red) && parse_hex(3, green) && parse_hex(5, blue)) {
                     *rgb = {red, green, blue};
                     return true;
                 }
@@ -441,7 +448,23 @@ namespace textlt {
         unsigned int green = 0;
         unsigned int blue = 0;
         const std::string printed = color.Print(false);
-        if (std::sscanf(printed.c_str(), "38;2;%u;%u;%u", &red, &green, &blue) != 3) {
+        constexpr std::string_view prefix = "38;2;";
+        if (printed.rfind(prefix, 0) != 0) return "#FFFFFF";
+        size_t position = prefix.size();
+        const auto parse_component = [&](unsigned int& value) {
+            const size_t end = printed.find(';', position);
+            const size_t length = (end == std::string::npos ? printed.size() : end) - position;
+            if (length == 0) return false;
+            const auto result = std::from_chars(
+                printed.data() + position, printed.data() + position + length, value);
+            if (result.ec != std::errc{} || result.ptr != printed.data() + position + length) {
+                return false;
+            }
+            position += length + (end == std::string::npos ? 0 : 1);
+            return true;
+        };
+        if (!parse_component(red) || !parse_component(green) || !parse_component(blue) ||
+            position != printed.size()) {
             return "#FFFFFF";
         }
 

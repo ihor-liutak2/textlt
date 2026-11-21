@@ -5,7 +5,6 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
-#include <cstdlib>
 #include <cctype>
 #include <filesystem>
 #include <fstream>
@@ -14,6 +13,8 @@
 #include <system_error>
 #include <unordered_map>
 #include <vector>
+
+#include "path_utils.hpp"
 
 namespace textlt {
 namespace fs = std::filesystem;
@@ -258,6 +259,16 @@ std::unordered_map<std::string, std::string> MergeParams(
 }  // namespace
 
 fs::path TextParserManager::UserConfigDirectory() {
+#ifdef _WIN32
+  const fs::path app_data = WindowsEnvironmentPath(L"APPDATA");
+  if (!app_data.empty()) {
+    return app_data / "textlt";
+  }
+  const fs::path user_profile = WindowsEnvironmentPath(L"USERPROFILE");
+  if (!user_profile.empty()) {
+    return user_profile / "AppData" / "Roaming" / "textlt";
+  }
+#else
   const char* xdg_config_home = std::getenv("XDG_CONFIG_HOME");
   if (xdg_config_home != nullptr && *xdg_config_home != '\0') {
     return fs::path(xdg_config_home) / "textlt";
@@ -267,7 +278,7 @@ fs::path TextParserManager::UserConfigDirectory() {
   if (home != nullptr && *home != '\0') {
     return fs::path(home) / ".config" / "textlt";
   }
-
+#endif
   return fs::current_path() / ".textlt";
 }
 

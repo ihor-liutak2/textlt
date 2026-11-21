@@ -15,6 +15,10 @@
 #include "remote/remote_http_client.hpp"
 #include "remote/remote_oauth_token_store.hpp"
 
+#ifdef RemoveDirectory
+#undef RemoveDirectory
+#endif
+
 namespace textlt {
 namespace {
 

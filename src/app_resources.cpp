@@ -155,6 +155,7 @@ bool IsTextProcessorsDirectory(const std::filesystem::path& path) {
 std::filesystem::path FindTextProcessorsDirectory() {
     std::vector<std::filesystem::path> candidates;
 
+#ifndef _WIN32
     if (const char* data_directory = std::getenv("TEXTLT_DATA_DIR")) {
         if (*data_directory != '\0') {
             const std::filesystem::path root(data_directory);
@@ -170,6 +171,7 @@ std::filesystem::path FindTextProcessorsDirectory() {
                 "text_processors");
         }
     }
+#endif
 
     const std::filesystem::path executable_directory = ExecutableDirectory();
     if (!executable_directory.empty()) {

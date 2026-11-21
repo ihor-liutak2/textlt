@@ -1,9 +1,9 @@
 #include "actions/action_repository.hpp"
 
 #include <algorithm>
-#include <cstdlib>
 
 #include "actions/action_serializer.hpp"
+#include "path_utils.hpp"
 
 namespace textlt::actions {
 namespace {
@@ -28,7 +28,10 @@ ActionRepository::ActionRepository(std::filesystem::path path, Writer writer)
 
 std::filesystem::path ActionRepository::DefaultPath() {
 #ifdef _WIN32
-    if (const char* value = std::getenv("LOCALAPPDATA")) return std::filesystem::path(value) / "textlt" / "actions.json";
+    const std::filesystem::path local_app_data = WindowsEnvironmentPath(L"LOCALAPPDATA");
+    if (!local_app_data.empty()) {
+        return local_app_data / "textlt" / "actions.json";
+    }
 #elif defined(__APPLE__)
     if (const char* value = std::getenv("HOME")) return std::filesystem::path(value) / "Library" / "Application Support" / "textlt" / "actions.json";
 #else

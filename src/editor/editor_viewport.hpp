@@ -17,7 +17,7 @@
 namespace textlt {
 
 class DocumentSession;
-class EditorConfig;
+struct EditorConfig;
 
 struct EditorViewportOptions {
     bool distraction_mode = false;

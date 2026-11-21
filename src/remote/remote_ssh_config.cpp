@@ -2,11 +2,12 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstdlib>
 #include <fstream>
 #include <set>
 #include <sstream>
 #include <system_error>
+
+#include "path_utils.hpp"
 #ifndef _WIN32
 #include <glob.h>
 #endif
@@ -80,15 +81,20 @@ std::filesystem::path ExpandHome(std::filesystem::path path) {
     const std::string text = path.string();
     if (text == "~" || text.rfind("~/", 0) == 0 || text.rfind("~\\", 0) == 0) {
 #ifdef _WIN32
-        const char* home = std::getenv("USERPROFILE");
+        const std::filesystem::path home = WindowsEnvironmentPath(L"USERPROFILE");
 #else
         const char* home = std::getenv("HOME");
+        const std::filesystem::path home_path = home ? home : "";
 #endif
-        if (home && *home) {
-            return text.size() == 1
-                ? std::filesystem::path(home)
-                : std::filesystem::path(home) / text.substr(2);
+#ifdef _WIN32
+        if (!home.empty()) {
+            return text.size() == 1 ? home : home / text.substr(2);
         }
+#else
+        if (!home_path.empty()) {
+            return text.size() == 1 ? home_path : home_path / text.substr(2);
+        }
+#endif
     }
     return path;
 }
@@ -236,12 +242,18 @@ void ParseConfigFile(
 
 std::filesystem::path DefaultSshConfigPath() {
 #ifdef _WIN32
-    const char* home = std::getenv("USERPROFILE");
+    const std::filesystem::path home = WindowsEnvironmentPath(L"USERPROFILE");
 #else
     const char* home = std::getenv("HOME");
+    const std::filesystem::path home_path = home ? home : "";
 #endif
-    return home && *home ? std::filesystem::path(home) / ".ssh" / "config"
-                         : std::filesystem::path(".ssh") / "config";
+#ifdef _WIN32
+    return home.empty() ? std::filesystem::path(".ssh") / "config"
+                        : home / ".ssh" / "config";
+#else
+    return home_path.empty() ? std::filesystem::path(".ssh") / "config"
+                             : home_path / ".ssh" / "config";
+#endif
 }
 
 std::vector<std::string> DiscoverSshConfigHosts(

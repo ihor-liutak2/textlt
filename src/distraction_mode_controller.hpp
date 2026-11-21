@@ -9,7 +9,7 @@ namespace textlt {
 
 class DocumentSession;
 class DocumentWorkspace;
-class EditorConfig;
+struct EditorConfig;
 
 struct DistractionModeSettings {
     bool enabled = false;

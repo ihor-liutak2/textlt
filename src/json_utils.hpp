@@ -12,6 +12,9 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#ifdef RemoveDirectory
+#undef RemoveDirectory
+#endif
 #endif
 
 #include "nlohmann/json.hpp"
