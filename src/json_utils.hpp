@@ -7,6 +7,13 @@
 #include <string>
 #include <system_error>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 #include "nlohmann/json.hpp"
 
 namespace textlt {
@@ -56,7 +63,14 @@ inline bool WriteJsonAtomically(const std::filesystem::path& path, const Json& j
         }
     }
 
+#ifdef _WIN32
+    if (!MoveFileExW(temp_path.c_str(), path.c_str(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        error = std::error_code(static_cast<int>(GetLastError()), std::system_category());
+    }
+#else
     std::filesystem::rename(temp_path, path, error);
+#endif
     if (error) {
         std::filesystem::remove(temp_path, error);
         return false;
