@@ -237,12 +237,20 @@ ActionsWorkspaceComponent::ActionsWorkspaceComponent(const Theme* theme,
     action_editor_modal_ = std::make_unique<textlt::ActionEditorModal>(
         theme_, [this](const ActionItem& item, std::string& error) {
             std::string created_id;
+            std::string created_page_id;
             const bool saved = item.id.empty()
                 ? repository_.CreateItem(
-                      selected_group_id_, selected_page_id_, item, created_id, error)
+                      selected_group_id_, SelectedPage() ? selected_page_id_ : std::string{},
+                      item, created_id, error, &created_page_id)
                 : repository_.UpdateItem(
                       selected_group_id_, selected_page_id_, item, error);
             if (!saved) return false;
+            if (!created_page_id.empty()) {
+                selected_page_id_ = std::move(created_page_id);
+                navigator_tab_ = NavigatorTab::Pages;
+                page_scroll_ = SelectedGroup()->pages.size() - 1;
+                item_scroll_ = 0;
+            }
             if (!created_id.empty()) selected_item_id_ = created_id;
             NormalizeSelection();
             if (groups_changed_) groups_changed_();
@@ -269,6 +277,18 @@ void ActionsWorkspaceComponent::SetProjectContext(
         Notify("Actions project group failed: " + error); return;
     }
     if (groups_changed_) groups_changed_();
+}
+
+bool ActionsWorkspaceComponent::UpdateProjectGroupName(const std::string& project_id,
+    const std::string& project_name, std::string& error) {
+    if (!repository_.UpdateProjectGroupName(project_id, project_name, error)) return false;
+    if (project_ && project_->first == project_id) project_->second = project_name;
+    return true;
+}
+
+bool ActionsWorkspaceComponent::DetachProjectGroup(
+    const std::string& project_id, std::string& error) {
+    return repository_.DetachProjectGroup(project_id, error);
 }
 
 const ActionGroup* ActionsWorkspaceComponent::SelectedGroup() const {
@@ -327,7 +347,26 @@ void ActionsWorkspaceComponent::RenameGroup() {
 void ActionsWorkspaceComponent::DeleteGroup() {
     navigator_tab_ = NavigatorTab::Groups;
     focus_ = FocusArea::Navigator;
-    if (SelectedGroup()) dialog_ = Dialog::DeleteGroup;
+    const ActionGroup* group = SelectedGroup();
+    if (!group) return;
+    if (!CanDeleteGroup(*group)) {
+        Notify("This group belongs to a registered project.");
+        return;
+    }
+    if (group->project_id) {
+        std::string error;
+        if (!repository_.ConvertGroupToGeneral(selected_group_id_, error)) {
+            Notify("Group update failed: " + error);
+            return;
+        }
+        if (groups_changed_) groups_changed_();
+    }
+    dialog_ = Dialog::DeleteGroup;
+}
+
+bool ActionsWorkspaceComponent::CanDeleteGroup(const ActionGroup& group) const {
+    return !group.project_id ||
+        (is_missing_project_ && is_missing_project_(*group.project_id));
 }
 void ActionsWorkspaceComponent::MergeGroup() {
     navigator_tab_ = NavigatorTab::Groups;
@@ -387,7 +426,11 @@ void ActionsWorkspaceComponent::DeletePage() {
     if (SelectedPage()) dialog_ = Dialog::DeletePage;
 }
 void ActionsWorkspaceComponent::AddAction() {
-    if (SelectedPage() && action_editor_modal_) action_editor_modal_->Open();
+    if (!SelectedGroup()) {
+        Notify("Select an Actions group before adding an action.");
+        return;
+    }
+    action_editor_modal_->Open();
 }
 void ActionsWorkspaceComponent::EditAction() {
     if (const auto* item = SelectedItem(); item && action_editor_modal_)
@@ -708,7 +751,7 @@ ftxui::Element ActionsWorkspaceComponent::RenderNavigator() {
     });
     const bool can_create = show_groups || group != nullptr;
     const bool can_rename = show_groups ? can_modify_group : can_modify_page;
-    const bool can_delete = show_groups ? can_modify_group : can_modify_page;
+    const bool can_delete = show_groups ? group && CanDeleteGroup(*group) : can_modify_page;
     Element actions = hbox({
         action_button("New", ButtonRole::Primary, can_create, navigator_new_box_),
         action_button("Rename", ButtonRole::Utility, can_rename, navigator_rename_box_),
@@ -1172,7 +1215,7 @@ bool ActionsWorkspaceComponent::OnEvent(ftxui::Event event) {
             }
             if (navigator_delete_box_.Contain(mouse.x, mouse.y)) {
                 if (navigator_tab_ == NavigatorTab::Groups) {
-                    if (group && !group->project_id) DeleteGroup();
+                    DeleteGroup();
                 } else if (page) {
                     DeletePage();
                 }

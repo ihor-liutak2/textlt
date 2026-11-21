@@ -67,6 +67,7 @@ SidebarPanel::SidebarPanel(
     ProjectsProvider projects_provider,
     ProjectIdCallback on_project_select,
     AddProjectCallback on_project_add,
+    ProjectIdCallback on_project_rename,
     ProjectIdCallback on_project_remove,
     ProjectIdCallback on_project_remote,
     ProjectIdCallback on_project_assign_remote,
@@ -92,6 +93,7 @@ SidebarPanel::SidebarPanel(
       projects_provider_(std::move(projects_provider)),
       on_project_select_(std::move(on_project_select)),
       on_project_add_(std::move(on_project_add)),
+      on_project_rename_(std::move(on_project_rename)),
       on_project_remove_(std::move(on_project_remove)),
       on_project_remote_(std::move(on_project_remote)),
       on_project_assign_remote_(std::move(on_project_assign_remote)),
@@ -335,7 +337,7 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {    // Action-view controls shar
             EnsureSelectedEntryVisible();
             FocusMenu();
             if (mode_ == SidebarMode::Opened || mode_ == SidebarMode::Favorites ||
-                mode_ == SidebarMode::Projects || mode_ == SidebarMode::Actions) {
+                mode_ == SidebarMode::Actions) {
                 OpenSelectedEntry();
                 last_clicked_entry_ = -1;
                 last_click_time_ = {};
@@ -449,6 +451,8 @@ void SidebarPanel::OpenSelectedEntry() {
     }
 
     if (selected_kind == EntryKind::Project) {
+        last_clicked_entry_ = -1;
+        last_click_time_ = {};
         if (on_project_select_ && selected_entry_ < static_cast<int>(entry_ids_.size())) {
             on_project_select_(entry_ids_[selected_entry_]);
         }
@@ -646,6 +650,7 @@ ftxui::Element SidebarPanel::RenderActionRow() {
     action_tertiary_box_ = {};
     action_quaternary_box_ = {};
     action_quinary_box_ = {};
+    project_rename_box_ = {1, 0, 1, 0};
     group_new_box_ = {};
     group_rename_box_ = {};
     group_delete_box_ = {};
@@ -689,6 +694,9 @@ ftxui::Element SidebarPanel::RenderActionRow() {
             hbox({
                 RenderFlatActionButton("Add", ButtonRole::Primary, action_secondary_box_),
                 text(" "),
+                selected ? RenderFlatActionButton("Rename", ButtonRole::Utility, project_rename_box_)
+                         : emptyElement(),
+                selected ? text(" ") : emptyElement(),
                 RenderFlatActionButton("Remove", ButtonRole::Danger, action_tertiary_box_),
             }),
             text(" Connection:") | bold | color(label_color),
@@ -853,6 +861,14 @@ bool SidebarPanel::HandleActionButtonMouse(const ftxui::Mouse& mouse) {
                 }
                 return true;
         }
+    }
+
+    if (mode_ == SidebarMode::Projects && project_rename_box_.Contain(mouse.x, mouse.y)) {
+        if (on_project_rename_ && selected_entry_ >= 0 &&
+            selected_entry_ < static_cast<int>(entry_ids_.size())) {
+            on_project_rename_(entry_ids_[selected_entry_]);
+        }
+        return true;
     }
 
     if (action_tertiary_box_.Contain(mouse.x, mouse.y) && mode_ == SidebarMode::Projects) {
@@ -1149,8 +1165,10 @@ void SidebarPanel::SetProjectRoot(const std::filesystem::path& root) {
         project_root_ = root.lexically_normal();
     }
     current_path_ = project_root_;
-    selected_entry_ = 0;
-    list_scroll_offset_ = 0;
+    if (mode_ != SidebarMode::Projects) {
+        selected_entry_ = 0;
+        list_scroll_offset_ = 0;
+    }
     RebuildEntries();
 }
 

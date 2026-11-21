@@ -199,7 +199,8 @@ void NotesWorkspaceComponent::FocusMainArea() {
 
 void NotesWorkspaceComponent::SetProjectContext(
     std::optional<ProjectContext> project,
-    std::vector<std::string> known_project_ids) {
+    std::vector<std::string> known_project_ids,
+    bool project_registry_usable) {
     const bool had_project = project_context_.has_value();
     const std::string previous_project_id =
         project_context_ ? project_context_->id : std::string{};
@@ -207,6 +208,7 @@ void NotesWorkspaceComponent::SetProjectContext(
         (had_project && project.has_value() && previous_project_id != project->id);
 
     known_project_ids_ = std::move(known_project_ids);
+    project_registry_usable_ = project_registry_usable;
     project_context_ = std::move(project);
     active_project_section_id_.reset();
     if (project_context_) {
@@ -228,6 +230,29 @@ void NotesWorkspaceComponent::SetProjectContext(
         // filter active.
         SelectSidebarEntry(0);
     }
+}
+
+bool NotesWorkspaceComponent::UpdateProjectGroupName(
+    const ProjectContext& project, std::string& error) {
+    const NoteSection* section = repository_.FindProjectSection(project.id);
+    const std::string previous_name = section ? section->name : std::string{};
+    if (!repository_.UpdateProjectSectionName(project.id, project.name, error)) return false;
+    if (project_context_ && project_context_->id == project.id) {
+        project_context_->name = project.name;
+    }
+    if (section && section->name != previous_name) RebuildSidebar();
+    return true;
+}
+
+bool NotesWorkspaceComponent::DetachProjectGroup(
+    const std::string& project_id, std::string& error) {
+    error.clear();
+    const NoteSection* section = repository_.FindProjectSection(project_id);
+    if (!section) return true;
+    if (!repository_.ConvertSectionToGeneral(section->id, error)) return false;
+    if (active_project_section_id_ == section->id) active_project_section_id_.reset();
+    RebuildSidebar();
+    return true;
 }
 
 void NotesWorkspaceComponent::Notify(const std::string& message) { save_status_ = message; if (on_status_) on_status_(message); }
@@ -408,7 +433,8 @@ void NotesWorkspaceComponent::RebuildSidebar() {
             if (!note.deleted_at && note.section_id && *note.section_id == section.id) ++count;
         }
         const bool project = section.project_id.has_value();
-        const bool orphaned = project && !IsKnownProject(*section.project_id);
+        const bool orphaned =
+            project_registry_usable_ && project && !IsKnownProject(*section.project_id);
         sidebar_entries_.push_back(
             {SidebarEntryKind::Section, section.id, section.name, count, project, orphaned});
     };
@@ -506,6 +532,16 @@ void NotesWorkspaceComponent::StartRenameSection() {
     focus_ = FocusArea::GroupName;
 }
 
+void NotesWorkspaceComponent::RequestDeleteSelectedSection() {
+    if (selected_sidebar_ < 0 ||
+        selected_sidebar_ >= static_cast<int>(sidebar_entries_.size())) return;
+    const SidebarEntry& entry = sidebar_entries_[selected_sidebar_];
+    if (entry.kind != SidebarEntryKind::Section) return;
+    if (entry.project && !ConvertSelectedGroupToGeneral()) return;
+    RequestConfirmation(ConfirmAction::DeleteGroup, "Delete group",
+        "Delete this group? Its notes will remain in Home.");
+}
+
 void NotesWorkspaceComponent::DeleteSelectedSection() {
     if (selected_sidebar_ < 0 || selected_sidebar_ >= static_cast<int>(sidebar_entries_.size())) return;
     const SidebarEntry entry = sidebar_entries_[selected_sidebar_];
@@ -548,14 +584,14 @@ void NotesWorkspaceComponent::OpenProjectNotes() {
     Notify("Project notes: " + section_name);
 }
 
-void NotesWorkspaceComponent::ConvertSelectedGroupToGeneral() {
-    if (selected_sidebar_ < 0 || selected_sidebar_ >= static_cast<int>(sidebar_entries_.size())) return;
+bool NotesWorkspaceComponent::ConvertSelectedGroupToGeneral() {
+    if (selected_sidebar_ < 0 || selected_sidebar_ >= static_cast<int>(sidebar_entries_.size())) return false;
     const SidebarEntry entry = sidebar_entries_[selected_sidebar_];
-    if (entry.kind != SidebarEntryKind::Section || !entry.orphaned) return;
+    if (entry.kind != SidebarEntryKind::Section || !entry.orphaned) return false;
     std::string error;
     if (!repository_.ConvertSectionToGeneral(entry.id, error)) {
         Notify("Group update failed: " + error);
-        return;
+        return false;
     }
     if (active_project_section_id_ && *active_project_section_id_ == entry.id) {
         active_project_section_id_.reset();
@@ -563,6 +599,7 @@ void NotesWorkspaceComponent::ConvertSelectedGroupToGeneral() {
     RebuildSidebar();
     RebuildVisibleNotes();
     Notify("Group kept as General: " + entry.label);
+    return true;
 }
 
 void NotesWorkspaceComponent::RelinkSelectedGroupToActiveProject() {
@@ -1169,14 +1206,7 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
             if (footer_new_group_box_.Contain(mouse.x, mouse.y)) { StartCreateSection(); return true; }
             if (footer_rename_group_box_.Contain(mouse.x, mouse.y)) { StartRenameSection(); return true; }
             if (footer_delete_group_box_.Contain(mouse.x, mouse.y)) {
-                const bool custom_group_selected = selected_sidebar_ >= 0 &&
-                    selected_sidebar_ < static_cast<int>(sidebar_entries_.size()) &&
-                    sidebar_entries_[selected_sidebar_].kind == SidebarEntryKind::Section &&
-                    !sidebar_entries_[selected_sidebar_].project;
-                if (custom_group_selected) {
-                    RequestConfirmation(ConfirmAction::DeleteGroup, "Delete group",
-                        "Delete this group? Its notes will remain in Home.");
-                }
+                RequestDeleteSelectedSection();
                 return true;
             }
             if (footer_project_notes_box_.Contain(mouse.x, mouse.y)) { OpenProjectNotes(); return true; }
@@ -1468,7 +1498,8 @@ ftxui::Element NotesWorkspaceComponent::RenderSidebar() {
         text(" "),
         footer_button("Rename", ButtonRole::Utility, custom_group_selected, footer_rename_group_box_),
         text(" "),
-        footer_button("Delete", ButtonRole::Danger, custom_group_selected, footer_delete_group_box_),
+        footer_button("Delete", ButtonRole::Danger,
+            custom_group_selected || orphaned_group_selected, footer_delete_group_box_),
     }));
     if (orphaned_group_selected) {
         if (project_context_) {

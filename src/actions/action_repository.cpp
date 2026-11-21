@@ -1,6 +1,8 @@
 #include "actions/action_repository.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <unordered_set>
 
 #include "actions/action_serializer.hpp"
 #include "windows_environment_path.hpp"
@@ -153,6 +155,22 @@ std::string UniquePageName(ActionGroup& group, const std::string& base) {
     return name;
 }
 
+std::string NextAutomaticPageName(const ActionsDocument& document) {
+    std::unordered_set<std::string> names;
+    for (const auto& group : document.groups) {
+        for (const auto& page : group.pages) {
+            std::string name = page.name;
+            std::transform(name.begin(), name.end(), name.begin(),
+                [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+            names.insert(std::move(name));
+        }
+    }
+    for (size_t number = 1; ; ++number) {
+        const std::string suffix = std::to_string(number);
+        if (names.count("page" + suffix) == 0) return "Page" + suffix;
+    }
+}
+
 } // namespace
 
 bool ActionRepository::MergeGroups(const std::string& source_id,
@@ -220,7 +238,8 @@ bool ActionRepository::MovePage(const std::string& group_id, const std::string& 
     return Commit(std::move(next), error);
 }
 
-bool ActionRepository::CreateItem(const std::string& group_id, const std::string& page_id, ActionItem item, std::string& id, std::string& error) {
+bool ActionRepository::CreateItem(const std::string& group_id, const std::string& page_id,
+    ActionItem item, std::string& id, std::string& error, std::string* created_page_id) {
     if (item.title.empty()) { error = "Action title is required."; return false; }
     if (item.tabs.empty()) item.tabs.push_back({});
     if (item.tabs.size() > 4) { error = "An action can have at most four tabs."; return false; }
@@ -230,9 +249,23 @@ bool ActionRepository::CreateItem(const std::string& group_id, const std::string
             return false;
         }
     }
-    ActionsDocument next = data_; ActionGroup* group = FindGroup(next, group_id); ActionPage* page = group ? FindPage(*group, page_id) : nullptr;
+    ActionsDocument next = data_;
+    ActionGroup* group = FindGroup(next, group_id);
+    ActionPage* page = group ? FindPage(*group, page_id) : nullptr;
+    std::string automatic_page_id;
+    if (group && page_id.empty() && created_page_id) {
+        automatic_page_id = GenerateActionId();
+        group->pages.push_back({automatic_page_id, NextAutomaticPageName(next), {}});
+        page = &group->pages.back();
+    }
     if (!page) { error = "Page was not found."; return false; }
-    id = GenerateActionId(); item.id = id; page->items.push_back(std::move(item)); return Commit(std::move(next), error);
+    const std::string item_id = GenerateActionId();
+    item.id = item_id;
+    page->items.push_back(std::move(item));
+    if (!Commit(std::move(next), error)) return false;
+    id = item_id;
+    if (created_page_id) *created_page_id = std::move(automatic_page_id);
+    return true;
 }
 
 bool ActionRepository::AppendItems(const std::string& group_id,
@@ -357,6 +390,43 @@ bool ActionRepository::EnsureProjectGroup(const std::string& project_id, const s
     ActionsDocument next = data_; group_id = GenerateActionId();
     std::string name = project_name.empty() ? "Project" : project_name;
     next.groups.insert(next.groups.begin(), {group_id, name, project_id, true, {}});
+    return Commit(std::move(next), error);
+}
+
+bool ActionRepository::UpdateProjectGroupName(const std::string& project_id,
+    const std::string& project_name, std::string& error) {
+    error.clear();
+    const std::string name = project_name.empty() ? "Project" : project_name;
+    const auto& groups = data_.groups;
+    const auto found = std::find_if(groups.begin(), groups.end(),
+        [&](const ActionGroup& group) { return group.project_id == project_id; });
+    if (found == groups.end() || found->name == name) return true;
+
+    ActionsDocument next = data_;
+    next.groups[std::distance(groups.begin(), found)].name = name;
+    return Commit(std::move(next), error);
+}
+
+bool ActionRepository::DetachProjectGroup(const std::string& project_id, std::string& error) {
+    error.clear();
+    const auto& groups = data_.groups;
+    const auto found = std::find_if(groups.begin(), groups.end(),
+        [&](const ActionGroup& group) { return group.project_id == project_id; });
+    if (found == groups.end()) return true;
+    return ConvertGroupToGeneral(found->id, error);
+}
+
+bool ActionRepository::ConvertGroupToGeneral(const std::string& group_id, std::string& error) {
+    error.clear();
+    ActionsDocument next = data_;
+    ActionGroup* group = FindGroup(next, group_id);
+    if (!group) {
+        error = "Group was not found.";
+        return false;
+    }
+    if (!group->project_id) return true;
+    group->project_id.reset();
+    group->auto_named = false;
     return Commit(std::move(next), error);
 }
 

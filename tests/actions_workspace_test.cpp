@@ -84,6 +84,14 @@ public:
         return textlt::ActionEditorModalTestAccess::Draft(
             *workspace.action_editor_modal_);
     }
+    static bool SaveNewAction(ActionsWorkspaceComponent& workspace, const std::string& title) {
+        workspace.AddAction();
+        if (!workspace.OnEvent(ftxui::Event::Character(title))) return false;
+        auto& editor = *workspace.action_editor_modal_;
+        if (!textlt::ActionEditorModalTestAccess::Submit(editor)) return false;
+        editor.Close();
+        return true;
+    }
     static std::string RenderText(
         ActionsWorkspaceComponent& workspace, int width = 100) {
         auto screen = ftxui::Screen::Create(
@@ -105,6 +113,9 @@ public:
     }
     static bool NewGroupDialogOpen(const ActionsWorkspaceComponent& workspace) {
         return workspace.dialog_ == ActionsWorkspaceComponent::Dialog::NewGroup;
+    }
+    static bool DeleteGroupDialogOpen(const ActionsWorkspaceComponent& workspace) {
+        return workspace.dialog_ == ActionsWorkspaceComponent::Dialog::DeleteGroup;
     }
     static bool MergeGroupDialogOpen(const ActionsWorkspaceComponent& workspace) {
         return workspace.dialog_ == ActionsWorkspaceComponent::Dialog::MergeGroup;
@@ -416,6 +427,66 @@ int main() {
     Check(ActionsWorkspaceModalTestAccess::ClickNavigatorNew(workspace));
     Check(ActionsWorkspaceModalTestAccess::NewGroupDialogOpen(workspace));
     Check(workspace.OnEvent(ftxui::Event::Escape));
+
+    const auto auto_pages_path = root / "automatic-pages.json";
+    ActionsDocument auto_pages;
+    auto_pages.groups = {
+        {"auto-first", "First", std::nullopt, false, {}},
+        {"auto-second", "Second", std::nullopt, false, {}},
+        {"auto-third", "Third", std::nullopt, false, {}},
+        {"other", "Other", std::nullopt, false, {{"existing", "page3", {}}}},
+    };
+    Check(ActionSerializer::Save(auto_pages_path, auto_pages, error));
+    ActionsWorkspaceComponent auto_workspace(nullptr, [](const std::string&) {},
+        [](const std::string&) { return true; }, [] {}, auto_pages_path);
+    auto_workspace.AddAction();
+    Check(auto_workspace.OnEvent(ftxui::Event::Escape));
+    Check(!auto_workspace.HasSelectedPage());
+    Check(auto_workspace.Groups().front().pages.empty());
+    Check(ActionsWorkspaceModalTestAccess::SaveNewAction(auto_workspace, "First action"));
+    Check(auto_workspace.HasSelectedPage());
+    Check(ActionsWorkspaceModalTestAccess::SaveNewAction(auto_workspace, "Same page"));
+    auto_workspace.SelectGroup("auto-second");
+    Check(ActionsWorkspaceModalTestAccess::SaveNewAction(auto_workspace, "Second action"));
+    auto_workspace.SelectGroup("auto-third");
+    Check(ActionsWorkspaceModalTestAccess::SaveNewAction(auto_workspace, "Fourth page"));
+
+    ActionsDocument persisted_pages;
+    Check(ActionSerializer::Load(auto_pages_path, persisted_pages, error));
+    const auto& groups = persisted_pages.groups;
+    Check(groups[0].pages.size() == 1 && groups[0].pages[0].name == "Page1");
+    Check(groups[0].pages[0].items.size() == 2);
+    Check(groups[1].pages[0].name == "Page2");
+    Check(groups[1].pages[0].items.front().title == "Second action");
+    Check(groups[2].pages[0].name == "Page4");
+
+    const auto orphan_path = root / "orphan-actions.json";
+    ActionsDocument orphan_actions;
+    orphan_actions.groups = {
+        {"linked-group", "Linked", "existing-project", true, {}},
+        {"other-orphan", "Other", "missing-project", true, {}},
+        {"orphan-group", "Orphan", "missing-project", true,
+            {{"page", "Page", {{"action", "Build", "", "make"}}}}},
+    };
+    Check(ActionSerializer::Save(orphan_path, orphan_actions, error));
+    ActionsWorkspaceComponent orphan_workspace(nullptr, [](const std::string&) {},
+        [](const std::string&) { return true; }, [] {}, orphan_path);
+    orphan_workspace.SetMissingProjectCheck(
+        [](const std::string& id) { return id == "missing-project"; });
+    orphan_workspace.DeleteGroup();
+    Check(ActionsWorkspaceModalTestAccess::DialogIsNone(orphan_workspace));
+    orphan_workspace.SelectGroup("orphan-group");
+    orphan_workspace.DeleteGroup();
+    Check(ActionsWorkspaceModalTestAccess::DeleteGroupDialogOpen(orphan_workspace));
+    Check(orphan_workspace.OnEvent(ftxui::Event::Escape));
+    const auto detached_groups = orphan_workspace.Groups();
+    Check(detached_groups[0].project_id.has_value());
+    Check(detached_groups[1].project_id.has_value());
+    Check(!detached_groups[2].project_id && !detached_groups[2].auto_named);
+    Check(detached_groups[2].pages.front().items.front().id == "action");
+    orphan_workspace.DeleteGroup();
+    Check(orphan_workspace.OnEvent(ftxui::Event::Return));
+    Check(orphan_workspace.Groups().size() == 2);
     std::filesystem::remove_all(root);
 
     // Merge group: similar-named groups are merged, clashing pages renumbered.

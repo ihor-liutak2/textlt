@@ -58,6 +58,7 @@ bool ProjectStore::Load(std::string& error) {
     usable_ = true;
     load_error_.clear();
     projects_.clear();
+    pending_group_detachments_.clear();
     active_project_id_.clear();
 
     std::error_code filesystem_error;
@@ -102,6 +103,16 @@ bool ProjectStore::Load(std::string& error) {
             }
         }
     }
+    const auto detachments = root.find("pending_group_detachments");
+    if (detachments != root.end() && detachments->is_array()) {
+        for (const Json& item : *detachments) {
+            if (!item.is_string()) continue;
+            auto id = item.get<std::string>();
+            if (!id.empty() && !FindById(id)) {
+                pending_group_detachments_.push_back(std::move(id));
+            }
+        }
+    }
     NormalizeActive();
     error.clear();
     return true;
@@ -115,6 +126,9 @@ bool ProjectStore::Save(std::string& error) const {
     Json root = Json::object();
     root["version"] = 1;
     root["active_project_id"] = active_project_id_;
+    if (!pending_group_detachments_.empty()) {
+        root["pending_group_detachments"] = pending_group_detachments_;
+    }
     root["projects"] = Json::array();
     for (const ProjectRecord& project : projects_) {
         root["projects"].push_back({
@@ -195,6 +209,34 @@ ProjectRecord* ProjectStore::Add(
     return &projects_.back();
 }
 
+bool ProjectStore::Rename(const std::string& id, std::string name, std::string& error) {
+    if (!usable_) {
+        error = load_error_;
+        return false;
+    }
+    ProjectRecord* project = FindById(id);
+    if (!project) {
+        error = "Project is not registered.";
+        return false;
+    }
+    const auto first = name.find_first_not_of(" \t\r\n\v\f");
+    if (first == std::string::npos) {
+        error = "Enter a project name.";
+        return false;
+    }
+    name = name.substr(first, name.find_last_not_of(" \t\r\n\v\f") - first + 1);
+    if (name.find_first_of("\r\n") != std::string::npos) {
+        error = "Enter the project name on one line.";
+        return false;
+    }
+    error.clear();
+    if (project->name == name) return true;
+    std::swap(project->name, name);
+    if (Save(error)) return true;
+    std::swap(project->name, name);
+    return false;
+}
+
 bool ProjectStore::Remove(const std::string& id, std::string& error) {
     if (!usable_) {
         error = load_error_.empty() ? "Project registry is not usable." : load_error_;
@@ -209,14 +251,28 @@ bool ProjectStore::Remove(const std::string& id, std::string& error) {
     }
     const std::vector<ProjectRecord> previous_projects = projects_;
     const std::string previous_active = active_project_id_;
+    // Save the cleanup request with the removal so either group write can be retried.
+    pending_group_detachments_.push_back(iter->id);
     projects_.erase(iter);
     NormalizeActive();
     if (!Save(error)) {
         projects_ = previous_projects;
         active_project_id_ = previous_active;
+        pending_group_detachments_.pop_back();
         return false;
     }
     return true;
+}
+
+bool ProjectStore::FinishGroupDetachment(std::string id, std::string& error) {
+    auto previous = pending_group_detachments_;
+    pending_group_detachments_.erase(std::remove(
+        pending_group_detachments_.begin(), pending_group_detachments_.end(), id),
+        pending_group_detachments_.end());
+    error.clear();
+    if (pending_group_detachments_.size() == previous.size() || Save(error)) return true;
+    pending_group_detachments_ = std::move(previous);
+    return false;
 }
 
 bool ProjectStore::SetActive(const std::string& id, std::string& error) {

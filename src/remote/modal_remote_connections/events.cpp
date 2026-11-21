@@ -107,6 +107,7 @@ std::vector<ftxui::Component> RemoteConnectionsModalContent::GetVisibleInputs() 
             inputs.push_back(port_input_);
             inputs.push_back(user_input_);
             inputs.push_back(password_input_);
+            inputs.push_back(toggle_password_button_);
             inputs.push_back(remote_root_input_);
             inputs.push_back(ftps_tls_mode_input_);
             inputs.push_back(ftps_passive_checkbox_);

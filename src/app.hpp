@@ -111,6 +111,7 @@ private:
         AiQuickActions,
         AiSettings,
         AssistantSettings,
+        RenameProject,
     };
 
     void SetActiveLayer(UiLayer layer);
@@ -267,6 +268,7 @@ private:
     void RunDropdownAction(int menu_index, int item_index);
     ftxui::Element Render();
     ftxui::Element RenderGoToLinePanel();
+    ftxui::Element RenderRenameProjectPanel();
     BottomBarRowState CurrentBottomBarRowState();
     bool HandleGlobalEvent(ftxui::Event event);
     int DropdownX() const;
@@ -291,9 +293,14 @@ private:
     void SyncNotesProjectContext();
     std::vector<SidebarPanel::ProjectEntry> SidebarProjects() const;
     bool RegisterProject(const std::filesystem::path& root, std::string& error);
-    void ActivateProject(const std::string& id);
+    bool ActivateProject(const std::string& id);
     void RemoveProject(const std::string& id);
-    void OpenProjectRemote(const std::string& id);
+    bool FinishProjectGroupDetachments(std::string& error);
+    void OpenRenameProject(const std::string& id);
+    void SubmitRenameProject();
+    void CloseRenameProject();
+    bool UpdateProjectGroupNames(const ProjectRecord& project, std::string& error);
+    void OpenProjectRemote(std::string id);
     bool OpenWorkspaceFolder(const std::filesystem::path& root, std::string& error);
     const ProjectRecord* ActiveWorkspaceProject() const;
     void AddCurrentFolderAsProject();
@@ -310,7 +317,6 @@ private:
     // Built-in command actions. UI surfaces and shortcuts call these through command IDs.
     void CommandFileNew();
     void CommandFileOpen();
-    void CommandFileOpenFolder();
     void CommandFileSaveAs();
     void CommandFileImport();
     void CommandFileRecent();
@@ -454,12 +460,16 @@ private:
     ThemeDialog theme_dialog_;
     UnsavedChangesDialog unsaved_changes_dialog_;
     std::string goto_line_input_;
+    std::string rename_project_id_;
+    std::string project_name_;
+    std::string rename_project_error_;
     std::string active_action_ = "Ready";
     TtsHeaderButton tts_header_active_button_ = TtsHeaderButton::Open;
 
     UiLayer active_layer_ = UiLayer::Main;
     int active_layer_index_ = static_cast<int>(UiLayer::Main);
     int goto_line_input_cursor_position_ = 0;
+    int project_name_cursor_position_ = 0;
     bool sidebar_has_focus_ = false;
     bool show_goto_line_bar_ = false;
     NavigationPopupMode navigation_popup_mode_ = NavigationPopupMode::GoToLine;
@@ -479,6 +489,10 @@ private:
     ftxui::Component goto_line_go_button_;
     ftxui::Component goto_line_cancel_button_;
     ftxui::Component goto_line_popup_container_;
+    ftxui::Component project_name_input_;
+    ftxui::Component rename_project_button_;
+    ftxui::Component cancel_rename_project_button_;
+    ftxui::Component rename_project_popup_;
     ftxui::Component renderer_;
     ftxui::Component global_shortcuts_;
 };

@@ -380,6 +380,11 @@ void TextltApp::CloseRemoteConnectionsModal() {
 
 
 void TextltApp::OpenRemoteFilesModal() {
+    if (const ProjectRecord* project = ActiveWorkspaceProject()) {
+        OpenProjectRemote(project->id);
+        return;
+    }
+
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }

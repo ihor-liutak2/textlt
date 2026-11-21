@@ -50,6 +50,12 @@ int main() {
         return command_id == "edit.undo" ? std::string("Ctrl+U") : std::string();
     });
     menu_bar.RefreshShortcutLabels();
+    const int file_index = MenuBarTestAccess::MenuIndex(menu_bar, " File ");
+    Expect(file_index >= 0, "The File menu should be present.");
+    Expect(menu_bar.CommandIdAt(file_index, 1) == "file.open" &&
+            menu_bar.CommandIdAt(file_index, 2) == "file.save_as",
+        "File should use a single Open item before Save As.");
+
     const int edit_index = MenuBarTestAccess::MenuIndex(menu_bar, " Edit ");
     Expect(edit_index >= 0, "The Edit menu should be present.");
     Expect(MenuBarTestAccess::ItemAt(menu_bar, edit_index, 0).label.find("(Ctrl+U)") !=

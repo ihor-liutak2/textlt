@@ -6,6 +6,7 @@
 #include <optional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "actions/action_repository.hpp"
@@ -21,6 +22,7 @@ public:
     using StatusCallback = std::function<void(const std::string&)>;
     using ClipboardCallback = std::function<bool(const std::string&)>;
     using GroupsChangedCallback = std::function<void()>;
+    using MissingProjectCheck = std::function<bool(const std::string&)>;
 
     ActionsWorkspaceComponent(const Theme* theme, StatusCallback status,
         ClipboardCallback clipboard, GroupsChangedCallback groups_changed,
@@ -31,6 +33,12 @@ public:
     void Open();
     bool Save(std::string& error) const;
     void SetProjectContext(std::optional<std::pair<std::string, std::string>> project);
+    void SetMissingProjectCheck(MissingProjectCheck check) {
+        is_missing_project_ = std::move(check);
+    }
+    bool UpdateProjectGroupName(const std::string& project_id,
+        const std::string& project_name, std::string& error);
+    bool DetachProjectGroup(const std::string& project_id, std::string& error);
 
     std::vector<ActionGroup> Groups() const { return repository_.Data().groups; }
     std::string SelectedGroupId() const { return selected_group_id_; }
@@ -83,6 +91,7 @@ private:
     enum class Dialog { None, NewGroup, RenameGroup, NewPage, RenamePage,
         DeleteGroup, DeletePage, DeleteAction, MergeGroup };
     const ActionGroup* SelectedGroup() const;
+    bool CanDeleteGroup(const ActionGroup& group) const;
     const ActionPage* SelectedPage() const;
     const ActionItem* SelectedItem() const;
     void NormalizeSelection();
@@ -106,6 +115,7 @@ private:
     StatusCallback status_;
     ClipboardCallback clipboard_;
     GroupsChangedCallback groups_changed_;
+    MissingProjectCheck is_missing_project_;
     ActionRepository repository_;
     std::optional<std::pair<std::string, std::string>> project_;
     std::string selected_group_id_;

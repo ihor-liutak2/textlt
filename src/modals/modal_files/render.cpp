@@ -324,10 +324,10 @@ std::string FilesModalContent::ModeTitle() const {
     return "Files";
 }
 
-std::string FilesModalContent::FooterActionLabel() const {
-    switch (mode_) {
+std::string FilesModalContent::FooterActionLabel(FilesModalMode mode) const {
+    switch (mode) {
         case FilesModalMode::Open:
-            return "Open";
+            return "Open File";
         case FilesModalMode::SaveAs:
             return "Save As";
         case FilesModalMode::Import:

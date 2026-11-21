@@ -1,12 +1,17 @@
 ftxui::Element RemoteConnectionsModalContent::RenderConnectionsTab() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    const RemoteConnectionConfig* linked = config_store_
+        ? config_store_->FindById(preferred_connection_id_) : nullptr;
+    const std::string connection_label = assignment_project_id_.empty()
+        ? "Default: " + ActiveConnectionLabel()
+        : "Project connection: " + (linked ? linked->name : std::string("None"));
 
     return vbox({
         hbox({
             text(" Connections ") | bold | color(theme.modal_accent),
             filler(),
-            text("Active: " + ActiveConnectionLabel()) | dim | color(theme.modal_text_color),
+            text(connection_label) | dim | color(theme.modal_text_color),
         }),
         separator() | color(theme.modal_border),
         hbox({
@@ -47,20 +52,25 @@ ftxui::Element RemoteConnectionsModalContent::RenderConnectionDetails() {
     }
 
     const RemoteConnectionConfig& config = connections_[static_cast<size_t>(selected_connection_)];
-    const std::string active_id = config_store_ ? config_store_->ActiveConnectionId() : std::string{};
-    const bool active = !active_id.empty() && config.id == active_id;
+    const bool assigning = !assignment_project_id_.empty();
+    const std::string marked_id = assigning ? preferred_connection_id_
+        : (config_store_ ? config_store_->ActiveConnectionId() : std::string{});
+    const bool marked = config.id == marked_id;
     rows.push_back(text(" Name: " + (config.name.empty() ? std::string("Unnamed") : config.name)) | color(theme.modal_text_color));
     rows.push_back(text(" Type: " + ConnectionKindLabel(config)) | color(theme.modal_text_color));
-    rows.push_back(text(std::string(" Active: ") + (active ? "yes" : "no")) | color(theme.modal_text_color));
+    rows.push_back(text(std::string(assigning ? " Linked to project: " : " Default: ") +
+        (marked ? "yes" : "no")) | color(theme.modal_text_color));
     const std::string target = ConnectionTargetSummary(config);
     if (!target.empty()) {
         rows.push_back(text(" Target: " + target) | dim | color(theme.modal_text_color));
     }
     rows.push_back(text(""));
     rows.push_back(text(" Edit opens the matching type tab.") | dim | color(theme.modal_text_color));
-    rows.push_back(text(" Generic Remote Files uses the default connection.") | dim | color(theme.modal_text_color));
-    if (!assignment_project_id_.empty()) {
+    if (assigning) {
         rows.push_back(text(" Set to Project assigns this profile without connecting.") |
+            dim | color(theme.modal_text_color));
+    } else {
+        rows.push_back(text(" Remote Files uses the default outside registered projects.") |
             dim | color(theme.modal_text_color));
     }
     rows.push_back(filler());
@@ -84,20 +94,21 @@ ftxui::Element RemoteConnectionsModalContent::RenderConnectionList() {
         });
     }
 
-    const std::string active_id = config_store_ ? config_store_->ActiveConnectionId() : std::string{};
+    const std::string marked_id = !assignment_project_id_.empty() ? preferred_connection_id_
+        : (config_store_ ? config_store_->ActiveConnectionId() : std::string{});
     Elements rows;
     rows.reserve(connections_.size());
     for (size_t index = 0; index < connections_.size(); ++index) {
         const RemoteConnectionConfig& config = connections_[index];
         const bool selected = static_cast<int>(index) == selected_connection_;
-        const bool active = !active_id.empty() && config.id == active_id;
+        const bool marked = config.id == marked_id;
         std::string label = config.name.empty() ? config.id : config.name;
         if (label.empty()) {
             label = "Unnamed";
         }
         const std::string target = ConnectionTargetSummary(config);
         Element row = hbox({
-            text(active ? "* " : "  ") | bold | color(theme.modal_accent),
+            text(marked ? "* " : "  ") | bold | color(theme.modal_accent),
             text(TrimForDisplay(label, 19)) | bold,
             filler(),
             text(ConnectionKindLabel(config)) | dim,

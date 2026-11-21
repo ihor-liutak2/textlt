@@ -121,9 +121,9 @@ ftxui::Element RemoteConnectionsModalContent::RenderCustomFooter() {
         buttons.push_back(text(" "));
         if (!assignment_project_id_.empty()) {
             buttons.push_back(assign_project_button_->Render());
-            buttons.push_back(text(" "));
+        } else {
+            buttons.push_back(set_active_button_->Render());
         }
-        buttons.push_back(set_active_button_->Render());
         buttons.push_back(text(" "));
         buttons.push_back(test_button_->Render());
         buttons.push_back(text(" "));

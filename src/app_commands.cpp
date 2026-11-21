@@ -68,7 +68,8 @@ void TextltApp::InitializeCommands() {
 
     add("file.new", "New", "File", "", [this] { CommandFileNew(); });
     add("file.open", "Open", "File", "Ctrl+O", [this] { CommandFileOpen(); });
-    add("file.open_folder", "Open Folder", "File", "", [this] { CommandFileOpenFolder(); });
+    // Keep the previous command ID for saved shortcuts.
+    add("file.open_folder", "Open Folder", "File", "", [this] { CommandFileOpen(); });
     add("file.save_as", "Save As", "File", "", [this] { CommandFileSaveAs(); });
     add("file.import", "Import", "File", "", [this] { CommandFileImport(); });
     add("file.recent", "Recent Files", "File", "", [this] { CommandFileRecent(); });

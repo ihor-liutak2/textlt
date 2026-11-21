@@ -84,7 +84,14 @@ void RemoteConnectionsModalContent::ApplyTypeDefaults(RemoteConnectionType type)
     }
 }
 
+void RemoteConnectionsModalContent::ResetInputSelections() {
+    for (const auto& selection : input_selections_) {
+        *selection = {};
+    }
+}
+
 void RemoteConnectionsModalContent::ResetFormForType(RemoteConnectionType type) {
+    ResetInputSelections();
     id_value_ = MakeRemoteConnectionId();
     name_value_ = DefaultNameForType(type);
     type_value_ = RemoteConnectionTypeToString(type);
@@ -92,6 +99,7 @@ void RemoteConnectionsModalContent::ResetFormForType(RemoteConnectionType type) 
     port_value_ = "22";
     user_value_.clear();
     password_value_.clear();
+    password_masked_ = true;
     remote_root_value_ = "/";
     auth_mode_value_.clear();
     identity_file_value_.clear();
@@ -129,6 +137,7 @@ void RemoteConnectionsModalContent::LoadSelectedIntoForm() {
         selected_connection_ >= static_cast<int>(connections_.size())) {
         return;
     }
+    ResetInputSelections();
     const RemoteConnectionConfig& config = connections_[selected_connection_];
     id_value_ = config.id;
     name_value_ = config.name;
@@ -137,6 +146,7 @@ void RemoteConnectionsModalContent::LoadSelectedIntoForm() {
     port_value_ = std::to_string(config.port <= 0 ? 22 : config.port);
     user_value_ = config.user;
     password_value_ = config.password;
+    password_masked_ = true;
     remote_root_value_ = config.remote_root.empty() ? "/" : config.remote_root;
     auth_mode_value_ = config.auth_mode.empty() ? "auto" : config.auth_mode;
     identity_file_value_ = config.identity_file;
@@ -500,8 +510,9 @@ void RemoteConnectionsModalContent::RebuildFooterActions() {
         add(edit_button_);
         if (!assignment_project_id_.empty()) {
             add(assign_project_button_);
+        } else {
+            add(set_active_button_);
         }
-        add(set_active_button_);
         add(test_button_);
         add(delete_button_);
         add(reload_button_);

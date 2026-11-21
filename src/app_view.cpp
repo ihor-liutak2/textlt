@@ -148,6 +148,9 @@ ftxui::Element TextltApp::Render() {
     if (show_goto_line_bar_) {
         layers.push_back(RenderGoToLinePanel() | clear_under | center);
     }
+    if (ActiveLayer() == UiLayer::RenameProject) {
+        layers.push_back(RenderRenameProjectPanel() | clear_under | center);
+    }
     if (!distraction_mode && menu_bar_->IsDropdownOpen()) {
         layers.push_back(menu_bar_->RenderDropdown());
     }
@@ -256,6 +259,26 @@ ftxui::Element TextltApp::RenderGoToLinePanel() {
         color(current_theme_.modal_text_color);
 }
 
+ftxui::Element TextltApp::RenderRenameProjectPanel() {
+    using namespace ftxui;
+    Elements rows = {
+        text(" Rename project ") | bold | color(current_theme_.modal_accent),
+        project_name_input_->Render() | borderStyled(LIGHT, current_theme_.modal_border),
+    };
+    if (!rename_project_error_.empty()) {
+        rows.push_back(paragraph(rename_project_error_) | color(current_theme_.modal_text_color));
+    }
+    rows.push_back(hbox({
+        filler(),
+        rename_project_button_->Render(),
+        text(" "),
+        cancel_rename_project_button_->Render(),
+    }));
+    return vbox(std::move(rows)) | size(WIDTH, EQUAL, 48) |
+        borderStyled(LIGHT, current_theme_.modal_border) |
+        bgcolor(current_theme_.modal_background);
+}
+
 void TextltApp::SetActiveLayer(UiLayer layer) {
     active_layer_ = layer;
     active_layer_index_ = static_cast<int>(layer);
@@ -291,6 +314,7 @@ bool TextltApp::ActiveModalIsOpen() const {
         case UiLayer::AiQuickActions: return ai_quick_actions_modal_.IsOpen();
         case UiLayer::AiSettings: return ai_settings_modal_.IsOpen();
         case UiLayer::AssistantSettings: return assistant_settings_modal_.IsOpen();
+        case UiLayer::RenameProject: return !rename_project_id_.empty();
     }
     return false;
 }

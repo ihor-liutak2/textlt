@@ -19,6 +19,7 @@
 #include "modal_window.hpp"
 #include "theme.hpp"
 #include "ui_button.hpp"
+#include "ui_selectable_input.hpp"
 
 namespace textlt {
 
@@ -93,14 +94,8 @@ private:
         PasteItems,
     };
 
-    struct InputSelection {
-        ftxui::Box box;
-        std::chrono::steady_clock::time_point last_click{};
-        bool all_selected = false;
-    };
-
     ftxui::Component MakeSelectableInput(
-        std::string& value, int& cursor, InputSelection& selection,
+        std::string& value, int& cursor, const std::shared_ptr<InputSelection>& selection,
         std::string placeholder, std::function<void()> on_enter);
 
     ftxui::Component MakeTextButton(
@@ -151,8 +146,10 @@ private:
     void ClampSelection();
     void EnsureSelectionVisible();
     void SetStatus(std::string message, bool error = false);
+    void ConfirmSelected(FilesModalMode mode);
     bool SelectedPath(std::filesystem::path& path, std::string& error) const;
-    bool TargetPathForMode(std::filesystem::path& path, std::string& error) const;
+    bool TargetPathForMode(
+        FilesModalMode mode, std::filesystem::path& path, std::string& error) const;
     FileFilter FilterForMode() const;
     bool IsParentEntry(const FileEntry& entry) const;
     bool IsFileActionMode() const;
@@ -174,7 +171,7 @@ private:
     ftxui::Element RenderConfirmOverlay();
 
     std::string ModeTitle() const;
-    std::string FooterActionLabel() const;
+    std::string FooterActionLabel(FilesModalMode mode) const;
     std::string FormatCurrentDirectory() const;
     std::string FormatEntryName(const FileEntry& entry, size_t width) const;
     std::string FormatSize(const FileEntry& entry) const;
@@ -204,10 +201,10 @@ private:
     int selection_anchor_ = -1;
     std::string path_input_value_;
     int path_input_cursor_ = 0;
-    InputSelection path_input_selection_;
+    std::shared_ptr<InputSelection> path_input_selection_ = std::make_shared<InputSelection>();
     std::string file_name_input_value_;
     int file_name_input_cursor_ = 0;
-    InputSelection file_name_input_selection_;
+    std::shared_ptr<InputSelection> file_name_input_selection_ = std::make_shared<InputSelection>();
     std::string status_ = "Ready.";
     bool status_is_error_ = false;
     PendingFileOperation pending_operation_ = PendingFileOperation::None;

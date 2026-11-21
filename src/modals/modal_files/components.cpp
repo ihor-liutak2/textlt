@@ -22,64 +22,18 @@ ftxui::Component FilesModalContent::MakeTextButton(
 }
 
 ftxui::Component FilesModalContent::MakeSelectableInput(
-    std::string& value, int& cursor, InputSelection& selection,
+    std::string& value, int& cursor, const std::shared_ptr<InputSelection>& selection,
     std::string placeholder, std::function<void()> on_enter) {
     using namespace ftxui;
     InputOption option;
     option.multiline = false;
-    option.cursor_position = &cursor;
     option.on_enter = std::move(on_enter);
-    option.transform = [this, &selection](InputState state) {
+    option.transform = [this](InputState state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        if (!state.focused) {
-            selection.all_selected = false;
-            selection.last_click = {};
-        }
-        auto element = state.element | bgcolor(theme.modal_input_bg) | color(theme.modal_input_fg);
-        return selection.all_selected ? element | inverted : element;
+        return state.element | bgcolor(theme.modal_input_bg) | color(theme.modal_input_fg);
     };
-    auto input = Input(&value, std::move(placeholder), option);
-    auto view = Renderer(input, [input, &selection] { return input->Render() | reflect(selection.box); });
-    return CatchEvent(view, [input, &value, &cursor, &selection](Event event) {
-        if (event.is_mouse()) {
-            const auto& mouse = event.mouse();
-            if (mouse.button != Mouse::Left || mouse.motion != Mouse::Pressed) {
-                return false;
-            }
-            selection.all_selected = false;
-            if (!selection.box.Contain(mouse.x, mouse.y)) {
-                selection.last_click = {};
-                return false;
-            }
-
-            const auto now = std::chrono::steady_clock::now();
-            if (now - selection.last_click <= std::chrono::milliseconds(kMaxDoubleClickMs)) {
-                selection.last_click = {};
-                selection.all_selected = true;
-                cursor = static_cast<int>(value.size());
-                input->TakeFocus();
-                return true;
-            }
-            selection.last_click = now;
-            return false;
-        }
-
-        if (!selection.all_selected || !input->Focused() || event == Event::Custom) {
-            return false;
-        }
-
-        selection.all_selected = false;
-        if (event.is_character() || event == Event::Backspace || event == Event::Delete) {
-            value.clear();
-            cursor = 0;
-            return !event.is_character();
-        }
-        if (event == Event::ArrowLeft) {
-            cursor = 0;
-            return true;
-        }
-        return event == Event::ArrowRight;
-    });
+    return textlt::MakeSelectableInput(value, cursor, std::move(placeholder),
+        std::move(option), selection);
 }
 
 void FilesModalContent::RebuildComponents() {

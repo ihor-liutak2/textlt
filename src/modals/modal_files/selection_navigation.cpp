@@ -93,24 +93,28 @@ void FilesModalContent::MoveSelectionWithRange(int delta) {
 }
 
 void FilesModalContent::ConfirmSelected() {
-    if (!IsFileActionMode()) {
+    ConfirmSelected(mode_);
+}
+
+void FilesModalContent::ConfirmSelected(FilesModalMode mode) {
+    if (mode == FilesModalMode::None) {
         SetStatus("No file action selected.");
         return;
     }
 
     std::filesystem::path target;
     std::string error;
-    if (!TargetPathForMode(target, error)) {
+    if (!TargetPathForMode(mode, target, error)) {
         SetStatus(error, true);
         return;
     }
 
-    if (on_confirm_path_ && !on_confirm_path_(mode_, target, error)) {
+    if (on_confirm_path_ && !on_confirm_path_(mode, target, error)) {
         SetStatus(error.empty() ? "Operation failed." : error, true);
         return;
     }
 
-    SetStatus(FooterActionLabel() + " complete: " + FileManager::PathToUtf8(target));
+    SetStatus(FooterActionLabel(mode) + " complete: " + FileManager::PathToUtf8(target));
     if (on_close_) {
         on_close_();
     }
@@ -228,8 +232,9 @@ bool FilesModalContent::SelectedPath(std::filesystem::path& path, std::string& e
     return true;
 }
 
-bool FilesModalContent::TargetPathForMode(std::filesystem::path& path, std::string& error) const {
-    if (IsSaveLikeMode()) {
+bool FilesModalContent::TargetPathForMode(
+    FilesModalMode mode, std::filesystem::path& path, std::string& error) const {
+    if (mode == FilesModalMode::SaveAs) {
         if (file_name_input_value_.empty()) {
             error = "Enter a file name.";
             return false;
@@ -242,8 +247,9 @@ bool FilesModalContent::TargetPathForMode(std::filesystem::path& path, std::stri
         return true;
     }
 
-    if ((mode_ == FilesModalMode::OpenFolder || mode_ == FilesModalMode::SelectDirectory) &&
-        !current_directory_.empty()) {
+    const bool directory_mode =
+        mode == FilesModalMode::OpenFolder || mode == FilesModalMode::SelectDirectory;
+    if (directory_mode && !current_directory_.empty()) {
         path = current_directory_;
         error.clear();
         return true;
@@ -254,7 +260,7 @@ bool FilesModalContent::TargetPathForMode(std::filesystem::path& path, std::stri
     }
 
     std::error_code status_error;
-    if (mode_ == FilesModalMode::OpenFolder || mode_ == FilesModalMode::SelectDirectory) {
+    if (directory_mode) {
         if (std::filesystem::is_directory(path, status_error)) {
             return true;
         }

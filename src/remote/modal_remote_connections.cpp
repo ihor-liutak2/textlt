@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
+#include <optional>
 #include <sstream>
 #include <utility>
 
@@ -13,6 +14,7 @@
 #include "ftxui/dom/elements.hpp"
 #include "editor_utils.hpp"
 #include "ui_button.hpp"
+#include "ui_selectable_input.hpp"
 #include "remote/remote_dialog_theme.hpp"
 #include "remote/remote_dropbox_provider.hpp"
 #include "remote/remote_ftps_provider.hpp"

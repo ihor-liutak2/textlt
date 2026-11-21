@@ -37,7 +37,8 @@ inline ftxui::Element RemoteDialogInputTransform(const Theme& theme,
 inline ftxui::Element RenderRemoteDialogInputFrame(
     const Theme& theme,
     const std::string& label,
-    const ftxui::Component& component) {
+    const ftxui::Component& component,
+    const ftxui::Component& label_action = {}) {
     using namespace ftxui;
     const bool focused = component && component->Focused();
     Element input = component ? component->Render() : text("");
@@ -46,10 +47,11 @@ inline ftxui::Element RenderRemoteDialogInputFrame(
         color(theme.modal_input_fg) |
         size(WIDTH, GREATER_THAN, 18) |
         borderStyled(LIGHT, focused ? theme.modal_accent : theme.modal_border);
-    return vbox({
-        text(" " + label) | color(theme.modal_accent),
-        input,
-    });
+    Element label_row = text(" " + label) | color(theme.modal_accent);
+    if (label_action) {
+        label_row = hbox({std::move(label_row), filler(), label_action->Render()});
+    }
+    return vbox({std::move(label_row), std::move(input)});
 }
 
 } // namespace textlt

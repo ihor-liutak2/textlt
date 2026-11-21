@@ -29,6 +29,8 @@ public:
         const std::string& project_id,
         const std::string& project_name,
         std::string& error);
+    bool UpdateProjectSectionName(
+        const std::string& project_id, const std::string& project_name, std::string& error);
     bool ConvertSectionToGeneral(const std::string& id, std::string& error);
     // Links an orphaned group to a project. When the project already has a
     // group, its notes are moved there and the orphaned group is retired.

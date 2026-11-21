@@ -72,8 +72,7 @@ public:
         component.FinishCreateSection();
     }
     static void DeleteGroup(NotesWorkspaceComponent& component) {
-        component.RequestConfirmation(
-            NotesWorkspaceComponent::ConfirmAction::DeleteGroup, "Delete group", "Confirm");
+        component.RequestDeleteSelectedSection();
         component.AcceptConfirmation();
     }
     static std::string FirstSectionName(const NotesWorkspaceComponent& component) {
@@ -367,8 +366,12 @@ public:
     static void OpenProjectNotes(NotesWorkspaceComponent& component) {
         component.OpenProjectNotes();
     }
-    static void ConvertSelectedToGeneral(NotesWorkspaceComponent& component) {
-        component.ConvertSelectedGroupToGeneral();
+    static bool RequestDeleteGroup(NotesWorkspaceComponent& component) {
+        component.RequestDeleteSelectedSection();
+        return component.confirm_action_ == NotesWorkspaceComponent::ConfirmAction::DeleteGroup;
+    }
+    static void CancelDeleteGroup(NotesWorkspaceComponent& component) {
+        component.CloseConfirmation();
     }
     static void RelinkSelectedToActiveProject(NotesWorkspaceComponent& component) {
         component.RelinkSelectedGroupToActiveProject();
@@ -545,8 +548,7 @@ int main() {
     Expect(NotesWorkspaceActionsTestAccess::SelectedSectionId(component) == alpha_id,
         "Open Project Notes should select the active project group.");
 
-    // Removing a project from the registry keeps its notes and marks its
-    // group as orphaned.
+    // A group loaded with an unknown project ID is offered for relinking.
     NotesWorkspaceActionsTestAccess::SetProject(component, "project-a", "Alpha", {"project-a"});
     Expect(NotesWorkspaceActionsTestAccess::SectionIsOrphaned(component, beta_id),
         "A group for a removed project should be marked as orphaned.");
@@ -570,15 +572,39 @@ int main() {
     const std::string gamma_id =
         NotesWorkspaceActionsTestAccess::ProjectSectionId(component, "project-c");
     Expect(!gamma_id.empty(), "Switching to another project did not create its group.");
+    Expect(!NotesWorkspaceActionsTestAccess::RequestDeleteGroup(component),
+        "A registered project's group should be protected from deletion.");
     NotesWorkspaceActionsTestAccess::SetProject(component, "project-a", "Alpha", {"project-a"});
     Expect(NotesWorkspaceActionsTestAccess::SectionIsOrphaned(component, gamma_id),
         "The removed project's group should be orphaned.");
     NotesWorkspaceActionsTestAccess::SelectGroupById(component, gamma_id);
-    NotesWorkspaceActionsTestAccess::ConvertSelectedToGeneral(component);
+    Expect(NotesWorkspaceActionsTestAccess::RequestDeleteGroup(component),
+        "Delete should open the confirmation for an orphaned group.");
+    NotesWorkspaceActionsTestAccess::CancelDeleteGroup(component);
     Expect(!NotesWorkspaceActionsTestAccess::SectionIsProject(component, gamma_id),
-        "Converting an orphan should turn it into a General group.");
+        "Requesting deletion of an orphan should turn it into a General group.");
     Expect(!NotesWorkspaceActionsTestAccess::SectionIsOrphaned(component, gamma_id),
         "A converted group should no longer be orphaned.");
+    Expect(!NotesWorkspaceActionsTestAccess::SectionDeleted(component, gamma_id),
+        "Canceling deletion should keep the converted group.");
+
+    // Explicit project removal detaches the group and keeps its notes.
+    NotesWorkspaceActionsTestAccess::SetProject(
+        component, "project-d", "Delta", {"project-a", "project-d"});
+    const std::string delta_id =
+        NotesWorkspaceActionsTestAccess::ProjectSectionId(component, "project-d");
+    NotesWorkspaceActionsTestAccess::NewNote(component);
+    std::string detach_error;
+    Expect(component.DetachProjectGroup("project-d", detach_error), detach_error);
+    NotesWorkspaceActionsTestAccess::SetProject(component, "project-a", "Alpha", {"project-a"});
+    Expect(!NotesWorkspaceActionsTestAccess::SectionIsProject(component, delta_id),
+        "The removed project's Notes group should be a regular group.");
+    Expect(NotesWorkspaceActionsTestAccess::FirstNoteSection(component) == delta_id,
+        "Detaching a project group should keep its notes in the group.");
+    NotesWorkspaceActionsTestAccess::SelectGroupById(component, delta_id);
+    NotesWorkspaceActionsTestAccess::DeleteGroup(component);
+    Expect(NotesWorkspaceActionsTestAccess::SectionDeleted(component, delta_id),
+        "The detached Notes group should be deletable.");
 
     // Non-project folders have no project context and therefore no Projects
     // footer block.

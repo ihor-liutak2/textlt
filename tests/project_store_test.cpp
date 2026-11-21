@@ -55,6 +55,13 @@ int main() {
         Expect(unicode->name == Utf8FromPath(unicode_directory.filename()),
                "Unicode project name was not preserved as UTF-8.");
         Expect(store.SetActive(first_id, error), error);
+        const auto second_root = store.FindById(second_id)->local_root;
+        Expect(!store.Rename(second_id, " \t ", error), "Blank project names must be rejected.");
+        Expect(store.FindById(second_id)->name == "Two", "Invalid rename changed the name.");
+        Expect(store.Rename(second_id, "  Client work  ", error), error);
+        Expect(store.FindById(second_id)->local_root == second_root &&
+                   std::filesystem::is_directory(second_root),
+               "Renaming an inactive project must preserve its folder.");
     }
 
     {
@@ -91,6 +98,7 @@ int main() {
         const ProjectRecord* second = store.FindById(second_id);
         Expect(second && second->remote_connection_id == "remote-two",
                "Remote connection association did not persist.");
+        Expect(second->name == "Client work", "Renamed project label did not persist.");
         Expect(store.SetRemoteConnection(second_id, {}, error), error);
         Expect(store.FindById(second_id)->remote_connection_id.empty(),
                "Unlinking a project remote connection failed.");
@@ -100,6 +108,12 @@ int main() {
                "Removing a project registration must not delete its folder.");
         Expect(store.ActiveProjectId() == second_id,
                "Removing the active project must select a remaining project.");
+        ProjectStore reopened(registry);
+        Expect(reopened.PendingGroupDetachments() == std::vector<std::string>{first_id},
+               "Pending group detachment did not persist after project removal.");
+        Expect(reopened.FinishGroupDetachment(first_id, error), error);
+        Expect(ProjectStore(registry).PendingGroupDetachments().empty(),
+               "Finished group detachment is still pending after reload.");
     }
 
     std::filesystem::remove_all(base, cleanup_error);

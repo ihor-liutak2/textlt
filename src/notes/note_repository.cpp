@@ -201,7 +201,24 @@ NoteSection* NoteRepository::EnsureProjectSection(
     return &sections_.back();
 }
 
+bool NoteRepository::UpdateProjectSectionName(
+    const std::string& project_id, const std::string& project_name, std::string& error) {
+    error.clear();
+    NoteSection* section = FindProjectSection(project_id);
+    if (!section) return true;
+    std::string name = UniqueSectionName(project_name, section->id);
+    if (section->name == name) return true;
+
+    NoteSection previous = *section;
+    section->name = std::move(name);
+    section->updated_at = UtcNow();
+    if (SaveSections(error)) return true;
+    *section = std::move(previous);
+    return false;
+}
+
 bool NoteRepository::ConvertSectionToGeneral(const std::string& id, std::string& error) {
+    error.clear();
     auto found = std::find_if(
         sections_.begin(), sections_.end(),
         [&](const NoteSection& section) { return section.id == id && !section.deleted_at; });
@@ -210,10 +227,13 @@ bool NoteRepository::ConvertSectionToGeneral(const std::string& id, std::string&
         return false;
     }
     if (!found->project_id) return true;
+    NoteSection previous = *found;
     found->project_id.reset();
     found->auto_named = false;
     found->updated_at = UtcNow();
-    return SaveSections(error);
+    if (SaveSections(error)) return true;
+    *found = std::move(previous);
+    return false;
 }
 
 bool NoteRepository::RelinkSectionToProject(

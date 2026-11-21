@@ -11,54 +11,58 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
       assign_project_(std::move(assign_project)),
       can_delete_(std::move(can_delete)),
       on_close_(std::move(on_close)) {
-    auto input_transform = [this](ftxui::InputState state) {
-        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return RemoteDialogInputTransform(theme, std::move(state));
+    const auto make_input = [this](std::string& value, int& cursor, std::string placeholder,
+                                   std::optional<MainTab> tab = std::nullopt,
+                                   bool* password_masked = nullptr) {
+        ftxui::InputOption option;
+        option.multiline = false;
+        if (password_masked) option.password = password_masked;
+        option.transform = [this, password_masked](ftxui::InputState state) {
+            const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+            if (password_masked && *password_masked && !state.is_placeholder) {
+                using namespace ftxui;
+                state.element = hbox({
+                    text("●●●●●●●●"),
+                    state.focused ? text(" ") | focusCursorBarBlinking : emptyElement(),
+                });
+            }
+            return RemoteDialogInputTransform(theme, std::move(state));
+        };
+        auto selection = std::make_shared<InputSelection>();
+        input_selections_.push_back(selection);
+        return ftxui::Maybe(MakeSelectableInput(value, cursor, std::move(placeholder),
+            std::move(option), std::move(selection)), [this, tab] {
+                return selected_tab_ != MainTab::Connections && (!tab || selected_tab_ == *tab);
+            });
     };
 
-    ftxui::InputOption base_option;
-    base_option.multiline = false;
-    base_option.transform = input_transform;
-
-    ftxui::InputOption name_option = base_option;
-    name_option.cursor_position = &name_cursor_;
-    name_input_ = ftxui::Input(&name_value_, "connection name", name_option);
-
-    ftxui::InputOption host_option = base_option;
-    host_option.cursor_position = &host_cursor_;
-    host_input_ = ftxui::Input(&host_value_, "host", host_option);
-
-    ftxui::InputOption port_option = base_option;
-    port_option.cursor_position = &port_cursor_;
-    port_input_ = ftxui::Input(&port_value_, "22", port_option);
-
-    ftxui::InputOption user_option = base_option;
-    user_option.cursor_position = &user_cursor_;
-    user_input_ = ftxui::Input(&user_value_, "user", user_option);
-
-    ftxui::InputOption password_option = base_option;
-    password_option.cursor_position = &password_cursor_;
-    password_input_ = ftxui::Input(&password_value_, "password", password_option);
-
-    ftxui::InputOption root_option = base_option;
-    root_option.cursor_position = &remote_root_cursor_;
-    remote_root_input_ = ftxui::Input(&remote_root_value_, "/remote/path", root_option);
-
-    ftxui::InputOption auth_mode_option = base_option;
-    auth_mode_option.cursor_position = &auth_mode_cursor_;
-    auth_mode_input_ = ftxui::Input(&auth_mode_value_, "auto / password / private_key / agent / ssh_config", auth_mode_option);
-
-    ftxui::InputOption identity_option = base_option;
-    identity_option.cursor_position = &identity_file_cursor_;
-    identity_file_input_ = ftxui::Input(&identity_file_value_, "~/.ssh/id_ed25519", identity_option);
-
-    ftxui::InputOption key_passphrase_option = base_option;
-    key_passphrase_option.cursor_position = &key_passphrase_cursor_;
-    key_passphrase_input_ = ftxui::Input(&key_passphrase_value_, "private key passphrase", key_passphrase_option);
-
-    ftxui::InputOption known_hosts_option = base_option;
-    known_hosts_option.cursor_position = &known_hosts_file_cursor_;
-    known_hosts_file_input_ = ftxui::Input(&known_hosts_file_value_, "~/.ssh/known_hosts", known_hosts_option);
+    name_input_ = make_input(name_value_, name_cursor_, "connection name");
+    remote_root_input_ = make_input(remote_root_value_, remote_root_cursor_, "/remote/path");
+    host_input_ = make_input(host_value_, host_cursor_, "host", MainTab::Ftps);
+    port_input_ = make_input(port_value_, port_cursor_, "22", MainTab::Ftps);
+    user_input_ = make_input(user_value_, user_cursor_, "user", MainTab::Ftps);
+    password_input_ = make_input(
+        password_value_, password_cursor_, "password", MainTab::Ftps, &password_masked_);
+    ftxui::ButtonOption toggle_password_option = ftxui::ButtonOption::Simple();
+    toggle_password_option.on_click = [this] { password_masked_ = !password_masked_; };
+    toggle_password_option.transform = [this](const ftxui::EntryState& state) {
+        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+        const auto spec = ButtonSpecFromLabel(password_masked_ ? "Show" : "Hide",
+            ButtonRole::Utility, ButtonVariant::Minimal, ButtonSize::Compact);
+        return RenderModalFlatButton(theme, spec, state.focused || state.active);
+    };
+    toggle_password_button_ = ftxui::Maybe(ftxui::Button(toggle_password_option),
+        [this] { return selected_tab_ == MainTab::Ftps; });
+    ftps_tls_mode_input_ = make_input(
+        ftps_tls_mode_value_, ftps_tls_mode_cursor_, "explicit / implicit", MainTab::Ftps);
+    auth_mode_input_ = make_input(auth_mode_value_, auth_mode_cursor_,
+        "auto / password / private_key / agent / ssh_config", MainTab::Sftp);
+    identity_file_input_ = make_input(
+        identity_file_value_, identity_file_cursor_, "~/.ssh/id_ed25519", MainTab::Sftp);
+    key_passphrase_input_ = make_input(
+        key_passphrase_value_, key_passphrase_cursor_, "private key passphrase", MainTab::Sftp);
+    known_hosts_file_input_ = make_input(
+        known_hosts_file_value_, known_hosts_file_cursor_, "~/.ssh/known_hosts", MainTab::Sftp);
 
     ftxui::MenuOption ssh_host_option = ftxui::MenuOption::Vertical();
     ssh_host_option.on_change = [this] { SyncSshConfigHostSelection(); };
@@ -73,29 +77,18 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
         }
         return row | ftxui::color(theme.modal_text_color);
     };
-    ssh_config_host_menu_ = ftxui::Menu(
-        &ssh_config_hosts_, &selected_ssh_config_host_, ssh_host_option);
+    ssh_config_host_menu_ = ftxui::Maybe(ftxui::Menu(
+        &ssh_config_hosts_, &selected_ssh_config_host_, ssh_host_option),
+        [this] { return selected_tab_ == MainTab::Sftp && !ssh_config_hosts_.empty(); });
 
-    ftxui::InputOption app_key_option = base_option;
-    app_key_option.cursor_position = &app_key_cursor_;
-    app_key_input_ = ftxui::Input(&app_key_value_, "Dropbox app key", app_key_option);
-
-    ftxui::InputOption app_secret_option = base_option;
-    app_secret_option.cursor_position = &app_secret_cursor_;
-    app_secret_input_ = ftxui::Input(&app_secret_value_, "Dropbox app secret", app_secret_option);
-
-    ftxui::InputOption access_token_option = base_option;
-    access_token_option.cursor_position = &access_token_cursor_;
-    access_token_input_ = ftxui::Input(&access_token_value_, "paste access token", access_token_option);
-
-    ftxui::InputOption refresh_token_option = base_option;
-    refresh_token_option.cursor_position = &refresh_token_cursor_;
-    refresh_token_input_ = ftxui::Input(&refresh_token_value_, "paste refresh token", refresh_token_option);
-
-    ftxui::InputOption ftps_tls_mode_option = base_option;
-    ftps_tls_mode_option.cursor_position = &ftps_tls_mode_cursor_;
-    ftps_tls_mode_input_ = ftxui::Input(
-        &ftps_tls_mode_value_, "explicit / implicit", ftps_tls_mode_option);
+    app_key_input_ = make_input(
+        app_key_value_, app_key_cursor_, "Dropbox app key", MainTab::Dropbox);
+    app_secret_input_ = make_input(
+        app_secret_value_, app_secret_cursor_, "Dropbox app secret", MainTab::Dropbox);
+    access_token_input_ = make_input(
+        access_token_value_, access_token_cursor_, "paste access token", MainTab::Dropbox);
+    refresh_token_input_ = make_input(
+        refresh_token_value_, refresh_token_cursor_, "paste refresh token", MainTab::Dropbox);
 
     ftxui::CheckboxOption checkbox_option = ftxui::CheckboxOption::Simple();
     checkbox_option.transform = [this](const ftxui::EntryState& state) {
@@ -109,8 +102,9 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
         }
         return item | ftxui::color(theme.modal_text_color);
     };
-    ftps_passive_checkbox_ = ftxui::Checkbox(
-        "Passive mode", &ftps_passive_value_, checkbox_option);
+    ftps_passive_checkbox_ = ftxui::Maybe(ftxui::Checkbox(
+        "Passive mode", &ftps_passive_value_, checkbox_option),
+        [this] { return selected_tab_ == MainTab::Ftps; });
 
     delete_button_ = MakeTextButton("Delete", [this] { DeleteSelected(); },
         ButtonRole::Danger, ButtonVariant::AccentEdges, "!");
@@ -161,6 +155,7 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     editor_fields.push_back(port_input_);
     editor_fields.push_back(user_input_);
     editor_fields.push_back(password_input_);
+    editor_fields.push_back(toggle_password_button_);
     editor_fields.push_back(remote_root_input_);
     editor_fields.push_back(auth_mode_input_);
     editor_fields.push_back(identity_file_input_);
@@ -292,6 +287,7 @@ void RemoteConnectionsModalContent::OpenForProject(
     assignment_project_id_ = std::move(project_id);
     assignment_project_name_ = std::move(project_name);
     preferred_connection_id_ = std::move(current_connection_id);
+    selected_connection_ = 0;
     id_value_.clear();
     selected_tab_ = MainTab::Connections;
     RebuildFooterActions();
@@ -341,7 +337,8 @@ void RemoteConnectionsModalContent::Reload() {
         return;
     }
     const std::string active_id = config_store_ ? config_store_->ActiveConnectionId() : std::string{};
-    const std::string selection_id = preferred_connection_id_.empty() ? active_id : preferred_connection_id_;
+    const std::string selection_id = assignment_project_id_.empty() && preferred_connection_id_.empty()
+        ? active_id : preferred_connection_id_;
     if (!selection_id.empty()) {
         for (size_t index = 0; index < connections_.size(); ++index) {
             if (connections_[index].id == selection_id) {

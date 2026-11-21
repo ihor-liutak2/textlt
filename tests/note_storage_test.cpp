@@ -119,6 +119,13 @@ int main() {
     assert(loaded_alpha->auto_named);
     assert(projects_reloaded.FindProjectSection("project-beta")->name == "Alpha (2)");
 
+    assert(projects_reloaded.UpdateProjectSectionName("project-beta", "Client work", error));
+    notes::NoteRepository after_project_rename(root);
+    assert(after_project_rename.Load(warning));
+    const notes::NoteSection* renamed_beta = after_project_rename.FindProjectSection("project-beta");
+    assert(renamed_beta && renamed_beta->id == beta_id && renamed_beta->name == "Client work");
+    assert(after_project_rename.FindProjectSection("project-alpha")->name == "Alpha");
+
     // Managed groups cannot be renamed or deleted through the General CRUD.
     assert(!projects_reloaded.RenameSection(alpha_id, "Renamed", error));
     assert(!projects_reloaded.DeleteSection(alpha_id, error));

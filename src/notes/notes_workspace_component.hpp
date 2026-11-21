@@ -44,7 +44,10 @@ public:
     // The project group is created lazily and is never associated by name.
     void SetProjectContext(
         std::optional<ProjectContext> project,
-        std::vector<std::string> known_project_ids);
+        std::vector<std::string> known_project_ids,
+        bool project_registry_usable = true);
+    bool UpdateProjectGroupName(const ProjectContext& project, std::string& error);
+    bool DetachProjectGroup(const std::string& project_id, std::string& error);
     bool Save(std::string& error);
     bool IsEditing() const { return editing_; }
     bool IsTrashSelected() const { return trash_selected_ && !editing_; }
@@ -130,13 +133,14 @@ private:
     void StartCreateSection();
     void FinishCreateSection();
     void StartRenameSection();
+    void RequestDeleteSelectedSection();
     void DeleteSelectedSection();
     void DeleteSelectedNote();
     void RestoreSelectedNote();
     void PermanentlyDeleteSelectedNote();
     void EmptyTrash();
     void OpenProjectNotes();
-    void ConvertSelectedGroupToGeneral();
+    bool ConvertSelectedGroupToGeneral();
     void RelinkSelectedGroupToActiveProject();
     void RequestConfirmation(ConfirmAction action, std::string title, std::string message);
     void AcceptConfirmation();
@@ -193,6 +197,7 @@ private:
     size_t note_search_active_ = 0;
     std::optional<ProjectContext> project_context_;
     std::vector<std::string> known_project_ids_;
+    bool project_registry_usable_ = true;
     std::optional<std::string> active_project_section_id_;
     std::string selected_section_id_;
     bool trash_selected_ = false;

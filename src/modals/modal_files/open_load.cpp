@@ -5,8 +5,8 @@ void FilesModalContent::Open(
     mode_ = mode;
     status_is_error_ = false;
     status_ = "Ready.";
-    path_input_selection_ = {};
-    file_name_input_selection_ = {};
+    *path_input_selection_ = {};
+    *file_name_input_selection_ = {};
     CancelPendingOperation();
     ClearSelectionMarks();
     file_name_input_value_ = std::move(suggested_file_name);
@@ -147,7 +147,7 @@ void FilesModalContent::LoadDirectory(const std::filesystem::path& directory) {
 }
 
 void FilesModalContent::LoadPathFromInput() {
-    path_input_selection_.all_selected = false;
+    path_input_selection_->all_selected = false;
     if (!file_manager_) {
         SetStatus("File manager is not available.", true);
         return;

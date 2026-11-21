@@ -59,8 +59,10 @@ public:
         std::string& error);
     bool MovePage(const std::string& group_id, const std::string& id,
         int delta, std::string& error);
+    // An empty page_id and a created_page_id output allow adding to a new page.
     bool CreateItem(const std::string& group_id, const std::string& page_id,
-        ActionItem item, std::string& id, std::string& error);
+        ActionItem item, std::string& id, std::string& error,
+        std::string* created_page_id = nullptr);
     bool AppendItems(const std::string& group_id, const std::string& page_id,
         std::vector<ActionItem> items, std::string& error);
     bool UpdateItem(const std::string& group_id, const std::string& page_id,
@@ -73,6 +75,10 @@ public:
         const std::string& id, int delta, std::string& error);
     bool EnsureProjectGroup(const std::string& project_id,
         const std::string& project_name, std::string& group_id, std::string& error);
+    bool UpdateProjectGroupName(const std::string& project_id,
+        const std::string& project_name, std::string& error);
+    bool DetachProjectGroup(const std::string& project_id, std::string& error);
+    bool ConvertGroupToGeneral(const std::string& group_id, std::string& error);
 
     static std::filesystem::path DefaultPath();
 

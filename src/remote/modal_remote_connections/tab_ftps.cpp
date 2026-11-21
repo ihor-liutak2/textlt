@@ -18,7 +18,8 @@ ftxui::Element RemoteConnectionsModalContent::RenderFtpsTab() {
         hbox({
             field("Username", user_input_, 53),
             text("  "),
-            field("Password", password_input_, 53),
+            RenderRemoteDialogInputFrame(theme, "Password", password_input_,
+                toggle_password_button_) | size(WIDTH, EQUAL, 53),
         }),
         hbox({
             field("TLS mode", ftps_tls_mode_input_, 53),

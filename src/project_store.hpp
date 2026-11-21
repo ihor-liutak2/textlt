@@ -27,7 +27,12 @@ public:
 
     // Returns the existing project when the normalized root is already registered.
     ProjectRecord* Add(std::filesystem::path root, std::string name, std::string& error);
+    bool Rename(const std::string& id, std::string name, std::string& error);
     bool Remove(const std::string& id, std::string& error);
+    const std::vector<std::string>& PendingGroupDetachments() const {
+        return pending_group_detachments_;
+    }
+    bool FinishGroupDetachment(std::string id, std::string& error);
     bool SetActive(const std::string& id, std::string& error);
     bool SetRemoteConnection(const std::string& id, std::string connection_id, std::string& error);
     const std::filesystem::path& Path() const { return path_; }
@@ -41,6 +46,7 @@ private:
 
     std::filesystem::path path_;
     std::vector<ProjectRecord> projects_;
+    std::vector<std::string> pending_group_detachments_;
     std::string active_project_id_;
     bool usable_ = true;
     std::string load_error_;

@@ -165,6 +165,7 @@ TextltApp::TextltApp()
           [this] { return SidebarProjects(); },
           [this](const std::string& id) { ActivateProject(id); },
           [this](const std::filesystem::path&) { OpenFilesModal(FilesModalMode::SelectDirectory); },
+          [this](const std::string& id) { OpenRenameProject(id); },
           [this](const std::string& id) { RemoveProject(id); },
           [this](const std::string& id) { OpenProjectRemote(id); },
           [this](const std::string& id) { AssignProjectConnection(id); },
@@ -495,7 +496,21 @@ TextltApp::TextltApp()
         [this](const std::string& message) { active_action_ = message; screen_.PostEvent(ftxui::Event::Custom); },
         [this](const std::string& text) { return clipboard_controller_.WriteText(text); },
         [this] { RefreshActionsSidebar(); });
+    std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_)
+        ->SetMissingProjectCheck([this](const std::string& id) {
+            return project_store_.IsUsable() && !project_store_.FindById(id);
+        });
     SyncActionsProjectContext();
+    {
+        std::string error;
+        if (!FinishProjectGroupDetachments(error)) active_action_ = error;
+    }
+    // Reconcile group names if the registry was saved before a group write failed.
+    for (const ProjectRecord& project : project_store_.Projects()) {
+        std::string error;
+        if (!UpdateProjectGroupNames(project, error)) active_action_ = error;
+    }
+    RefreshActionsSidebar();
 
     editor_find_target_ = std::make_unique<EditorFindTarget>([this]() {
         return std::static_pointer_cast<EditorComponent>(text_editor_).get();
@@ -604,6 +619,29 @@ TextltApp::TextltApp()
         goto_line_cancel_button_,
     });
 
+    ftxui::InputOption project_name_option;
+    project_name_option.multiline = false;
+    project_name_option.cursor_position = &project_name_cursor_position_;
+    project_name_option.on_enter = [this] { SubmitRenameProject(); };
+    project_name_option.transform = [this](ftxui::InputState state) {
+        return current_theme_.InputTransform(std::move(state));
+    };
+    project_name_input_ = ftxui::Input(&project_name_, "Project name", project_name_option);
+    rename_project_button_ = ftxui::Button(MakePopupFlatButtonOption(
+        "Rename", [this] { SubmitRenameProject(); }, &current_theme_, ButtonRole::Primary));
+    cancel_rename_project_button_ = ftxui::Button(MakePopupFlatButtonOption(
+        "Cancel", [this] { CloseRenameProject(); }, &current_theme_, ButtonRole::Cancel));
+    rename_project_popup_ = ftxui::CatchEvent(
+        ftxui::Container::Vertical({
+            project_name_input_,
+            ftxui::Container::Horizontal({rename_project_button_, cancel_rename_project_button_}),
+        }),
+        [this](ftxui::Event event) {
+            if (event != ftxui::Event::Escape) return false;
+            CloseRenameProject();
+            return true;
+        });
+
     // GitSettingsModal used to create its component lazily in Open(). Every
     // entry passed to Container::Tab must already be a valid, stable component.
     git_settings_modal_.Configure(
@@ -637,6 +675,7 @@ TextltApp::TextltApp()
         ai_quick_actions_modal_.View(),
         ai_settings_modal_.View(),
         assistant_settings_modal_.View(),
+        rename_project_popup_,
     }, &active_layer_index_);
 
     renderer_ = ftxui::Renderer(root_container_, [this] { return Render(); });

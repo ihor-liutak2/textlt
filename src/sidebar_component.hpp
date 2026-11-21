@@ -102,6 +102,7 @@ public:
         ProjectsProvider projects_provider,
         ProjectIdCallback on_project_select,
         AddProjectCallback on_project_add,
+        ProjectIdCallback on_project_rename,
         ProjectIdCallback on_project_remove,
         ProjectIdCallback on_project_remote,
         ProjectIdCallback on_project_assign_remote,
@@ -242,6 +243,7 @@ private:
     ProjectsProvider projects_provider_;
     ProjectIdCallback on_project_select_;
     AddProjectCallback on_project_add_;
+    ProjectIdCallback on_project_rename_;
     ProjectIdCallback on_project_remove_;
     ProjectIdCallback on_project_remote_;
     ProjectIdCallback on_project_assign_remote_;
@@ -275,6 +277,7 @@ private:
     ftxui::Box action_tertiary_box_;
     ftxui::Box action_quaternary_box_;
     ftxui::Box action_quinary_box_;
+    ftxui::Box project_rename_box_;
     ftxui::Box group_new_box_;
     ftxui::Box group_rename_box_;
     ftxui::Box group_delete_box_;

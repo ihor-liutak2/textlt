@@ -75,7 +75,6 @@ MenuBarComponent::MenuBarComponent(
           {
               {" New ", "file.new"},
               {" Open... ", "file.open"},
-              {" Open Folder... ", "file.open_folder"},
               {" Save As... ", "file.save_as"},
               {" Import... ", "file.import"},
               {" Recent Files ", "file.recent"},

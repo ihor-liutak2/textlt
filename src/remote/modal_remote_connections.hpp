@@ -19,6 +19,8 @@
 
 namespace textlt {
 
+struct InputSelection;
+
 class RemoteConnectionsModalContent : public IModalContent {
 public:
     using CloseCallback = std::function<void()>;
@@ -95,6 +97,7 @@ private:
     void SelectType(RemoteConnectionType type);
     void ApplyTypeDefaults(RemoteConnectionType type);
     void ResetFormForType(RemoteConnectionType type);
+    void ResetInputSelections();
     void AddConnectionOfType(RemoteConnectionType type);
     void LoadSelectedIntoForm();
     void SaveFormToSelected();
@@ -150,6 +153,7 @@ private:
     std::string port_value_ = "22";
     std::string user_value_;
     std::string password_value_;
+    bool password_masked_ = true;
     std::string remote_root_value_ = "/";
     std::string auth_mode_value_ = "auto";
     std::string identity_file_value_;
@@ -179,6 +183,7 @@ private:
     int access_token_cursor_ = 0;
     int refresh_token_cursor_ = 0;
     int ftps_tls_mode_cursor_ = 0;
+    std::vector<std::shared_ptr<InputSelection>> input_selections_;
 
     std::string status_ = "Ready.";
     bool status_is_error_ = false;
@@ -191,6 +196,7 @@ private:
     ftxui::Component port_input_;
     ftxui::Component user_input_;
     ftxui::Component password_input_;
+    ftxui::Component toggle_password_button_;
     ftxui::Component remote_root_input_;
     ftxui::Component auth_mode_input_;
     ftxui::Component identity_file_input_;

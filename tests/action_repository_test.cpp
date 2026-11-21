@@ -87,6 +87,11 @@ int main() try {
     std::string unused;
     Check(!failing.CreateGroup("Must not commit", unused, error));
     Check(failing.Data().groups.size() == before.groups.size());
+    std::string new_page;
+    Check(!failing.CreateItem(group, "", {"", "Must not commit", "", "test"},
+        unused, error, &new_page));
+    Check(new_page.empty());
+    Check(failing.Data().groups.front().pages.size() == before.groups.front().pages.size());
     ActionRepository still_valid(path); Check(still_valid.Load(error));
     Check(still_valid.Data().groups.size() == before.groups.size());
 
@@ -225,6 +230,37 @@ int main() try {
         Check(edited_tabs[1].content == "make production");
         std::filesystem::remove_all(migration_root);
     }
+
+    const auto project_actions_path = root / "project-actions.json";
+    ActionRepository project_actions(project_actions_path);
+    std::string project_group, project_page, project_action, general_group;
+    Check(project_actions.EnsureProjectGroup("project-one", "Before", project_group, error));
+    Check(project_actions.CreateGroup("Before", general_group, error));
+    Check(project_actions.CreatePage(project_group, "Commands", project_page, error));
+    Check(project_actions.CreateItem(
+        project_group, project_page, {"", "Build", "", "make"}, project_action, error));
+    Check(project_actions.UpdateProjectGroupName("project-one", "After", error));
+
+    ActionRepository renamed_actions(project_actions_path);
+    Check(renamed_actions.Load(error));
+    const auto& renamed_group = renamed_actions.Data().groups.front();
+    Check(renamed_group.id == project_group && renamed_group.name == "After");
+    Check(renamed_group.pages.front().id == project_page);
+    Check(renamed_group.pages.front().items.front().id == project_action);
+    Check(renamed_actions.Data().groups.back().name == "Before");
+
+    Check(!renamed_actions.DeleteGroup(project_group, error));
+    Check(renamed_actions.DetachProjectGroup("project-one", error));
+    Check(renamed_actions.DetachProjectGroup("project-one", error));
+    ActionRepository detached_actions(project_actions_path);
+    Check(detached_actions.Load(error));
+    const auto& detached_group = detached_actions.Data().groups.front();
+    Check(detached_group.id == project_group && detached_group.name == "After");
+    Check(!detached_group.project_id && !detached_group.auto_named);
+    Check(detached_group.pages.front().items.front().id == project_action);
+    Check(detached_actions.DeleteGroup(project_group, error));
+    Check(detached_actions.Data().groups.size() == 1);
+    Check(detached_actions.Data().groups.front().id == general_group);
 
     std::filesystem::remove_all(root);
 } catch (const std::exception& error) {

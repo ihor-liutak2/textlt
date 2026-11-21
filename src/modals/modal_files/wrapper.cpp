@@ -97,8 +97,13 @@ void FilesModal::RebuildFooterButtons() {
     const size_t directory_action_count = buttons.size();
 
     if (content_->IsFileActionMode()) {
-        buttons.push_back({content_->FooterActionLabel(),
+        buttons.push_back({content_->FooterActionLabel(content_->mode_),
             [this] { content_->ConfirmSelected(); }, ButtonRole::Default, operations_available});
+    }
+    if (content_->mode_ == FilesModalMode::Open) {
+        buttons.push_back({content_->FooterActionLabel(FilesModalMode::OpenFolder),
+            [this] { content_->ConfirmSelected(FilesModalMode::OpenFolder); },
+            ButtonRole::Default, operations_available});
     }
     buttons.push_back({"Close", [this] { Close(); }});
     modal_->SetFooterButtons(std::move(buttons), directory_action_count);
