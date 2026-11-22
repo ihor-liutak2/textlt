@@ -110,10 +110,7 @@ ftxui::Element GitModalContent::RenderConfirmOverlay() {
         rows.push_back(ftxui::text(""));
         rows.push_back(ftxui::text("Type " + confirm_required_text_ + " to confirm:") |
                        ftxui::bold | ftxui::color(theme.modal_text_color));
-        rows.push_back(confirm_input_component_->Render() |
-                       ftxui::bgcolor(theme.modal_input_bg) |
-                       ftxui::color(theme.modal_input_fg) |
-                       ftxui::frame);
+        rows.push_back(confirm_input_component_->Render() | ftxui::frame);
     }
 
     rows.push_back(ftxui::text(""));
@@ -124,11 +121,7 @@ ftxui::Element GitModalContent::RenderConfirmOverlay() {
         confirm_cancel_button_->Render(),
     }));
 
-    return ftxui::vbox(std::move(rows)) |
-           ftxui::size(ftxui::WIDTH, ftxui::LESS_THAN, 84) |
-           ftxui::border |
-           ftxui::bgcolor(theme.modal_background) |
-           ftxui::color(theme.modal_foreground);
+    return ftxui::vbox(std::move(rows)) | ftxui::size(ftxui::WIDTH, ftxui::LESS_THAN, 84);
 }
 
 } // namespace textlt

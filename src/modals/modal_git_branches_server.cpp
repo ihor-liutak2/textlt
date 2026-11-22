@@ -106,10 +106,7 @@ ftxui::Element GitModalContent::RenderBranchInputOverlay() {
         ftxui::hbox({
             ftxui::text(branch_input_label_ + " ") |
                 ftxui::bold | ftxui::color(theme.modal_text_color),
-            branch_input_component_->Render() |
-                ftxui::bgcolor(theme.modal_input_bg) |
-                ftxui::color(theme.modal_input_fg) |
-                ftxui::xflex,
+            branch_input_component_->Render() | ftxui::xflex,
         }),
         ftxui::text(""),
         ftxui::hbox({
@@ -118,11 +115,7 @@ ftxui::Element GitModalContent::RenderBranchInputOverlay() {
             ftxui::text(" "),
             branch_input_cancel_button_->Render(),
         }),
-    }) |
-        ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 96) |
-        ftxui::border |
-        ftxui::bgcolor(theme.modal_background) |
-        ftxui::color(theme.modal_foreground);
+    }) | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, 96);
 }
 
 void GitModalContent::RefreshBranches() {

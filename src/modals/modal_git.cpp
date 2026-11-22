@@ -181,14 +181,15 @@ GitModalContent::GitModalContent(
     update_button_ = MakeTextButton("Update", [this] { UpdateSelectedBranch(); });
     copy_branch_output_button_ = MakeTextButton("Copy output", [this] { CopyBranchOutput(); });
 
-    ftxui::InputOption branch_input_option;
-    branch_input_option.multiline = false;
-    branch_input_option.transform = [this](ftxui::InputState state) {
+    ftxui::InputOption popup_input_option;
+    popup_input_option.multiline = false;
+    popup_input_option.transform = [this](ftxui::InputState state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return theme.InputTransform(std::move(state));
+        return state.element | ftxui::bgcolor(theme.modal_background) |
+            ftxui::color(theme.modal_foreground);
     };
     branch_input_component_ =
-        ftxui::Input(&branch_input_value_, "", branch_input_option);
+        ftxui::Input(&branch_input_value_, "", popup_input_option);
     branch_input_confirm_button_ = MakeTextButton("Confirm", [this] { ConfirmBranchInput(); });
     branch_input_cancel_button_ = MakeTextButton("Cancel", [this] { CancelBranchInput(); });
     branch_input_container_ = ftxui::CatchEvent(
@@ -340,15 +341,20 @@ GitModalContent::GitModalContent(
     open_compare_diff_button_ = MakeTextButton("Open unified diff", [this] { OpenCompareUnifiedDiff(); });
     copy_compare_diff_button_ = MakeTextButton("Copy diff", [this] { CopyCompareDiff(); });
 
-    ftxui::InputOption confirm_input_option;
-    confirm_input_option.multiline = false;
-    confirm_input_option.transform = [this](ftxui::InputState state) {
-        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return theme.InputTransform(std::move(state));
+    confirm_input_component_ = ftxui::Input(&confirm_typed_text_, "confirmation", popup_input_option);
+    auto checkbox_option = ftxui::CheckboxOption::Simple();
+    checkbox_option.transform = [](const ftxui::EntryState& state) {
+        auto label = ftxui::text(state.label);
+        if (state.active) {
+            label |= ftxui::bold;
+        }
+        if (state.focused) {
+            label |= ftxui::inverted;
+        }
+        return ftxui::hbox({ftxui::text(state.state ? "[X] " : "[ ] "), label});
     };
-    confirm_input_component_ = ftxui::Input(&confirm_typed_text_, "confirmation", confirm_input_option);
     confirm_force_tag_checkbox_ = ftxui::Checkbox(
-        "Force push (overwrite remote tag)", &confirm_force_tag_push_);
+        "Force push (overwrite remote tag)", &confirm_force_tag_push_, std::move(checkbox_option));
     confirm_confirm_button_ = MakeTextButton("Confirm", [this] { ConfirmPendingAction(); });
     confirm_cancel_button_ = MakeTextButton("Cancel", [this] { CancelPendingAction(); });
     auto confirm_controls = ftxui::Container::Vertical({
@@ -688,11 +694,7 @@ ftxui::Element GitModalContent::RenderOperationOverlay() const {
         }),
         ftxui::text("Please wait. The Git operation is still running.") |
             ftxui::dim | ftxui::color(theme.modal_text_color),
-    }) |
-        ftxui::border |
-        ftxui::bgcolor(theme.modal_background) |
-        ftxui::color(theme.modal_border) |
-        ftxui::clear_under;
+    });
 }
 
 ftxui::Component GitModalContent::MakeTextButton(
@@ -872,6 +874,12 @@ ftxui::Element GitModalContent::Render() {
     ftxui::Element overlay = operation_running_
         ? RenderOperationOverlay()
         : (branch_input_active_ ? RenderBranchInputOverlay() : RenderConfirmOverlay());
+    overlay = overlay |
+        ftxui::borderEmpty |
+        ftxui::borderStyled(ftxui::LIGHT, theme.modal_border) |
+        ftxui::bgcolor(theme.modal_input_bg) |
+        ftxui::color(theme.modal_input_fg) |
+        ftxui::clear_under;
 
     return ftxui::dbox({
         body,
