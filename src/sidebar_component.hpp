@@ -187,6 +187,8 @@ public:
     }
 
 private:
+    class EntryList;
+
     void SetMode(SidebarMode mode);
     void OpenSelectedEntry();
     bool OpenDirectoryEntry(int entry_index);
@@ -198,6 +200,9 @@ private:
     void EnsureSelectedEntryVisible();
     void ClampSelectedEntryToVisible();
     void ScrollEntries(int delta);
+    void ScrollLabels(int delta);
+    bool HandleScrollbarMouse(const ftxui::Event& event, const ftxui::Mouse& mouse);
+    ftxui::Element RenderEntry(size_t index, int width, const Theme& theme) const;
     void RebuildEntries();
     void RebuildOpenedEntries();
     void RebuildProjectEntries();
@@ -262,6 +267,10 @@ private:
     std::string selected_action_group_id_;
     int selected_entry_ = 0;
     size_t list_scroll_offset_ = 0;
+    int widest_label_ = 0;
+    int label_scroll_offset_ = 0;
+    int scrollbar_grab_column_ = 0;
+    ftxui::CapturedMouse scrollbar_drag_;
     int last_clicked_entry_ = -1;
     SidebarMode mode_ = SidebarMode::Folder;
     std::chrono::steady_clock::time_point last_click_time_{};
@@ -292,6 +301,7 @@ private:
     ftxui::Box item_move_down_box_;
     ftxui::Box panel_box_;
     ftxui::Box menu_box_;
+    ftxui::Box scrollbar_box_{1, 0, 1, 0};
     ftxui::Component menu_;
 };
 

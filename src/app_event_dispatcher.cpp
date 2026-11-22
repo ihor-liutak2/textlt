@@ -197,6 +197,12 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
         return event.is_mouse() ? false : app_.menu_bar_->OnEvent(event);
     }
 
+    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Documents &&
+        !app_.find_panel_focus_ &&
+        app_.HandleTerminalBracketedPaste(event)) {
+        return true;
+    }
+
     if (app_.find_panel_open_ && app_.find_replace_panel_) {
         if (event == ftxui::Event::Escape) {
             app_.CloseFindPanel();
@@ -284,6 +290,11 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
         return true;
     }
 
+    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Documents &&
+        MatchesShortcut(event, ShortcutModifier::CtrlShift, 'v')) {
+        return app_.RunCommand("edit.paste");
+    }
+
     return HandleFunctionKeyEvent(event);
 }
 
@@ -328,10 +339,6 @@ bool AppEventDispatcher::HandleEditorEvent(const ftxui::Event& event) {
     const bool editor_is_focused = app_.ActiveLayer() == TextltApp::UiLayer::Main && !app_.sidebar_has_focus_;
     if (!editor_is_focused) {
         return false;
-    }
-
-    if (app_.HandleTerminalBracketedPaste(event)) {
-        return true;
     }
 
     if (app_.RunTextShortcut(event)) {

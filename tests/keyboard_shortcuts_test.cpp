@@ -30,5 +30,15 @@ int main() {
     assert(MatchesShortcut(ftxui::Event::Special("Ctrl+Alt+P"), ShortcutModifier::CtrlAlt, 'p'));
     assert(!MatchesShortcut(ftxui::Event::Character("ц"), ShortcutModifier::Ctrl, 'w'));
     assert(!MatchesShortcut(ftxui::Event::Special("\x1B[1094;5u"), ShortcutModifier::Ctrl, 'q'));
+
+    std::cerr << "Paste shortcuts\n";
+    using textlt::MatchesPasteShortcut;
+    assert(MatchesPasteShortcut(ftxui::Event::Special("\x16")));
+    assert(MatchesPasteShortcut(ftxui::Event::Special("Ctrl+Shift+V")));
+    assert(MatchesPasteShortcut(ftxui::Event::Special("\x1B[118;6u")));
+    assert(MatchesPasteShortcut(ftxui::Event::Special("\x1B[27;6;86~")));
+    assert(MatchesPasteShortcut(ftxui::Event::Special("\x1B[1052;6u")));
+    assert(!MatchesPasteShortcut(ftxui::Event::Character("V")));
+    assert(!MatchesPasteShortcut(ftxui::Event::Special("\x1B[118;7u")));
     return 0;
 }

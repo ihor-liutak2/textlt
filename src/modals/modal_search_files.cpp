@@ -8,6 +8,7 @@
 #include <system_error>
 #include <utility>
 #include "json_utils.hpp"
+#include "keyboard_shortcuts.hpp"
 #include "ui_button.hpp"
 
 #include "ftxui/component/component_options.hpp"

@@ -160,7 +160,6 @@ private:
     bool RemoveFileModalDirectory(
         const std::filesystem::path& directory,
         std::string& error);
-    void CopyFileModalPathText(const std::string& text);
     bool GetTextProcessorTargetText(
         ProcessorTarget target,
         std::string& text,

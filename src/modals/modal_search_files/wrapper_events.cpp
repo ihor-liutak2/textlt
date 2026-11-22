@@ -70,11 +70,8 @@ bool SearchFilesModal::OnEvent(ftxui::Event event) {
 
 bool SearchFilesModalContent::HandleEvent(ftxui::Event event) {
     if (selected_tab_ == 0) {
-        const std::string input = event.input();
         if (query_input_ && query_input_->Focused() &&
-            (input == "Ctrl+V" || input == "Ctrl+Shift+V" ||
-             event == ftxui::Event::Special("Ctrl+V") ||
-             event == ftxui::Event::Special("Ctrl+Shift+V"))) {
+            MatchesPasteShortcut(event)) {
             PasteSearchQuery();
             return true;
         }

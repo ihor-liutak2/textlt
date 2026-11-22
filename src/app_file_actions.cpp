@@ -286,13 +286,6 @@ bool TextltApp::RemoveFileModalDirectory(
 }
 
 
-void TextltApp::CopyFileModalPathText(const std::string& text) {
-    clipboard_controller_.WriteText(text);
-    active_action_ = "Copied path";
-    screen_.PostEvent(ftxui::Event::Custom);
-}
-
-
 std::filesystem::path TextltApp::CurrentSidebarDirectory() const {
     return std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->CurrentPath();
 }

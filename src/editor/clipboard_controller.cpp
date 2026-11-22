@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <thread>
@@ -61,29 +62,39 @@ int ClosePipe(FILE* pipe) {
 }
 
 bool WriteTextToPipe(const std::string& command, const std::string& text) {
+#ifdef _WIN32
     FILE* pipe = OpenPipe(command, "w");
+#else
+    // A helper can exit before reading stdin, for example if its display is
+    // unavailable. Keep the pipe open and drain it before reporting its status.
+    FILE* pipe = OpenPipe(
+        "{ " + command + "; status=$?; cat; exit \"$status\"; } >/dev/null 2>&1", "w");
+#endif
     if (!pipe) {
         return false;
     }
 
     const size_t written = std::fwrite(text.data(), 1, text.size(), pipe);
-    std::fflush(pipe);
+    const int flush_status = std::fflush(pipe);
     const int close_status = ClosePipe(pipe);
-    return written == text.size() && close_status == 0;
+    return written == text.size() && flush_status == 0 && close_status == 0;
 }
 
-std::string ReadTextFromPipe(const std::string& command) {
+std::optional<std::string> ReadTextFromPipe(const std::string& command) {
     std::string clipboard_text;
     char buffer[256];
     FILE* pipe = OpenPipe(command, "r");
     if (!pipe) {
-        return clipboard_text;
+        return std::nullopt;
     }
 
-    while (std::fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-        clipboard_text += buffer;
+    while (const size_t count = std::fread(buffer, 1, sizeof(buffer), pipe)) {
+        clipboard_text.append(buffer, count);
     }
-    ClosePipe(pipe);
+    const bool read_ok = !std::ferror(pipe);
+    if (ClosePipe(pipe) != 0 || !read_ok) {
+        return std::nullopt;
+    }
     return clipboard_text;
 }
 
@@ -93,7 +104,7 @@ bool WriteTextToClipExe(const std::string& text) {
 #ifdef _WIN32
     const std::string command = "clip.exe 2>nul";
 #else
-    const std::string command = "clip.exe 2>/dev/null";
+    const std::string command = "clip.exe";
 #endif
     for (int attempt = 0; attempt < kClipboardWriteAttempts; ++attempt) {
         if (WriteTextToPipe(command, text)) {
@@ -192,64 +203,67 @@ bool WriteTextToWindowsClipboardWithPowerShell(const std::string& text) {
         "$text=[System.Text.Encoding]::UTF8.GetString("
         "[System.Convert]::FromBase64String($b64));"
         "for($i=0;$i -lt 5;$i++){"
-        "try{Set-Clipboard -Value $text;exit 0}"
+        "try{Set-Clipboard -Value $text -ErrorAction Stop;exit 0}"
         "catch{Start-Sleep -Milliseconds 50}};"
-        "exit 1' 2>/dev/null";
+        "exit 1'";
     return WriteTextToPipe(command, Base64Encode(text));
 }
 
-std::string ReadTextFromWindowsClipboard() {
-    const std::string encoded = ReadTextFromPipe(
+std::optional<std::string> ReadTextFromWindowsClipboard() {
+    const auto encoded = ReadTextFromPipe(
         "powershell.exe -NoProfile -NonInteractive -Command "
-        "'$text=Get-Clipboard -Raw;"
+        "'$ErrorActionPreference=\"Stop\";$text=Get-Clipboard -Raw;"
         "if($null -eq $text){exit 0};"
         "[System.Convert]::ToBase64String("
         "[System.Text.Encoding]::UTF8.GetBytes($text))' 2>/dev/null");
-    return Base64Decode(encoded);
-}
-
-bool ContainsNonAscii(const std::string& text) {
-    for (char character : text) {
-        if (static_cast<unsigned char>(character) >= 0x80) {
-            return true;
-        }
+    if (!encoded) {
+        return std::nullopt;
     }
-    return false;
+    return Base64Decode(*encoded);
 }
 
-bool WriteTextToX11Clipboard(const std::string& text) {
-    if (WriteTextToPipe("xclip -selection clipboard -i 2>/dev/null", text)) {
+bool HasDisplay(const char* variable) {
+    const char* value = std::getenv(variable);
+    return value && *value;
+}
+
+bool WriteTextToDesktopClipboard(const std::string& text) {
+    if (HasDisplay("WAYLAND_DISPLAY") &&
+        WriteTextToPipe("wl-copy --type 'text/plain;charset=utf-8'", text)) {
         return true;
     }
-    return WriteTextToPipe("xsel --clipboard --input 2>/dev/null", text);
+    return HasDisplay("DISPLAY") &&
+        (WriteTextToPipe("xclip -selection clipboard -i", text) ||
+         WriteTextToPipe("xsel --clipboard --input", text));
+}
+
+std::string ReadTextFromDesktopClipboard() {
+    if (HasDisplay("WAYLAND_DISPLAY")) {
+        if (auto text = ReadTextFromPipe("wl-paste --no-newline --type text 2>/dev/null")) {
+            return *text;
+        }
+    }
+    if (HasDisplay("DISPLAY")) {
+        if (auto text = ReadTextFromPipe("xclip -selection clipboard -o 2>/dev/null")) {
+            return *text;
+        }
+        return ReadTextFromPipe("xsel --clipboard --output 2>/dev/null").value_or("");
+    }
+    return {};
 }
 
 } // namespace
 
-std::string ClipboardController::ReadText(bool prefer_windows_clipboard) const {
+std::string ClipboardController::ReadText() const {
 #ifdef _WIN32
-    (void)prefer_windows_clipboard;
-    return ReadTextFromPipe("powershell -NoProfile -Command Get-Clipboard 2>nul");
+    return ReadTextFromPipe("powershell -NoProfile -Command Get-Clipboard 2>nul").value_or("");
 #else
-    if (prefer_windows_clipboard && IsWslEnvironment()) {
-        std::string windows_text = ReadTextFromWindowsClipboard();
-        if (!windows_text.empty()) {
-            return windows_text;
+    if (IsWslEnvironment()) {
+        if (auto text = ReadTextFromWindowsClipboard()) {
+            return *text;
         }
     }
-    std::string clipboard_text = ReadTextFromPipe("xclip -selection clipboard -o 2>/dev/null");
-    if (clipboard_text.empty()) {
-        clipboard_text = ReadTextFromPipe("xsel --clipboard --output 2>/dev/null");
-    }
-    if (clipboard_text.empty()) {
-        clipboard_text = ReadTextFromPipe("xclip -selection primary -o 2>/dev/null");
-    }
-    if (clipboard_text.empty() && !prefer_windows_clipboard && IsWslEnvironment()) {
-        // WSLg's clipboard bridge is not always available. Fall back to the
-        // Windows clipboard so text copied in Windows can be pasted here.
-        clipboard_text = ReadTextFromWindowsClipboard();
-    }
-    return clipboard_text;
+    return ReadTextFromDesktopClipboard();
 #endif
 }
 
@@ -261,33 +275,22 @@ bool ClipboardController::WriteText(const std::string& text) const {
 #ifdef _WIN32
     return WriteTextToClipExe(text);
 #else
-    if (IsWslEnvironment()) {
-        bool windows_written = false;
-        if (ContainsNonAscii(text)) {
-            // clip.exe interprets its stdin with the console code page, so use
-            // the encoding-safe PowerShell path for non-ASCII action text.
-            windows_written = WriteTextToWindowsClipboardWithPowerShell(text);
-        }
-        if (!windows_written) {
-            windows_written = CommandAvailable("clip.exe") && WriteTextToClipExe(text);
-        }
-        if (!windows_written) {
-            windows_written = WriteTextToWindowsClipboardWithPowerShell(text);
-        }
-        // Mirror the same text into the X11 clipboard so pasting inside WSL
-        // works without depending on the WSLg clipboard bridge.
-        const bool x11_written = WriteTextToX11Clipboard(text);
-        return windows_written || x11_written;
+    if (IsWslEnvironment() &&
+        (WriteTextToWindowsClipboardWithPowerShell(text) ||
+         (CommandAvailable("clip.exe") && WriteTextToClipExe(text)))) {
+        return true;
     }
 
-    return WriteTextToX11Clipboard(text);
+    return WriteTextToDesktopClipboard(text);
 #endif
 }
 
 ClipboardController::ActionResult ClipboardController::CutFromEditor(EditorComponent& editor) const {
     if (editor.HasSelection()) {
         const std::string selected_text = editor.GetSelectedText();
-        WriteText(selected_text);
+        if (!WriteText(selected_text)) {
+            return {false, "Could not write to the system clipboard"};
+        }
         editor.DeleteSelection();
         return {true, "Cut selection to clipboard"};
     }
@@ -297,7 +300,9 @@ ClipboardController::ActionResult ClipboardController::CutFromEditor(EditorCompo
         return {false, "Nothing to cut"};
     }
 
-    WriteText(current_line);
+    if (!WriteText(current_line)) {
+        return {false, "Could not write to the system clipboard"};
+    }
     editor.DeleteCurrentLine();
     return {true, "Cut line to clipboard"};
 }
@@ -305,8 +310,8 @@ ClipboardController::ActionResult ClipboardController::CutFromEditor(EditorCompo
 ClipboardController::ActionResult ClipboardController::CopyFromEditor(EditorComponent& editor) const {
     if (editor.HasSelection()) {
         const std::string selected_text = editor.GetSelectedText();
-        WriteText(selected_text);
-        return {false, "Copied selection to clipboard"};
+        return {false, WriteText(selected_text)
+            ? "Copied selection to clipboard" : "Could not write to the system clipboard"};
     }
 
     const std::string current_line = editor.GetCurrentLineText();
@@ -314,8 +319,8 @@ ClipboardController::ActionResult ClipboardController::CopyFromEditor(EditorComp
         return {false, "Nothing to copy"};
     }
 
-    WriteText(current_line);
-    return {false, "Copied line to clipboard"};
+    return {false, WriteText(current_line)
+        ? "Copied line to clipboard" : "Could not write to the system clipboard"};
 }
 
 ClipboardController::ActionResult ClipboardController::PasteIntoEditor(EditorComponent& editor) const {

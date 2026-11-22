@@ -110,6 +110,13 @@ textlt
 textlt path/to/file.cpp
 ```
 
+For **Copy Path**, **Ctrl+C**, and **Ctrl+V** on a Linux desktop, install
+`wl-clipboard` on Wayland or `xclip` on X11 (`xsel` also works).
+On Ubuntu and elementary OS, run `sudo apt install wl-clipboard xclip` to
+cover both session types. In WSL, TextLT uses the Windows clipboard through
+Windows PowerShell when WSL interoperability is enabled. **Ctrl+Shift+V**
+also pastes, including when the terminal handles the shortcut itself.
+
 To uninstall TextLT from Linux:
 
 ```bash

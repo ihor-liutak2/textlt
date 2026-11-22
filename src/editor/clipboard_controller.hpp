@@ -13,7 +13,7 @@ public:
         std::string message;
     };
 
-    std::string ReadText(bool prefer_windows_clipboard = false) const;
+    std::string ReadText() const;
     bool WriteText(const std::string& text) const;
 
     ActionResult CutFromEditor(EditorComponent& editor) const;

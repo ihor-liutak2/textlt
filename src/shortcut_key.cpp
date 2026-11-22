@@ -364,6 +364,9 @@ bool ShortcutKeyMatchesEvent(const ShortcutKey& shortcut, const ftxui::Event& ev
         if (shortcut.modifier == ShortcutKeyModifier::Alt) {
             return MatchesShortcut(event, ShortcutModifier::Alt, letter);
         }
+        if (shortcut.modifier == ShortcutKeyModifier::CtrlShift) {
+            return MatchesShortcut(event, ShortcutModifier::CtrlShift, letter);
+        }
         const std::string name = ShortcutKeyToString({shortcut.modifier, key});
         return IsNamedEvent(event, name) ||
             IsNamedEvent(event, "Shift+Ctrl+" + key) ||

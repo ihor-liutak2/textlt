@@ -41,7 +41,7 @@ public:
     using FavoriteDirectoryCallback = std::function<bool(
         const std::filesystem::path& directory,
         std::string& error)>;
-    using CopyPathCallback = std::function<void(const std::string& text)>;
+    using CopyPathCallback = std::function<bool(const std::string& text)>;
     using ConfirmPathCallback = std::function<bool(
         FilesModalMode mode,
         const std::filesystem::path& path,

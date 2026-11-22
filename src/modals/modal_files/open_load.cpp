@@ -265,8 +265,9 @@ void FilesModalContent::CopySelectedPathText() {
         SetStatus("Nothing to copy.", true);
         return;
     }
-    if (on_copy_path_) {
-        on_copy_path_(text);
+    if (!on_copy_path_ || !on_copy_path_(text)) {
+        SetStatus("Could not copy path to the system clipboard.", true);
+        return;
     }
     SetStatus("Copied path text.");
 }

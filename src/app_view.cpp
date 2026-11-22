@@ -75,6 +75,12 @@ ftxui::Element TextltApp::Render() {
         find_replace_panel_->Tick();
     }
     const bool find_open = find_panel_open_ && find_replace_panel_;
+    const bool show_sidebar = !find_open && !distraction_mode &&
+        ((workspace_mode_ == WorkspaceMode::Documents && editor_config_.show_file_explorer) ||
+         (workspace_mode_ == WorkspaceMode::Actions && editor_config_.show_actions_sidebar));
+    if (!show_sidebar) {
+        std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->ClearHitboxes();
+    }
     Element find_panel_element = find_open
         ? find_replace_panel_->Render() | size(WIDTH, EQUAL, 28) | yflex
         : emptyElement();
@@ -97,7 +103,7 @@ ftxui::Element TextltApp::Render() {
         ? (find_open
               ? hbox({find_panel_element, text("  "),
                       actions_workspace_component_->Render() | xflex})
-              : !distraction_mode && editor_config_.show_actions_sidebar
+              : show_sidebar
               ? hbox({sidebar_panel_->Render() | size(WIDTH, EQUAL, 28),
                       text("  "),
                       actions_workspace_component_->Render() | xflex})
@@ -108,7 +114,7 @@ ftxui::Element TextltApp::Render() {
               text("  "),
               editor_workspace | xflex,
           })
-        : !distraction_mode && editor_config_.show_file_explorer
+        : show_sidebar
         ? hbox({
               sidebar_panel_->Render() | size(WIDTH, EQUAL, 28),
               text("  "),

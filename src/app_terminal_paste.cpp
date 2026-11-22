@@ -11,6 +11,9 @@ namespace textlt {
 
         const std::string& input = event.input();
         if (input == kPasteStart) {
+            if (sidebar_has_focus_) {
+                FocusEditor();
+            }
             terminal_bracketed_paste_active_ = true;
             terminal_bracketed_paste_buffer_.clear();
             return true;
@@ -34,7 +37,9 @@ namespace textlt {
             return true;
         }
 
-        terminal_bracketed_paste_buffer_ += input;
+        if (!event.is_mouse() && !event.is_cursor_position() && event != ftxui::Event::Custom) {
+            terminal_bracketed_paste_buffer_ += input;
+        }
         return true;
     }
 

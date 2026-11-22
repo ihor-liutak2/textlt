@@ -963,7 +963,7 @@ bool NotesWorkspaceComponent::HandleEditorEvent(ftxui::Event event) {
         }
         return true;
     }
-    if (IsCtrl(event, 'v') && focus_ == FocusArea::Body) {
+    if (MatchesPasteShortcut(event) && focus_ == FocusArea::Body) {
         if (read_clipboard_) {
             const std::string value = read_clipboard_();
             if (!value.empty()) {
@@ -1035,7 +1035,7 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
             }
             return true;
         }
-        if (IsCtrl(event, 'v')) {
+        if (MatchesPasteShortcut(event)) {
             if (read_clipboard_) {
                 std::string value = read_clipboard_();
                 for (char& character : value) {

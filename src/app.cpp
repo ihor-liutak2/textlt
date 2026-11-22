@@ -226,7 +226,7 @@ TextltApp::TextltApp()
               return RemoveFileModalDirectory(directory, error);
           },
           [this](const std::string& text) {
-              CopyFileModalPathText(text);
+              return clipboard_controller_.WriteText(text);
           },
           [this](FilesModalMode mode, const std::filesystem::path& path, std::string& error) {
               return ConfirmFilesModalAction(mode, path, error);
@@ -342,13 +342,13 @@ TextltApp::TextltApp()
           &current_theme_,
           [this] { screen_.PostEvent(ftxui::Event::Custom); },
           [this] { CloseQuickAiModal(); },
-          [this] { return clipboard_controller_.ReadText(true); },
+          [this] { return clipboard_controller_.ReadText(); },
           [this](const std::string& text) { return clipboard_controller_.WriteText(text); }),
       ai_settings_modal_(
           &current_theme_,
           &editor_config_,
           [this] { screen_.PostEvent(ftxui::Event::Custom); },
-          [this] { return clipboard_controller_.ReadText(true); },
+          [this] { return clipboard_controller_.ReadText(); },
           [this](const std::string& text) { return clipboard_controller_.WriteText(text); }),
       assistant_settings_modal_(
           &current_theme_,

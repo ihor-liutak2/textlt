@@ -10,6 +10,7 @@ enum class ShortcutModifier {
     Ctrl,
     Alt,
     CtrlAlt,
+    CtrlShift,
 };
 
 inline std::string UkrainianKeyForUsKey(char key) {
@@ -149,10 +150,16 @@ inline bool MatchesShortcut(
             event == ftxui::Event::Special(swapped)) {
             return true;
         }
+    } else if (modifier == ShortcutModifier::CtrlShift) {
+        if (input == "Ctrl+Shift+" + std::string(1, upper) ||
+            input == "Shift+Ctrl+" + std::string(1, upper)) {
+            return true;
+        }
     }
 
     const int modifier_code = modifier == ShortcutModifier::Ctrl ? 5 :
-        modifier == ShortcutModifier::Alt ? 3 : 7;
+        modifier == ShortcutModifier::Alt ? 3 :
+        modifier == ShortcutModifier::CtrlShift ? 6 : 7;
     const std::string modifiers = std::to_string(modifier_code);
 
     auto matches_modified_code_point = [&](int code_point) {
@@ -193,10 +200,24 @@ inline bool MatchesShortcut(
             (upper_code_point >= 0 && matches_modified_code_point(upper_code_point));
     }
 
+    if (modifier == ShortcutModifier::CtrlShift) {
+        return input == "Ctrl+Shift+" + ukrainian ||
+            input == "Ctrl+Shift+" + ukrainian_upper ||
+            input == "Shift+Ctrl+" + ukrainian ||
+            input == "Shift+Ctrl+" + ukrainian_upper ||
+            matches_modified_code_point(code_point) ||
+            (upper_code_point >= 0 && matches_modified_code_point(upper_code_point));
+    }
+
     return input == "Ctrl+" + ukrainian ||
         input == "Ctrl+" + ukrainian_upper ||
         matches_modified_code_point(code_point) ||
         (upper_code_point >= 0 && matches_modified_code_point(upper_code_point));
+}
+
+inline bool MatchesPasteShortcut(const ftxui::Event& event) {
+    return MatchesShortcut(event, ShortcutModifier::Ctrl, 'v') ||
+        MatchesShortcut(event, ShortcutModifier::CtrlShift, 'v');
 }
 
 } // namespace textlt

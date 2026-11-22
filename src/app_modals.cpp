@@ -92,7 +92,7 @@ std::vector<std::string> BuiltInHelpLines() {
         "  Ctrl+C        Copy selection or current line",
         "  Ctrl+X        Cut selection or current line",
         "  Ctrl+V        Paste clipboard text",
-        "  Ctrl+Shift+V  Paste when terminal reserves Ctrl+V",
+        "  Ctrl+Shift+V  Paste clipboard text",
         "",
         "TTS / AI",
         "  Alt+H         Open Text-to-Speech",

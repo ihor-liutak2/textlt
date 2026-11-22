@@ -874,13 +874,23 @@ bool GitManager::IsWorkingTreeRef(const std::string& ref) {
 }
 
 GitManager::CommandResult GitManager::RunGitCommand(const std::vector<std::string>& args) {
-    std::string command = GitCommandPrefix();
+    // Terminal input belongs to TextLT. Git can still use a credential helper
+    // or askpass, but must not read usernames or passwords from our terminal.
+#ifdef _WIN32
+    std::string command = "set \"GIT_TERMINAL_PROMPT=0\" && ";
+#else
+    std::string command = "GIT_TERMINAL_PROMPT=0 ";
+#endif
+    command += GitCommandPrefix();
     for (const std::string& arg : args) {
         command += " " + ShellQuote(arg);
     }
     command += " " + StderrToStdout();
 
     CommandResult result = ExecuteCommandWithStatus(command);
+    if (!result.success() && result.output.find("terminal prompts disabled") != std::string::npos) {
+        result.output += "\nSign in outside TextLT or configure a Git credential helper for this remote, then retry.\n";
+    }
     Invalidate();
     return result;
 }

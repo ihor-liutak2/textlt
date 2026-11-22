@@ -11,6 +11,8 @@
 
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/event.hpp"
+#include "ftxui/dom/node.hpp"
+#include "ftxui/screen/string.hpp"
 #include "workspace_tabs.hpp"
 
 namespace textlt {
@@ -44,7 +46,109 @@ ftxui::Color SidebarBorderColor(const Theme& theme) {
     return theme.gutter;
 }
 
+std::string VisibleLabel(const std::string& label, int offset, int width) {
+    if (offset == 0 && ftxui::string_width(label) <= width) {
+        return label;
+    }
+    const auto glyphs = ftxui::Utf8ToGlyphs(label);
+    const int end = std::min(offset + width, static_cast<int>(glyphs.size()));
+    std::string visible;
+    for (int column = offset; column < end; ++column) {
+        const std::string& glyph = glyphs[column];
+        const int glyph_width = ftxui::string_width(glyph);
+        // A full-width glyph must fit on both sides of the viewport.
+        if (column == offset && glyph_width == 0) {
+            visible += ' ';
+        } else if (column != end - 1 || glyph_width != 2) {
+            visible += glyph;
+        }
+    }
+    return visible;
+}
+
+int BoxWidth(const ftxui::Box& box) {
+    return box.IsEmpty() ? 0 : box.x_max - box.x_min + 1;
+}
+
+struct HorizontalScrollbar {
+    int width;
+    int max_offset;
+    int thumb_width = 0;
+    int thumb_start = 0;
+
+    HorizontalScrollbar(int viewport_width, int label_width, int offset)
+        : width(viewport_width), max_offset(std::max(0, label_width - width)) {
+        if (width > 0 && max_offset > 0) {
+            thumb_width = std::max(1, static_cast<int>(1LL * width * width / label_width));
+            thumb_start = static_cast<int>(1LL * offset * Travel() / max_offset);
+        }
+    }
+
+    int Travel() const { return width - thumb_width; }
+};
+
 } // namespace
+
+class SidebarPanel::EntryList final : public ftxui::Node {
+public:
+    EntryList(SidebarPanel& sidebar, const Theme& theme)
+        : sidebar_(sidebar), theme_(theme) {}
+
+    void ComputeRequirement() override { requirement_.min_y = 1; }
+
+    void SetBox(ftxui::Box box) override {
+        Node::SetBox(box);
+        sidebar_.scrollbar_box_ = {box.x_min, box.x_max, box.y_max, box.y_max};
+        sidebar_.menu_box_ = box;
+        --sidebar_.menu_box_.y_max;
+        children_.clear();
+
+        if (box.IsEmpty()) {
+            sidebar_.scrollbar_box_ = box;
+            sidebar_.scrollbar_drag_.reset();
+            return;
+        }
+
+        const int width = BoxWidth(box);
+        sidebar_.ScrollLabels(0);
+        sidebar_.ClampScrollOffset();
+
+        size_t index = sidebar_.list_scroll_offset_;
+        for (int y = box.y_min; y < box.y_max && index < sidebar_.entry_labels_.size(); ++y, ++index) {
+            AddRow(sidebar_.RenderEntry(index, width, theme_), y);
+        }
+
+        const HorizontalScrollbar scrollbar(width, sidebar_.widest_label_, sidebar_.label_scroll_offset_);
+        if (scrollbar.max_offset == 0) {
+            sidebar_.scrollbar_drag_.reset();
+            return;
+        }
+
+        using namespace ftxui;
+        const auto track = [this](int length) {
+            std::string line;
+            for (int column = 0; column < length; ++column) {
+                line += "─";
+            }
+            return text(std::move(line)) | color(SidebarBorderColor(theme_));
+        };
+        AddRow(hbox({
+            track(scrollbar.thumb_start),
+            text(std::string(scrollbar.thumb_width, ' ')) | bgcolor(theme_.modal_selected_item_bg),
+            track(width - scrollbar.thumb_start - scrollbar.thumb_width),
+        }), box.y_max);
+    }
+
+private:
+    void AddRow(ftxui::Element row, int y) {
+        row->ComputeRequirement();
+        row->SetBox({box_.x_min, box_.x_max, y, y});
+        children_.push_back(std::move(row));
+    }
+
+    SidebarPanel& sidebar_;
+    Theme theme_;
+};
 
 SidebarPanel::SidebarPanel(
     FileOpenCallback on_file_open,
@@ -111,40 +215,8 @@ SidebarPanel::SidebarPanel(
 ftxui::Element SidebarPanel::OnRender() {
     using namespace ftxui;
 
-    ClampScrollOffset();
-
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     const ftxui::Color sidebar_text = SidebarTextColor(theme);
-
-    Elements rows;
-    const size_t visible_entry_count = VisibleEntryCount();
-    const size_t end_index =
-        std::min(entry_labels_.size(), list_scroll_offset_ + visible_entry_count);
-    for (size_t index = list_scroll_offset_; index < end_index; ++index) {
-        Element row = text(entry_labels_[index]) | color(sidebar_text);
-        if (mode_ == SidebarMode::Folder &&
-            index < entry_paths_.size() &&
-            index < entry_kinds_.size() &&
-            (entry_kinds_[index] == EntryKind::Directory ||
-             entry_kinds_[index] == EntryKind::File)) {
-            const char status = GitStatusForPath(entry_paths_[index]);
-            if (status == 'M') {
-                row = row | color(theme.syntax_keyword);
-            } else if (status == '?' || status == 'A') {
-                row = row | color(theme.syntax_string);
-            }
-        }
-
-        if (static_cast<int>(index) == selected_entry_) {
-            row = row |
-                bgcolor(theme.modal_selected_item_bg) |
-                color(theme.modal_selected_item_fg);
-        }
-        rows.push_back(std::move(row));
-    }
-    while (rows.size() < visible_entry_count) {
-        rows.push_back(text(""));
-    }
 
     return vbox({
         RenderWorkspaceTabs(
@@ -176,16 +248,37 @@ ftxui::Element SidebarPanel::OnRender() {
             : separator() | color(SidebarBorderColor(theme)),
         RenderActionRow(),
         separator() | color(SidebarBorderColor(theme)),
-        vbox(std::move(rows)) | reflect(menu_box_) | frame | yflex,
+        std::make_shared<EntryList>(*this, theme) | yflex,
     }) |
         borderStyled(ftxui::LIGHT, SidebarBorderColor(theme)) |
         reflect(panel_box_);
+}
+
+ftxui::Element SidebarPanel::RenderEntry(size_t index, int width, const Theme& theme) const {
+    using namespace ftxui;
+    Color label_color = SidebarTextColor(theme);
+    if (mode_ == SidebarMode::Folder &&
+        (entry_kinds_[index] == EntryKind::Directory || entry_kinds_[index] == EntryKind::File)) {
+        const char status = GitStatusForPath(entry_paths_[index]);
+        if (status == 'M') {
+            label_color = theme.syntax_keyword;
+        } else if (status == '?' || status == 'A') {
+            label_color = theme.syntax_string;
+        }
+    }
+    Element row = text(VisibleLabel(entry_labels_[index], label_scroll_offset_, width));
+    if (static_cast<int>(index) == selected_entry_) {
+        return row | bgcolor(theme.modal_selected_item_bg) | color(theme.modal_selected_item_fg);
+    }
+    return row | color(label_color);
 }
 
 void SidebarPanel::ClearHitboxes() {
     const ftxui::Box empty{1, 0, 1, 0};
     panel_box_ = empty;
     menu_box_ = empty;
+    scrollbar_box_ = empty;
+    scrollbar_drag_.reset();
     opened_tab_box_ = empty;
     project_tab_box_ = empty;
     projects_tab_box_ = empty;
@@ -198,6 +291,7 @@ void SidebarPanel::ClearHitboxes() {
     action_tertiary_box_ = empty;
     action_quaternary_box_ = empty;
     action_quinary_box_ = empty;
+    project_rename_box_ = empty;
     group_new_box_ = empty;
     group_rename_box_ = empty;
     group_delete_box_ = empty;
@@ -212,7 +306,12 @@ void SidebarPanel::ClearHitboxes() {
     item_move_down_box_ = empty;
 }
 
-bool SidebarPanel::OnEvent(ftxui::Event event) {    // Action-view controls share the sidebar with the workspace tabs. Handle
+bool SidebarPanel::OnEvent(ftxui::Event event) {
+    if (event.is_mouse() && HandleScrollbarMouse(event, event.mouse())) {
+        return true;
+    }
+
+    // Action-view controls share the sidebar with the workspace tabs. Handle
     // their hitboxes first so a stale/overlapping tab box cannot turn a Delete
     // click into a Documents workspace switch.
     if (mode_ == SidebarMode::Actions &&
@@ -262,12 +361,19 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {    // Action-view controls shar
         return true;
     }
 
+    if ((event == ftxui::Event::ArrowLeft || event == ftxui::Event::ArrowRight) &&
+        BoxWidth(scrollbar_box_) > 0 && widest_label_ > BoxWidth(scrollbar_box_)) {
+        ScrollLabels(event == ftxui::Event::ArrowLeft ? -1 : 1);
+        return true;
+    }
+
     if (event == ftxui::Event::Backspace && mode_ == SidebarMode::Folder) {
         const std::filesystem::path parent = current_path_.parent_path();
         if (current_path_ != project_root_ && !parent.empty() && parent != current_path_) {
             current_path_ = parent;
             RebuildEntries();
             list_scroll_offset_ = 0;
+            label_scroll_offset_ = 0;
             FocusMenu();
             return true;
         }
@@ -421,6 +527,8 @@ void SidebarPanel::SetMode(SidebarMode mode) {
     mode_ = mode;
     selected_entry_ = 0;
     list_scroll_offset_ = 0;
+    label_scroll_offset_ = 0;
+    scrollbar_drag_.reset();
     last_clicked_entry_ = -1;
     last_click_time_ = {};
     RebuildEntries();
@@ -504,6 +612,7 @@ bool SidebarPanel::OpenDirectoryEntry(int entry_index) {
     }
     RebuildEntries();
     list_scroll_offset_ = 0;
+    label_scroll_offset_ = 0;
     return true;
 }
 
@@ -583,6 +692,62 @@ void SidebarPanel::ScrollEntries(int delta) {
     list_scroll_offset_ = static_cast<size_t>(
         std::clamp<long long>(target_offset, 0, static_cast<long long>(MaxScrollOffset())));
     ClampSelectedEntryToVisible();
+}
+
+void SidebarPanel::ScrollLabels(int delta) {
+    const int max_offset = std::max(0, widest_label_ - BoxWidth(scrollbar_box_));
+    label_scroll_offset_ = std::clamp(label_scroll_offset_ + delta, 0, max_offset);
+}
+
+bool SidebarPanel::HandleScrollbarMouse(const ftxui::Event& event, const ftxui::Mouse& mouse) {
+    using ftxui::Mouse;
+    if (scrollbar_drag_ && mouse.motion == Mouse::Released) {
+        scrollbar_drag_.reset();
+        return true;
+    }
+
+    const HorizontalScrollbar scrollbar(BoxWidth(scrollbar_box_), widest_label_, label_scroll_offset_);
+    if (scrollbar.width == 0 || scrollbar.max_offset == 0) {
+        return false;
+    }
+
+    if (panel_box_.Contain(mouse.x, mouse.y)) {
+        if (mouse.button == Mouse::WheelLeft || (mouse.shift && mouse.button == Mouse::WheelUp)) {
+            ScrollLabels(-3);
+            return true;
+        }
+        if (mouse.button == Mouse::WheelRight || (mouse.shift && mouse.button == Mouse::WheelDown)) {
+            ScrollLabels(3);
+            return true;
+        }
+    }
+
+    if (scrollbar.Travel() == 0) {
+        return false;
+    }
+    const int column = mouse.x - scrollbar_box_.x_min;
+    if (mouse.motion == Mouse::Pressed && mouse.button == Mouse::Left &&
+        scrollbar_box_.Contain(mouse.x, mouse.y)) {
+        scrollbar_drag_ = CaptureMouse(event);
+        if (!scrollbar_drag_) {
+            return false;
+        }
+        const int relative_to_thumb = column - scrollbar.thumb_start;
+        if (relative_to_thumb >= 0 && relative_to_thumb < scrollbar.thumb_width) {
+            scrollbar_grab_column_ = relative_to_thumb;
+            return true;
+        }
+        scrollbar_grab_column_ = scrollbar.thumb_width / 2;
+    } else if (!scrollbar_drag_ || mouse.motion != Mouse::Moved) {
+        return false;
+    }
+
+    const int travel = scrollbar.Travel();
+    const int thumb_start = std::clamp(column - scrollbar_grab_column_, 0, travel);
+    if (thumb_start != scrollbar.thumb_start) {
+        label_scroll_offset_ = static_cast<int>((1LL * thumb_start * scrollbar.max_offset + travel - 1) / travel);
+    }
+    return true;
 }
 
 std::string SidebarPanel::ShortcutLabelForMode(SidebarMode mode) const {
@@ -1014,6 +1179,7 @@ void SidebarPanel::RebuildEntries() {
     entry_kinds_.clear();
     entry_ids_.clear();
     project_entries_.clear();
+    widest_label_ = 0;
 
     switch (mode_) {
         case SidebarMode::Opened:
@@ -1149,6 +1315,10 @@ void SidebarPanel::RebuildProjectsEntries() {
 }
 
 void SidebarPanel::AddEntry(std::filesystem::path path, std::string label, EntryKind kind) {
+    std::replace_if(label.begin(), label.end(), [](char ch) {
+        return ch == '\n' || ch == '\r' || ch == '\t';
+    }, ' ');
+    widest_label_ = std::max(widest_label_, ftxui::string_width(label));
     entry_paths_.push_back(std::move(path));
     entry_labels_.push_back(std::move(label));
     entry_kinds_.push_back(kind);
@@ -1168,6 +1338,7 @@ void SidebarPanel::SetProjectRoot(const std::filesystem::path& root) {
     if (mode_ != SidebarMode::Projects) {
         selected_entry_ = 0;
         list_scroll_offset_ = 0;
+        label_scroll_offset_ = 0;
     }
     RebuildEntries();
 }
