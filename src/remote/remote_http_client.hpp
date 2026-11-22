@@ -36,7 +36,8 @@ public:
         int timeout_seconds,
         const std::atomic<bool>* cancel_requested,
         OutputCallback on_body_chunk,
-        RemoteCommandControl* command_control = nullptr) const;
+        RemoteCommandControl* command_control = nullptr,
+        bool follow_redirects = true) const;
 
     RemoteHttpResponse Download(
         const std::string& method,
@@ -77,7 +78,8 @@ private:
         int timeout_seconds,
         const std::atomic<bool>* cancel_requested,
         OutputCallback on_body_chunk,
-        RemoteCommandControl* command_control = nullptr) const;
+        RemoteCommandControl* command_control = nullptr,
+        bool follow_redirects = true) const;
 };
 
 } // namespace textlt

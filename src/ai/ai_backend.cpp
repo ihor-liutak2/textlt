@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cctype>
+#include <random>
+#include <sstream>
 #include <utility>
 
 #include "json_utils.hpp"
@@ -23,7 +25,7 @@ std::string Trim(std::string value) {
 }
 
 std::string JoinUrl(const std::string& base, const std::string& path) {
-    return AiBackend::NormalizeServerUrl(base) + path;
+    return base + path;
 }
 
 std::string CompactErrorText(std::string value) {
@@ -77,12 +79,15 @@ std::string JsonErrorDetail(const Json& root) {
 std::string HttpFailureMessage(
     const RemoteHttpResponse& response,
     const std::string& fallback) {
-    std::string detail = response.error;
-    if (detail.empty() && !response.body.empty()) {
+    std::string detail;
+    if (!response.body.empty()) {
         const Json root = Json::parse(response.body, nullptr, false);
         if (!root.is_discarded()) {
             detail = JsonErrorDetail(root);
         }
+    }
+    if (detail.empty()) {
+        detail = response.error;
     }
     detail = CompactErrorText(std::move(detail));
     if (response.status_code > 0) {
@@ -180,6 +185,7 @@ int JsonInteger(const Json& object, const char* key);
 
 struct OllamaStreamEvent {
     std::string content;
+    std::string error;
     std::string done_reason;
     bool done = false;
     int prompt_tokens = 0;
@@ -202,7 +208,8 @@ OllamaStreamEvent ParseOllamaStreamEvent(const std::string& line) {
     if (message != root.end() && message->is_object()) {
         event.content = JsonString(*message, "content");
     }
-    event.done = root.value("done", false);
+    event.error = JsonString(root, "error");
+    event.done = JsonBool(root, "done", false);
     event.done_reason = JsonString(root, "done_reason");
     event.prompt_tokens = JsonInteger(root, "prompt_eval_count");
     event.generated_tokens = JsonInteger(root, "eval_count");
@@ -220,6 +227,7 @@ OllamaStreamEvent ParseOllamaStreamEvent(const std::string& line) {
 struct OpenAiStreamEvent {
     std::string content;
     bool done = false;
+    std::string error;
     std::string finish_reason;
     std::string stop_type;
     int prompt_tokens = 0;
@@ -261,6 +269,41 @@ OpenAiStreamEvent ParseOpenAiStreamEvent(std::string line) {
     if (root.is_discarded() || !root.is_object()) {
         return event;
     }
+    event.error = root.contains("error") ? JsonErrorDetail(root) : std::string{};
+    const std::string type = JsonString(root, "type");
+    if (type == "content_block_delta") {
+        const auto delta = root.find("delta");
+        if (delta != root.end() && JsonString(*delta, "type") == "text_delta") {
+            event.content = JsonString(*delta, "text");
+        }
+    } else if (type == "message_stop" || type == "response.completed") {
+        event.done = true;
+    } else if (type == "message_delta") {
+        const auto delta = root.find("delta");
+        if (delta != root.end()) {
+            const std::string reason = JsonString(*delta, "stop_reason");
+            event.finish_reason = reason == "max_tokens" ? "length" : reason;
+        }
+    } else if (type == "response.output_text.delta") {
+        event.content = JsonString(root, "delta");
+    } else if (type == "response.incomplete" || type == "response.failed") {
+        const auto response = root.find("response");
+        if (response != root.end()) {
+            event.error = JsonErrorDetail(*response);
+            const auto details = response->find("incomplete_details");
+            if (details != response->end() && JsonString(*details, "reason") == "max_output_tokens") {
+                event.finish_reason = "length";
+            }
+        }
+        if (event.error.empty() && event.finish_reason.empty()) {
+            event.error = "OpenCode did not complete the response.";
+        }
+    } else if (type == "error" && event.error.empty()) {
+        event.error = JsonErrorDetail(root);
+        if (event.error.empty()) {
+            event.error = "The provider reported a streaming error.";
+        }
+    }
     const auto choices = root.find("choices");
     if (choices != root.end() && choices->is_array() && !choices->empty() &&
         (*choices)[0].is_object()) {
@@ -277,8 +320,10 @@ OpenAiStreamEvent ParseOpenAiStreamEvent(std::string line) {
     }
     const auto usage = root.find("usage");
     if (usage != root.end() && usage->is_object()) {
-        event.prompt_tokens = JsonInteger(*usage, "prompt_tokens");
-        event.generated_tokens = JsonInteger(*usage, "completion_tokens");
+        event.prompt_tokens = std::max(
+            JsonInteger(*usage, "prompt_tokens"), JsonInteger(*usage, "input_tokens"));
+        event.generated_tokens = std::max(
+            JsonInteger(*usage, "completion_tokens"), JsonInteger(*usage, "output_tokens"));
     }
     const auto timings = root.find("timings");
     if (timings != root.end() && timings->is_object()) {
@@ -319,10 +364,7 @@ int CountUtf8Codepoints(const std::string& text) {
 int DefaultMaxOutputTokens(const AiPromptRequest& request) {
     const int codepoints = std::max(1, CountUtf8Codepoints(request.text));
     const int estimated_input_tokens = std::max(8, codepoints / 2 + 8);
-    const int estimated = request.action == AiActionType::Translate
-        ? estimated_input_tokens * 2 + 24
-        : estimated_input_tokens + estimated_input_tokens / 2 + 24;
-    return std::clamp(estimated, 64, 2048);
+    return std::clamp(estimated_input_tokens + estimated_input_tokens / 2 + 24, 64, 2048);
 }
 
 AiBackendResult ErrorResult(AiProvider provider, std::string error) {
@@ -343,10 +385,112 @@ AiBackendResult StoppedResult(AiProvider provider) {
 
 AiBackend::AiBackend(AiBackendSettings settings)
     : settings_(std::move(settings)) {
-    settings_.server_url = NormalizeServerUrl(settings_.server_url);
+    if (Trim(settings_.server_url).empty()) {
+        settings_.server_url = DefaultEndpoint(settings_.provider, settings_.opencode_use_go);
+    }
+    if (settings_.provider != AiProvider::ChatGpt) {
+        settings_.server_url = NormalizeServerUrl(settings_.server_url);
+    }
+    settings_.api_key = Trim(std::move(settings_.api_key));
     if (settings_.timeout_seconds <= 0) {
         settings_.timeout_seconds = 120;
     }
+}
+
+std::string AiBackend::DefaultEndpoint(AiProvider provider, bool opencode_use_go) {
+    switch (provider) {
+        case AiProvider::Ollama: return "http://localhost:11434/v1";
+        case AiProvider::OpenCodeGo: return opencode_use_go
+            ? "https://opencode.ai/inference/go" : "https://opencode.ai/inference";
+        case AiProvider::ChatGpt: return "codex";
+        case AiProvider::Claude: return "https://api.anthropic.com";
+        case AiProvider::Mimo: return "https://api.xiaomimimo.com/v1";
+        default: return {};
+    }
+}
+
+std::string AiBackend::ValidationError(const AiBackendSettings& settings) {
+    if (settings.provider == AiProvider::ChatGpt) {
+        const auto& effort = settings.effort;
+        if (!effort.empty() && effort != "none" && effort != "minimal" &&
+            effort != "low" && effort != "medium" && effort != "high" &&
+            effort != "xhigh" && effort != "max") {
+            return "Choose an effort level supported by the selected Codex model.";
+        }
+        return {};
+    }
+    const std::string url = NormalizeServerUrl(settings.server_url.empty()
+        ? DefaultEndpoint(settings.provider, settings.opencode_use_go) : settings.server_url);
+    if (!IsSupportedServerUrl(url)) {
+        return "Enter a valid HTTP or HTTPS server URL.";
+    }
+    if (settings.provider == AiProvider::OpenCodeGo &&
+        url == DefaultEndpoint(settings.provider, !settings.opencode_use_go)) {
+        return "The OpenCode URL does not match the selected billing plan.";
+    }
+    if (settings.provider == AiProvider::Claude || settings.provider == AiProvider::Mimo ||
+        settings.provider == AiProvider::OpenCodeGo) {
+        if (url.rfind("https://", 0) != 0) {
+            return "This provider requires an HTTPS URL.";
+        }
+        const std::string key = Trim(settings.api_key);
+        if (key.empty()) {
+            return "Enter an API key for " + ProviderLabel(settings.provider) + ".";
+        }
+        if (std::any_of(key.begin(), key.end(), [](unsigned char ch) {
+                return ch <= ' ' || ch == 127;
+            })) {
+            return "The API key contains whitespace or a control character.";
+        }
+    }
+    const auto& effort = settings.effort;
+    if (!effort.empty()) {
+        const auto is_one_of = [&](std::initializer_list<const char*> values) {
+            return std::any_of(values.begin(), values.end(),
+                [&](const char* value) { return effort == value; });
+        };
+        if ((settings.provider == AiProvider::Mimo && !is_one_of({"enabled", "disabled"})) ||
+            (settings.provider == AiProvider::Claude && !is_one_of({"low", "medium", "high", "xhigh", "max"})) ||
+            (settings.provider == AiProvider::OpenCodeGo && !is_one_of({"none", "minimal", "low", "medium", "high", "xhigh", "max"}))) {
+            return "This provider does not accept the entered effort value.";
+        }
+    }
+    return {};
+}
+
+std::vector<std::string> AiBackend::HttpHeaders(bool stream) const {
+    std::vector<std::string> headers{
+        stream ? "Accept: text/event-stream" : "Accept: application/json",
+    };
+    if (stream) {
+        headers.emplace_back("Content-Type: application/json");
+    }
+    if (settings_.provider == AiProvider::Claude) {
+        headers.emplace_back("anthropic-version: 2023-06-01");
+        headers.push_back("x-api-key: " + settings_.api_key);
+    } else if (settings_.provider == AiProvider::Mimo) {
+        headers.push_back("api-key: " + settings_.api_key);
+    } else if (settings_.provider == AiProvider::OpenCodeGo) {
+        headers.push_back("Authorization: Bearer " + settings_.api_key);
+        if (stream) {
+            std::random_device random;
+            std::ostringstream session;
+            session << "x-opencode-session: ses_" << std::hex << random() << random();
+            headers.push_back(session.str());
+        }
+    }
+    return headers;
+}
+
+std::string AiBackend::Redact(std::string message) const {
+    if (!settings_.api_key.empty()) {
+        size_t pos = 0;
+        while ((pos = message.find(settings_.api_key, pos)) != std::string::npos) {
+            message.replace(pos, settings_.api_key.size(), "[redacted]");
+            pos += sizeof("[redacted]") - 1;
+        }
+    }
+    return message;
 }
 
 AiProvider AiBackend::ProviderFromConfig(const std::string& value) {
@@ -356,6 +500,10 @@ AiProvider AiBackend::ProviderFromConfig(const std::string& value) {
     if (value == "openai") {
         return AiProvider::OpenAiCompatible;
     }
+    if (value == "opencode") return AiProvider::OpenCodeGo;
+    if (value == "chatgpt") return AiProvider::ChatGpt;
+    if (value == "claude") return AiProvider::Claude;
+    if (value == "mimo") return AiProvider::Mimo;
     return AiProvider::Auto;
 }
 
@@ -365,6 +513,10 @@ std::string AiBackend::ProviderToConfig(AiProvider provider) {
             return "ollama";
         case AiProvider::OpenAiCompatible:
             return "openai";
+        case AiProvider::OpenCodeGo: return "opencode";
+        case AiProvider::ChatGpt: return "chatgpt";
+        case AiProvider::Claude: return "claude";
+        case AiProvider::Mimo: return "mimo";
         case AiProvider::Auto:
         default:
             return "auto";
@@ -377,6 +529,10 @@ std::string AiBackend::ProviderLabel(AiProvider provider) {
             return "Ollama";
         case AiProvider::OpenAiCompatible:
             return "OpenAI-compatible";
+        case AiProvider::OpenCodeGo: return "OpenCode";
+        case AiProvider::ChatGpt: return "ChatGPT";
+        case AiProvider::Claude: return "Claude";
+        case AiProvider::Mimo: return "MiMo";
         case AiProvider::Auto:
         default:
             return "Auto";
@@ -388,6 +544,13 @@ std::string AiBackend::NormalizeServerUrl(std::string url) {
     while (!url.empty() && url.back() == '/') {
         url.pop_back();
     }
+    for (const std::string suffix : {"/v1/chat/completions", "/v1/messages", "/api/chat"}) {
+        if (url.size() > suffix.size() && url.compare(url.size() - suffix.size(),
+                suffix.size(), suffix) == 0) {
+            url.erase(url.size() - suffix.size());
+            return url;
+        }
+    }
     if (url.size() >= 4 && url.compare(url.size() - 4, 4, "/api") == 0) {
         url.erase(url.size() - 4);
     } else if (url.size() >= 3 && url.compare(url.size() - 3, 3, "/v1") == 0) {
@@ -398,7 +561,12 @@ std::string AiBackend::NormalizeServerUrl(std::string url) {
 
 bool AiBackend::IsSupportedServerUrl(const std::string& url) {
     const std::string normalized = NormalizeServerUrl(url);
-    return normalized.rfind("http://", 0) == 0 || normalized.rfind("https://", 0) == 0;
+    const size_t offset = normalized.rfind("https://", 0) == 0 ? 8 :
+        normalized.rfind("http://", 0) == 0 ? 7 : 0;
+    return offset > 0 && normalized.size() > offset && normalized[offset] != '/' &&
+        normalized.find_first_of("?#@\\") == std::string::npos &&
+        std::none_of(normalized.begin(), normalized.end(),
+            [](unsigned char ch) { return ch <= ' ' || ch == 127; });
 }
 
 std::string AiBackend::ModelIdFromKey(const std::string& key) {
@@ -412,19 +580,6 @@ std::string AiBackend::NormalizeGeneratedText(std::string text) {
 
 int AiBackend::RecommendedMaxOutputTokens(const AiPromptRequest& request) {
     return DefaultMaxOutputTokens(request);
-}
-
-std::string AiBackend::FinishReasonLabel(AiFinishReason reason) {
-    switch (reason) {
-        case AiFinishReason::Eos: return "end of sequence";
-        case AiFinishReason::StopMarker: return "stop marker";
-        case AiFinishReason::TokenLimit: return "token limit";
-        case AiFinishReason::Timeout: return "timeout";
-        case AiFinishReason::Cancelled: return "cancelled";
-        case AiFinishReason::Error: return "error";
-        case AiFinishReason::Unknown:
-        default: return "completed";
-    }
 }
 
 AiConnectionResult AiBackend::TryOllama(
@@ -451,7 +606,7 @@ AiConnectionResult AiBackend::TryOllama(
         std::min(settings_.timeout_seconds, 20),
         cancel_requested,
         {},
-        command_control);
+        command_control, false);
     if (IsCancelled(cancel_requested)) {
         result.error = "Operation stopped.";
         return result;
@@ -486,6 +641,7 @@ AiConnectionResult AiBackend::TryOllama(
             "Ollama",
             true,
             "Model reported by the configured Ollama server.",
+            {},
         });
     }
     result.success = true;
@@ -496,59 +652,59 @@ AiConnectionResult AiBackend::TryOpenAiCompatible(
     const std::atomic<bool>* cancel_requested,
     RemoteCommandControl* command_control) const {
     AiConnectionResult result;
-    result.provider = AiProvider::OpenAiCompatible;
+    result.provider = settings_.provider == AiProvider::Auto
+        ? AiProvider::OpenAiCompatible : settings_.provider;
     result.provider_label = ProviderLabel(result.provider);
-    if (settings_.server_url.empty()) {
-        result.error = "AI server URL is empty.";
-        return result;
-    }
-    if (!IsSupportedServerUrl(settings_.server_url)) {
-        result.error = "AI server URL must start with http:// or https://.";
-        return result;
-    }
 
     RemoteHttpClient client;
+    const char* path = result.provider == AiProvider::Claude ? "/v1/models?limit=1000" : "/v1/models";
     const RemoteHttpResponse response = client.RequestStreaming(
-        "GET",
-        JoinUrl(settings_.server_url, "/v1/models"),
-        {"Accept: application/json"},
-        {},
-        std::min(settings_.timeout_seconds, 20),
-        cancel_requested,
-        {},
-        command_control);
+        "GET", JoinUrl(settings_.server_url, path), HttpHeaders(false), {},
+        std::min(settings_.timeout_seconds, 20), cancel_requested, {}, command_control, false);
     if (IsCancelled(cancel_requested)) {
         result.error = "Operation stopped.";
         return result;
     }
-    std::string error;
-    const Json root = ParseJsonBody(response, error);
-    if (!error.empty()) {
-        result.error = std::move(error);
+    const Json root = ParseJsonBody(response, result.error);
+    if (!result.error.empty()) {
+        result.error = Redact(std::move(result.error));
         return result;
     }
-
     const auto data = root.find("data");
     if (data == root.end() || !data->is_array()) {
-        result.error = "OpenAI-compatible response does not contain a data array.";
+        result.error = result.provider_label + " returned an invalid model list.";
         return result;
     }
     for (const Json& item : *data) {
-        if (!item.is_object()) {
-            continue;
-        }
         const std::string id = JsonString(item, "id");
-        if (id.empty()) {
+        const std::string kind = JsonString(item, "type");
+        if (id.empty() || (result.provider == AiProvider::Mimo &&
+            (id.find("-tts") != std::string::npos || id.find("-asr") != std::string::npos)) ||
+            (result.provider == AiProvider::OpenCodeGo && !kind.empty() && kind != "chat")) {
             continue;
         }
-        result.models.push_back({
-            "openai:" + id,
-            id,
-            id,
-            "OpenAI-compatible",
-            true,
-            "Model reported by the configured OpenAI-compatible server.",
-        });
+        AiModelInfo model{
+            ProviderToConfig(result.provider) + ":" + id, id,
+            JsonString(item, "display_name", JsonString(item, "name", id)),
+            result.provider_label, true, {}, {},
+        };
+        if (result.provider == AiProvider::OpenCodeGo) {
+            const auto capabilities = item.find("capabilities");
+            if (capabilities != item.end() && capabilities->is_object()) {
+                const auto reasoning = capabilities->find("reasoning");
+                if (reasoning != capabilities->end() && reasoning->is_object()) {
+                    const auto efforts = reasoning->find("effort");
+                    if (efforts != reasoning->end() && efforts->is_array()) {
+                        for (const auto& effort : *efforts) {
+                            if (effort.is_string()) {
+                                model.efforts.push_back(effort.get<std::string>());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        result.models.push_back(std::move(model));
     }
     result.success = true;
     return result;
@@ -557,63 +713,65 @@ AiConnectionResult AiBackend::TryOpenAiCompatible(
 AiConnectionResult AiBackend::CheckConnectionAndListModels(
     const std::atomic<bool>* cancel_requested,
     RemoteCommandControl* command_control) const {
-    if (settings_.provider == AiProvider::Ollama) {
-        return TryOllama(cancel_requested, command_control);
+    AiConnectionResult result;
+    result.provider = settings_.provider;
+    result.provider_label = ProviderLabel(result.provider);
+    result.error = IsCancelled(cancel_requested) ? "Operation stopped." : ValidationError(settings_);
+    if (!result.error.empty()) {
+        return result;
     }
-    if (settings_.provider == AiProvider::OpenAiCompatible) {
-        return TryOpenAiCompatible(cancel_requested, command_control);
+    if (settings_.provider == AiProvider::ChatGpt) {
+        AiBackendResult unused;
+        return RunCodex(nullptr, unused, cancel_requested, {}, command_control);
     }
-    AiConnectionResult ollama = TryOllama(cancel_requested, command_control);
-    if (ollama.success || IsCancelled(cancel_requested)) {
-        return ollama;
+    if (settings_.provider == AiProvider::Ollama || settings_.provider == AiProvider::Auto) {
+        result = TryOllama(cancel_requested, command_control);
+        if (settings_.provider == AiProvider::Ollama || result.success || IsCancelled(cancel_requested)) {
+            return result;
+        }
     }
-    AiConnectionResult openai = TryOpenAiCompatible(cancel_requested, command_control);
-    if (openai.success) {
-        return openai;
-    }
-    openai.error = "Could not detect an Ollama or OpenAI-compatible server. Ollama: " +
-        ollama.error + " OpenAI-compatible: " + openai.error;
-    return openai;
+    return TryOpenAiCompatible(cancel_requested, command_control);
 }
 
-AiConnectionResult AiBackend::CheckSelectedModelReady(
+AiConnectionResult AiBackend::GetOllamaModelEfforts(
     const std::atomic<bool>* cancel_requested,
     RemoteCommandControl* command_control) const {
     AiConnectionResult result;
-    if (settings_.selected_model_key.empty()) {
-        result.provider = settings_.provider;
-        result.provider_label = ProviderLabel(result.provider);
-        result.error = "No AI model is selected.";
+    result.provider = AiProvider::Ollama;
+    result.provider_label = ProviderLabel(result.provider);
+    result.error = ValidationError(settings_);
+    if (!result.error.empty()) {
         return result;
     }
-    if (IsCancelled(cancel_requested)) {
-        result.provider = settings_.provider;
-        result.provider_label = ProviderLabel(result.provider);
-        result.error = "Operation stopped.";
+    if (settings_.model.empty()) {
+        result.error = "Choose an Ollama model first.";
         return result;
     }
-
-    const std::string& selected_key = settings_.selected_model_key;
-    const std::string model_id = ModelIdFromKey(selected_key);
-    if (selected_key.rfind("ollama:", 0) == 0) {
-        result = TryOllama(cancel_requested, command_control);
-    } else if (selected_key.rfind("openai:", 0) == 0) {
-        result = TryOpenAiCompatible(cancel_requested, command_control);
-    } else {
-        result = CheckConnectionAndListModels(cancel_requested, command_control);
-    }
-    if (!result.success || IsCancelled(cancel_requested)) {
+    const auto response = RemoteHttpClient().RequestStreaming(
+        "POST", JoinUrl(settings_.server_url, "/api/show"),
+        {"Accept: application/json", "Content-Type: application/json"},
+        Json{{"model", settings_.model}}.dump(), std::min(settings_.timeout_seconds, 20),
+        cancel_requested, {}, command_control, false);
+    const Json root = ParseJsonBody(response, result.error);
+    if (!result.error.empty()) {
         return result;
     }
 
-    const auto selected = std::find_if(
-        result.models.begin(), result.models.end(), [&](const AiModelInfo& model) {
-            return model.key == selected_key || model.id == model_id;
-        });
-    if (selected == result.models.end()) {
-        result.success = false;
-        result.error = "The selected model is not available from the configured AI backend.";
+    AiModelInfo model{"ollama:" + settings_.model, settings_.model, settings_.model,
+        result.provider_label, true, {}, {}};
+    const auto thinking = root.find("thinking");
+    if (thinking != root.end() && thinking->is_object()) {
+        const auto values = thinking->find("values");
+        if (values != thinking->end() && values->is_array()) {
+            for (const auto& value : *values) {
+                if (value.is_boolean() || value.is_string()) {
+                    model.efforts.push_back(value.is_boolean() ? value.dump() : value.get<std::string>());
+                }
+            }
+        }
     }
+    result.models.push_back(std::move(model));
+    result.success = true;
     return result;
 }
 
@@ -627,8 +785,8 @@ AiBackendResult AiBackend::RunOllama(
         {"model", model},
         {"stream", true},
         {"messages", Json::array({
-            Json{{"role", "system"}, {"content", BuildAiSystemPrompt(request)}},
-            Json{{"role", "user"}, {"content", BuildAiUserPrompt(request)}},
+            Json{{"role", "system"}, {"content", request.system}},
+            Json{{"role", "user"}, {"content", request.text}},
         })},
         {"options", Json{
             {"temperature", 0.2},
@@ -641,6 +799,14 @@ AiBackendResult AiBackend::RunOllama(
         }},
     };
 
+    if (!settings_.effort.empty()) {
+        if (settings_.effort == "true" || settings_.effort == "false") {
+            body["think"] = settings_.effort == "true";
+        } else {
+            body["think"] = settings_.effort;
+        }
+    }
+
     const auto request_started = std::chrono::steady_clock::now();
     bool first_token_seen = false;
     std::string line_buffer;
@@ -652,6 +818,9 @@ AiBackendResult AiBackend::RunOllama(
     auto last_progress_at = std::chrono::steady_clock::now() - std::chrono::seconds(1);
     auto consume_line = [&](std::string line) {
         const OllamaStreamEvent event = ParseOllamaStreamEvent(line);
+        if (!event.error.empty()) {
+            result.error = event.error;
+        }
         result.prompt_tokens = std::max(result.prompt_tokens, event.prompt_tokens);
         result.generated_tokens = std::max(result.generated_tokens, event.generated_tokens);
         result.prompt_ms = std::max(result.prompt_ms, event.prompt_ms);
@@ -690,7 +859,7 @@ AiBackendResult AiBackend::RunOllama(
         [&](const std::string& chunk) {
             ConsumeCompleteLines(line_buffer, chunk, consume_line);
         },
-        command_control);
+        command_control, false);
     if (!line_buffer.empty()) {
         consume_line(std::move(line_buffer));
     }
@@ -698,7 +867,11 @@ AiBackendResult AiBackend::RunOllama(
         (command_control && command_control->StopRequested())) {
         return StoppedResult(AiProvider::Ollama);
     }
-    if (!response.ok && !(stream_completed && !generated.empty())) {
+    if (!result.error.empty()) {
+        result.finish_reason = AiFinishReason::Error;
+        return result;
+    }
+    if (!response.ok) {
         result.error = HttpFailureMessage(response, "Ollama request failed.");
         result.finish_reason = result.error.find("timed out") != std::string::npos
             ? AiFinishReason::Timeout
@@ -719,6 +892,9 @@ AiBackendResult AiBackend::RunOllama(
     if (generated.empty()) {
         return ErrorResult(AiProvider::Ollama, "Ollama returned an empty response.");
     }
+    if (!stream_completed) {
+        return ErrorResult(AiProvider::Ollama, "Ollama closed the response stream early.");
+    }
     result.success = true;
     result.text = std::move(generated);
     result.finish_reason = done_reason == "length"
@@ -733,23 +909,48 @@ AiBackendResult AiBackend::RunOpenAiCompatible(
     const std::atomic<bool>* cancel_requested,
     ProgressCallback progress,
     RemoteCommandControl* command_control) const {
-    Json messages = Json::array({
-        Json{{"role", "system"}, {"content", BuildAiSystemPrompt(request)}},
-        Json{{"role", "user"}, {"content", BuildAiUserPrompt(request)}},
-    });
-
-    Json body = {
-        {"model", model},
-        {"temperature", 0.2},
-        {"max_tokens", settings_.max_output_tokens > 0
-            ? settings_.max_output_tokens
-            : DefaultMaxOutputTokens(request)},
-        {"stream", true},
-        {"stop", Json::array({
-            "[end of text]", "<|end_of_text|>", "<|eot_id|>",
-            "<end_of_turn>", "</s>"})},
-        {"messages", std::move(messages)},
-    };
+    const auto provider = settings_.provider == AiProvider::Auto
+        ? AiProvider::OpenAiCompatible : settings_.provider;
+    const std::string system = request.system;
+    const std::string user = request.text;
+    const int tokens = settings_.max_output_tokens > 0
+        ? settings_.max_output_tokens : DefaultMaxOutputTokens(request);
+    Json body = {{"model", model}, {"stream", true}};
+    std::string path = "/v1/chat/completions";
+    if (provider == AiProvider::Claude) {
+        path = "/v1/messages";
+        body["system"] = system;
+        body["messages"] = Json::array({Json{{"role", "user"}, {"content", user}}});
+        body["max_tokens"] = std::max(tokens, 4096);
+        if (!settings_.effort.empty()) {
+            body["output_config"] = {{"effort", settings_.effort}};
+        }
+    } else if (provider == AiProvider::OpenCodeGo) {
+        path = "/openai/v1/responses";
+        body["instructions"] = system;
+        body["input"] = user;
+        body["max_output_tokens"] = std::max(tokens, 4096);
+        if (!settings_.effort.empty()) {
+            body["reasoning"] = {{"effort", settings_.effort}};
+        }
+    } else {
+        body["messages"] = Json::array({
+            Json{{"role", "system"}, {"content", system}},
+            Json{{"role", "user"}, {"content", user}},
+        });
+        if (provider == AiProvider::Mimo) {
+            body["max_completion_tokens"] = settings_.effort == "disabled"
+                ? tokens : std::max(tokens, 4096);
+            if (!settings_.effort.empty()) {
+                body["thinking"] = {{"type", settings_.effort}};
+            }
+        } else {
+            body["max_tokens"] = tokens;
+            body["temperature"] = 0.2;
+            body["stop"] = Json::array({"[end of text]", "<|end_of_text|>", "<|eot_id|>",
+                "<end_of_turn>", "</s>"});
+        }
+    }
     const auto request_started = std::chrono::steady_clock::now();
     bool first_token_seen = false;
     std::string line_buffer;
@@ -758,11 +959,14 @@ AiBackendResult AiBackend::RunOpenAiCompatible(
     std::string stop_type;
     bool stream_completed = false;
     AiBackendResult result;
-    result.provider = AiProvider::OpenAiCompatible;
+    result.provider = provider;
     auto last_progress_at = std::chrono::steady_clock::now() - std::chrono::seconds(1);
     auto consume_line = [&](std::string line) {
         const OpenAiStreamEvent event = ParseOpenAiStreamEvent(std::move(line));
-        if (event.done || !event.finish_reason.empty()) {
+        if (!event.error.empty()) {
+            result.error = Redact(event.error);
+        }
+        if (event.done || (provider != AiProvider::Claude && !event.finish_reason.empty())) {
             stream_completed = true;
         }
         if (!event.finish_reason.empty()) {
@@ -795,25 +999,29 @@ AiBackendResult AiBackend::RunOpenAiCompatible(
     RemoteHttpClient client;
     const RemoteHttpResponse response = client.RequestStreaming(
         "POST",
-        JoinUrl(settings_.server_url, "/v1/chat/completions"),
-        {"Accept: text/event-stream", "Content-Type: application/json"},
+        JoinUrl(settings_.server_url, path),
+        HttpHeaders(true),
         body.dump(),
         settings_.timeout_seconds,
         cancel_requested,
         [&](const std::string& chunk) {
             ConsumeCompleteLines(line_buffer, chunk, consume_line);
         },
-        command_control);
+        command_control, false);
     if (!line_buffer.empty()) {
         consume_line(std::move(line_buffer));
     }
     if (IsCancelled(cancel_requested) ||
         (command_control && command_control->StopRequested())) {
-        return StoppedResult(AiProvider::OpenAiCompatible);
+        return StoppedResult(provider);
     }
-    if (!response.ok && !(stream_completed && !generated.empty())) {
-        result.error = HttpFailureMessage(
-            response, "OpenAI-compatible request failed.");
+    if (!result.error.empty()) {
+        result.finish_reason = AiFinishReason::Error;
+        return result;
+    }
+    if (!response.ok && (provider != AiProvider::OpenAiCompatible ||
+            !(stream_completed && !generated.empty()))) {
+        result.error = Redact(HttpFailureMessage(response, ProviderLabel(provider) + " request failed."));
         result.finish_reason = result.error.find("timed out") != std::string::npos
             ? AiFinishReason::Timeout
             : AiFinishReason::Error;
@@ -837,9 +1045,12 @@ AiBackendResult AiBackend::RunOpenAiCompatible(
     }
     generated = NormalizeGeneratedTextImpl(std::move(generated));
     if (generated.empty()) {
-        result.error = "OpenAI-compatible server returned an empty response.";
+        result.error = ProviderLabel(provider) + " returned an empty response.";
         result.finish_reason = AiFinishReason::Error;
         return result;
+    }
+    if (provider != AiProvider::OpenAiCompatible && !stream_completed) {
+        return ErrorResult(provider, ProviderLabel(provider) + " closed the response stream early.");
     }
     result.success = true;
     result.text = std::move(generated);
@@ -847,6 +1058,189 @@ AiBackendResult AiBackend::RunOpenAiCompatible(
     if (result.finish_reason == AiFinishReason::Unknown) {
         result.finish_reason = AiFinishReason::Eos;
     }
+    return result;
+}
+
+AiConnectionResult AiBackend::RunCodex(
+    const AiPromptRequest* request,
+    AiBackendResult& generation,
+    const std::atomic<bool>* cancel_requested,
+    ProgressCallback progress,
+    RemoteCommandControl* command_control) const {
+    AiConnectionResult result;
+    result.provider = AiProvider::ChatGpt;
+    result.provider_label = ProviderLabel(result.provider);
+    generation.provider = result.provider;
+
+    std::string buffer;
+    std::string thread_id;
+    std::string current_text;
+    std::string current_item;
+    std::string final_text;
+    bool finished = false;
+    int model_list_id = 3;
+    const auto started = std::chrono::steady_clock::now();
+    const auto rpc = [](int id, const char* method, Json params) {
+        return Json{{"id", id}, {"method", method}, {"params", std::move(params)}}.dump() + "\n";
+    };
+    const std::string init = rpc(1, "initialize",
+        {{"clientInfo", {{"name", "textlt"}, {"title", "TextLT"}, {"version", "1"}}}});
+    const auto handle_output = [&](const std::string& chunk,
+                                   const RemoteCommandRunner::OutputCallback& send) {
+        const auto finish = [&](std::string error = {}) {
+            result.error = std::move(error);
+            finished = true;
+            send({});
+        };
+        ConsumeCompleteLines(buffer, chunk, [&](std::string line) {
+            if (finished) {
+                return;
+            }
+            const Json message = Json::parse(line, nullptr, false);
+            if (!message.is_object()) {
+                return;
+            }
+            if (message.contains("error") && message.contains("id")) {
+                finish(JsonErrorDetail(message));
+                if (result.error.empty()) {
+                    result.error = "Codex app-server rejected the request.";
+                }
+                return;
+            }
+            const int id = JsonInteger(message, "id");
+            const Json payload = message.value("result", Json::object());
+            if (id == 1) {
+                send(Json{{"method", "initialized"}}.dump() + "\n" +
+                    rpc(2, "account/read", {{"refreshToken", false}}));
+            } else if (id == 2) {
+                const auto account = payload.find("account");
+                if (account == payload.end() || JsonString(*account, "type") != "chatgpt") {
+                    finish("Sign in with ChatGPT in Codex (codex login), then try again.");
+                } else if (!request) {
+                    send(rpc(model_list_id, "model/list", {{"includeHidden", false}}));
+                } else {
+                    send(rpc(3, "thread/start", {
+                        {"model", settings_.model},
+                        {"modelProvider", "openai"},
+                        {"ephemeral", true},
+                        {"approvalPolicy", "never"},
+                        {"sandbox", "read-only"},
+                        {"baseInstructions", "Follow the developer instructions without using tools."},
+                        {"developerInstructions", request->system},
+                    }));
+                }
+            } else if (id == model_list_id && !request) {
+                const auto models = payload.find("data");
+                if (models == payload.end() || !models->is_array()) {
+                    finish("Codex app-server returned an invalid model catalog.");
+                    return;
+                }
+                for (const auto& model : *models) {
+                    const std::string name = JsonString(model, "model", JsonString(model, "id"));
+                    if (name.empty()) {
+                        continue;
+                    }
+                    AiModelInfo info{"chatgpt:" + name, name, JsonString(model, "displayName", name),
+                        result.provider_label, true, JsonString(model, "description"), {}};
+                    const auto efforts = model.find("supportedReasoningEfforts");
+                    if (efforts != model.end() && efforts->is_array()) {
+                        for (const auto& effort : *efforts) {
+                            const std::string value = JsonString(effort, "reasoningEffort");
+                            if (!value.empty()) {
+                                info.efforts.push_back(value);
+                            }
+                        }
+                    }
+                    result.models.push_back(std::move(info));
+                }
+                const std::string cursor = JsonString(payload, "nextCursor");
+                if (cursor.empty()) {
+                    finish();
+                } else {
+                    send(rpc(++model_list_id, "model/list", {{"cursor", cursor}, {"includeHidden", false}}));
+                }
+            } else if (id == 3 && request) {
+                const auto thread = payload.find("thread");
+                if (thread != payload.end()) {
+                    thread_id = JsonString(*thread, "id");
+                }
+                if (thread_id.empty()) {
+                    finish("Codex app-server did not return a thread ID.");
+                    return;
+                }
+                Json turn = {
+                    {"threadId", thread_id},
+                    {"input", Json::array({Json{{"type", "text"},
+                        {"text", request->text}, {"text_elements", Json::array()}}})},
+                    {"approvalPolicy", "never"},
+                    {"sandboxPolicy", {{"type", "readOnly"}, {"networkAccess", false}}},
+                };
+                if (!settings_.effort.empty()) {
+                    turn["effort"] = settings_.effort;
+                }
+                send(rpc(4, "turn/start", std::move(turn)));
+            } else if (request && !thread_id.empty() && id == 0) {
+                const Json params = message.value("params", Json::object());
+                if (JsonString(params, "threadId") != thread_id) {
+                    return;
+                }
+                const std::string method = JsonString(message, "method");
+                if (method == "item/agentMessage/delta") {
+                    const std::string item_id = JsonString(params, "itemId");
+                    if (current_item != item_id) {
+                        current_item = item_id;
+                        current_text.clear();
+                    }
+                    if (generation.time_to_first_token_ms == 0) {
+                        generation.time_to_first_token_ms = std::chrono::duration<double, std::milli>(
+                            std::chrono::steady_clock::now() - started).count();
+                    }
+                    current_text += JsonString(params, "delta");
+                    if (progress) {
+                        progress(current_text);
+                    }
+                } else if (method == "item/completed") {
+                    const auto item = params.find("item");
+                    if (item != params.end() && JsonString(*item, "type") == "agentMessage" &&
+                        JsonString(*item, "phase") != "commentary") {
+                        final_text = JsonString(*item, "text");
+                    }
+                } else if (method == "turn/completed") {
+                    const Json turn = params.value("turn", Json::object());
+                    if (JsonString(turn, "status") != "completed") {
+                        const std::string detail = JsonErrorDetail(turn);
+                        finish(detail.empty() ? "The Codex turn failed or was interrupted." : detail);
+                        return;
+                    }
+                    generation.text = NormalizeGeneratedTextImpl(
+                        final_text.empty() ? current_text : final_text);
+                    generation.success = !generation.text.empty();
+                    generation.finish_reason = generation.success ? AiFinishReason::Eos : AiFinishReason::Error;
+                    finish(generation.success ? std::string{} : "Codex returned an empty response.");
+                }
+            }
+        });
+    };
+
+    RemoteCommandControl local_control;
+    const auto process = RemoteCommandRunner().RunStreaming(
+        {settings_.server_url, "-c", "model_provider=\"openai\"", "-c", "web_search=\"disabled\"",
+            "-c", "features.shell_tool=false", "-c", "features.hooks=false",
+            "-c", "features.apps=false", "-c", "features.multi_agent=false",
+            "-c", "mcp_servers={}", "-c", "plugins={}", "app-server"},
+        init, cancel_requested, {},
+        {request ? settings_.timeout_seconds : std::min(settings_.timeout_seconds, 20)},
+        command_control ? command_control : &local_control, handle_output);
+    if (IsCancelled(cancel_requested) || (process.cancelled && !finished)) {
+        result.error = "Operation stopped.";
+    } else if (process.timed_out) {
+        result.error = "Codex app-server timed out.";
+    } else if (!finished) {
+        result.error = process.exit_code == 127 || process.exit_code == -1
+            ? "Cannot start Codex. Install the Codex CLI or enter its executable path."
+            : "Codex app-server closed before responding. Check that the Codex CLI is up to date.";
+    }
+    result.success = result.error.empty();
     return result;
 }
 
@@ -861,33 +1255,34 @@ AiBackendResult AiBackend::Run(
     if (request.text.empty()) {
         return ErrorResult(settings_.provider, "There is no text to process.");
     }
-    if (settings_.selected_model_key.empty()) {
+    if (settings_.model.empty()) {
         return ErrorResult(settings_.provider, "No AI model is selected.");
     }
-
-    const std::string model = ModelIdFromKey(settings_.selected_model_key);
-    if (settings_.selected_model_key.rfind("ollama:", 0) == 0) {
-        return RunOllama(request, model, cancel_requested, progress, command_control);
+    const std::string invalid = ValidationError(settings_);
+    if (!invalid.empty()) {
+        return ErrorResult(settings_.provider, invalid);
     }
-    if (settings_.selected_model_key.rfind("openai:", 0) == 0) {
-        return RunOpenAiCompatible(request, model, cancel_requested, progress, command_control);
+    if (settings_.provider == AiProvider::ChatGpt) {
+        AiBackendResult result;
+        const auto connection = RunCodex(&request, result, cancel_requested, progress, command_control);
+        if (!connection.success) {
+            return IsCancelled(cancel_requested) ? StoppedResult(settings_.provider)
+                : ErrorResult(settings_.provider, connection.error);
+        }
+        return result;
     }
-
-    if (settings_.provider == AiProvider::Ollama) {
-        return RunOllama(request, model, cancel_requested, progress, command_control);
+    AiProvider provider = settings_.provider;
+    if (provider == AiProvider::Auto) {
+        const auto connection = CheckConnectionAndListModels(cancel_requested, command_control);
+        if (!connection.success) {
+            return ErrorResult(provider, connection.error);
+        }
+        provider = connection.provider;
     }
-    if (settings_.provider == AiProvider::OpenAiCompatible) {
-        return RunOpenAiCompatible(request, model, cancel_requested, progress, command_control);
+    if (provider == AiProvider::Ollama) {
+        return RunOllama(request, settings_.model, cancel_requested, progress, command_control);
     }
-
-    const AiConnectionResult connection = CheckConnectionAndListModels(cancel_requested, command_control);
-    if (!connection.success) {
-        return ErrorResult(AiProvider::Auto, connection.error);
-    }
-    if (connection.provider == AiProvider::Ollama) {
-        return RunOllama(request, model, cancel_requested, progress, command_control);
-    }
-    return RunOpenAiCompatible(request, model, cancel_requested, progress, command_control);
+    return RunOpenAiCompatible(request, settings_.model, cancel_requested, progress, command_control);
 }
 
 } // namespace textlt

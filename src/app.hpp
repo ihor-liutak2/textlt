@@ -27,9 +27,8 @@
 #include "modals/modal_sidebar_shortcuts.hpp"
 #include "modals/modal_keyboard_shortcuts.hpp"
 #include "modals/modal_custom_processor_builder.hpp"
-#include "modals/modal_ai.hpp"
-#include "modals/modal_ai_quick_actions.hpp"
 #include "modals/modal_ai_settings.hpp"
+#include "modals/modal_quick_ai.hpp"
 #include "modals/modal_git.hpp"
 #include "modals/modal_git_settings.hpp"
 #include "modals/modal_recent_files.hpp"
@@ -107,8 +106,7 @@ private:
         Tts,
         ViewLayout,
         DistractionOptions,
-        AiActions,
-        AiQuickActions,
+        QuickAi,
         AiSettings,
         AssistantSettings,
         RenameProject,
@@ -188,10 +186,8 @@ private:
     void CloseViewLayoutModal();
     void OpenDistractionOptionsModal();
     void CloseDistractionOptionsModal();
-    void OpenAiActionsModal();
-    void CloseAiActionsModal();
-    void OpenAiQuickActionsModal();
-    void CloseAiQuickActionsModal();
+    void OpenQuickAiModal();
+    void CloseQuickAiModal();
     void OpenAiSettingsModal();
     void CloseAiSettingsModal();
     void OpenAssistantSettingsModal();
@@ -452,8 +448,7 @@ private:
     TtsModal tts_modal_;
     ViewLayoutModal view_layout_modal_;
     DistractionOptionsModal distraction_options_modal_;
-    AiActionsModal ai_actions_modal_;
-    AiQuickActionsModal ai_quick_actions_modal_;
+    QuickAiModal quick_ai_modal_;
     AiSettingsModal ai_settings_modal_;
     AssistantSettingsModal assistant_settings_modal_;
     ThemeColorsModal theme_colors_modal_;

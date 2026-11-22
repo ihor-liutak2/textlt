@@ -1374,6 +1374,48 @@ void NotesWorkspaceComponent::SetBlockType(NoteBlockType type) {
     }
     if (session_.SetBlockType(type)) TouchAndSave();
 }
+std::optional<NotesWorkspaceComponent::TextTarget> NotesWorkspaceComponent::CaptureTextTarget() const {
+    const auto* note = EditingNote();
+    if (!note || note->blocks.empty()) {
+        return std::nullopt;
+    }
+    if (session_.HasSelection()) {
+        const auto [start, end] = session_.Selection();
+        return TextTarget{note->id, note->revision, start, end, session_.SelectedText()};
+    }
+    const size_t block = std::min(session_.Cursor().block, note->blocks.size() - 1);
+    auto text = BlockText(note->blocks[block]);
+    if (text.empty()) {
+        return std::nullopt;
+    }
+    return TextTarget{note->id, note->revision, {block, 0}, {block, text.size()}, std::move(text)};
+}
+
+bool NotesWorkspaceComponent::ReplaceTextTarget(
+    const TextTarget& target, const std::string& replacement, std::string& error) {
+    const auto* note = EditingNote();
+    if (!note || note->id != target.note_id || note->revision != target.revision ||
+        note->deleted_at) {
+        error = "The original note has changed. Reopen Quick AI to capture its text again.";
+        return false;
+    }
+    if (replacement == target.text) {
+        return true;
+    }
+    session_.SetCursor(target.start);
+    session_.SetCursor(target.end, true);
+    if (!session_.Insert(replacement)) {
+        error = "Could not replace the note text.";
+        return false;
+    }
+    JumpToNotePosition(session_.Cursor());
+    ClearNoteSearchHighlights();
+    if (!Save(error)) {
+        error = "Note text changed, but saving failed: " + error;
+    }
+    return true;
+}
+
 void NotesWorkspaceComponent::CopyCurrentParagraph() {
     auto* note = session_.Note();
     if (!note || note->blocks.empty()) return;

@@ -248,7 +248,7 @@ std::string NoteSession::SelectedText() const {
     if (!note_ || !HasSelection()) return {};
     const auto range = Selection(); std::string result;
     for (size_t block = range.first.block; block <= range.second.block; ++block) {
-        if (!result.empty()) result += '\n';
+        if (block != range.first.block) result += '\n';
         const std::string text = BlockText(note_->blocks[block]);
         const size_t start = block == range.first.block ? range.first.byte : 0;
         const size_t end = block == range.second.block ? range.second.byte : text.size();

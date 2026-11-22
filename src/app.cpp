@@ -338,78 +338,18 @@ TextltApp::TextltApp()
           [this](DistractionModeSettings settings) { ApplyDistractionSettings(settings); },
           [this](const std::string& command_id) { RunCommand(command_id); },
           [this] { CloseDistractionOptionsModal(); }),
-      ai_actions_modal_(
+      quick_ai_modal_(
           &current_theme_,
-          &editor_config_,
-          [this](bool whole_document, AiDocumentTarget& target, std::string& error) {
-              const auto editor = ActiveEditor();
-              target.session = editor ? editor->GetSession() : nullptr;
-              if (!target.session || !editor) {
-                  error = "No active document.";
-                  return false;
-              }
-              return target.session->CaptureAiTransformTargetAt(
-                  editor->GetCursorRow(),
-                  editor->GetCursorCol(),
-                  whole_document,
-                  target.range,
-                  error);
-          },
-          [this](const AiDocumentTarget& target,
-                 const std::string& text,
-                 std::string& error) {
-              const auto active_editor = ActiveEditor();
-              const std::shared_ptr<DocumentSession> active_session =
-                  active_editor ? active_editor->GetSession() : nullptr;
-              if (!target.session || active_session != target.session) {
-                  error = "The active document changed while the AI request was running.";
-                  return false;
-              }
-              if (!target.session->ReplaceAiTransformTarget(target.range, text, error)) {
-                  return false;
-              }
-              const auto editor = ActiveEditor();
-              if (editor) {
-                  editor->SetSession(target.session);
-              }
-              active_action_ = target.range.whole_document
-                  ? "AI action applied to whole document"
-                  : "AI action applied to current paragraph";
-              screen_.PostEvent(ftxui::Event::Custom);
-              return true;
-          },
           [this] { screen_.PostEvent(ftxui::Event::Custom); },
-          [this](const std::string& message) {
-              active_action_ = message;
-              screen_.PostEvent(ftxui::Event::Custom);
-          },
-          [this](bool success, const std::string& message) {
-              active_action_ = message;
-              if (success && ai_quick_actions_modal_.IsOpen()) {
-                  CloseAiQuickActionsModal();
-              } else {
-                  screen_.PostEvent(ftxui::Event::Custom);
-              }
-          }),
-      ai_quick_actions_modal_(
-          &current_theme_,
-          [this](AiActionType action, std::string& error) {
-              const bool started = ai_actions_modal_.StartQuickAction(action, error);
-              if (started) {
-                  active_action_ = action == AiActionType::Translate
-                      ? "AI quick translation started for current paragraph"
-                      : "AI quick editing started for current paragraph";
-                  screen_.PostEvent(ftxui::Event::Custom);
-              }
-              return started;
-          },
-          [this] { return ai_actions_modal_.QuickStatus(); },
-          [this] { ai_actions_modal_.StopQuickAction(); },
-          [this] { CloseAiQuickActionsModal(); }),
+          [this] { CloseQuickAiModal(); },
+          [this] { return clipboard_controller_.ReadText(true); },
+          [this](const std::string& text) { return clipboard_controller_.WriteText(text); }),
       ai_settings_modal_(
           &current_theme_,
           &editor_config_,
-          [this] { screen_.PostEvent(ftxui::Event::Custom); }),
+          [this] { screen_.PostEvent(ftxui::Event::Custom); },
+          [this] { return clipboard_controller_.ReadText(true); },
+          [this](const std::string& text) { return clipboard_controller_.WriteText(text); }),
       assistant_settings_modal_(
           &current_theme_,
           [this] { screen_.PostEvent(ftxui::Event::Custom); }),
@@ -671,8 +611,7 @@ TextltApp::TextltApp()
         tts_modal_.View(),
         view_layout_modal_.View(),
         distraction_options_modal_.View(),
-        ai_actions_modal_.View(),
-        ai_quick_actions_modal_.View(),
+        quick_ai_modal_.View(),
         ai_settings_modal_.View(),
         assistant_settings_modal_.View(),
         rename_project_popup_,

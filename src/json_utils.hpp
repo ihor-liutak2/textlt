@@ -15,6 +15,10 @@
 #ifdef RemoveDirectory
 #undef RemoveDirectory
 #endif
+#else
+#include <cstdio>
+#include <cstdlib>
+#include <unistd.h>
 #endif
 
 #include "nlohmann/json.hpp"
@@ -40,7 +44,7 @@ inline Json LoadJsonObject(const std::filesystem::path& path) {
     return parsed;
 }
 
-inline bool WriteJsonAtomically(const std::filesystem::path& path, const Json& json) {
+inline bool WriteJsonAtomically(const std::filesystem::path& path, const Json& json, bool private_file = false) {
     std::error_code error;
     const std::filesystem::path parent = path.parent_path();
     if (!parent.empty()) {
@@ -52,6 +56,30 @@ inline bool WriteJsonAtomically(const std::filesystem::path& path, const Json& j
 
     std::filesystem::path temp_path = path;
     temp_path += ".tmp";
+#ifndef _WIN32
+    if (private_file) {
+        const std::string data = json.dump(2) + '\n';
+        std::string pattern = path.string() + ".tmp.XXXXXX";
+        const int descriptor = mkstemp(pattern.data());
+        if (descriptor < 0) {
+            return false;
+        }
+        temp_path = pattern;
+        FILE* file = fdopen(descriptor, "wb");
+        if (!file) {
+            close(descriptor);
+            std::filesystem::remove(temp_path, error);
+            return false;
+        }
+        const bool written = std::fwrite(data.data(), 1, data.size(), file) == data.size();
+        if (std::fclose(file) != 0 || !written) {
+            std::filesystem::remove(temp_path, error);
+            return false;
+        }
+    } else
+#else
+    (void)private_file;
+#endif
     {
         std::ofstream file(temp_path, std::ios::binary | std::ios::trunc);
         if (!file) {

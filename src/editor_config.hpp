@@ -10,6 +10,14 @@
 
 namespace textlt {
 
+struct AiProviderConfig {
+    std::string endpoint;
+    std::string api_key;
+    std::string model;
+    std::map<std::string, std::string> model_efforts;
+    bool opencode_use_go = true;
+};
+
 struct EditorConfig {
     bool show_line_numbers = true;
     bool show_file_explorer = true;
@@ -28,13 +36,8 @@ struct EditorConfig {
     std::string tts_audio_player_id = "auto";
     std::string tts_audio_player_command;
     std::string tts_player_voice_id;
-    std::string ai_server_url = "http://127.0.0.1:11434";
-    std::string ai_provider = "ollama";
-    std::string ai_selected_model_key;
-    std::string ai_translation_source_language = "English";
-    std::string ai_translation_language = "Ukrainian";
-    std::string ai_edit_style = "conversational";
-    bool ai_whole_document = false;
+    std::string ai_active_provider;
+    std::map<std::string, AiProviderConfig> ai_providers;
     DistractionModeSettings distraction_mode;
     std::vector<std::string> file_modal_directories_;
 

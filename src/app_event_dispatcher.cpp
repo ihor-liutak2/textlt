@@ -103,8 +103,7 @@ bool AppEventDispatcher::HandleBodyEvent(ftxui::Event event) {
         !app_.tts_modal_.IsOpen() &&
         !app_.view_layout_modal_.IsOpen() &&
         !app_.distraction_options_modal_.IsOpen() &&
-        !app_.ai_actions_modal_.IsOpen() &&
-        !app_.ai_quick_actions_modal_.IsOpen() &&
+        !app_.quick_ai_modal_.IsOpen() &&
         !app_.ai_settings_modal_.IsOpen() &&
         !app_.assistant_settings_modal_.IsOpen() &&
         !app_.theme_dialog_.IsOpen() &&
@@ -226,6 +225,10 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
                 return true;
             }
         }
+    }
+
+    if (!event.is_mouse() && app_.shortcut_registry_.MatchAction(ShortcutContext::Menu, event) == "ai.quick") {
+        return app_.RunCommand("ai.quick");
     }
 
     if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Notes) {

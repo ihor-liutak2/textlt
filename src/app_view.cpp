@@ -67,7 +67,6 @@ BottomBarRowState TextltApp::CurrentBottomBarRowState() {
 ftxui::Element TextltApp::Render() {
     using namespace ftxui;
 
-    ai_actions_modal_.Poll();
 
     const auto editor = std::static_pointer_cast<EditorComponent>(text_editor_);
     const bool distraction_mode = layout_controller_.IsDistractionModeActive();
@@ -206,11 +205,8 @@ ftxui::Element TextltApp::Render() {
     if (distraction_options_modal_.IsOpen()) {
         layers.push_back(distraction_options_modal_.View()->Render() | clear_under | center);
     }
-    if (ai_actions_modal_.IsOpen()) {
-        layers.push_back(ai_actions_modal_.View()->Render() | clear_under | center);
-    }
-    if (ai_quick_actions_modal_.IsOpen()) {
-        layers.push_back(ai_quick_actions_modal_.View()->Render() | clear_under | center);
+    if (quick_ai_modal_.IsOpen()) {
+        layers.push_back(quick_ai_modal_.View()->Render() | clear_under | center);
     }
     if (ai_settings_modal_.IsOpen()) {
         layers.push_back(ai_settings_modal_.View()->Render() | clear_under | center);
@@ -310,8 +306,7 @@ bool TextltApp::ActiveModalIsOpen() const {
         case UiLayer::Tts: return tts_modal_.IsOpen();
         case UiLayer::ViewLayout: return view_layout_modal_.IsOpen();
         case UiLayer::DistractionOptions: return distraction_options_modal_.IsOpen();
-        case UiLayer::AiActions: return ai_actions_modal_.IsOpen();
-        case UiLayer::AiQuickActions: return ai_quick_actions_modal_.IsOpen();
+        case UiLayer::QuickAi: return quick_ai_modal_.IsOpen();
         case UiLayer::AiSettings: return ai_settings_modal_.IsOpen();
         case UiLayer::AssistantSettings: return assistant_settings_modal_.IsOpen();
         case UiLayer::RenameProject: return !rename_project_id_.empty();

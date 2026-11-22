@@ -85,13 +85,8 @@ bool WriteConfigAtomically(const std::filesystem::path& path, const EditorConfig
         {"tts_audio_player_id", config.tts_audio_player_id.empty() ? "auto" : config.tts_audio_player_id},
         {"tts_audio_player_command", config.tts_audio_player_command},
         {"tts_player_voice_id", config.tts_player_voice_id},
-        {"ai_server_url", config.ai_server_url},
-        {"ai_provider", config.ai_provider},
-        {"ai_selected_model_key", config.ai_selected_model_key},
-        {"ai_translation_source_language", config.ai_translation_source_language},
-        {"ai_translation_language", config.ai_translation_language},
-        {"ai_edit_style", config.ai_edit_style},
-        {"ai_whole_document", config.ai_whole_document},
+        {"ai_active_provider", config.ai_active_provider},
+        {"ai_providers", Json::object()},
         {"distraction_enabled", config.distraction_mode.enabled},
         {"distraction_column_count", config.distraction_mode.column_count},
         {"distraction_column_width", config.distraction_mode.column_width},
@@ -103,7 +98,18 @@ bool WriteConfigAtomically(const std::filesystem::path& path, const EditorConfig
     for (const std::string& directory : config.file_modal_directories_) {
         root["file_modal_directories"].push_back(directory);
     }
-    return WriteJsonAtomically(path, root);
+    for (const auto& [id, profile] : config.ai_providers) {
+        root["ai_providers"][id] = {
+            {"endpoint", profile.endpoint},
+            {"api_key", profile.api_key},
+            {"model", profile.model},
+            {"model_efforts", profile.model_efforts},
+        };
+        if (id == "opencode") {
+            root["ai_providers"][id]["use_go"] = profile.opencode_use_go;
+        }
+    }
+    return WriteJsonAtomically(path, root, true);
 }
 
 } // namespace

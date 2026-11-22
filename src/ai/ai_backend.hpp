@@ -5,8 +5,6 @@
 #include <string>
 #include <vector>
 
-#include "ai/ai_prompts.hpp"
-
 namespace textlt {
 
 class RemoteCommandControl;
@@ -15,6 +13,10 @@ enum class AiProvider {
     Auto,
     Ollama,
     OpenAiCompatible,
+    OpenCodeGo,
+    ChatGpt,
+    Claude,
+    Mimo,
 };
 
 enum class AiFinishReason {
@@ -27,10 +29,18 @@ enum class AiFinishReason {
     Error,
 };
 
+struct AiPromptRequest {
+    std::string system;
+    std::string text;
+};
+
 struct AiBackendSettings {
     std::string server_url;
     AiProvider provider = AiProvider::Auto;
-    std::string selected_model_key;
+    std::string model;
+    std::string api_key;
+    std::string effort;
+    bool opencode_use_go = true;
     int timeout_seconds = 120;
     int max_output_tokens = 0;
 };
@@ -42,6 +52,7 @@ struct AiModelInfo {
     std::string provider_label;
     bool available = false;
     std::string description;
+    std::vector<std::string> efforts;
 };
 
 struct AiBackendResult {
@@ -76,7 +87,7 @@ public:
     AiConnectionResult CheckConnectionAndListModels(
         const std::atomic<bool>* cancel_requested = nullptr,
         RemoteCommandControl* command_control = nullptr) const;
-    AiConnectionResult CheckSelectedModelReady(
+    AiConnectionResult GetOllamaModelEfforts(
         const std::atomic<bool>* cancel_requested = nullptr,
         RemoteCommandControl* command_control = nullptr) const;
     AiBackendResult Run(
@@ -85,6 +96,8 @@ public:
         ProgressCallback progress = {},
         RemoteCommandControl* command_control = nullptr) const;
 
+    static std::string DefaultEndpoint(AiProvider provider, bool opencode_use_go = true);
+    static std::string ValidationError(const AiBackendSettings& settings);
     static AiProvider ProviderFromConfig(const std::string& value);
     static std::string ProviderToConfig(AiProvider provider);
     static std::string ProviderLabel(AiProvider provider);
@@ -93,7 +106,6 @@ public:
     static std::string ModelIdFromKey(const std::string& key);
     static std::string NormalizeGeneratedText(std::string text);
     static int RecommendedMaxOutputTokens(const AiPromptRequest& request);
-    static std::string FinishReasonLabel(AiFinishReason reason);
 private:
     AiConnectionResult TryOllama(
         const std::atomic<bool>* cancel_requested,
@@ -110,6 +122,12 @@ private:
         const std::string& model,
         const std::atomic<bool>* cancel_requested,
         ProgressCallback progress,
+        RemoteCommandControl* command_control) const;
+    std::vector<std::string> HttpHeaders(bool stream) const;
+    std::string Redact(std::string message) const;
+    AiConnectionResult RunCodex(
+        const AiPromptRequest* request, AiBackendResult& generation,
+        const std::atomic<bool>* cancel_requested, ProgressCallback progress,
         RemoteCommandControl* command_control) const;
     AiBackendSettings settings_;
 };

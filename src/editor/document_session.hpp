@@ -40,16 +40,6 @@ enum class LineEnding {
     CRLF,
 };
 
-struct DocumentTransformTarget {
-    size_t start_row = 0;
-    size_t start_column = 0;
-    size_t end_row = 0;
-    size_t end_column = 0;
-    std::uint64_t buffer_version = 0;
-    bool whole_document = false;
-    std::string original_text;
-};
-
 class DocumentSession {
 public:
     DocumentSession();
@@ -168,20 +158,8 @@ public:
         bool whole_document,
         const std::string& text,
         std::string& error);
-    bool CaptureAiTransformTarget(
-        bool whole_document,
-        DocumentTransformTarget& target,
-        std::string& error) const;
-    bool CaptureAiTransformTargetAt(
-        size_t cursor_row,
-        size_t cursor_column,
-        bool whole_document,
-        DocumentTransformTarget& target,
-        std::string& error) const;
-    bool ReplaceAiTransformTarget(
-        const DocumentTransformTarget& target,
-        const std::string& text,
-        std::string& error);
+    bool GetCurrentParagraphText(std::string& text, std::string& error) const;
+    bool ReplaceCurrentParagraphText(const std::string& text, std::string& error);
 
     static DocumentType DetermineDocumentType(const std::filesystem::path& path);
 

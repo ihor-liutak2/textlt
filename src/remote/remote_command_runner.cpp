@@ -294,7 +294,8 @@ RemoteCommandResult RemoteCommandRunner::RunStreaming(
     const std::atomic<bool>* cancel_requested,
     OutputCallback on_stdout,
     RemoteCommandOptions options,
-    RemoteCommandControl* control) const {
+    RemoteCommandControl* control,
+    DuplexCallback exchange) const {
     RemoteCommandResult result;
     if (args.empty()) {
         result.error = "No command specified.";
@@ -395,16 +396,35 @@ RemoteCommandResult RemoteCommandRunner::RunStreaming(
             reinterpret_cast<std::intptr_t>(job));
     }
 
+    const auto write_input = [&](const std::string& input) {
+        if (!stdin_write) {
+            return;
+        }
+        if (input.empty()) {
+            CloseHandle(stdin_write);
+            stdin_write = nullptr;
+            return;
+        }
+        size_t offset = 0;
+        while (offset < input.size()) {
+            DWORD written = 0;
+            const DWORD count = static_cast<DWORD>(
+                std::min<size_t>(input.size() - offset, 65536));
+            if (!WriteFile(stdin_write, input.data() + offset, count, &written, nullptr) ||
+                written == 0) {
+                break;
+            }
+            offset += written;
+        }
+    };
     if (!stdin_text.empty()) {
-        DWORD written = 0;
-        WriteFile(
-            stdin_write,
-            stdin_text.data(),
-            static_cast<DWORD>(stdin_text.size()),
-            &written,
-            nullptr);
+        write_input(stdin_text);
     }
-    CloseHandle(stdin_write);
+    if (exchange) {
+        on_stdout = [&](const std::string& chunk) { exchange(chunk, write_input); };
+    } else {
+        write_input({});
+    }
 
     bool stop_started = false;
     auto stop_sent_at = std::chrono::steady_clock::time_point{};
@@ -452,6 +472,7 @@ RemoteCommandResult RemoteCommandRunner::RunStreaming(
     }
     DrainWindowsPipe(stdout_read, result.output, on_stdout);
     DrainWindowsPipe(stderr_read, result.error, {});
+    write_input({});
     DWORD exit_code = static_cast<DWORD>(-1);
     GetExitCodeProcess(process.hProcess, &exit_code);
     if (control) {
@@ -558,24 +579,34 @@ RemoteCommandResult RemoteCommandRunner::RunStreaming(
     close(stdout_pipe[1]);
     close(stderr_pipe[1]);
     IgnoreSigpipeForProcess();
-    if (!stdin_text.empty()) {
+    const auto write_input = [&](const std::string& input) {
+        if (stdin_pipe[1] < 0) {
+            return;
+        }
+        if (input.empty()) {
+            close(stdin_pipe[1]);
+            stdin_pipe[1] = -1;
+            return;
+        }
         size_t offset = 0;
-        while (offset < stdin_text.size()) {
+        while (offset < input.size()) {
             const ssize_t count = write(
-                stdin_pipe[1],
-                stdin_text.data() + offset,
-                stdin_text.size() - offset);
+                stdin_pipe[1], input.data() + offset, input.size() - offset);
             if (count > 0) {
                 offset += static_cast<size_t>(count);
-                continue;
+            } else if (count >= 0 || errno != EINTR) {
+                break;
             }
-            if (count < 0 && errno == EINTR) {
-                continue;
-            }
-            break;
         }
+    };
+    if (!stdin_text.empty()) {
+        write_input(stdin_text);
     }
-    close(stdin_pipe[1]);
+    if (exchange) {
+        on_stdout = [&](const std::string& chunk) { exchange(chunk, write_input); };
+    } else {
+        write_input({});
+    }
     SetNonBlocking(stdout_pipe[0]);
     SetNonBlocking(stderr_pipe[0]);
 
@@ -659,6 +690,7 @@ RemoteCommandResult RemoteCommandRunner::RunStreaming(
             }
         }
     }
+    write_input({});
     close(stdout_pipe[0]);
     close(stderr_pipe[0]);
     if (running) {

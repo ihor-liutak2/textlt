@@ -52,13 +52,42 @@ configuration, data, cache, and temporary directories. Each failed check names
 the tool or path. Exit code zero means the checks and editor initialization passed.
 Piper is an optional download. The checks run offline.
 
+### Connect AI Settings
+
+Open **Tools → AI Settings** and choose a provider tab. Select **Get Models**,
+highlight a model, and select **Use Model**. **Save** keeps the provider's
+settings, and **Set Active** marks that model as the active one. The
+**Providers** tab lists saved models and can switch between them. Effort is saved
+for each model. Leave it blank to use the provider default.
+
+| Provider | Connection |
+| --- | --- |
+| Ollama | Start your local Ollama server and use `http://localhost:11434/v1` or enter its URL. **Get Efforts** checks which thinking levels the selected model reports. |
+| OpenCode | Enter a Console API key. Check **Use Go subscription** for Go or clear it for pay-as-you-go. |
+| ChatGPT | Install the Codex CLI, run `codex login` with your ChatGPT account, then use `codex` or enter the path to its executable. |
+| Claude | Enter an Anthropic API key. |
+| MiMo | Enter a Xiaomi MiMo API key. |
+
+TextLT masks the API key fields and stores saved keys in its local configuration
+file. Double-click any input to select its contents. Paste with **Ctrl+V** or
+your terminal's paste shortcut, usually **Ctrl+Shift+V** in Windows Terminal.
+**Show** reveals a key until you hide it or leave the tab. **Info** explains
+the fields on the current tab. **Copy Message** copies the full status or
+error. **Test Model** sends a short sample through the configured provider.
+
+Use **Tools → Quick AI** or **Alt+M** to rephrase or translate selected
+text or the current paragraph in Docs or an open note. Pick a mode, optionally
+enable **Translate** and choose the languages, then select **Do**. Use
+**Change** to replace the original selection or paragraph, or **Copy Result**
+to use the result elsewhere. Double-click either text pane to select its contents.
+
 ### Install from Release
 
 Installing or upgrading resets TextLT configuration, custom themes, text-parser
 configuration, and downloaded registries so the release's current defaults and
 themes are used. Installed Piper/TTS voices are preserved. Legacy managed local
-AI runtimes and models are removed because TextLT now connects only to an
-already-running Ollama or OpenAI-compatible service through its URL.
+AI runtimes and models are removed. Manage Ollama and its models separately
+before connecting them through AI Settings.
 
 #### Linux (Debian, Ubuntu, Fedora, Arch, and others)
 

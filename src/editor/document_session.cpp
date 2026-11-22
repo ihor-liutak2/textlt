@@ -508,4 +508,53 @@ bool DocumentSession::ReplaceTextProcessorTargetText(
     return changed;
 }
 
+bool DocumentSession::GetCurrentParagraphText(std::string& text, std::string& error) const {
+    if (buffer.LineCount() == 0) {
+        error = "The active document is empty.";
+        return false;
+    }
+    const auto& paragraph = buffer.Line(std::min(CursorRow(), buffer.LineCount() - 1));
+    if (std::all_of(paragraph.begin(), paragraph.end(),
+            [](unsigned char character) { return std::isspace(character) != 0; })) {
+        error = "The cursor is on an empty paragraph.";
+        return false;
+    }
+    text = paragraph;
+    return true;
+}
+
+bool DocumentSession::ReplaceCurrentParagraphText(const std::string& text, std::string& error) {
+    std::string paragraph;
+    if (!GetCurrentParagraphText(paragraph, error)) {
+        return false;
+    }
+    if (text == paragraph) {
+        return true;
+    }
+    if (read_only) {
+        error = "Document is read-only.";
+        return false;
+    }
+
+    EnsureValidBuffer();
+    history.EndTypingGroup();
+    const HistoryManager::State before = CurrentState();
+
+    CursorRow() = std::min(CursorRow(), buffer.LineCount() - 1);
+    SelectionState().anchor_x = 0;
+    SelectionState().anchor_y = CursorRow();
+    SelectionState().active = true;
+    CursorState().selection_anchor_mode = false;
+    CursorCol() = paragraph.size();
+
+    DeleteTextProcessorSelection();
+    if (!text.empty()) {
+        InsertTextProcessorText(text);
+    }
+    history.PushSnapshot(before);
+    buffer.MarkDirty();
+    ClampCursor();
+    return true;
+}
+
 } // namespace textlt

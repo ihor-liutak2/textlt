@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "app_resources.hpp"
+#include "ai/ai_active_settings.hpp"
 #include "editor/document_session.hpp"
 #include "ftxui/component/event.hpp"
 #include "theme.hpp"
@@ -96,9 +97,6 @@ std::vector<std::string> BuiltInHelpLines() {
         "TTS / AI",
         "  Alt+H         Open Text-to-Speech",
         "  Alt+S         Open TTS Settings",
-        "  Alt+M         Open Quick AI",
-        "  1 / 2 / 3     Quick AI Translate / Edit / Stop",
-        "  Alt+J         Open AI Actions",
         "  Tools > AI Settings opens AI Settings",
         "",
         "Menus",
@@ -107,6 +105,7 @@ std::vector<std::string> BuiltInHelpLines() {
         "  Alt+Right     Switch to the next editor pane",
         "  Ctrl+B        Open Quick Commands",
         "  Alt+B         Open Quick Text Formatting",
+        "  Alt+M         Open Quick AI",
         "  B             Toggle sidebar",
         "  O             Open the Opened files tab in Docs",
         "  F             Open the Favorites tab in Docs",
@@ -418,10 +417,7 @@ bool TextltApp::GetTextProcessorTargetText(
 
     auto& session = *document;
     if (target == ProcessorTarget::Paragraph) {
-        DocumentTransformTarget paragraph;
-        if (!session.CaptureAiTransformTarget(false, paragraph, error)) return false;
-        text = std::move(paragraph.original_text);
-        return true;
+        return session.GetCurrentParagraphText(text, error);
     }
     if (!session.GetTextProcessorTargetText(target == ProcessorTarget::Document, text, error)) {
         active_action_ = error;
@@ -448,9 +444,7 @@ bool TextltApp::ReplaceTextProcessorTargetText(
     auto& session = *document;
     bool applied;
     if (target == ProcessorTarget::Paragraph) {
-        DocumentTransformTarget paragraph;
-        applied = session.CaptureAiTransformTarget(false, paragraph, error) &&
-            (paragraph.original_text == text || session.ReplaceAiTransformTarget(paragraph, text, error));
+        applied = session.ReplaceCurrentParagraphText(text, error);
     } else {
         applied = session.ReplaceTextProcessorTargetText(target == ProcessorTarget::Document, text, error);
     }
@@ -693,46 +687,86 @@ void TextltApp::CloseViewLayoutModal() {
 }
 
 
-void TextltApp::OpenAiActionsModal() {
+void TextltApp::OpenQuickAiModal() {
+    std::string source;
+    QuickAiModal::ApplyResult apply;
+    if (workspace_mode_ == WorkspaceMode::Documents) {
+        if (const auto editor = ActiveEditor()) {
+            if (const auto session = editor->GetSession()) {
+                const bool selected = editor->HasSelection();
+                if (selected) {
+                    source = editor->GetSelectedText();
+                } else {
+                    std::string error;
+                    session->GetCurrentParagraphText(source, error);
+                }
+                if (!source.empty() && !session->read_only) {
+                    const auto version = session->buffer.Version();
+                    const auto selection = session->SelectionState();
+                    const auto row = editor->GetCursorRow();
+                    const auto column = editor->GetCursorCol();
+                    apply = [this, editor, session, version, selection, row, column, selected]
+                        (const std::string& result, std::string& error) {
+                        if (workspace_mode_ != WorkspaceMode::Documents || ActiveEditor() != editor ||
+                            editor->GetSession() != session || session->buffer.Version() != version) {
+                            error = "The original document has changed. Reopen Quick AI to capture its text again.";
+                            return false;
+                        }
+                        if (session->read_only) {
+                            error = "The original document is read-only.";
+                            return false;
+                        }
+                        session->SetCursorPosition(row, column);
+                        if (selected) {
+                            session->SetSelectionAnchor(selection.anchor_y, selection.anchor_x);
+                            session->SetSelectionActive(true);
+                            if (session->GetSelectedText() != result) {
+                                editor->InsertText(result);
+                            }
+                        } else if (!session->ReplaceCurrentParagraphText(result, error)) {
+                            return false;
+                        } else {
+                            editor->SetSession(session);
+                        }
+                        active_action_ = selected ? "Changed selected text" : "Changed current paragraph";
+                        return true;
+                    };
+                }
+            }
+        }
+    } else if (workspace_mode_ == WorkspaceMode::Notes && notes_workspace_component_) {
+        const auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_);
+        if (auto target = notes->CaptureTextTarget()) {
+            source = target->text;
+            apply = [this, notes, target = std::move(*target)](const std::string& result, std::string& error) {
+                if (workspace_mode_ != WorkspaceMode::Notes ||
+                    !notes->ReplaceTextTarget(target, result, error)) {
+                    return false;
+                }
+                active_action_ = error.empty() ? "Changed note text" : error;
+                return true;
+            };
+        }
+    }
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
-    ai_actions_modal_.Open();
-    active_action_ = "Opened AI Actions";
-    SetActiveLayer(UiLayer::AiActions);
-}
-
-
-void TextltApp::CloseAiActionsModal() {
-    ai_actions_modal_.Close();
-    FocusEditor();
-}
-
-
-void TextltApp::OpenAiQuickActionsModal() {
-    if (menu_bar_) {
-        menu_bar_->CloseDropdown();
-    }
-    ai_actions_modal_.PrepareQuickActions();
-    ai_quick_actions_modal_.Open();
+    SetActiveLayer(UiLayer::QuickAi);
+    quick_ai_modal_.Open(ActiveAiSettings(editor_config_), std::move(source), std::move(apply));
     active_action_ = "Opened Quick AI";
-    SetActiveLayer(UiLayer::AiQuickActions);
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
-
-void TextltApp::CloseAiQuickActionsModal() {
-    ai_quick_actions_modal_.Close();
+void TextltApp::CloseQuickAiModal() {
+    quick_ai_modal_.Close();
     FocusEditor();
     screen_.PostEvent(ftxui::Event::Custom);
 }
-
 
 void TextltApp::OpenAiSettingsModal() {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
-    EnsureAssistantResources();
     ai_settings_modal_.Open();
     active_action_ = "Opened AI Settings";
     SetActiveLayer(UiLayer::AiSettings);

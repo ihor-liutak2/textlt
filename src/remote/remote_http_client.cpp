@@ -113,6 +113,7 @@ std::string BuildCurlConfig(
     const std::filesystem::path* body_file_path,
     int timeout_seconds,
     bool streaming,
+    bool follow_redirects,
     std::string& error) {
     if (!ValidateCurlConfigValue("HTTP method", method, error) ||
         !ValidateCurlConfigValue("HTTP URL", url, error)) {
@@ -121,7 +122,9 @@ std::string BuildCurlConfig(
 
     std::ostringstream config;
     config << "show-error\n";
-    config << "location\n";
+    if (follow_redirects) {
+        config << "location\n";
+    }
     config << "no-buffer\n";
     if (streaming) {
         config << "silent\n";
@@ -230,11 +233,12 @@ RemoteHttpResponse RemoteHttpClient::RequestStreaming(
     int timeout_seconds,
     const std::atomic<bool>* cancel_requested,
     OutputCallback on_body_chunk,
-    RemoteCommandControl* command_control) const {
+    RemoteCommandControl* command_control,
+    bool follow_redirects) const {
     const std::string* body = request_body.empty() ? nullptr : &request_body;
     return RunCurl(
         method, url, headers, nullptr, nullptr, body, timeout_seconds,
-        cancel_requested, std::move(on_body_chunk), command_control);
+        cancel_requested, std::move(on_body_chunk), command_control, follow_redirects);
 }
 
 RemoteHttpResponse RemoteHttpClient::Download(
@@ -282,7 +286,8 @@ RemoteHttpResponse RemoteHttpClient::RunCurl(
     int timeout_seconds,
     const std::atomic<bool>* cancel_requested,
     OutputCallback on_body_chunk,
-    RemoteCommandControl* command_control) const {
+    RemoteCommandControl* command_control,
+    bool follow_redirects) const {
     RemoteHttpResponse response;
     std::string executable_error;
     if (!CheckCurlExecutable(executable_error)) {
@@ -326,6 +331,7 @@ RemoteHttpResponse RemoteHttpClient::RunCurl(
         body_path_ptr,
         timeout_seconds,
         static_cast<bool>(on_body_chunk),
+        follow_redirects,
         config_error);
     if (!config_error.empty()) {
         response.error = config_error;
@@ -337,9 +343,9 @@ RemoteHttpResponse RemoteHttpClient::RunCurl(
 
     const bool streaming = static_cast<bool>(on_body_chunk);
     RemoteCommandRunner runner;
-    RemoteCommandResult command_result = cancel_requested || streaming
+    RemoteCommandResult command_result = cancel_requested || streaming || !follow_redirects
         ? runner.RunStreaming(
-              {"curl", "--config", "-"}, config, cancel_requested, std::move(on_body_chunk),
+              {"curl", "--disable", "--config", "-"}, config, cancel_requested, std::move(on_body_chunk),
               streaming
                   ? RemoteCommandOptions{0, 300, true, timeout_seconds}
                   : RemoteCommandOptions{timeout_seconds, 300, true, 0},

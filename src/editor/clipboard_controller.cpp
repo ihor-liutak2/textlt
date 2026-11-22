@@ -31,6 +31,9 @@ bool IsWslEnvironment() {
     return false;
 #else
     static const bool is_wsl = [] {
+        if (std::getenv("WSL_INTEROP") || std::getenv("WSL_DISTRO_NAME")) {
+            return true;
+        }
         std::error_code error;
         if (std::filesystem::exists("/proc/sys/fs/binfmt_misc/WSLInterop", error)) {
             return true;
@@ -223,10 +226,17 @@ bool WriteTextToX11Clipboard(const std::string& text) {
 
 } // namespace
 
-std::string ClipboardController::ReadText() const {
+std::string ClipboardController::ReadText(bool prefer_windows_clipboard) const {
 #ifdef _WIN32
+    (void)prefer_windows_clipboard;
     return ReadTextFromPipe("powershell -NoProfile -Command Get-Clipboard 2>nul");
 #else
+    if (prefer_windows_clipboard && IsWslEnvironment()) {
+        std::string windows_text = ReadTextFromWindowsClipboard();
+        if (!windows_text.empty()) {
+            return windows_text;
+        }
+    }
     std::string clipboard_text = ReadTextFromPipe("xclip -selection clipboard -o 2>/dev/null");
     if (clipboard_text.empty()) {
         clipboard_text = ReadTextFromPipe("xsel --clipboard --output 2>/dev/null");
@@ -234,7 +244,7 @@ std::string ClipboardController::ReadText() const {
     if (clipboard_text.empty()) {
         clipboard_text = ReadTextFromPipe("xclip -selection primary -o 2>/dev/null");
     }
-    if (clipboard_text.empty() && IsWslEnvironment()) {
+    if (clipboard_text.empty() && !prefer_windows_clipboard && IsWslEnvironment()) {
         // WSLg's clipboard bridge is not always available. Fall back to the
         // Windows clipboard so text copied in Windows can be pasted here.
         clipboard_text = ReadTextFromWindowsClipboard();

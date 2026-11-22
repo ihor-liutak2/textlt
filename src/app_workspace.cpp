@@ -89,7 +89,7 @@ bool TextltApp::MainViewCanActivateEditorPane() const {
         !tts_modal_.IsOpen() &&
         !view_layout_modal_.IsOpen() &&
         !distraction_options_modal_.IsOpen() &&
-        !ai_actions_modal_.IsOpen() &&
+        !quick_ai_modal_.IsOpen() &&
         !ai_settings_modal_.IsOpen() &&
         !assistant_settings_modal_.IsOpen() &&
         !theme_dialog_.IsOpen() &&

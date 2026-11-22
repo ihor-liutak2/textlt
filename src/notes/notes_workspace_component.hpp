@@ -64,6 +64,15 @@ public:
     void ToggleHeading(int level);
     void SetBlockType(NoteBlockType type);
     void CopyCurrentParagraph();
+    struct TextTarget {
+        std::string note_id;
+        uint64_t revision;
+        NotePosition start;
+        NotePosition end;
+        std::string text;
+    };
+    std::optional<TextTarget> CaptureTextTarget() const;
+    bool ReplaceTextTarget(const TextTarget& target, const std::string& replacement, std::string& error);
     void NewNote();
     bool ImportNote(std::string title, std::vector<NoteBlock> blocks, std::string& error);
     // Opens the card selected in the overview. Does nothing (with a status

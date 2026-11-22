@@ -54,6 +54,9 @@ class RemoteCommandRunner {
 public:
     using OutputCallback = std::function<void(const std::string& chunk)>;
 
+    // An empty write closes the subprocess input.
+    using DuplexCallback = std::function<void(const std::string&, const OutputCallback&)>;
+
     RemoteCommandResult Run(
         const std::vector<std::string>& args,
         const std::string& stdin_text = {}) const;
@@ -64,7 +67,8 @@ public:
         const std::atomic<bool>* cancel_requested,
         OutputCallback on_stdout,
         RemoteCommandOptions options = {},
-        RemoteCommandControl* control = nullptr) const;
+        RemoteCommandControl* control = nullptr,
+        DuplexCallback exchange = {}) const;
 
     static std::string ShellQuote(const std::string& value);
 
