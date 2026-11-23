@@ -65,11 +65,15 @@ public:
     // Toggles the heading level on every block in the selection. When all
     // selected blocks already use this level, they return to a paragraph.
     bool ToggleHeading(int level);
+    bool CanSetHeading(int level) const;
     bool SetBlockType(NoteBlockType type);
+    bool CanSetBlockType(NoteBlockType type) const;
     bool ToggleCheck();
     bool Indent(int delta);
     bool Undo();
     bool Redo();
+    bool CanUndo() const { return !undo_.empty(); }
+    bool CanRedo() const { return !redo_.empty(); }
     static bool Before(const NotePosition& left, const NotePosition& right);
 
 private:
@@ -77,6 +81,7 @@ private:
     void ClampCursor();
     void PushUndo();
     void Changed();
+    std::pair<size_t, size_t> SelectedBlockRange() const;
     bool DeleteRange(NotePosition start, NotePosition end);
     void InsertTextAt(NoteBlock& block, size_t byte, const std::string& text);
     void SplitBlockAtCursor();

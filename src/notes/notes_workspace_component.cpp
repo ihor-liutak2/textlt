@@ -136,7 +136,8 @@ NotesWorkspaceComponent::NotesWorkspaceComponent(
       on_actions_(std::move(on_actions)),
       write_clipboard_(std::move(write_clipboard)),
       repository_(std::move(root)),
-      session_(nullptr) {
+      session_(nullptr),
+      context_menu_(theme) {
     repository_.Load(load_warning_); RebuildSidebar(); RebuildVisibleNotes();
 }
 
@@ -178,6 +179,7 @@ void NotesWorkspaceComponent::SetSidebarVisible(bool visible) {
 void NotesWorkspaceComponent::SetEditorColumns(int columns) {
     const int clamped = std::clamp(columns, 1, 3);
     if (editor_columns_ == clamped) return;
+    context_menu_.Close();
     editor_columns_ = clamped;
     has_last_editor_cursor_ = false;
     editor_column_boxes_.clear();
@@ -947,6 +949,102 @@ bool NotesWorkspaceComponent::HandleOverviewEvent(ftxui::Event event) {
     return false;
 }
 
+void NotesWorkspaceComponent::CopySelectionToClipboard(bool cut) {
+    if (!session_.HasSelection()) return;
+    if (!write_clipboard_ || !write_clipboard_(session_.SelectedText())) {
+        Notify(ClipboardController::kWriteFailed);
+        return;
+    }
+    if (cut && session_.DeleteSelection()) TouchAndSave();
+}
+
+void NotesWorkspaceComponent::PasteText(const std::string& text) {
+    if (!text.empty() && session_.Insert(text)) TouchAndSave();
+}
+
+void NotesWorkspaceComponent::EditHistory(bool redo) {
+    if (redo) session_.Redo();
+    else session_.Undo();
+    TouchAndSave();
+}
+
+void NotesWorkspaceComponent::PasteFromClipboard() {
+    const auto* note = EditingNote();
+    if (!note || note->deleted_at || !read_clipboard_) return;
+    const auto cursor = session_.Cursor();
+    const auto selection = session_.Selection();
+    read_clipboard_([this, id = note->id, revision = note->revision, cursor, selection](
+                       std::optional<std::string> text) {
+        const auto* current = EditingNote();
+        if (!current || current->deleted_at || current->id != id || current->revision != revision ||
+            session_.Cursor() != cursor || session_.Selection() != selection) return;
+        if (text) *text = ClipboardController::NormalizeText(*text);
+        if (text && !text->empty()) PasteText(*text);
+        else Notify("Clipboard has no text");
+    });
+}
+
+void NotesWorkspaceComponent::ExecuteContextCommand(NotesContextMenu::Command command) {
+    using Command = NotesContextMenu::Command;
+    switch (command) {
+        case Command::Undo: EditHistory(false); break;
+        case Command::Redo: EditHistory(true); break;
+        case Command::Cut: CopySelectionToClipboard(true); break;
+        case Command::Copy: CopySelectionToClipboard(false); break;
+        case Command::Paste: PasteFromClipboard(); break;
+        case Command::SelectAll: session_.SelectAll(); break;
+        case Command::NormalText: SetBlockType(NoteBlockType::Paragraph); break;
+        case Command::Heading1: ToggleHeading(1); break;
+        case Command::Heading2: ToggleHeading(2); break;
+        case Command::Heading3: ToggleHeading(3); break;
+        case Command::BulletedList: SetBlockType(NoteBlockType::BulletItem); break;
+        case Command::NumberedList: SetBlockType(NoteBlockType::NumberedItem); break;
+    }
+}
+
+bool NotesWorkspaceComponent::HandleContextMenuEvent(ftxui::Event event) {
+    if (context_menu_.IsOpen()) {
+        return context_menu_.OnEvent(std::move(event),
+            [this](NotesContextMenu::Command command) { ExecuteContextCommand(command); });
+    }
+
+    const auto* note = EditingNote();
+    if (!note || !event.is_mouse()) return false;
+    const auto& mouse = event.mouse();
+    if (mouse.button != ftxui::Mouse::Right || mouse.motion != ftxui::Mouse::Pressed ||
+        !editor_view_box_.Contain(mouse.x, mouse.y) ||
+        editor_scrollbar_box_.Contain(mouse.x, mouse.y)) return false;
+    const bool in_text_column = std::any_of(editor_column_boxes_.begin(), editor_column_boxes_.end(),
+        [&mouse](const ftxui::Box& column) { return column.Contain(mouse.x, mouse.y); });
+    if (!in_text_column) return false;
+
+    using Command = NotesContextMenu::Command;
+    const bool writable = !note->deleted_at.has_value();
+    const bool can_copy = session_.HasSelection() && static_cast<bool>(write_clipboard_);
+    const bool has_text = note->blocks.size() > 1 ||
+        (!note->blocks.empty() && !BlockText(note->blocks.front()).empty());
+    editor_mouse_selecting_ = false;
+    editor_scrollbar_dragging_ = false;
+    context_menu_.Open(mouse.x, mouse.y, {
+        {"Undo", Command::Undo, writable && session_.CanUndo()},
+        {"Redo", Command::Redo, writable && session_.CanRedo()},
+        {},
+        {"Cut", Command::Cut, writable && can_copy},
+        {"Copy", Command::Copy, can_copy},
+        {"Paste", Command::Paste, writable && static_cast<bool>(read_clipboard_)},
+        {"Select All", Command::SelectAll, has_text},
+        {},
+        {"Normal Text", Command::NormalText, writable && session_.CanSetBlockType(NoteBlockType::Paragraph)},
+        {"Heading 1", Command::Heading1, writable && session_.CanSetHeading(1)},
+        {"Heading 2", Command::Heading2, writable && session_.CanSetHeading(2)},
+        {"Heading 3", Command::Heading3, writable && session_.CanSetHeading(3)},
+        {},
+        {"Bulleted List", Command::BulletedList, writable && session_.CanSetBlockType(NoteBlockType::BulletItem)},
+        {"Numbered List", Command::NumberedList, writable && session_.CanSetBlockType(NoteBlockType::NumberedItem)},
+    });
+    return true;
+}
+
 bool NotesWorkspaceComponent::HandleEditorEvent(ftxui::Event event) {
     if (event == ftxui::Event::Escape) { CloseEditor(); return true; }
     if (event == ftxui::Event::PageDown) {
@@ -959,34 +1057,21 @@ bool NotesWorkspaceComponent::HandleEditorEvent(ftxui::Event event) {
     }
     if (IsCtrl(event, 'a') && focus_ == FocusArea::Body) { session_.SelectAll(); return true; }
     if (IsCtrl(event, 'c') && focus_ == FocusArea::Body) {
-        if (session_.HasSelection() &&
-            (!write_clipboard_ || !write_clipboard_(session_.SelectedText()))) {
-            Notify(ClipboardController::kWriteFailed);
-        }
+        CopySelectionToClipboard(false);
         return true;
     }
     if (IsCtrl(event, 'x') && focus_ == FocusArea::Body) {
-        if (session_.HasSelection()) {
-            if (!write_clipboard_ || !write_clipboard_(session_.SelectedText())) {
-                Notify(ClipboardController::kWriteFailed);
-                return true;
-            }
-            session_.DeleteSelection();
-            TouchAndSave();
-        }
+        CopySelectionToClipboard(true);
         return true;
     }
     if (focus_ == FocusArea::Body) {
         if (const auto text = ClipboardController::PastedText(event)) {
-            if (!text->empty()) {
-                session_.Insert(*text);
-                TouchAndSave();
-            }
+            PasteText(*text);
             return true;
         }
     }
-    if (IsCtrl(event, 'z')) { session_.Undo(); TouchAndSave(); return true; }
-    if (IsCtrl(event, 'y')) { session_.Redo(); TouchAndSave(); return true; }
+    if (IsCtrl(event, 'z')) { EditHistory(false); return true; }
+    if (IsCtrl(event, 'y')) { EditHistory(true); return true; }
     if (event == ftxui::Event::Tab) {
         if (session_.Note() &&
             session_.Note()->blocks[session_.Cursor().block].type != NoteBlockType::Paragraph) {
@@ -1068,6 +1153,7 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
         }
         return true;
     }
+    if (HandleContextMenuEvent(event)) return true;
     if (sidebar_visible_ && sidebar_content_selected_ && event.is_mouse() &&
         sidebar_content_box_.Contain(event.mouse().x, event.mouse().y)) {
         const auto& mouse = event.mouse();
@@ -1718,6 +1804,7 @@ ftxui::Element NotesWorkspaceComponent::ToolbarItem(const std::string& label, bo
 }
 
 void NotesWorkspaceComponent::ResetEditorViewport() {
+    context_menu_.Close();
     heading_scroll_ = 0;
     heading_blocks_.clear();
     heading_boxes_.clear();
@@ -2179,6 +2266,7 @@ ftxui::Element NotesWorkspaceComponent::OnRender() {
     if (title_editor_open_) {
         return dbox({body, vbox({filler(), hbox({filler(), RenderTitleEditor(), filler()}), filler()})});
     }
+    if (context_menu_.IsOpen()) return context_menu_.Overlay(std::move(body)) | flex;
     return body;
 }
 

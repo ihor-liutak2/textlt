@@ -262,17 +262,26 @@ int NoteSession::ActiveHeading() const {
     return note_->blocks[std::min(cursor_.block, note_->blocks.size() - 1)].heading;
 }
 
+std::pair<size_t, size_t> NoteSession::SelectedBlockRange() const {
+    const auto [start, end] = Selection();
+    // A selection ending at the start of the next block does not format it.
+    return {start.block, end.block > start.block && end.byte == 0 ? end.block - 1 : end.block};
+}
+
+bool NoteSession::CanSetHeading(int level) const {
+    if (!note_ || note_->blocks.empty()) return false;
+    const auto [first, last] = SelectedBlockRange();
+    return std::any_of(note_->blocks.begin() + first, note_->blocks.begin() + last + 1,
+        [level](const NoteBlock& item) { return item.heading != level; });
+}
+
 bool NoteSession::ToggleHeading(int level) {
     if (!note_) return false;
     level = std::clamp(level, 1, 3);
     PushUndo();
-    const auto range = Selection();
-    bool all_same = true;
-    for (size_t block = range.first.block; block <= range.second.block; ++block) {
-        if (note_->blocks[block].heading != level) { all_same = false; break; }
-    }
-    const int target = all_same ? 0 : level;
-    for (size_t block = range.first.block; block <= range.second.block; ++block) {
+    const auto [first, last] = SelectedBlockRange();
+    const int target = CanSetHeading(level) ? level : 0;
+    for (size_t block = first; block <= last; ++block) {
         NoteBlock& item = note_->blocks[block];
         item.heading = target;
         if (target > 0) {
@@ -284,7 +293,26 @@ bool NoteSession::ToggleHeading(int level) {
     return true;
 }
 
-bool NoteSession::SetBlockType(NoteBlockType type) { if (!note_) return false; PushUndo(); auto range = Selection(); for (size_t block = range.first.block; block <= range.second.block; ++block) { note_->blocks[block].type = type; note_->blocks[block].heading = 0; if (type != NoteBlockType::CheckItem) note_->blocks[block].checked = false; } Changed(); return true; }
+bool NoteSession::CanSetBlockType(NoteBlockType type) const {
+    if (!note_ || note_->blocks.empty()) return false;
+    const auto [first, last] = SelectedBlockRange();
+    return std::any_of(note_->blocks.begin() + first, note_->blocks.begin() + last + 1,
+        [type](const NoteBlock& item) { return item.type != type || item.heading != 0; });
+}
+
+bool NoteSession::SetBlockType(NoteBlockType type) {
+    if (!note_) return false;
+    PushUndo();
+    const auto [first, last] = SelectedBlockRange();
+    for (size_t block = first; block <= last; ++block) {
+        NoteBlock& item = note_->blocks[block];
+        item.type = type;
+        item.heading = 0;
+        if (type != NoteBlockType::CheckItem) item.checked = false;
+    }
+    Changed();
+    return true;
+}
 bool NoteSession::ToggleCheck() { if (!note_) return false; auto& block = note_->blocks[cursor_.block]; if (block.type != NoteBlockType::CheckItem || block.heading > 0) return SetBlockType(NoteBlockType::CheckItem); PushUndo(); block.checked = !block.checked; Changed(); return true; }
 bool NoteSession::Indent(int delta) { if (!note_) return false; PushUndo(); auto range = Selection(); for (size_t block = range.first.block; block <= range.second.block; ++block) note_->blocks[block].indent = std::clamp(note_->blocks[block].indent + delta, 0, 6); Changed(); return true; }
 

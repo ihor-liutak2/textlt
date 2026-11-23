@@ -260,6 +260,7 @@ add_executable(textlt
   src/notes/note_serializer.cpp
   src/notes/note_repository.cpp
   src/notes/note_session.cpp
+  src/notes/notes_context_menu.cpp
   src/notes/notes_workspace_component.cpp
   src/actions/action_model.cpp
   src/actions/action_config_importer.cpp
@@ -543,6 +544,7 @@ add_executable(textlt_notes_workspace_actions_test
   src/notes/note_serializer.cpp
   src/notes/note_repository.cpp
   src/notes/note_session.cpp
+  src/notes/notes_context_menu.cpp
   src/notes/notes_workspace_component.cpp
   src/editor/clipboard_input.cpp
   src/editor_utils.cpp

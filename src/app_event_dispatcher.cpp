@@ -185,6 +185,12 @@ bool AppEventDispatcher::HandleActiveModalEvent(const ftxui::Event& event) {
 }
 
 bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
+    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Notes) {
+        const auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(
+            app_.notes_workspace_component_);
+        if (notes && notes->HasOpenContextMenu() && notes->HandleContextMenuEvent(event)) return true;
+    }
+
     if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Documents) {
         if (app_.editor_context_menu_.OnEvent(event)) return true;
         if (event.is_mouse()) {

@@ -424,6 +424,9 @@ TextltApp::TextltApp()
         [this](const std::string& text) { return clipboard_controller_.WriteText(text); });
     auto notes_component = std::static_pointer_cast<notes::NotesWorkspaceComponent>(
         notes_workspace_component_);
+    notes_component->SetClipboardReader([this](ClipboardController::PasteCallback deliver) {
+        clipboard_controller_.ReadText(std::move(deliver));
+    });
     notes_component->SetColumnsChangedCallback([this](int columns) {
         editor_config_.notes_editor_columns = columns;
         SaveConfig();

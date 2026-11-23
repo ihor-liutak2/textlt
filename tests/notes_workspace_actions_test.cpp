@@ -172,6 +172,15 @@ public:
     static ftxui::Box EditorViewBox(const NotesWorkspaceComponent& component) {
         return component.editor_view_box_;
     }
+    static ftxui::Box EditorScrollbarBox(const NotesWorkspaceComponent& component) {
+        return component.editor_scrollbar_box_;
+    }
+    static ftxui::Box SidebarBox(const NotesWorkspaceComponent& component) {
+        return component.sidebar_box_;
+    }
+    static NoteSession& Session(NotesWorkspaceComponent& component) {
+        return component.session_;
+    }
     static void SetEditorColumns(NotesWorkspaceComponent& component, int columns) {
         component.SetEditorColumns(columns);
     }
@@ -390,6 +399,190 @@ void Expect(bool value, const std::string& message) {
     }
 }
 
+std::pair<int, int> FindMenuLabel(const ftxui::Screen& screen, const std::string& label,
+                                  std::optional<ftxui::Box> limit = std::nullopt) {
+    const auto box = limit.value_or(ftxui::Box{0, screen.dimx() - 1, 0, screen.dimy() - 1});
+    for (int y = box.y_min; y <= box.y_max; ++y) {
+        for (int x = box.x_min + 2; x + static_cast<int>(label.size()) <= box.x_max; ++x) {
+            if (screen.PixelAt(x - 2, y).character != "│" ||
+                screen.PixelAt(x - 1, y).character != " ") continue;
+            std::string text;
+            for (size_t index = 0; index < label.size(); ++index) {
+                text += screen.PixelAt(x + static_cast<int>(index), y).character;
+            }
+            if (text == label) return {x, y};
+        }
+    }
+    Expect(false, "Missing menu label " + label + "\n" + screen.ToString());
+    return {};
+}
+
+void TestNotesContextMenu(const std::filesystem::path& root) {
+    using namespace textlt::notes;
+    using Access = NotesWorkspaceActionsTestAccess;
+    using ftxui::Event;
+    using ftxui::Mouse;
+
+    std::string clipboard;
+    NotesWorkspaceComponent workspace(
+        nullptr, {}, {}, {}, [&](const std::string& text) { clipboard = text; return true; }, root);
+    workspace.SetClipboardReader([&](textlt::ClipboardController::PasteCallback deliver) {
+        deliver(clipboard);
+    });
+    const auto render = [&](int width = 104, int height = 30) {
+        auto screen = ftxui::Screen::Create(
+            ftxui::Dimension::Fixed(width), ftxui::Dimension::Fixed(height));
+        ftxui::Render(screen, ftxui::vbox({
+            ftxui::text("Application header"),
+            workspace.Render() | ftxui::flex,
+            ftxui::text("Application footer"),
+        }));
+        return screen;
+    };
+    const auto mouse = [&](Mouse::Button button, Mouse::Motion motion, int x, int y) {
+        return Access::MouseAt(workspace, button, motion, x, y);
+    };
+    const auto right_click = [&](int x, int y) {
+        return mouse(Mouse::Right, Mouse::Pressed, x, y);
+    };
+    const auto menu_rectangle = [&](const ftxui::Screen& screen) {
+        const auto [label_x, label_y] = FindMenuLabel(screen, "Undo");
+        const int left = label_x - 2;
+        const int top = label_y - 1;
+        const int right = left + static_cast<int>(std::string("Numbered List").size()) + 3;
+        const int bottom = top + 16;
+        Expect(left >= 0 && top > 0 && right < screen.dimx() && bottom < screen.dimy() - 1 &&
+                screen.PixelAt(left, top).character == "┌" &&
+                screen.PixelAt(right, bottom).character == "┘", "Notes menu stays within workspace and terminal bounds");
+        return ftxui::Box{left, right, top, bottom};
+    };
+
+    render();
+    Expect(!right_click(50, 10) && !workspace.HasOpenContextMenu(), "Notes overview never opens the editor menu");
+    Access::NewNote(workspace);
+    Access::SeedEditorDocument(workspace, 97);
+    auto& session = Access::Session(workspace);
+    session.SetCursor({0, 0});
+    session.SetCursor({0, 4}, true);
+    const auto original_selection = session.Selection();
+    const auto original_cursor = session.Cursor();
+    const auto original_revision = session.Note()->revision;
+    const auto original_note = session.Note()->id;
+
+    for (int columns : {2, 3}) {
+        workspace.SetEditorColumns(columns);
+        render();
+        render();
+        const auto first = Access::EditorColumnBox(workspace, 0);
+        const auto last = Access::EditorColumnBox(workspace, columns - 1);
+        const auto sidebar = Access::SidebarBox(workspace);
+        const auto scrollbar = Access::EditorScrollbarBox(workspace);
+        const auto view = Access::EditorViewBox(workspace);
+        for (const auto& [x, y] : {std::pair{sidebar.x_min + 2, sidebar.y_min + 3},
+                 std::pair{scrollbar.x_min, scrollbar.y_min},
+                 std::pair{first.x_min, view.y_min},
+                 std::pair{first.x_min, view.y_min - 1},
+                 std::pair{first.x_max + 1, first.y_min + 1}}) {
+            right_click(x, y);
+            Expect(!workspace.HasOpenContextMenu(), "Notes menu excludes sidebar, toolbar, border, scrollbar and dividers");
+        }
+        for (bool right : {false, true}) {
+            for (bool bottom : {false, true}) {
+                const int x = right ? last.x_max : first.x_min;
+                const int y = bottom ? first.y_max : first.y_min;
+                Expect(right_click(x, y) && workspace.HasOpenContextMenu(), "Right-click opens in each editor corner");
+                const auto popup = menu_rectangle(render());
+                Expect((right ? popup.x_max == x : popup.x_min == x) &&
+                       (bottom ? popup.y_max == y : popup.y_min == y), "Menu opens inward from the editor corner");
+                Expect(session.Cursor() == original_cursor && session.Selection() == original_selection &&
+                    session.Note()->revision == original_revision && session.Note()->id == original_note &&
+                    workspace.EditorColumns() == columns, "Opening preserves the entire Notes editing context");
+                Expect(workspace.OnEvent(Event::Escape) && !workspace.HasOpenContextMenu() &&
+                    workspace.IsEditing(), "Escape dismisses only the Notes menu");
+            }
+        }
+        Expect(right_click(first.x_max, first.y_min), "Right-click at internal column edge");
+        auto frame = render();
+        Expect(menu_rectangle(frame).x_max > first.x_max &&
+               frame.ToString().find("Numbered List") != std::string::npos &&
+               frame.ToString().find("Bold") == std::string::npos &&
+               frame.ToString().find("Italic") == std::string::npos,
+               "The full Notes menu can draw across columns without Bold or Italic");
+        Expect(!workspace.OnEvent(Event::Special({0})) && workspace.HasOpenContextMenu(),
+               "Terminal resize event leaves the menu open");
+        menu_rectangle(render(65, 22));
+        workspace.OnEvent(Event::ArrowDown);
+        render(40, 10);
+        Expect(workspace.HasOpenContextMenu(), "The menu remains navigable on a short screen");
+        Expect(mouse(Mouse::Left, Mouse::Pressed, 0, 0) && !workspace.HasOpenContextMenu(),
+               "Clicking outside dismisses the menu without moving the selection");
+        Expect(session.Selection() == original_selection, "Outside dismissal preserves the selection");
+    }
+
+    render();
+    render();
+    const auto menu = [&](const std::string& label, bool hover = false) {
+        const auto first = Access::EditorColumnBox(workspace, 0);
+        Expect(right_click(first.x_min, first.y_min), "Open Notes menu for command test");
+        const auto screen = render();
+        const auto [x, y] = FindMenuLabel(screen, label, menu_rectangle(screen));
+        if (hover) {
+            Expect(mouse(Mouse::None, Mouse::Moved, x, y), "Menu handles hover");
+        } else {
+            Expect(mouse(Mouse::Left, Mouse::Pressed, x, y) &&
+                mouse(Mouse::Left, Mouse::Released, x, y), "Menu handles left click");
+        }
+    };
+
+    const std::string original_first = BlockText(session.Note()->blocks[0]);
+    menu("Copy");
+    Expect(clipboard == "Line" && !workspace.HasOpenContextMenu() &&
+        session.Selection() == original_selection, "Menu Copy uses the preserved selection");
+    menu("Cut");
+    Expect(BlockText(session.Note()->blocks[0]) == original_first.substr(4),
+        "Menu Cut removes only the copied selection");
+    menu("Undo");
+    Expect(BlockText(session.Note()->blocks[0]) == original_first, "Menu Undo restores cut text");
+    menu("Redo");
+    Expect(BlockText(session.Note()->blocks[0]) == original_first.substr(4), "Menu Redo reapplies cut");
+    clipboard = "Line";
+    menu("Paste");
+    Expect(BlockText(session.Note()->blocks[0]) == original_first, "Menu Paste inserts at the retained cursor");
+
+    session.SetCursor({1, 3});
+    menu("Heading 1");
+    Expect(session.Note()->blocks[0].heading == 0 && session.Note()->blocks[1].heading == 1,
+        "Heading changes only the current paragraph without a selection");
+    session.SetCursor({0, 3});
+    session.SetCursor({2, 0}, true);
+    menu("Heading 2", true);
+    Expect(workspace.OnEvent(Event::ArrowDown) && workspace.OnEvent(Event::Return) &&
+        !workspace.HasOpenContextMenu(), "Hover, Down, and Enter run the focused command");
+    Expect(session.Note()->blocks[0].heading == 3 && session.Note()->blocks[1].heading == 3 &&
+        session.Note()->blocks[2].heading == 0, "Heading formats only affected paragraphs");
+    const auto before_no_op = session.Note()->revision;
+    menu("Heading 3");
+    Expect(workspace.HasOpenContextMenu() && session.Note()->revision == before_no_op,
+           "An already-applied heading is disabled");
+    workspace.OnEvent(Event::Escape);
+    menu("Bulleted List");
+    Expect(session.Note()->blocks[0].type == NoteBlockType::BulletItem &&
+        session.Note()->blocks[1].type == NoteBlockType::BulletItem &&
+        session.Note()->blocks[2].type == NoteBlockType::Paragraph, "Bullets format both selected blocks");
+    menu("Numbered List");
+    Expect(session.Note()->blocks[0].type == NoteBlockType::NumberedItem &&
+        session.Note()->blocks[1].type == NoteBlockType::NumberedItem, "Numbered list formats the selection");
+    menu("Normal Text");
+    Expect(session.Note()->blocks[0].type == NoteBlockType::Paragraph &&
+        session.Note()->blocks[1].type == NoteBlockType::Paragraph, "Normal Text removes list formatting");
+    menu("Undo");
+    Expect(session.Note()->blocks[0].type == NoteBlockType::NumberedItem &&
+        session.Note()->blocks[1].type == NoteBlockType::NumberedItem, "Undo restores both formatted blocks at once");
+    menu("Select All");
+    Expect(session.HasSelection() && session.Selection().first == NotePosition{0, 0} &&
+        session.Selection().second.block == session.Note()->blocks.size() - 1, "Menu Select All uses the Notes session");
+}
+
 } // namespace
 
 int main() {
@@ -400,6 +593,7 @@ int main() {
     const fs::path root = fs::temp_directory_path() / "textlt_notes_workspace_actions_test";
     std::error_code cleanup_error;
     fs::remove_all(root, cleanup_error);
+    TestNotesContextMenu(root / "context-menu");
 
     NotesWorkspaceComponent component(
         nullptr, [](const std::string&) {}, [] {}, [] {},

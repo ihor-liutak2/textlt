@@ -14,6 +14,7 @@
 #include "ftxui/dom/elements.hpp"
 #include "notes/note_repository.hpp"
 #include "notes/note_session.hpp"
+#include "notes/notes_context_menu.hpp"
 #include "theme.hpp"
 
 namespace textlt::notes {
@@ -50,6 +51,11 @@ public:
     bool DetachProjectGroup(const std::string& project_id, std::string& error);
     bool Save(std::string& error);
     bool IsEditing() const { return editing_; }
+    bool HasOpenContextMenu() const { return context_menu_.IsOpen(); }
+    bool HandleContextMenuEvent(ftxui::Event event);
+    void SetClipboardReader(ClipboardController::ReadCallback reader) {
+        read_clipboard_ = std::move(reader);
+    }
     bool IsTrashSelected() const { return trash_selected_ && !editing_; }
     void SetSidebarVisible(bool visible);
     bool IsSidebarVisible() const { return sidebar_visible_; }
@@ -164,6 +170,11 @@ private:
     void Notify(const std::string& message);
     bool HandleOverviewEvent(ftxui::Event event);
     bool HandleEditorEvent(ftxui::Event event);
+    void ExecuteContextCommand(NotesContextMenu::Command command);
+    void CopySelectionToClipboard(bool cut);
+    void PasteText(const std::string& text);
+    void PasteFromClipboard();
+    void EditHistory(bool redo);
     bool HandleTextFieldEvent(std::string& value, size_t& cursor, ftxui::Event event, std::function<void()> on_change);
     ftxui::Element RenderSidebar();
     ftxui::Element RenderSidebarContents(const Theme& theme);
@@ -197,8 +208,10 @@ private:
     DocumentsCallback on_documents_;
     ActionsCallback on_actions_;
     ClipboardWriteCallback write_clipboard_;
+    ClipboardController::ReadCallback read_clipboard_;
     NoteRepository repository_;
     NoteSession session_;
+    NotesContextMenu context_menu_;
     std::vector<SidebarEntry> sidebar_entries_;
     std::vector<size_t> visible_notes_;
     std::vector<NoteSearchResult> note_search_matches_;
