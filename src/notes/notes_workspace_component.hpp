@@ -48,6 +48,7 @@ public:
         std::vector<std::string> known_project_ids,
         bool project_registry_usable = true);
     bool UpdateProjectGroupName(const ProjectContext& project, std::string& error);
+    bool RelinkGroupForNewProject(const ProjectContext& project, std::string& error);
     bool DetachProjectGroup(const std::string& project_id, std::string& error);
     bool Save(std::string& error);
     bool IsEditing() const { return editing_; }

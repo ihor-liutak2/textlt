@@ -245,6 +245,29 @@ bool NotesWorkspaceComponent::UpdateProjectGroupName(
     return true;
 }
 
+bool NotesWorkspaceComponent::RelinkGroupForNewProject(
+    const ProjectContext& project, std::string& error) {
+    error.clear();
+    if (repository_.FindProjectSection(project.id)) return true;
+
+    const std::string name = Lower(project.name);
+    auto& sections = repository_.Sections();
+    const auto section = std::find_if(sections.begin(), sections.end(), [&](const NoteSection& candidate) {
+        return !candidate.deleted_at && Lower(candidate.name) == name &&
+            (!candidate.project_id || !IsKnownProject(*candidate.project_id));
+    });
+    if (section == sections.end()) return true;
+
+    NoteSection previous = *section;
+    std::string resulting_id;
+    if (repository_.RelinkSectionToProject(
+            previous.id, project.id, project.name, resulting_id, error)) {
+        return true;
+    }
+    *section = std::move(previous);
+    return false;
+}
+
 bool NotesWorkspaceComponent::DetachProjectGroup(
     const std::string& project_id, std::string& error) {
     error.clear();

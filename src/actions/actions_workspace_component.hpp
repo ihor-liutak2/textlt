@@ -47,6 +47,8 @@ public:
     }
     bool UpdateProjectGroupName(const std::string& project_id,
         const std::string& project_name, std::string& error);
+    bool MergeGroupsForNewProject(const std::string& project_id,
+        const std::string& project_name, std::string& error);
     bool DetachProjectGroup(const std::string& project_id, std::string& error);
 
     std::vector<ActionGroup> Groups() const { return repository_.Data().groups; }

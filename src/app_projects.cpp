@@ -26,7 +26,7 @@ void TextltApp::InitializeProjects() {
             active_action_ = filesystem_error.message();
             return;
         }
-        if (!RegisterProject(std::filesystem::current_path(), error)) {
+        if (!project_store_.Add(std::filesystem::current_path(), {}, error)) {
             active_action_ = error;
             return;
         }
@@ -34,7 +34,7 @@ void TextltApp::InitializeProjects() {
 
     const ProjectRecord* active = project_store_.ActiveProject();
     if (!active || !std::filesystem::is_directory(active->local_root, filesystem_error)) {
-        RegisterProject(std::filesystem::current_path(), error);
+        project_store_.Add(std::filesystem::current_path(), {}, error);
         active = project_store_.ActiveProject();
     }
     if (!active) {
@@ -84,7 +84,28 @@ std::vector<SidebarPanel::ProjectEntry> TextltApp::SidebarProjects() const {
 }
 
 bool TextltApp::RegisterProject(const std::filesystem::path& root, std::string& error) {
-    return project_store_.Add(root, {}, error) != nullptr;
+    const size_t previous_count = project_store_.Projects().size();
+    const ProjectRecord* project = project_store_.Add(root, {}, error);
+    if (!project) return false;
+
+    std::string group_errors;
+    if (project_store_.Projects().size() > previous_count) {
+        const auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_);
+        const auto actions = std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_);
+        std::string notes_error;
+        std::string actions_error;
+        if (!notes->RelinkGroupForNewProject({project->id, project->name}, notes_error)) {
+            group_errors += " | Notes group relink failed: " + notes_error;
+        }
+        if (!actions->MergeGroupsForNewProject(project->id, project->name, actions_error)) {
+            group_errors += " | Actions group merge failed: " + actions_error;
+        }
+    }
+
+    ActivateProject(project->id);
+    std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->ShowProjects();
+    active_action_ += group_errors;
+    return true;
 }
 
 bool TextltApp::ActivateProject(const std::string& id) {
@@ -329,9 +350,6 @@ void TextltApp::AddCurrentFolderAsProject() {
         screen_.PostEvent(ftxui::Event::Custom);
         return;
     }
-    const std::string id = project_store_.ActiveProjectId();
-    ActivateProject(id);
-    std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->ShowProjects();
 }
 
 void TextltApp::AssignProjectConnection(const std::string& id) {

@@ -198,12 +198,7 @@ bool TextltApp::ConfirmFilesModalAction(
     } else if (mode == FilesModalMode::OpenFolder) {
         success = OpenWorkspaceFolder(path, error);
     } else if (mode == FilesModalMode::SelectDirectory) {
-        if (RegisterProject(path, error)) {
-            const std::string id = project_store_.ActiveProjectId();
-            ActivateProject(id);
-            std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->ShowProjects();
-            success = true;
-        }
+        success = RegisterProject(path, error);
     } else {
         error = "No file action selected.";
         return false;

@@ -292,6 +292,29 @@ bool ActionsWorkspaceComponent::UpdateProjectGroupName(const std::string& projec
     return true;
 }
 
+bool ActionsWorkspaceComponent::MergeGroupsForNewProject(const std::string& project_id,
+    const std::string& project_name, std::string& error) {
+    error.clear();
+    std::vector<std::string> sources;
+    for (const auto& group : repository_.Data().groups) {
+        const bool available = !group.project_id ||
+            (is_missing_project_ && is_missing_project_(*group.project_id));
+        if (!group.trash && available &&
+            (group.name == project_name || BaseGroupName(group.name) == project_name)) {
+            sources.push_back(group.id);
+        }
+    }
+    if (sources.empty()) return true;
+
+    std::string target;
+    if (!repository_.EnsureProjectGroup(project_id, project_name, target, error)) return false;
+    for (const auto& source : sources) {
+        if (!repository_.MergeGroups(source, target, error)) return false;
+        if (selected_group_id_ == source) selected_group_id_ = target;
+    }
+    return true;
+}
+
 bool ActionsWorkspaceComponent::DetachProjectGroup(
     const std::string& project_id, std::string& error) {
     return repository_.DetachProjectGroup(project_id, error);
