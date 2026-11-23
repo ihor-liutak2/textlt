@@ -6,6 +6,7 @@
 #include "actions/action_serializer.hpp"
 #include "actions/actions_workspace_component.hpp"
 #include "ftxui/component/event.hpp"
+#include "ftxui/component/mouse.hpp"
 #include "ftxui/dom/node.hpp"
 #include "ftxui/screen/screen.hpp"
 #include "modals/modal_action_editor.hpp"
@@ -223,6 +224,26 @@ public:
         return page && workspace.items_visible_count_ > 0 &&
             workspace.items_visible_count_ < page->items.size();
     }
+    static ftxui::Box ActionBox(const ActionsWorkspaceComponent& workspace, const std::string& id) {
+        for (size_t i = 0; i < workspace.item_box_ids_.size(); ++i) {
+            if (workspace.item_box_ids_[i] == id) {
+                return ftxui::Box::Intersection(workspace.item_boxes_[i], workspace.items_view_box_);
+            }
+        }
+        return {0, -1, 0, -1};
+    }
+    static std::string SelectedItemId(const ActionsWorkspaceComponent& workspace) {
+        return workspace.selected_item_id_;
+    }
+    static void SelectItem(ActionsWorkspaceComponent& workspace, const std::string& id) {
+        workspace.selected_item_id_ = id;
+    }
+    static ftxui::Box AddActionBox(const ActionsWorkspaceComponent& workspace) {
+        return workspace.add_action_box_;
+    }
+    static ActionEditorModal& ActionEditor(ActionsWorkspaceComponent& workspace) {
+        return *workspace.action_editor_modal_;
+    }
 };
 } // namespace textlt::actions
 
@@ -235,6 +256,207 @@ public:
             std::abort();                                                       \
         }                                                                       \
     } while (false)
+
+namespace {
+
+ftxui::Box FindActionsMenu(const ftxui::Screen& screen) {
+    for (int y = 1; y < screen.dimy() - 1; ++y) {
+        for (int x = 0; x + 13 < screen.dimx(); ++x) {
+            if (screen.PixelAt(x, y).character != "│") continue;
+            std::string label;
+            for (int i = 1; i <= 12; ++i) label += screen.PixelAt(x + i, y).character;
+            if (label != " Edit Action") continue;
+            int top = y;
+            while (top > 0 && screen.PixelAt(x, top).character != "┌") --top;
+            int bottom = y;
+            while (bottom < screen.dimy() - 1 && screen.PixelAt(x, bottom).character != "└") ++bottom;
+            int right = x + 1;
+            while (right < screen.dimx() - 1 && screen.PixelAt(right, top).character != "┐") ++right;
+            Check(screen.PixelAt(x, top).character == "┌");
+            Check(screen.PixelAt(right, bottom).character == "┘");
+            return {x, right, top, bottom};
+        }
+    }
+    Check(false);
+    return {};
+}
+
+void TestActionsContextMenu(const std::filesystem::path& path) {
+    using Access = ActionsWorkspaceModalTestAccess;
+    using ftxui::Event;
+    using ftxui::Mouse;
+    using EditorAccess = ActionEditorModalTestAccess;
+    ActionsDocument document;
+    ActionPage page{"context-page", "Context page", {}};
+    for (size_t count = 1; count <= 4; ++count) {
+        std::vector<ActionTab> blocks;
+        for (size_t block = 0; block < count; ++block) {
+            const std::string suffix = std::to_string(count) + "-" + std::to_string(block);
+            blocks.push_back({count == 4 && block == 3 ? "" : "Caption " + suffix,
+                "\t  Текст " + suffix + "\r\n配置\n  ", true});
+        }
+        page.items.push_back(ActionItem::WithTabs("action-" + std::to_string(count),
+            "Target " + std::to_string(count), std::move(blocks)));
+    }
+    document.groups.push_back({"context-group", "Context group", std::nullopt, false, {page}});
+    std::string error;
+    Check(ActionSerializer::Save(path, document, error));
+
+    std::string status;
+    std::vector<std::string> copies;
+    bool clipboard_available = true;
+    ActionsWorkspaceComponent workspace(nullptr, [&](const std::string& value) { status = value; },
+        [&](const std::string& value) { copies.push_back(value); return clipboard_available; }, [] {}, path);
+    const auto draw = [&](int width = 105, int height = 40) {
+        auto screen = ftxui::Screen::Create(
+            ftxui::Dimension::Fixed(width), ftxui::Dimension::Fixed(height));
+        ftxui::Render(screen, workspace.Render());
+        return screen;
+    };
+    const auto mouse = [&](Mouse::Button button, Mouse::Motion motion, int x, int y) {
+        Mouse value{};
+        value.button = button;
+        value.motion = motion;
+        value.x = x;
+        value.y = y;
+        return workspace.OnEvent(Event::Mouse("", value));
+    };
+    const auto open = [&](const std::string& id, bool edge = false) {
+        const auto card = Access::ActionBox(workspace, id);
+        Check(!card.IsEmpty());
+        Check(mouse(Mouse::Right, Mouse::Pressed,
+            edge ? card.x_max : card.x_min + 1, edge ? card.y_max : card.y_min));
+        Check(workspace.HasOpenContextMenu());
+        Check(Access::SelectedItemId(workspace) == id);
+    };
+    const auto click_row = [&](const ftxui::Box& menu, size_t row) {
+        const int y = menu.y_min + 1 + static_cast<int>(row);
+        Check(mouse(Mouse::Left, Mouse::Pressed, menu.x_min + 2, y));
+        Check(mouse(Mouse::Left, Mouse::Released, menu.x_min + 2, y));
+    };
+    const auto open_menu = [&](const std::string& id) {
+        open(id);
+        return FindActionsMenu(draw());
+    };
+
+    draw();
+    const auto add = Access::AddActionBox(workspace);
+    Check(!mouse(Mouse::Right, Mouse::Pressed, add.x_min + 1, add.y_min));
+    Check(!workspace.HasOpenContextMenu());
+
+    for (const auto& action : page.items) {
+        for (size_t block = 0; block < action.tabs.size(); ++block) {
+            Access::SelectItem(workspace, "action-1");
+            open(action.id, true);
+            const auto screen = draw();
+            const auto menu = FindActionsMenu(screen);
+            Check(menu.y_max - menu.y_min + 1 == static_cast<int>(action.tabs.size()) + 7);
+            Check(menu.x_min >= 0 && menu.y_min >= 0 && menu.x_max < screen.dimx() && menu.y_max < screen.dimy());
+            Check(screen.PixelAt(menu.x_min + 1, menu.y_min + 1 + static_cast<int>(action.tabs.size())).character == "─");
+            for (size_t row = 0; row < action.tabs.size(); ++row) {
+                std::string label;
+                for (int x = menu.x_min + 2; x < menu.x_max; ++x) {
+                    label += screen.PixelAt(x, menu.y_min + 1 + static_cast<int>(row)).character;
+                }
+                label.erase(label.find_last_not_of(' ') + 1);
+                Check(label == action.tabs[row].caption);
+            }
+            // A different selection after opening cannot retarget the copy.
+            Access::SelectItem(workspace, action.id == "action-1" ? "action-2" : "action-1");
+            const size_t old_copies = copies.size();
+            if (block % 2 == 0) {
+                for (size_t index = 0; index < block; ++index) Check(workspace.OnEvent(Event::ArrowDown));
+                Check(workspace.OnEvent(Event::Return));
+            } else {
+                click_row(menu, block);
+            }
+            Check(!workspace.HasOpenContextMenu() && copies.size() == old_copies + 1);
+            Check(copies.back() == action.tabs[block].content);
+        }
+    }
+
+    auto menu = open_menu("action-2");
+    Check(mouse(Mouse::None, Mouse::Moved, menu.x_min + 3, menu.y_min + 2));
+    clipboard_available = false;
+    Check(workspace.OnEvent(Event::Return) && workspace.HasOpenContextMenu());
+    Check(copies.back() == page.items[1].tabs[1].content);
+    Check(status == "Could not copy action to the system clipboard");
+    Check(draw().ToString().find("Clipboard write failed") != std::string::npos);
+    clipboard_available = true;
+    Check(workspace.OnEvent(Event::Return) && !workspace.HasOpenContextMenu());
+
+    open_menu("action-1");
+    Check(mouse(Mouse::Left, Mouse::Pressed, add.x_min + 1, add.y_min));
+    Check(!workspace.HasOpenContextMenu() && !Access::ActionEditor(workspace).IsOpen());
+    open_menu("action-1");
+    Check(workspace.OnEvent(Event::Escape) && !workspace.HasOpenContextMenu());
+    menu = open_menu("action-1");
+    click_row(menu, 4);  // Move Up.
+    Check(workspace.HasOpenContextMenu());
+    Check(workspace.OnEvent(Event::Escape));
+    menu = open_menu("action-4");
+    click_row(menu, 8);  // Move Down.
+    Check(workspace.HasOpenContextMenu());
+    Check(workspace.OnEvent(Event::Escape));
+
+    menu = open_menu("action-3");
+    click_row(menu, 5);  // Rename Action.
+    Check(!workspace.HasOpenContextMenu());
+    Check(draw().ToString().find("Rename Action") != std::string::npos);
+    Check(workspace.OnEvent(Event::Character(" renamed")));
+    Check(workspace.OnEvent(Event::Return));
+    Check(workspace.Groups()[0].pages[0].items[2].title == "Target 3 renamed");
+    Check(workspace.Groups()[0].pages[0].items[2].tabs[1].content == page.items[2].tabs[1].content);
+
+    menu = open_menu("action-2");
+    click_row(menu, 3);  // Edit Action.
+    auto& editor = Access::ActionEditor(workspace);
+    Check(editor.IsOpen() && Access::Draft(workspace).id == "action-2");
+    EditorAccess::FocusContent(editor);
+    Check(workspace.OnEvent(Event::Character("Edited")));
+    Check(EditorAccess::Submit(editor));
+    editor.Close();
+
+    draw(54, 10);
+    draw(54, 10);
+    open("action-1", true);
+    auto small = draw(45, 10);
+    Check(workspace.HasOpenContextMenu());
+    const auto narrow_menu = FindActionsMenu(small);
+    Check(narrow_menu.x_min < Access::ActionBox(workspace, "action-1").x_min);
+    Check(workspace.OnEvent(Event::ArrowUp));
+    small = draw(45, 10);
+    Check(small.ToString().find("Move Down") != std::string::npos);
+    Check(workspace.OnEvent(Event::Return) && !workspace.HasOpenContextMenu());
+    Check(workspace.Groups()[0].pages[0].items[1].id == "action-1");
+    draw(54, 10);
+    Check(Access::SelectedItemId(workspace) == "action-1");
+    Check(!Access::ActionBox(workspace, "action-1").IsEmpty());
+    draw();
+    menu = open_menu("action-1");
+    click_row(menu, 4);  // Move Up.
+    Check(workspace.Groups()[0].pages[0].items[0].id == "action-1");
+
+    ActionsDocument saved;
+    Check(ActionSerializer::Load(path, saved, error));
+    const auto& items = saved.groups[0].pages[0].items;
+    Check(items[0].id == "action-1" && items[1].id == "action-2");
+    Check(items[1].tabs[0].content.find("Edited") != std::string::npos);
+    Check(items[2].title == "Target 3 renamed");
+    Check(items[3].tabs[3].content == page.items[3].tabs[3].content);
+
+    ActionRepository failing_write(path, [](const auto&, const auto&, std::string& message) {
+        message = "Write failed";
+        return false;
+    });
+    Check(failing_write.Load(error));
+    Check(!failing_write.RenameItem("context-group", "context-page", "action-3", "Unsaved", error));
+    Check(failing_write.Data().groups[0].pages[0].items[2].title == "Target 3 renamed");
+    Check(ActionSerializer::Load(path, saved, error));
+    Check(saved.groups[0].pages[0].items[2].title == "Target 3 renamed");
+}
+
+} // namespace
 
 int main() {
     ActionItem submitted;
@@ -305,6 +527,7 @@ int main() {
     editor.Close();
 
     const auto root = std::filesystem::temp_directory_path() / ("textlt-actions-ui-" + GenerateActionId());
+    TestActionsContextMenu(root / "context-menu.json");
     const auto path = root / "actions.json";
     std::string unicode_metadata;
     for (int index = 0; index < 55; ++index) unicode_metadata += "Ж";

@@ -267,6 +267,7 @@ add_executable(textlt
   src/actions/action_serializer.cpp
   src/actions/action_repository.cpp
   src/actions/actions_workspace_component.cpp
+  src/actions/actions_context_menu.cpp
   src/find_replace/editor_find_target.cpp
   src/find_replace/notes_find_target.cpp
   src/find_replace/actions_find_target.cpp
@@ -526,6 +527,7 @@ add_executable(textlt_actions_workspace_test
   src/actions/action_serializer.cpp
   src/actions/action_repository.cpp
   src/actions/actions_workspace_component.cpp
+  src/actions/actions_context_menu.cpp
   src/modals/modal_action_editor.cpp
   src/editor/clipboard_input.cpp
   src/modals/modal_window.cpp

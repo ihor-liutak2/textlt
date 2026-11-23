@@ -185,6 +185,23 @@ bool AppEventDispatcher::HandleActiveModalEvent(const ftxui::Event& event) {
 }
 
 bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
+    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Actions &&
+        !app_.menu_bar_->IsDropdownOpen()) {
+        const auto workspace = std::static_pointer_cast<actions::ActionsWorkspaceComponent>(
+            app_.actions_workspace_component_);
+        if (workspace) {
+            const bool already_open = workspace->HasOpenContextMenu();
+            if (workspace->HandleContextMenuEvent(event)) {
+                if (!already_open && workspace->HasOpenContextMenu()) {
+                    app_.sidebar_has_focus_ = false;
+                    app_.find_panel_focus_ = false;
+                    if (app_.find_replace_panel_) app_.find_replace_panel_->SetFocused(false);
+                }
+                return true;
+            }
+        }
+    }
+
     if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Notes) {
         const auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(
             app_.notes_workspace_component_);

@@ -234,7 +234,8 @@ ActionsWorkspaceComponent::ActionsWorkspaceComponent(const Theme* theme,
     StatusCallback status, ClipboardCallback clipboard,
     GroupsChangedCallback groups_changed, std::filesystem::path storage_path)
     : theme_(theme), status_(std::move(status)), clipboard_(std::move(clipboard)),
-      groups_changed_(std::move(groups_changed)), repository_(std::move(storage_path)) {
+      groups_changed_(std::move(groups_changed)), repository_(std::move(storage_path)),
+      context_menu_(theme) {
     name_selection_ = std::make_shared<InputSelection>();
     name_component_ = MakeSelectableInput(name_input_, name_selection_->cursor, "name",
         ftxui::InputOption{}, name_selection_);
@@ -270,7 +271,7 @@ ActionsWorkspaceComponent::ActionsWorkspaceComponent(const Theme* theme,
     NormalizeSelection();
 }
 
-void ActionsWorkspaceComponent::Open() { NormalizeSelection(); TakeFocus(); }
+void ActionsWorkspaceComponent::Open() { context_menu_.Close(); NormalizeSelection(); TakeFocus(); }
 bool ActionsWorkspaceComponent::Save(std::string& error) const { return repository_.Save(error); }
 
 void ActionsWorkspaceComponent::SetProjectContext(
@@ -338,7 +339,12 @@ void ActionsWorkspaceComponent::OpenNameDialog(Dialog dialog, std::string value)
     name_selection_->cursor = static_cast<int>(name_input_.size());
     name_component_->TakeFocus();
 }
-void ActionsWorkspaceComponent::CloseDialog() { dialog_ = Dialog::None; TakeFocus(); }
+void ActionsWorkspaceComponent::CloseDialog() {
+    dialog_ = Dialog::None;
+    rename_action_target_.reset();
+    rename_action_error_.clear();
+    TakeFocus();
+}
 void ActionsWorkspaceComponent::AfterMutation(const std::string& message) {
     NormalizeSelection(); if (groups_changed_) groups_changed_(); Notify(message); CloseDialog();
 }
@@ -451,16 +457,40 @@ void ActionsWorkspaceComponent::MovePage(int delta) {
     std::string error; if (!repository_.MovePage(selected_group_id_, selected_page_id_, delta, error)) Notify("Page move failed: " + error); else AfterMutation("Page moved");
 }
 void ActionsWorkspaceComponent::MoveAction(int delta) {
-    std::string error; if (!repository_.MoveItem(selected_group_id_, selected_page_id_, selected_item_id_, delta, error)) Notify("Action move failed: " + error); else AfterMutation("Action moved");
+    std::string error;
+    if (!repository_.MoveItem(selected_group_id_, selected_page_id_, selected_item_id_, delta, error)) {
+        Notify("Action move failed: " + error);
+        return;
+    }
+    if (const auto* page = SelectedPage()) {
+        const int index = IndexById(page->items, selected_item_id_);
+        if (index >= 0) {
+            const size_t row = static_cast<size_t>(index);
+            if (row < item_scroll_ || row >= item_scroll_ + items_visible_count_) {
+                // Start at the moved item when the adjacent card is outside the
+                // fully visible range. A partially visible card can be taller.
+                item_scroll_ = row;
+                items_visible_count_ = 1;
+                item_boxes_.clear();
+                item_box_ids_.clear();
+            }
+        }
+    }
+    AfterMutation("Action moved");
 }
 void ActionsWorkspaceComponent::CopySelectedAction(int tab_index) {
     const ActionItem* item = SelectedItem(); if (!item) { Notify("No action selected"); return; }
     if (item->tabs.empty()) { Notify("Action has no content"); return; }
     const size_t index = std::min(static_cast<size_t>(std::max(0, tab_index)),
         item->tabs.size() - 1);
-    Notify(clipboard_ && clipboard_(item->tabs[index].content)
-        ? "Copied action: " + item->title
+    CopyActionBlock(*item, index);
+}
+
+bool ActionsWorkspaceComponent::CopyActionBlock(const ActionItem& item, size_t block) {
+    const bool copied = block < item.tabs.size() && clipboard_ && clipboard_(item.tabs[block].content);
+    Notify(copied ? "Copied action: " + item.title
         : "Could not copy action to the system clipboard");
+    return copied;
 }
 void ActionsWorkspaceComponent::CopyAllActions() {
     const ActionPage* page = SelectedPage(); if (!page || page->items.empty()) { Notify("No actions to copy"); return; }
@@ -688,6 +718,16 @@ void ActionsWorkspaceComponent::AcceptDialog() {
             if (repository_.CreatePage(selected_group_id_, name_input_, id, error)) { selected_page_id_ = id; AfterMutation("Page created"); } break;
         case Dialog::RenamePage:
             if (repository_.RenamePage(selected_group_id_, selected_page_id_, name_input_, error)) AfterMutation("Page renamed"); break;
+        case Dialog::RenameAction: {
+            if (!rename_action_target_) return;
+            const auto& target = *rename_action_target_;
+            if (repository_.RenameItem(target.group_id, target.page_id, target.item_id, name_input_, rename_action_error_)) {
+                AfterMutation("Action renamed");
+            } else {
+                Notify(rename_action_error_);
+            }
+            return;
+        }
         case Dialog::DeleteGroup:
             if (repository_.DeleteGroup(selected_group_id_, error)) { selected_group_id_.clear(); AfterMutation("Group deleted"); } break;
         case Dialog::MergeGroup:
@@ -868,7 +908,7 @@ ftxui::Element ActionsWorkspaceComponent::RenderItems() {
     }
     items_visible_rows_ = visible_rows;
 
-    Elements cards; item_boxes_.clear(); copy_boxes_.clear();
+    Elements cards; item_boxes_.clear(); item_box_ids_.clear(); copy_boxes_.clear();
     auto header_rows = std::make_shared<std::vector<int>>();
     std::string header = page ? page->name : "Actions";
     const size_t total_items = page ? page->items.size() : 0;
@@ -882,11 +922,13 @@ ftxui::Element ActionsWorkspaceComponent::RenderItems() {
         const size_t start = std::min(item_scroll_, page->items.size() - 1);
         // Same stable-address requirement for reflect() as in RenderPages.
         item_boxes_.assign(page->items.size() - start, {});
+        item_box_ids_.reserve(item_boxes_.size());
         copy_boxes_.assign(page->items.size() - start, {});
         header_rows = std::make_shared<std::vector<int>>(
             page->items.size() - start, -1);
         for (size_t i = start; i < page->items.size(); ++i) {
             const auto& item = page->items[i];
+            item_box_ids_.push_back(item.id);
             const bool is_selected = static_cast<int>(i) == selected;
             const std::string title = LimitActionMetadata(item.title);
             const ActionSearchResult* active_match =
@@ -1095,6 +1137,17 @@ ftxui::Element ActionsWorkspaceComponent::RenderDialog() {
             text(" Enter: merge   Esc: cancel ") | dim | color(theme.modal_text_color),
         });
     }
+    else if (dialog_ == Dialog::RenameAction) {
+        Elements rows = {
+            text(" Rename Action ") | bold | color(theme.modal_text_color),
+            name_component_->Render(),
+            text(" Enter: save   Esc: cancel ") | dim | color(theme.modal_text_color),
+        };
+        if (!rename_action_error_.empty()) {
+            rows.push_back(paragraph(rename_action_error_) | color(theme.button_warning));
+        }
+        body = vbox(std::move(rows));
+    }
     else body = vbox({text(" Name ") | bold | color(theme.modal_text_color), name_component_->Render(),
         text(" Enter: save   Esc: cancel ") | dim | color(theme.modal_text_color)});
     return body | size(WIDTH, GREATER_THAN, 48) | borderStyled(ftxui::LIGHT, BorderColor(theme)) | bgcolor(theme.menu_background) | clear_under | center;
@@ -1104,7 +1157,8 @@ ftxui::Element ActionsWorkspaceComponent::OnRender() {
     using namespace ftxui; Element base = hbox({RenderNavigator(), RenderItems()}) | flex;
     if (action_editor_modal_ && action_editor_modal_->IsOpen())
         return dbox({base, action_editor_modal_->View()->Render() | clear_under | center});
-    return dialog_ == Dialog::None ? base : dbox({base, RenderDialog()});
+    if (dialog_ != Dialog::None) return dbox({base, RenderDialog()});
+    return context_menu_.IsOpen() ? context_menu_.Overlay(std::move(base)) | flex : base;
 }
 
 ftxui::Component ActionsWorkspaceComponent::ActiveChild() {
@@ -1112,6 +1166,75 @@ ftxui::Component ActionsWorkspaceComponent::ActiveChild() {
         return action_editor_modal_->View();
     if (dialog_ != Dialog::None) return name_component_;
     return nullptr;
+}
+
+ActionsContextMenu::Result ActionsWorkspaceComponent::ExecuteContextCommand(
+    const ActionsContextMenu::Target& target, ActionsContextMenu::Command command, size_t block) {
+    using Command = ActionsContextMenu::Command;
+    using Result = ActionsContextMenu::Result;
+    const auto& groups = repository_.Data().groups;
+    const int group = IndexById(groups, target.group_id);
+    if (group < 0) { Notify("Action is no longer available"); return Result::Close; }
+    const auto& pages = groups[group].pages;
+    const int page = IndexById(pages, target.page_id);
+    if (page < 0) { Notify("Action is no longer available"); return Result::Close; }
+    const auto& items = pages[page].items;
+    const int index = IndexById(items, target.item_id);
+    if (index < 0) { Notify("Action is no longer available"); return Result::Close; }
+    const auto& item = items[index];
+    if (command == Command::CopyBlock) {
+        return CopyActionBlock(item, block) ? Result::Close : Result::ClipboardFailure;
+    }
+
+    if (selected_page_id_ != target.page_id) item_scroll_ = static_cast<size_t>(index);
+    selected_group_id_ = target.group_id;
+    selected_page_id_ = target.page_id;
+    selected_item_id_ = target.item_id;
+    focus_ = FocusArea::Items;
+    if (command == Command::Edit) {
+        EditAction();
+    } else if (command == Command::Rename) {
+        rename_action_target_ = target;
+        rename_action_error_.clear();
+        OpenNameDialog(Dialog::RenameAction, item.title);
+    } else if (command == Command::MoveUp && index > 0) {
+        MoveAction(-1);
+    } else if (command == Command::MoveDown && static_cast<size_t>(index) + 1 < items.size()) {
+        MoveAction(1);
+    }
+    return Result::Close;
+}
+
+bool ActionsWorkspaceComponent::HandleContextMenuEvent(ftxui::Event event) {
+    if (dialog_ != Dialog::None || (action_editor_modal_ && action_editor_modal_->IsOpen())) return false;
+    if (context_menu_.IsOpen()) {
+        return context_menu_.OnEvent(std::move(event),
+            [this](const ActionsContextMenu::Target& target, ActionsContextMenu::Command command, size_t block) {
+                return ExecuteContextCommand(target, command, block);
+            });
+    }
+    if (!event.is_mouse()) return false;
+    const auto& mouse = event.mouse();
+    if (mouse.button != ftxui::Mouse::Right || mouse.motion != ftxui::Mouse::Pressed ||
+        !items_view_box_.Contain(mouse.x, mouse.y) ||
+        items_scrollbar_box_.Contain(mouse.x, mouse.y)) return false;
+    const auto* page = SelectedPage();
+    if (!page || page->id != items_layout_page_id_) return false;
+
+    for (size_t row = 0; row < item_boxes_.size(); ++row) {
+        if (!item_boxes_[row].Contain(mouse.x, mouse.y)) continue;
+        const int index = IndexById(page->items, item_box_ids_[row]);
+        if (index < 0) return false;
+        const auto& item = page->items[index];
+        selected_item_id_ = item.id;
+        focus_ = FocusArea::Items;
+        items_scrollbar_dragging_ = false;
+        TakeFocus();
+        context_menu_.Open(mouse.x, mouse.y, {selected_group_id_, page->id, item.id},
+            item, index > 0, static_cast<size_t>(index) + 1 < page->items.size());
+        return true;
+    }
+    return false;
 }
 
 bool ActionsWorkspaceComponent::OnEvent(ftxui::Event event) {
@@ -1124,6 +1247,7 @@ bool ActionsWorkspaceComponent::OnEvent(ftxui::Event event) {
         if (event == ftxui::Event::Return) { AcceptDialog(); return true; }
         return name_component_->OnEvent(event);
     }
+    if (HandleContextMenuEvent(event)) return true;
     const ActionGroup* group = SelectedGroup(); const ActionPage* page = SelectedPage();
     if (event == ftxui::Event::Tab) {
         focus_ = focus_ == FocusArea::Navigator ? FocusArea::Items : FocusArea::Navigator;

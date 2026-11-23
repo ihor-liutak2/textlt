@@ -311,6 +311,25 @@ bool ActionRepository::UpdateItem(const std::string& group_id, const std::string
     *found = item; return Commit(std::move(next), error);
 }
 
+bool ActionRepository::RenameItem(const std::string& group_id, const std::string& page_id,
+    const std::string& id, const std::string& title, std::string& error) {
+    error.clear();
+    if (title.empty() || LimitActionMetadata(title).size() != title.size()) {
+        error = "Enter an action title of 1 to 30 characters.";
+        return false;
+    }
+    ActionsDocument next = data_;
+    ActionGroup* group = FindGroup(next, group_id);
+    ActionPage* page = group ? FindPage(*group, page_id) : nullptr;
+    if (!page) { error = "Page was not found."; return false; }
+    const auto item = std::find_if(page->items.begin(), page->items.end(),
+        [&](const auto& value) { return value.id == id; });
+    if (item == page->items.end()) { error = "Action was not found."; return false; }
+    if (item->title == title) return true;
+    item->title = title;
+    return Commit(std::move(next), error);
+}
+
 bool ActionRepository::ApplyTextEdits(const std::string& group_id,
     const std::string& page_id, std::vector<ActionTextEdit> edits,
     std::string& error) {

@@ -67,6 +67,8 @@ public:
         std::vector<ActionItem> items, std::string& error);
     bool UpdateItem(const std::string& group_id, const std::string& page_id,
         const ActionItem& item, std::string& error);
+    bool RenameItem(const std::string& group_id, const std::string& page_id,
+        const std::string& id, const std::string& title, std::string& error);
     bool ApplyTextEdits(const std::string& group_id, const std::string& page_id,
         std::vector<ActionTextEdit> edits, std::string& error);
     bool DeleteItem(const std::string& group_id, const std::string& page_id,
