@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cctype>
 
+#include "ftxui/component/animation.hpp"
 #include "ftxui/component/component.hpp"
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/event.hpp"
@@ -26,6 +27,7 @@ constexpr size_t kItemsScrollbarColumns = 2;
 constexpr int kActionContentPreviewRows = 5;
 constexpr int kActionActiveMarkerWidth = 2;
 constexpr size_t kActionMetadataFirstRowCharacters = 25;
+constexpr auto kCopyCaptionFlashDuration = std::chrono::milliseconds(400);
 // Mask for items with "hide text": a solid large circle, shown 8 times in tiles.
 const std::string kHiddenContentMask = "⬤⬤⬤⬤⬤⬤⬤⬤";
 
@@ -839,6 +841,13 @@ ftxui::Element ActionsWorkspaceComponent::RenderNavigator() {
 
 ftxui::Element ActionsWorkspaceComponent::RenderItems() {
     using namespace ftxui; const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    const auto now = std::chrono::steady_clock::now();
+    for (auto entry = copy_caption_deadlines_.begin(); entry != copy_caption_deadlines_.end();) {
+        if (entry->second <= now) entry = copy_caption_deadlines_.erase(entry);
+        else ++entry;
+    }
+    if (!copy_caption_deadlines_.empty()) animation::RequestAnimationFrame();
+
     const ActionPage* page = SelectedPage();
     const bool page_changed = selected_page_id_ != items_layout_page_id_;
     if (page_changed) {
@@ -893,8 +902,10 @@ ftxui::Element ActionsWorkspaceComponent::RenderItems() {
                 const std::string button_caption = item.tabs[tab_index].caption.empty()
                     ? (tab_index == 0 ? "Copy" : "Copy " + std::to_string(tab_index + 1))
                     : LimitActionCaption(item.tabs[tab_index].caption);
+                const bool flashing = !copy_caption_deadlines_.empty() &&
+                    copy_caption_deadlines_.count({item.id, tab_index}) != 0;
                 ButtonSpec copy_spec = ButtonSpecFromLabel(
-                    button_caption, ButtonRole::Secondary,
+                    button_caption, flashing ? ButtonRole::Primary : ButtonRole::Secondary,
                     ButtonVariant::Minimal, ButtonSize::Compact);
                 Element button = RenderButton(theme, copy_spec);
                 if (active_match && active_match->field == ActionField::Caption &&
@@ -905,11 +916,14 @@ ftxui::Element ActionsWorkspaceComponent::RenderItems() {
                     if (begin < end) {
                         const ButtonStyle style = ResolveButtonStyle(
                             theme, copy_spec.role, ButtonState::Normal);
+                        const auto match_flash_color = style.accent == theme.active_match_bg
+                            ? theme.button_utility : style.accent;
                         Elements parts = {text(" ")};
                         if (begin > 0) parts.push_back(text(button_caption.substr(0, begin)) |
                             color(style.accent));
                         parts.push_back(text(button_caption.substr(begin, end - begin)) |
-                            bgcolor(theme.active_match_bg) | color(theme.selection_fg));
+                            bgcolor(theme.active_match_bg) |
+                            color(flashing ? match_flash_color : theme.selection_fg));
                         if (end < button_caption.size())
                             parts.push_back(text(button_caption.substr(end)) | color(style.accent));
                         parts.push_back(text(" "));
@@ -1259,6 +1273,8 @@ bool ActionsWorkspaceComponent::OnEvent(ftxui::Event event) {
                 for (size_t tab = 0; tab < copy_boxes_[i].size(); ++tab) {
                     if (copy_boxes_[i][tab].Contain(mouse.x, mouse.y)) {
                         CopySelectedAction(static_cast<int>(tab));
+                        copy_caption_deadlines_[{selected_item_id_, tab}] =
+                            std::chrono::steady_clock::now() + kCopyCaptionFlashDuration;
                         break;
                     }
                 }

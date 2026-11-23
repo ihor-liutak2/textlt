@@ -1,8 +1,10 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <optional>
 #include <memory>
 #include <string>
@@ -151,6 +153,8 @@ private:
     std::vector<ftxui::Box> page_boxes_;
     std::vector<ftxui::Box> item_boxes_;
     std::vector<std::array<ftxui::Box, 4>> copy_boxes_;
+    std::map<std::pair<std::string, size_t>, std::chrono::steady_clock::time_point>
+        copy_caption_deadlines_;
     bool pages_view_known_ = false;
     bool items_view_known_ = false;
     size_t groups_visible_count_ = 0;
