@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="TextLT is a fast, modeless terminal text editor for developers, translators, and people who want a modern editor inside the terminal.">
-  <title>TextLT — Terminal text editor with modern UX</title>
+  <meta name="description" content="Edit code, keep project notes, and copy reusable snippets from one terminal workspace. Explore real TextLT screenshots and install on Linux, Windows, or macOS.">
+  <title>TextLT — Code, notes, and snippets in your terminal</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     :root {
@@ -21,7 +21,6 @@
       --tl-cyan: #37c6d0;
       --tl-teal: #45d6c2;
       --tl-green: #78d36b;
-      --tl-code: #070b0e;
       --tl-shadow: 0 24px 80px rgba(0, 0, 0, .42);
     }
 
@@ -87,52 +86,22 @@
     .dot-yellow { background: var(--tl-orange-soft); }
     .dot-green { background: var(--tl-green); }
 
-    .editor-shell {
-      display: grid;
-      grid-template-columns: 15rem minmax(0, 1fr);
-      min-height: 30rem;
+    .screenshot {
+      display: block;
+      width: 100%;
+      height: auto;
     }
 
-    .editor-sidebar {
-      background: rgba(0, 0, 0, .18);
-      border-right: 1px solid var(--tl-line);
+    .screenshot-controls:not([hidden]) { display: flex; }
+
+    .screenshot-controls .btn {
+      --bs-btn-active-color: #111;
+      --bs-btn-active-bg: var(--tl-orange-soft);
+      --bs-btn-active-border-color: var(--tl-orange-soft);
+      --bs-btn-focus-shadow-rgb: 255, 184, 77;
     }
 
-    .file-row {
-      color: #b9c2c9;
-      border-radius: .55rem;
-      padding: .35rem .55rem;
-      font-size: .9rem;
-    }
-
-    .file-row.active {
-      color: #fff;
-      background: rgba(255, 122, 26, .16);
-      border-left: 3px solid var(--tl-orange);
-    }
-
-    .code-window {
-      background: var(--tl-code);
-      min-width: 0;
-    }
-
-    .code-tabs {
-      border-bottom: 1px solid var(--tl-line);
-      background: rgba(255, 255, 255, .025);
-    }
-
-    .code-tab {
-      border-right: 1px solid var(--tl-line);
-      color: #aeb8c1;
-      padding: .72rem 1rem;
-      font-size: .88rem;
-    }
-
-    .code-tab.active {
-      color: #fff;
-      box-shadow: inset 0 -2px 0 var(--tl-orange);
-      background: rgba(255, 122, 26, .08);
-    }
+    #showcase { scroll-margin-top: 5rem; }
 
     pre {
       margin: 0;
@@ -142,16 +111,6 @@
       line-height: 1.75;
       tab-size: 2;
     }
-
-    .code-body { padding: 1.2rem; }
-    .ln { color: #58636d; user-select: none; display: inline-block; width: 2.2rem; }
-    .kw { color: var(--tl-orange); font-weight: 700; }
-    .fn { color: var(--tl-orange-soft); }
-    .str { color: #ffd166; }
-    .cm { color: #74808b; }
-    .type { color: var(--tl-cyan); }
-    .var { color: #f1d1df; }
-    .cur { background: rgba(216, 90, 143, .16); box-shadow: inset 3px 0 0 var(--tl-pink); }
 
     .badge-soft {
       border: 1px solid rgba(255, 255, 255, .13);
@@ -246,13 +205,6 @@
       padding: .9rem 1rem;
     }
 
-    .palette-swatch {
-      width: 2.15rem;
-      height: 2.15rem;
-      border-radius: .55rem;
-      border: 1px solid rgba(255, 255, 255, .18);
-    }
-
     .footer {
       border-top: 1px solid var(--tl-line);
       background: rgba(0, 0, 0, .22);
@@ -261,10 +213,14 @@
     .link-soft { color: #b9c2c9; text-decoration: none; }
     .link-soft:hover { color: var(--tl-orange-soft); }
 
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .feature-card { transition: none; }
+      .feature-card:hover { transform: none; }
+    }
+
     @media (max-width: 991.98px) {
       .hero { padding-top: 6rem; }
-      .editor-shell { grid-template-columns: 1fr; }
-      .editor-sidebar { display: none; }
     }
   </style>
 </head>
@@ -281,7 +237,7 @@
       <div class="collapse navbar-collapse" id="mainNav">
         <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-lg-center gap-lg-2">
           <li class="nav-item"><a class="nav-link" href="#features">Features</a></li>
-          <li class="nav-item"><a class="nav-link" href="#unique">Why unique</a></li>
+          <li class="nav-item"><a class="nav-link" href="#unique">Workflows</a></li>
           <li class="nav-item"><a class="nav-link" href="#install">Install</a></li>
           <li class="nav-item"><a class="nav-link" href="#registries">Registries</a></li>
           <li class="nav-item ms-lg-2"><a id="navReleaseLink" class="btn btn-sm btn-accent" href="#install">Get TextLT</a></li>
@@ -297,84 +253,47 @@
           <div class="col-lg-5">
             <div class="d-flex flex-wrap gap-2 mb-4">
               <span id="heroReleaseBadge" class="badge rounded-pill badge-soft">Latest release</span>
-              <span class="badge rounded-pill badge-soft">C++17 + FTXUI</span>
-              <span class="badge rounded-pill badge-soft">Terminal-native</span>
             </div>
             <h1 class="display-4 fw-bold lh-1 mb-4">
-              A modern text editor that lives <span class="text-gradient">inside your terminal.</span>
+              Code, notes, and snippets. <span class="text-gradient">One terminal.</span>
             </h1>
             <p class="lead text-secondary mb-4">
-              TextLT combines the speed of a terminal application with a friendly, modeless editor experience: mouse support, syntax highlighting, themes, remote workflows, text processors, and practical tools for everyday development and translation work.
+              Open a source file, draft release notes, or grab the snippet you reuse every week. TextLT puts all three in the same terminal workspace, with familiar shortcuts and right-click menus.
             </p>
             <div class="d-flex flex-wrap gap-3">
               <a class="btn btn-accent btn-lg" href="#install">Install TextLT</a>
-              <a class="btn btn-outline-accent btn-lg" href="https://github.com/ihor-liutak2/textlt">View on GitHub</a>
+              <a class="btn btn-outline-accent btn-lg" href="#showcase">See TextLT in action</a>
             </div>
             <div class="row g-3 mt-4">
               <div class="col-6">
                 <div class="mini-stat">
                   <div class="fw-bold">Modeless</div>
-                  <small class="text-secondary">No Vim/Emacs mode barrier</small>
+                  <small class="text-secondary">Open a file and start typing</small>
                 </div>
               </div>
               <div class="col-6">
                 <div class="mini-stat" style="border-left-color: var(--tl-cyan);">
-                  <div class="fw-bold">Local-first</div>
-                  <small class="text-secondary">Fast, private, terminal-native</small>
+                  <div class="fw-bold">Mouse and keyboard</div>
+                  <small class="text-secondary">Drag to select or use shortcuts</small>
                 </div>
               </div>
             </div>
           </div>
           <div class="col-lg-7">
-            <div class="hero-card">
-              <div class="terminal-top d-flex align-items-center justify-content-between px-3 py-2">
-                <div class="d-flex align-items-center gap-2">
+            <figure class="hero-card mb-0">
+              <figcaption class="terminal-top d-flex align-items-center justify-content-between gap-2 px-3 py-2">
+                <span class="d-flex align-items-center gap-2" aria-hidden="true">
                   <span class="dot dot-red"></span>
                   <span class="dot dot-yellow"></span>
                   <span class="dot dot-green"></span>
-                </div>
-                <small class="text-secondary">textlt — mimo night</small>
-                <small class="text-secondary">Ctrl+S</small>
-              </div>
-              <div class="editor-shell">
-                <aside class="editor-sidebar p-3">
-                  <div class="small text-uppercase text-secondary mb-3">Workspace</div>
-                  <div class="file-row">▸ src</div>
-                  <div class="file-row active">C++ app.cpp</div>
-                  <div class="file-row">C++ modal_text_processors.cpp</div>
-                  <div class="file-row">C++ custom_processor_builder.cpp</div>
-                  <div class="file-row">▸ docs</div>
-                  <div class="file-row">▸ themes</div>
-                  <hr class="border-secondary-subtle">
-                  <div class="small text-uppercase text-secondary mb-2">Palette</div>
-                  <div class="d-flex gap-2 flex-wrap">
-                    <span class="palette-swatch" style="background:#090d10"></span>
-                    <span class="palette-swatch" style="background:#172027"></span>
-                    <span class="palette-swatch" style="background:#ff7a1a"></span>
-                    <span class="palette-swatch" style="background:#d85a8f"></span>
-                    <span class="palette-swatch" style="background:#37c6d0"></span>
-                  </div>
-                </aside>
-                <div class="code-window">
-                  <div class="code-tabs d-flex">
-                    <div class="code-tab active">main.cpp</div>
-                    <div class="code-tab">processor.lua</div>
-                    <div class="code-tab">remote.json</div>
-                  </div>
-                  <div class="code-body">
-<pre><code><span class="ln">42</span><span class="kw">void</span> <span class="fn">TextLT</span>::OpenProcessorModal() {
-<span class="ln">43</span>  <span class="type">Modal</span> modal = <span class="fn">CustomProcessorBuilder</span>();
-<span class="ln">44</span>  modal.<span class="fn">ShowTabs</span>({<span class="str">"Create"</span>, <span class="str">"Manage"</span>});
-<span class="ln">45</span>
-<span class="ln">46</span>  <span class="cm">// Write once. Reuse everywhere.</span>
-<span class="ln">47</span>  <span class="kw">if</span> (modal.<span class="fn">Validated</span>()) {
-<span class="ln">48</span>    <span class="var">editor</span>.<span class="fn">ApplyTextProcessor</span>();
-<span class="ln">49</span>  }
-<span class="ln cur">50</span>}</code></pre>
-                  </div>
-                </div>
-              </div>
-            </div>
+                </span>
+                <small class="text-secondary">TextLT Docs · Mimo Night</small>
+                <small class="text-secondary">preview.py</small>
+              </figcaption>
+              <img class="screenshot" src="media/images/docs-python.png" width="1308" height="784"
+                   alt="TextLT Docs workspace with syntax-highlighted Python and the project sidebar in Mimo Night."
+                   fetchpriority="high" onerror="this.onerror = null; this.src = '../assets/images/docs-python.png';">
+            </figure>
           </div>
         </div>
       </div>
@@ -384,30 +303,57 @@
       <div class="container">
         <div class="row justify-content-center text-center mb-5">
           <div class="col-lg-8">
-            <span class="badge rounded-pill badge-soft mb-3">Designed for focused work</span>
-            <h2 class="display-6 fw-bold">Everything useful, nothing ceremonial.</h2>
-            <p class="text-secondary fs-5">TextLT is built for people who want a fast editor, not a ritual. Open a file, click, type, search, transform text, and keep moving.</p>
+            <h2 class="display-6 fw-bold">From the first edit to the release notes</h2>
+            <p class="text-secondary fs-5">Use Docs for source files, Notes for the words around the work, and Actions for text you’ll need again.</p>
           </div>
         </div>
         <div class="row g-4">
           <div class="col-md-6 col-lg-4">
-            <div class="feature-card"><div class="feature-icon mb-3">⌨</div><h3 class="h5">Modeless editing</h3><p class="text-secondary mb-0">No command mode, no insert mode, no memorized dance. TextLT behaves closer to a GUI editor while staying in the terminal.</p></div>
+            <div class="feature-card"><div class="feature-icon mb-3" aria-hidden="true">⌨</div><h3 class="h5">Edit code in Docs</h3><p class="text-secondary mb-0">Open Python, C++, Java, and PHP files with syntax highlighting. Right-click a selection to change its case, adjust indentation, or find the same text.</p></div>
           </div>
           <div class="col-md-6 col-lg-4">
-            <div class="feature-card"><div class="feature-icon mb-3">🎨</div><h3 class="h5">Beautiful TUI themes</h3><p class="text-secondary mb-0">Dark palettes, readable contrast, modal borders, selections, cursor colors, and syntax colors tuned for long coding sessions.</p></div>
+            <div class="feature-card"><div class="feature-icon mb-3" aria-hidden="true">✎</div><h3 class="h5">Draft in Notes</h3><p class="text-secondary mb-0">Keep project notes in groups. Format headings and lists from the right-click menu, and give longer drafts room in two or three columns.</p></div>
           </div>
           <div class="col-md-6 col-lg-4">
-            <div class="feature-card"><div class="feature-icon mb-3">🧩</div><h3 class="h5">Lua text processors</h3><p class="text-secondary mb-0">Create repeatable text transformations for translation, cleanup, formatting, OCR fixes, or custom publishing workflows.</p></div>
+            <div class="feature-card"><div class="feature-icon mb-3" aria-hidden="true">⎘</div><h3 class="h5">Copy from Actions</h3><p class="text-secondary mb-0">Save release blurbs, prompts, or commands in named blocks. Click a caption or choose it from the context menu to copy the whole block.</p></div>
           </div>
           <div class="col-md-6 col-lg-4">
-            <div class="feature-card"><div class="feature-icon mb-3">🖱</div><h3 class="h5">Mouse-aware terminal UI</h3><p class="text-secondary mb-0">Click to move, drag to select, use scroll wheels, operate modals, and navigate panels without leaving the terminal.</p></div>
+            <div class="feature-card"><div class="feature-icon mb-3" aria-hidden="true">▤</div><h3 class="h5">Find your files</h3><p class="text-secondary mb-0">Browse folders in the Files dialog, then use the sidebar to jump between projects, open files, and favorites.</p></div>
           </div>
           <div class="col-md-6 col-lg-4">
-            <div class="feature-card"><div class="feature-icon mb-3">🔎</div><h3 class="h5">Search, replace, and files</h3><p class="text-secondary mb-0">Focused modals for file opening, recent files, search in files, find/replace, git tools, remote files, and structured workflows.</p></div>
+            <div class="feature-card"><div class="feature-icon mb-3" aria-hidden="true">🎨</div><h3 class="h5">Preview a theme while you edit</h3><p class="text-secondary mb-0">Browse light and dark palettes in the theme picker. See how each one colors the file you already have open.</p></div>
           </div>
           <div class="col-md-6 col-lg-4">
-            <div class="feature-card"><div class="feature-icon mb-3">🗣</div><h3 class="h5">Local voice and AI-ready tools</h3><p class="text-secondary mb-0">TextLT is growing into a local writing workbench with Piper voice support, model registries, prompt builders, and practical automation.</p></div>
+            <div class="feature-card"><div class="feature-icon mb-3" aria-hidden="true">⚙</div><h3 class="h5">Make shortcuts your own</h3><p class="text-secondary mb-0">Look up menu and editing shortcuts, change the bindings you use most, or reset a shortcut to its default.</p></div>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="showcase" class="section-pad pt-0" aria-labelledby="showcaseHeading">
+      <div class="container">
+        <div class="row justify-content-center text-center mb-4">
+          <div class="col-lg-8">
+            <h2 id="showcaseHeading" class="display-6 fw-bold">Take a look inside TextLT</h2>
+            <p class="text-secondary fs-5">Explore real captures from a sample publishing project, from editing source files to copying a release blurb.</p>
+          </div>
+        </div>
+        <div class="glass-card p-3 p-lg-4">
+          <div id="screenshotControls" class="screenshot-controls flex-wrap gap-2 mb-3" role="group" aria-label="Choose a TextLT screenshot" hidden></div>
+          <figure class="mb-0">
+            <div class="hero-card">
+              <img id="showcaseImage" class="screenshot" src="media/images/actions.png" width="1308" height="784"
+                   alt="TextLT Actions workspace with its Publishing page and the context menu open on an action card."
+                   loading="lazy" decoding="async" onerror="this.onerror = null; this.src = '../assets/images/actions.png';">
+            </div>
+            <figcaption class="d-flex flex-wrap align-items-start justify-content-between gap-2 mt-3">
+              <div role="status">
+                <h3 id="showcaseTitle" class="h5 mb-1">Reusable Actions · Pantone Office Violet Dark</h3>
+                <p id="showcaseDescription" class="text-secondary mb-0">Choose a caption in the Publishing action’s right-click menu to copy its entire content block.</p>
+              </div>
+              <a id="showcaseFullSize" class="link-soft" href="media/images/actions.png" hidden>View full-size screenshot</a>
+            </figcaption>
+          </figure>
         </div>
       </div>
     </section>
@@ -417,16 +363,15 @@
         <div class="glass-card p-4 p-lg-5">
           <div class="row align-items-center g-4">
             <div class="col-lg-5">
-              <span class="badge rounded-pill badge-soft mb-3">Why TextLT feels different</span>
-              <h2 class="display-6 fw-bold mb-3">A personal editor that can become your own workshop.</h2>
-              <p class="text-secondary fs-5 mb-0">Most terminal editors are designed around old keyboard cultures. TextLT is different: it keeps terminal speed, but adds discoverable menus, modals, mouse support, custom processors, and a local-first philosophy.</p>
+              <h2 class="display-6 fw-bold mb-3">One project, from draft to handoff</h2>
+              <p class="text-secondary fs-5 mb-0">Open the project in the sidebar, keep its draft in Notes, and save the text you’ll paste into the release in Actions.</p>
             </div>
             <div class="col-lg-7">
               <div class="row g-3">
-                <div class="col-sm-6"><div class="p-3 rounded-4 bg-black bg-opacity-25 border border-secondary-subtle h-100"><div class="fw-bold text-gradient mb-2">For developers</div><p class="text-secondary mb-0">C++, PHP, JS/TS, Python, Java, SQL, YAML, JSON, Docker, HTML/CSS, XML, configs, and more.</p></div></div>
-                <div class="col-sm-6"><div class="p-3 rounded-4 bg-black bg-opacity-25 border border-secondary-subtle h-100"><div class="fw-bold text-gradient mb-2">For translators</div><p class="text-secondary mb-0">Text cleanup, paragraph wrapping, custom transformations, and keyboard-friendly editing in one place.</p></div></div>
-                <div class="col-sm-6"><div class="p-3 rounded-4 bg-black bg-opacity-25 border border-secondary-subtle h-100"><div class="fw-bold text-gradient mb-2">For local-first users</div><p class="text-secondary mb-0">Your files stay on your machine. Add remote providers only when you want them.</p></div></div>
-                <div class="col-sm-6"><div class="p-3 rounded-4 bg-black bg-opacity-25 border border-secondary-subtle h-100"><div class="fw-bold text-gradient mb-2">For customization</div><p class="text-secondary mb-0">Themes, shortcuts, pinned processors, modal workflows, and user-created Lua tools.</p></div></div>
+                <div class="col-sm-6"><div class="p-3 rounded-4 bg-black bg-opacity-25 border border-secondary-subtle h-100"><div class="fw-bold text-gradient mb-2">Find the right file</div><p class="text-secondary mb-0">Search across project files to see where a phrase or symbol appears.</p></div></div>
+                <div class="col-sm-6"><div class="p-3 rounded-4 bg-black bg-opacity-25 border border-secondary-subtle h-100"><div class="fw-bold text-gradient mb-2">Clean up pasted text</div><p class="text-secondary mb-0">Use a text processor to rewrap paragraphs or save your own repeatable cleanup in Lua.</p></div></div>
+                <div class="col-sm-6"><div class="p-3 rounded-4 bg-black bg-opacity-25 border border-secondary-subtle h-100"><div class="fw-bold text-gradient mb-2">Keep a publishing checklist</div><p class="text-secondary mb-0">Use headings and numbered lists to organize review steps in a project note.</p></div></div>
+                <div class="col-sm-6"><div class="p-3 rounded-4 bg-black bg-opacity-25 border border-secondary-subtle h-100"><div class="fw-bold text-gradient mb-2">Reuse the handoff text</div><p class="text-secondary mb-0">Store a headline and a multiline blurb in separate blocks on one Action, ready to copy when needed.</p></div></div>
               </div>
             </div>
           </div>
@@ -439,8 +384,8 @@
         <div class="row justify-content-center text-center mb-4">
           <div class="col-lg-8">
             <span id="installReleaseBadge" class="badge rounded-pill badge-soft mb-3">Install</span>
-            <h2 class="display-6 fw-bold">Choose your platform, run the installer.</h2>
-            <p class="text-secondary fs-5">Pick Windows, Linux, or macOS. The box now only downloads one installer file and runs it; the real installation logic lives inside the platform installer script.</p>
+            <h2 class="display-6 fw-bold">Install TextLT</h2>
+            <p class="text-secondary fs-5">Choose Linux, Windows, or macOS. Copy the commands into your terminal to download and run the installer for your platform.</p>
           </div>
         </div>
 
@@ -475,10 +420,9 @@
         </div>
 
         <div class="row g-3 mt-4">
-          <div class="col-md-4"><div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25 h-100"><div class="fw-bold">Installer scripts</div><small class="text-secondary">The site now exposes one installer file per platform: Linux, Windows, and macOS. The copy box only downloads and runs that file.</small></div></div>
-          <div class="col-md-4"><div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25 h-100"><div class="fw-bold">Linux first-class</div><small class="text-secondary">MX Linux, Ubuntu, Debian, WSL, and terminal workflows are the natural home of TextLT.</small></div></div>
-          <div class="col-md-4"><div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25 h-100"><div class="fw-bold">Windows supported</div><small class="text-secondary">The archive installer creates a wrapper so resources such as themes and text processors load correctly.</small></div></div>
-          <div class="col-md-4"><div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25 h-100"><div class="fw-bold">macOS installer</div><small class="text-secondary">The macOS installer uses the matching release archive for the current CPU architecture when that asset is published.</small></div></div>
+          <div class="col-md-4"><div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25 h-100"><div class="fw-bold">Linux</div><small class="text-secondary">Run the installer in Bash. It puts the launcher in <code>~/.local/bin</code>.</small></div></div>
+          <div class="col-md-4"><div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25 h-100"><div class="fw-bold">Windows</div><small class="text-secondary">Run the commands in PowerShell. The installer adds the TextLT launcher to your user PATH.</small></div></div>
+          <div class="col-md-4"><div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25 h-100"><div class="fw-bold">macOS</div><small class="text-secondary">The installer selects the archive for your Mac’s architecture when a matching release asset is available.</small></div></div>
         </div>
       </div>
     </section>
@@ -487,15 +431,14 @@
       <div class="container">
         <div class="row g-4 align-items-center">
           <div class="col-lg-6">
-            <span class="badge rounded-pill badge-soft mb-3">Static registry</span>
-            <h2 class="display-6 fw-bold">Downloadable voice index.</h2>
-            <p class="text-secondary fs-5">The docs folder publishes the static Piper voice registry used by TextLT. It can be fetched directly by the editor or viewed in a browser.</p>
+            <h2 class="display-6 fw-bold">Piper voices and developer resources</h2>
+            <p class="text-secondary fs-5">Browse the Piper voice index used by TextLT or read the project’s FTXUI interface notes.</p>
           </div>
           <div class="col-lg-6">
             <div class="glass-card p-4">
               <div class="d-grid gap-3">
-                <a class="btn btn-outline-accent text-start" href="registries/piper_voices_index.json">Piper voices registry →</a>
-                <a class="btn btn-outline-secondary text-start" href="ftxui-ui-refactoring-reference.md">FTXUI UI refactoring reference →</a>
+                <a class="btn btn-outline-accent text-start" href="registries/piper_voices_index.json">Piper voice index</a>
+                <a class="btn btn-outline-secondary text-start" href="ftxui-ui-refactoring-reference.md">FTXUI interface reference</a>
               </div>
             </div>
           </div>
@@ -508,7 +451,7 @@
     <div class="container d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
       <div>
         <div class="fw-bold">TextLT</div>
-        <small class="text-secondary">A personal, fast, customizable terminal text editor.</small>
+        <small class="text-secondary">A modeless terminal editor with project notes and reusable snippets.</small>
       </div>
       <div class="d-flex flex-wrap gap-3 small">
         <a class="link-soft" href="#install">Install</a>
@@ -603,6 +546,65 @@ bash "$INSTALLER" "$TEXTLT_VERSION"`
 
     updateReleaseLabels();
     updateInstallPanel();
+
+    async function setupScreenshotBrowser() {
+      const controls = document.getElementById("screenshotControls");
+      const image = document.getElementById("showcaseImage");
+      const title = document.getElementById("showcaseTitle");
+      const description = document.getElementById("showcaseDescription");
+      const fullSize = document.getElementById("showcaseFullSize");
+
+      for (const path of ["media/image-description.json", "../assets/image-description.json"]) {
+        try {
+          const response = await fetch(path);
+          if (!response.ok) continue;
+
+          const { images } = await response.json();
+          if (!Array.isArray(images) || !images.length) continue;
+
+          const entries = images.map((item) => {
+            const url = new URL(item.src, response.url).href;
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "btn btn-sm btn-outline-accent";
+            button.textContent = item.language || item.title;
+            return { item, url, button };
+          });
+
+          function selectScreenshot(entry) {
+            const { item, url } = entry;
+            image.onerror = null;
+            image.alt = item.alt;
+            image.width = item.width;
+            image.height = item.height;
+            image.src = url;
+            title.textContent = `${item.title} · ${item.theme}`;
+            description.textContent = item.description;
+            fullSize.href = url;
+
+            for (const { button } of entries) {
+              const active = button === entry.button;
+              button.classList.toggle("active", active);
+              button.setAttribute("aria-pressed", String(active));
+            }
+          }
+
+          for (const entry of entries) {
+            entry.button.addEventListener("click", () => selectScreenshot(entry));
+            controls.append(entry.button);
+          }
+
+          selectScreenshot(entries.find(({ item }) => item.id === "actions") ?? entries[0]);
+          controls.hidden = false;
+          fullSize.hidden = false;
+          return;
+        } catch {
+          // Keep the standalone preview if neither manifest location is available.
+        }
+      }
+    }
+
+    setupScreenshotBrowser();
   </script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>

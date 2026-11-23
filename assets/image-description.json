@@ -1,0 +1,144 @@
+{
+  "images": [
+    {
+      "id": "docs-python",
+      "feature": "Docs",
+      "title": "Python editor",
+      "src": "images/docs-python.png",
+      "width": 1308,
+      "height": 784,
+      "alt": "TextLT Docs workspace showing syntax-highlighted Python in the Mimo Night theme.",
+      "description": "A Python article preview with type annotations, a dataclass, and sample lorem ipsum text.",
+      "theme": "Mimo Night",
+      "language": "Python",
+      "demo_file": "preview.py"
+    },
+    {
+      "id": "docs-cpp",
+      "feature": "Docs",
+      "title": "C++ editor",
+      "src": "images/docs-cpp.png",
+      "width": 1308,
+      "height": 784,
+      "alt": "TextLT Docs workspace showing a syntax-highlighted C++ reading-time program in Nord.",
+      "description": "A small C++ reading-time utility with line numbers, syntax highlighting, and a project file sidebar.",
+      "theme": "Nord",
+      "language": "C++",
+      "demo_file": "reading_time.cpp"
+    },
+    {
+      "id": "docs-java",
+      "feature": "Docs",
+      "title": "Java editor",
+      "src": "images/docs-java.png",
+      "width": 1308,
+      "height": 784,
+      "alt": "TextLT Docs workspace showing Java records and streams in GitHub Light.",
+      "description": "A Java example that uses a record and stream filtering to build a list of article previews.",
+      "theme": "GitHub Light",
+      "language": "Java",
+      "demo_file": "ArticlePreview.java"
+    },
+    {
+      "id": "docs-php",
+      "feature": "Docs",
+      "title": "PHP editor",
+      "src": "images/docs-php.png",
+      "width": 1308,
+      "height": 784,
+      "alt": "TextLT Docs workspace showing PHP template code in Night Violet.",
+      "description": "A PHP template that escapes a title and lorem ipsum excerpt before rendering an article card.",
+      "theme": "Night Violet",
+      "language": "PHP",
+      "demo_file": "preview.php"
+    },
+    {
+      "id": "notes-two-columns",
+      "feature": "Notes",
+      "title": "Two-column Notes",
+      "src": "images/notes-two-columns.png",
+      "width": 1308,
+      "height": 784,
+      "alt": "TextLT Notes editor displaying an editorial note in two columns in Pantone Mocha Dark.",
+      "description": "An editorial note with sample prose, headings, and lists, laid out in two text columns.",
+      "theme": "Pantone Mocha Dark"
+    },
+    {
+      "id": "notes-three-columns",
+      "feature": "Notes",
+      "title": "Three-column Notes",
+      "src": "images/notes-three-columns.png",
+      "width": 1308,
+      "height": 784,
+      "alt": "TextLT Notes editor displaying an editorial note in three columns in Pantone Deep Sea Teal.",
+      "description": "A denser view of the same editorial note, with three columns for reading and editing long-form material.",
+      "theme": "Pantone Deep Sea Teal"
+    },
+    {
+      "id": "actions",
+      "feature": "Actions",
+      "title": "Reusable Actions",
+      "src": "images/actions.png",
+      "width": 1308,
+      "height": 784,
+      "alt": "TextLT Actions workspace with a Publishing page and the context menu open on an action card.",
+      "description": "Publishing actions with named content blocks. The context menu exposes the captions and commands for editing, renaming, and changing card order.",
+      "theme": "Pantone Office Violet Dark"
+    },
+    {
+      "id": "files",
+      "feature": "Files",
+      "title": "Files dialog",
+      "src": "images/files.png",
+      "width": 1308,
+      "height": 784,
+      "alt": "TextLT Files dialog listing Python, C++, Java, and PHP source files in Pantone Emerald Mint.",
+      "description": "The Files dialog browses project folders and source files, with a path field and file operations in the same view.",
+      "theme": "Pantone Emerald Mint"
+    },
+    {
+      "id": "themes",
+      "feature": "Themes",
+      "title": "Theme picker",
+      "src": "images/themes.png",
+      "width": 1308,
+      "height": 784,
+      "alt": "TextLT theme picker open over a Python file in Pantone Classic Blue.",
+      "description": "The theme picker previews a palette on the current workspace while you browse the available themes.",
+      "theme": "Pantone Classic Blue"
+    },
+    {
+      "id": "keyboard-shortcuts",
+      "feature": "Keyboard Shortcuts",
+      "title": "Keyboard shortcuts",
+      "src": "images/keyboard-shortcuts.png",
+      "width": 1308,
+      "height": 784,
+      "alt": "TextLT Keyboard Shortcuts dialog showing tabs, modifiers, keys, and actions in Blueprint.",
+      "description": "The keyboard shortcut dialog shows menu and text bindings, with controls to apply or reset a shortcut.",
+      "theme": "Blueprint"
+    },
+    {
+      "id": "sidebar",
+      "feature": "Sidebar",
+      "title": "Project sidebar",
+      "src": "images/sidebar.png",
+      "width": 1308,
+      "height": 784,
+      "alt": "TextLT project sidebar showing the registered Field Guide project next to a Python editor in Solarized Light.",
+      "description": "The Docs sidebar provides folder, project, opened-file, and favorite views alongside the editor.",
+      "theme": "Solarized Light"
+    },
+    {
+      "id": "sidebar-quick-commands",
+      "feature": "Sidebar",
+      "title": "Sidebar quick commands",
+      "src": "images/sidebar-quick-commands.png",
+      "width": 1308,
+      "height": 784,
+      "alt": "TextLT Quick Commands dialog over the Docs workspace in Pantone Grape Shadow.",
+      "description": "Quick Commands lists file and project navigation shortcuts and shows which sidebar view is active.",
+      "theme": "Pantone Grape Shadow"
+    }
+  ]
+}
