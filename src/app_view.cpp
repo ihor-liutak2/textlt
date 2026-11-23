@@ -157,6 +157,9 @@ ftxui::Element TextltApp::Render() {
     if (ActiveLayer() == UiLayer::RenameProject) {
         layers.push_back(RenderRenameProjectPanel() | clear_under | center);
     }
+    if (ActiveLayer() == UiLayer::RemoveProject) {
+        layers.push_back(remove_project_popup_->Render() | center);
+    }
     if (!distraction_mode && menu_bar_->IsDropdownOpen()) {
         layers.push_back(menu_bar_->RenderDropdown());
     }
@@ -317,6 +320,7 @@ bool TextltApp::ActiveModalIsOpen() const {
         case UiLayer::AiSettings: return ai_settings_modal_.IsOpen();
         case UiLayer::AssistantSettings: return assistant_settings_modal_.IsOpen();
         case UiLayer::RenameProject: return !rename_project_id_.empty();
+        case UiLayer::RemoveProject: return !remove_project_id_.empty();
     }
     return false;
 }

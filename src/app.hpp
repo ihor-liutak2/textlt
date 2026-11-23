@@ -112,6 +112,7 @@ private:
         AiSettings,
         AssistantSettings,
         RenameProject,
+        RemoveProject,
     };
 
     void SetActiveLayer(UiLayer layer);
@@ -292,6 +293,9 @@ private:
     std::vector<SidebarPanel::ProjectEntry> SidebarProjects() const;
     bool RegisterProject(const std::filesystem::path& root, std::string& error);
     bool ActivateProject(const std::string& id);
+    void RequestRemoveProject(const std::string& id);
+    ftxui::Element RenderRemoveProjectPopup();
+    bool HandleRemoveProjectEvent(ftxui::Event event);
     void RemoveProject(const std::string& id);
     bool FinishProjectGroupDetachments(std::string& error);
     void OpenRenameProject(const std::string& id);
@@ -457,6 +461,7 @@ private:
     UnsavedChangesDialog unsaved_changes_dialog_;
     std::string goto_line_input_;
     std::string rename_project_id_;
+    std::string remove_project_id_;
     std::string project_name_;
     std::string rename_project_error_;
     std::string active_action_ = "Ready";
@@ -487,6 +492,9 @@ private:
     ftxui::Component rename_project_button_;
     ftxui::Component cancel_rename_project_button_;
     ftxui::Component rename_project_popup_;
+    ftxui::Component remove_project_popup_;
+    ftxui::Box remove_project_cancel_box_;
+    ftxui::Box remove_project_delete_box_;
     ftxui::Component renderer_;
     ftxui::Component global_shortcuts_;
 };

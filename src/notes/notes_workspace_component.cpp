@@ -12,6 +12,7 @@
 #include "ftxui/screen/string.hpp"
 #include "ftxui/screen/terminal.hpp"
 #include "keyboard_shortcuts.hpp"
+#include "modals/delete_confirmation_popup.hpp"
 #include "ui_button.hpp"
 #include "workspace_tabs.hpp"
 
@@ -1242,25 +1243,9 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
 }
 
 ftxui::Element NotesWorkspaceComponent::RenderConfirmationPopup() {
-    using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    ButtonSpec yes = ButtonSpecFromLabel(
-        "Delete", ButtonRole::Danger, ButtonVariant::AccentEdges, ButtonSize::Compact);
-    ButtonSpec cancel = ButtonSpecFromLabel(
-        "Cancel", ButtonRole::Cancel, ButtonVariant::Minimal, ButtonSize::Compact);
-    return vbox({
-        text(" " + confirm_title_ + " ") | bold | color(theme.button_danger),
-        separator() | color(theme.modal_border),
-        paragraph(confirm_message_) | color(theme.modal_text_color),
-        hbox({
-            filler(),
-            RenderModalFlatButton(theme, cancel) | reflect(confirm_cancel_box_),
-            text("  "),
-            RenderModalFlatButton(theme, yes) | reflect(confirm_yes_box_),
-            filler(),
-        }),
-    }) | size(WIDTH, EQUAL, 54) | borderStyled(HEAVY, theme.modal_border) |
-        bgcolor(theme.modal_background) | clear_under;
+    return RenderDeleteConfirmationPopup(
+        theme, confirm_title_, confirm_message_, confirm_cancel_box_, confirm_yes_box_);
 }
 
 ftxui::Element NotesWorkspaceComponent::RenderGroupPicker() {

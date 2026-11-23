@@ -998,7 +998,8 @@ bool SidebarPanel::HandleActionButtonMouse(const ftxui::Mouse& mouse) {
     }
 
     if (action_tertiary_box_.Contain(mouse.x, mouse.y) && mode_ == SidebarMode::Projects) {
-        if (on_project_remove_ && selected_entry_ < static_cast<int>(entry_ids_.size())) {
+        if (on_project_remove_ && selected_entry_ >= 0 &&
+            selected_entry_ < static_cast<int>(entry_ids_.size())) {
             on_project_remove_(entry_ids_[selected_entry_]);
         }
         return true;

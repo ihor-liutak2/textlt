@@ -1,5 +1,7 @@
 #include "app.hpp"
 
+#include "ftxui/component/mouse.hpp"
+#include "modals/delete_confirmation_popup.hpp"
 #include "path_utils.hpp"
 #include "ui_selectable_input.hpp"
 
@@ -175,6 +177,45 @@ bool TextltApp::UpdateProjectGroupNames(const ProjectRecord& project, std::strin
         error += "Actions group rename failed: " + actions_error;
     }
     return notes_updated && actions_updated;
+}
+
+void TextltApp::RequestRemoveProject(const std::string& id) {
+    if (!project_store_.FindById(id)) return;
+
+    remove_project_id_ = id;
+    remove_project_cancel_box_ = {};
+    remove_project_delete_box_ = {};
+    CloseDropdown();
+    SetActiveLayer(UiLayer::RemoveProject);
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+ftxui::Element TextltApp::RenderRemoveProjectPopup() {
+    const ProjectRecord* project = project_store_.FindById(remove_project_id_);
+    if (!project) return ftxui::emptyElement();
+
+    return RenderDeleteConfirmationPopup(current_theme_, "Delete project",
+        "Remove project \"" + project->name + "\"? Its files will stay on disk.",
+        remove_project_cancel_box_, remove_project_delete_box_);
+}
+
+bool TextltApp::HandleRemoveProjectEvent(ftxui::Event event) {
+    using namespace ftxui;
+    if (event == Event::Custom) return false;
+
+    const bool click = event.is_mouse() && event.mouse().button == Mouse::Left &&
+        event.mouse().motion == Mouse::Pressed;
+    const bool confirm = event == Event::Return ||
+        (click && remove_project_delete_box_.Contain(event.mouse().x, event.mouse().y));
+    const bool cancel = event == Event::Escape ||
+        (click && remove_project_cancel_box_.Contain(event.mouse().x, event.mouse().y));
+    if (confirm || cancel) {
+        const std::string id = std::exchange(remove_project_id_, {});
+        if (sidebar_has_focus_) FocusSidebar();
+        else FocusEditor();
+        if (confirm) RemoveProject(id);
+    }
+    return true;
 }
 
 void TextltApp::RemoveProject(const std::string& id) {

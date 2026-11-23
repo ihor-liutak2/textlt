@@ -167,7 +167,7 @@ TextltApp::TextltApp()
           [this](const std::string& id) { ActivateProject(id); },
           [this](const std::filesystem::path&) { OpenFilesModal(FilesModalMode::SelectDirectory); },
           [this](const std::string& id) { OpenRenameProject(id); },
-          [this](const std::string& id) { RemoveProject(id); },
+          [this](const std::string& id) { RequestRemoveProject(id); },
           [this](const std::string& id) { OpenProjectRemote(id); },
           [this](const std::string& id) { AssignProjectConnection(id); },
           [this](const std::string& id) { EditProjectConnection(id); },
@@ -581,6 +581,10 @@ TextltApp::TextltApp()
             return true;
         });
 
+    remove_project_popup_ = ftxui::CatchEvent(
+        ftxui::Renderer([this](bool) { return RenderRemoveProjectPopup(); }),
+        [this](ftxui::Event event) { return HandleRemoveProjectEvent(std::move(event)); });
+
     // GitSettingsModal used to create its component lazily in Open(). Every
     // entry passed to Container::Tab must already be a valid, stable component.
     git_settings_modal_.Configure(
@@ -614,6 +618,7 @@ TextltApp::TextltApp()
         ai_settings_modal_.View(),
         assistant_settings_modal_.View(),
         rename_project_popup_,
+        remove_project_popup_,
     }, &active_layer_index_);
 
     renderer_ = ftxui::Renderer(root_container_, [this] { return Render(); });

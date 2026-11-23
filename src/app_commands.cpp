@@ -89,7 +89,7 @@ void TextltApp::InitializeCommands() {
     add("project.remove", "Remove Current Project", "Project", "", [this] {
         const ProjectRecord* project = ActiveWorkspaceProject();
         if (project) {
-            RemoveProject(project->id);
+            RequestRemoveProject(project->id);
         } else {
             active_action_ = "Current folder is not a registered project";
             screen_.PostEvent(ftxui::Event::Custom);
