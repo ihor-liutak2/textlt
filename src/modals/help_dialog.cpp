@@ -16,10 +16,10 @@ constexpr int kHelpModalHeight = 28;
 constexpr int kHelpBodyWidth = kHelpModalWidth - 2;
 constexpr size_t kHelpVisibleRows = 22;
 
-constexpr int kAboutModalWidth = 60;
-constexpr int kAboutModalHeight = 16;
+constexpr int kAboutModalWidth = 76;
+constexpr int kAboutModalHeight = 22;
 constexpr int kAboutBodyWidth = kAboutModalWidth - 2;
-constexpr size_t kAboutVisibleRows = 10;
+constexpr size_t kAboutVisibleRows = kAboutModalHeight - 6;
 
 } // namespace
 
@@ -140,6 +140,12 @@ ftxui::Element HelpDialogContent::Render() {
     rows.reserve(visible_rows_);
 
     const size_t end = std::min(lines_.size(), scroll_y_ + visible_rows_);
+    if (center_content_) {
+        const size_t top_padding = (visible_rows_ - (end - scroll_y_)) / 2;
+        for (size_t row = 0; row < top_padding; ++row) {
+            rows.push_back(text(""));
+        }
+    }
     for (size_t index = scroll_y_; index < end; ++index) {
         Element line = text(lines_[index]) | color(theme.modal_text_color);
         if (center_content_) {
