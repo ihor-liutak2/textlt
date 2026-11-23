@@ -104,6 +104,7 @@ private:
     const ActionPage* SelectedPage() const;
     const ActionItem* SelectedItem() const;
     bool CopyActionBlock(const ActionItem& item, size_t block);
+    void FlashCopyCaption(const std::string& item_id, size_t block);
     ActionsContextMenu::Result ExecuteContextCommand(
         const ActionsContextMenu::Target& target, ActionsContextMenu::Command command, size_t block);
     void NormalizeSelection();

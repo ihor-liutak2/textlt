@@ -224,6 +224,13 @@ public:
         return page && workspace.items_visible_count_ > 0 &&
             workspace.items_visible_count_ < page->items.size();
     }
+    static bool HasCopyCaptionFlash(
+        const ActionsWorkspaceComponent& workspace, const std::string& id, size_t block) {
+        return workspace.copy_caption_deadlines_.count({id, block}) != 0;
+    }
+    static void ClearCopyCaptionFlashes(ActionsWorkspaceComponent& workspace) {
+        workspace.copy_caption_deadlines_.clear();
+    }
     static ftxui::Box ActionBox(const ActionsWorkspaceComponent& workspace, const std::string& id) {
         for (size_t i = 0; i < workspace.item_box_ids_.size(); ++i) {
             if (workspace.item_box_ids_[i] == id) {
@@ -346,6 +353,7 @@ void TestActionsContextMenu(const std::filesystem::path& path) {
 
     for (const auto& action : page.items) {
         for (size_t block = 0; block < action.tabs.size(); ++block) {
+            Access::ClearCopyCaptionFlashes(workspace);
             Access::SelectItem(workspace, "action-1");
             open(action.id, true);
             const auto screen = draw();
@@ -372,18 +380,23 @@ void TestActionsContextMenu(const std::filesystem::path& path) {
             }
             Check(!workspace.HasOpenContextMenu() && copies.size() == old_copies + 1);
             Check(copies.back() == action.tabs[block].content);
+            Check(Access::HasCopyCaptionFlash(workspace, action.id, block));
+            Check(!Access::HasCopyCaptionFlash(workspace, action.id, (block + 1) % 4));
         }
     }
 
+    Access::ClearCopyCaptionFlashes(workspace);
     auto menu = open_menu("action-2");
     Check(mouse(Mouse::None, Mouse::Moved, menu.x_min + 3, menu.y_min + 2));
     clipboard_available = false;
     Check(workspace.OnEvent(Event::Return) && workspace.HasOpenContextMenu());
     Check(copies.back() == page.items[1].tabs[1].content);
     Check(status == "Could not copy action to the system clipboard");
+    Check(!Access::HasCopyCaptionFlash(workspace, "action-2", 1));
     Check(draw().ToString().find("Clipboard write failed") != std::string::npos);
     clipboard_available = true;
     Check(workspace.OnEvent(Event::Return) && !workspace.HasOpenContextMenu());
+    Check(Access::HasCopyCaptionFlash(workspace, "action-2", 1));
 
     open_menu("action-1");
     Check(mouse(Mouse::Left, Mouse::Pressed, add.x_min + 1, add.y_min));

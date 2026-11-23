@@ -492,6 +492,12 @@ bool ActionsWorkspaceComponent::CopyActionBlock(const ActionItem& item, size_t b
         : "Could not copy action to the system clipboard");
     return copied;
 }
+
+void ActionsWorkspaceComponent::FlashCopyCaption(const std::string& item_id, size_t block) {
+    copy_caption_deadlines_[{item_id, block}] =
+        std::chrono::steady_clock::now() + kCopyCaptionFlashDuration;
+}
+
 void ActionsWorkspaceComponent::CopyAllActions() {
     const ActionPage* page = SelectedPage(); if (!page || page->items.empty()) { Notify("No actions to copy"); return; }
     std::string text;
@@ -1183,7 +1189,9 @@ ActionsContextMenu::Result ActionsWorkspaceComponent::ExecuteContextCommand(
     if (index < 0) { Notify("Action is no longer available"); return Result::Close; }
     const auto& item = items[index];
     if (command == Command::CopyBlock) {
-        return CopyActionBlock(item, block) ? Result::Close : Result::ClipboardFailure;
+        if (!CopyActionBlock(item, block)) return Result::ClipboardFailure;
+        FlashCopyCaption(target.item_id, block);
+        return Result::Close;
     }
 
     if (selected_page_id_ != target.page_id) item_scroll_ = static_cast<size_t>(index);
@@ -1397,8 +1405,7 @@ bool ActionsWorkspaceComponent::OnEvent(ftxui::Event event) {
                 for (size_t tab = 0; tab < copy_boxes_[i].size(); ++tab) {
                     if (copy_boxes_[i][tab].Contain(mouse.x, mouse.y)) {
                         CopySelectedAction(static_cast<int>(tab));
-                        copy_caption_deadlines_[{selected_item_id_, tab}] =
-                            std::chrono::steady_clock::now() + kCopyCaptionFlashDuration;
+                        FlashCopyCaption(selected_item_id_, tab);
                         break;
                     }
                 }
