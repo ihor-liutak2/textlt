@@ -70,7 +70,7 @@ ftxui::Element RemoteConnectionsModalContent::RenderConnectionDetails() {
         rows.push_back(text(" Set to Project assigns this profile without connecting.") |
             dim | color(theme.modal_text_color));
     } else {
-        rows.push_back(text(" Remote Files uses the default outside registered projects.") |
+        rows.push_back(text(" Remote Files uses the project connection or the default.") |
             dim | color(theme.modal_text_color));
     }
     rows.push_back(filler());

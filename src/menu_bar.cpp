@@ -91,7 +91,7 @@ MenuBarComponent::MenuBarComponent(
               {" Add Current Folder as Project ", "project.add_current"},
               {" Remove Current Project ", "project.remove"},
               {" ───────────────────────── ", "", true},
-              {" Remote Files... ", "project.remote_files"},
+              {" Remote Files... ", "remote.files"},
               {" Set/Change Connection... ", "project.assign_connection"},
               {" Edit Connection... ", "project.edit_connection"},
               {" Unlink Remote ", "project.unlink_connection"},

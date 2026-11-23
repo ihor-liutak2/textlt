@@ -379,16 +379,24 @@ void TextltApp::CloseRemoteConnectionsModal() {
 
 
 void TextltApp::OpenRemoteFilesModal() {
+    std::string connection_id;
     if (const ProjectRecord* project = ActiveWorkspaceProject()) {
-        OpenProjectRemote(project->id);
-        return;
+        std::string error;
+        if (!project->remote_connection_id.empty() && remote_config_store_.Load(error) &&
+            remote_config_store_.FindById(project->remote_connection_id)) {
+            connection_id = project->remote_connection_id;
+        }
     }
 
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
 
-    remote_files_modal_.Open();
+    if (connection_id.empty()) {
+        remote_files_modal_.Open();
+    } else {
+        remote_files_modal_.OpenForConnection(connection_id);
+    }
     active_action_ = "Opened Remote Files";
     SetActiveLayer(UiLayer::RemoteFiles);
     screen_.PostEvent(ftxui::Event::Custom);

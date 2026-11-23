@@ -95,15 +95,8 @@ void TextltApp::InitializeCommands() {
             screen_.PostEvent(ftxui::Event::Custom);
         }
     });
-    add("project.remote_files", "Project Remote Files", "Project", "", [this] {
-        const ProjectRecord* project = ActiveWorkspaceProject();
-        if (project) {
-            OpenProjectRemote(project->id);
-        } else {
-            active_action_ = "Add the current folder as a project before assigning a remote";
-            screen_.PostEvent(ftxui::Event::Custom);
-        }
-    });
+    // Keep the previous command ID for saved shortcuts.
+    add("project.remote_files", "Project Remote Files", "Project", "", [this] { OpenRemoteFilesModal(); });
     add("project.assign_connection", "Set Project Connection", "Project", "", [this] {
         const ProjectRecord* project = ActiveWorkspaceProject();
         if (project) {
