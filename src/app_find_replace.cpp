@@ -1,5 +1,7 @@
 #include "app.hpp"
 
+#include <utility>
+
 #include "find_replace/find_target.hpp"
 #include "ftxui/component/event.hpp"
 
@@ -52,7 +54,7 @@ void TextltApp::SyncFindPanelTarget() {
     find_replace_panel_->SetTarget(target);
 }
 
-void TextltApp::OpenFindPanel(bool replace_tab) {
+void TextltApp::OpenFindPanel(bool replace_tab, std::optional<std::string> query) {
     if (!find_replace_panel_) return;
     if (menu_bar_) menu_bar_->CloseDropdown();
     SetActiveLayer(UiLayer::Main);
@@ -81,7 +83,7 @@ void TextltApp::OpenFindPanel(bool replace_tab) {
     }
 
     find_replace_panel_->Open(replace_tab ? FindReplaceTab::Replace
-                                          : FindReplaceTab::Find);
+                                          : FindReplaceTab::Find, std::move(query));
     if (sidebar_panel_) {
         std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->ClearHitboxes();
     }

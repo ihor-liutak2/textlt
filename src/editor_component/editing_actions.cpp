@@ -201,11 +201,13 @@
         return changed;
     }
 
-    void EditorComponent::ToggleCase() {
-        if (!session_) return;
+    bool EditorComponent::ChangeCase(transform::CaseMode mode) {
+        if (!session_) return false;
         EndTypingGroup();
         ClampCursorToBuffer();
-        if (session_->ToggleCase()) {
+        const bool changed = session_->ChangeCase(mode);
+        if (changed) {
             UpdateScroll();
         }
+        return changed;
     }

@@ -1,8 +1,10 @@
 #include "text_transformer.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <cstdint>
+#include <iterator>
+#include <optional>
+#include <string_view>
 #include <utility>
 
 namespace textlt::transform {
@@ -85,6 +87,12 @@ bool DecodeUtf8At(const std::string& value,
         codepoint = (codepoint << 6) | (next & 0x3F);
     }
 
+    constexpr std::uint32_t minimum[] = {0, 0, 0x80, 0x800, 0x10000};
+    if (codepoint < minimum[expected] || codepoint > 0x10FFFF ||
+        (codepoint >= 0xD800 && codepoint <= 0xDFFF)) {
+        length = 1;
+        return false;
+    }
     length = expected;
     return true;
 }
@@ -138,50 +146,48 @@ bool IsUnicodeWordCharacter(std::uint32_t codepoint) {
            IsCyrillicLower(codepoint) || IsCyrillicUpper(codepoint);
 }
 
-std::uint32_t ToLowerCodepoint(std::uint32_t codepoint) {
-    if (IsAsciiUpper(codepoint)) {
-        return codepoint + 32;
-    }
-    if (codepoint >= 0x0410 && codepoint <= 0x042F) {
-        return codepoint + 32;
+struct CaseRange {
+    std::uint32_t first;
+    std::uint32_t last;
+    std::uint32_t stride;
+    int offset;
+};
+
+struct SpecialCase {
+    std::uint32_t codepoint;
+    std::string_view replacement;
+};
+
+#include "unicode_case_mappings.inc"
+
+template <size_t RangeCount, size_t SpecialCount>
+bool AppendCaseMapping(std::string& output, std::uint32_t codepoint,
+                       const CaseRange (&ranges)[RangeCount],
+                       const SpecialCase (&special)[SpecialCount]) {
+    const auto range = std::lower_bound(std::begin(ranges), std::end(ranges), codepoint,
+        [](const CaseRange& entry, std::uint32_t value) { return entry.last < value; });
+    if (range != std::end(ranges) && codepoint >= range->first &&
+        (codepoint - range->first) % range->stride == 0) {
+        const auto mapped = static_cast<std::uint32_t>(
+            static_cast<int>(codepoint) + range->offset);
+        output += EncodeUtf8(mapped);
+        return true;
     }
 
-    switch (codepoint) {
-        case 0x0401: return 0x0451;  // Ё -> ё
-        case 0x0404: return 0x0454;  // Є -> є
-        case 0x0406: return 0x0456;  // І -> і
-        case 0x0407: return 0x0457;  // Ї -> ї
-        case 0x0490: return 0x0491;  // Ґ -> ґ
-        default: return codepoint;
-    }
+    const auto entry = std::lower_bound(std::begin(special), std::end(special), codepoint,
+        [](const SpecialCase& item, std::uint32_t value) { return item.codepoint < value; });
+    if (entry == std::end(special) || entry->codepoint != codepoint) return false;
+    output += entry->replacement;
+    return true;
 }
 
-std::uint32_t ToUpperCodepoint(std::uint32_t codepoint) {
-    if (IsAsciiLower(codepoint)) {
-        return codepoint - 32;
+bool AppendChangedCase(std::string& output, std::uint32_t codepoint, CaseMode mode) {
+    if (mode != CaseMode::Upper &&
+        AppendCaseMapping(output, codepoint, kLowerRanges, kLowerSpecialCases)) {
+        return true;
     }
-    if (codepoint >= 0x0430 && codepoint <= 0x044F) {
-        return codepoint - 32;
-    }
-
-    switch (codepoint) {
-        case 0x0451: return 0x0401;  // ё -> Ё
-        case 0x0454: return 0x0404;  // є -> Є
-        case 0x0456: return 0x0406;  // і -> І
-        case 0x0457: return 0x0407;  // ї -> Ї
-        case 0x0491: return 0x0490;  // ґ -> Ґ
-        default: return codepoint;
-    }
-}
-
-std::uint32_t ToggleCodepointCase(std::uint32_t codepoint) {
-    if (IsAsciiLower(codepoint) || IsCyrillicLower(codepoint)) {
-        return ToUpperCodepoint(codepoint);
-    }
-    if (IsAsciiUpper(codepoint) || IsCyrillicUpper(codepoint)) {
-        return ToLowerCodepoint(codepoint);
-    }
-    return codepoint;
+    return mode != CaseMode::Lower &&
+        AppendCaseMapping(output, codepoint, kUpperRanges, kUpperSpecialCases);
 }
 
 size_t CodepointStartAtOrBefore(const std::string& value, size_t offset) {
@@ -219,27 +225,27 @@ bool IsWordCharacterAt(const std::string& value, size_t offset) {
     return IsUnicodeWordCharacter(codepoint);
 }
 
-bool ToggleCaseInByteRange(std::string& line, size_t start, size_t end) {
+std::optional<size_t> ChangeCaseInByteRange(std::string& line, size_t start,
+                                            size_t end, CaseMode mode) {
+    std::string replacement;
+    replacement.reserve(end - start);
     bool changed = false;
-    start = std::min(start, line.size());
-    end = std::min(end, line.size());
-
     for (size_t offset = start; offset < end;) {
         std::uint32_t codepoint = 0;
         size_t length = 0;
-        DecodeUtf8At(line, offset, codepoint, length);
-        const std::uint32_t mapped = ToggleCodepointCase(codepoint);
-        if (mapped != codepoint) {
-            const std::string replacement = EncodeUtf8(mapped);
-            line.replace(offset, length, replacement);
-            end = end - length + replacement.size();
-            offset += replacement.size();
+        const bool decoded = DecodeUtf8At(line, offset, codepoint, length);
+        if (decoded && length <= end - offset &&
+            AppendChangedCase(replacement, codepoint, mode)) {
             changed = true;
         } else {
-            offset += std::max<size_t>(length, 1);
+            length = std::min(length, end - offset);
+            replacement.append(line, offset, length);
         }
+        offset += length;
     }
-    return changed;
+    if (!changed) return std::nullopt;
+    line.replace(start, end - start, replacement);
+    return start + replacement.size();
 }
 
 TransformResult ConvertLeadingIndent(std::vector<std::string>& lines,
@@ -344,6 +350,13 @@ void AdjustColumnAfterLinePrefixErase(size_t row,
     }
 }
 
+size_t LeadingIndentToErase(const std::string& line, size_t width) {
+    if (!line.empty() && line.front() == '\t') return 1;
+    size_t spaces = 0;
+    while (spaces < width && spaces < line.size() && line[spaces] == ' ') ++spaces;
+    return spaces;
+}
+
 } // namespace
 
 TransformResult Convert4To2Spaces(std::vector<std::string>& lines,
@@ -409,16 +422,7 @@ TransformResult OutdentLines(std::vector<std::string>& lines,
     const auto [start_row, end_row] = SelectedLineRange(lines, result.cursor, selection);
     for (size_t row = start_row; row <= end_row && row < lines.size(); ++row) {
         std::string& line = lines[row];
-        size_t erase_count = 0;
-        if (!line.empty() && line.front() == '\t') {
-            erase_count = 1;
-        } else {
-            while (erase_count < indent_width &&
-                   erase_count < line.size() &&
-                   line[erase_count] == ' ') {
-                ++erase_count;
-            }
-        }
+        const size_t erase_count = LeadingIndentToErase(line, indent_width);
         if (erase_count == 0) {
             continue;
         }
@@ -438,9 +442,18 @@ TransformResult OutdentLines(std::vector<std::string>& lines,
     return result;
 }
 
-TransformResult ToggleCase(std::vector<std::string>& lines,
+bool CanOutdentLines(const std::vector<std::string>& lines, CursorState cursor,
+                     SelectionState selection) {
+    if (lines.empty()) return false;
+    const auto [start, end] = SelectedLineRange(lines, cursor, selection);
+    return std::any_of(lines.begin() + start, lines.begin() + end + 1,
+        [](const std::string& line) { return LeadingIndentToErase(line, 1) > 0; });
+}
+
+TransformResult ChangeCase(std::vector<std::string>& lines,
                            CursorState cursor,
-                           SelectionState selection) {
+                           SelectionState selection,
+                           CaseMode mode) {
     TransformResult result{false, cursor, selection};
     if (lines.empty()) {
         return result;
@@ -455,15 +468,22 @@ TransformResult ToggleCase(std::vector<std::string>& lines,
             {result.cursor.x, result.cursor.y},
             lines);
 
-        for (size_t y = start.y; y <= end.y && y < lines.size(); ++y) {
+        const bool cursor_at_end = result.cursor.y == end.y && result.cursor.x == end.x;
+        for (size_t y = start.y; y <= end.y; ++y) {
             const size_t x_start = y == start.y ? start.x : 0;
             const size_t x_end = y == end.y ? end.x : lines[y].size();
-            if (ToggleCaseInByteRange(lines[y], x_start, x_end)) {
+            if (const auto new_end = ChangeCaseInByteRange(lines[y], x_start, x_end, mode)) {
                 result.changed = true;
+                if (y == end.y) {
+                    if (cursor_at_end) result.cursor.x = *new_end;
+                    else result.selection.anchor_x = *new_end;
+                }
             }
         }
         return result;
     }
+
+    if (mode != CaseMode::Toggle) return result;
 
     std::string& line = lines[result.cursor.y];
     if (line.empty()) {
@@ -501,10 +521,14 @@ TransformResult ToggleCase(std::vector<std::string>& lines,
         end += std::max<size_t>(length, 1);
     }
 
-    if (ToggleCaseInByteRange(line, start, end)) {
-        result.changed = true;
-    }
+    result.changed = ChangeCaseInByteRange(line, start, end, mode).has_value();
     return result;
+}
+
+TransformResult ToggleCase(std::vector<std::string>& lines,
+                           CursorState cursor,
+                           SelectionState selection) {
+    return ChangeCase(lines, cursor, selection, CaseMode::Toggle);
 }
 
 } // namespace textlt::transform

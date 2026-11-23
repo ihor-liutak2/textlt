@@ -23,6 +23,8 @@ struct TransformResult {
     SelectionState selection;
 };
 
+enum class CaseMode { Toggle, Upper, Lower };
+
 TransformResult Convert4To2Spaces(std::vector<std::string>& lines,
                                   CursorState cursor,
                                   SelectionState selection);
@@ -37,6 +39,13 @@ TransformResult OutdentLines(std::vector<std::string>& lines,
                              CursorState cursor,
                              SelectionState selection,
                              size_t indent_width);
+bool CanOutdentLines(const std::vector<std::string>& lines,
+                     CursorState cursor,
+                     SelectionState selection);
+TransformResult ChangeCase(std::vector<std::string>& lines,
+                           CursorState cursor,
+                           SelectionState selection,
+                           CaseMode mode);
 TransformResult ToggleCase(std::vector<std::string>& lines,
                            CursorState cursor,
                            SelectionState selection);

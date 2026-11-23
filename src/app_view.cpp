@@ -163,6 +163,9 @@ ftxui::Element TextltApp::Render() {
     if (!distraction_mode && menu_bar_->IsDropdownOpen()) {
         layers.push_back(menu_bar_->RenderDropdown());
     }
+    if (workspace_mode_ == WorkspaceMode::Documents && editor_context_menu_.IsOpen()) {
+        layers.push_back(editor_context_menu_.Render());
+    }
 
     if (help_dialog_.IsOpen()) {
         layers.push_back(help_dialog_.View()->Render() | clear_under | center);
@@ -286,6 +289,7 @@ ftxui::Element TextltApp::RenderRenameProjectPanel() {
 }
 
 void TextltApp::SetActiveLayer(UiLayer layer) {
+    if (layer != UiLayer::Main) editor_context_menu_.Close();
     active_layer_ = layer;
     active_layer_index_ = static_cast<int>(layer);
 }

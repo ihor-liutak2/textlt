@@ -76,6 +76,7 @@ TextltApp::TextltApp()
       distraction_controller_(editor_config_.distraction_mode),
       themes_(LoadThemesFromConfiguredLocations()),
       current_theme_(ResolveConfiguredTheme(themes_, editor_config_)),
+      editor_context_menu_(current_theme_, [this](const std::string& command) { RunCommand(command); }),
       screen_(ftxui::App::Fullscreen()),
       app_event_dispatcher_(*this),
       file_manager_(),

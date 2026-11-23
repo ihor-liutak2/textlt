@@ -185,6 +185,18 @@ bool AppEventDispatcher::HandleActiveModalEvent(const ftxui::Event& event) {
 }
 
 bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
+    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Documents) {
+        if (app_.editor_context_menu_.OnEvent(event)) return true;
+        if (event.is_mouse()) {
+            auto mouse_event = event;
+            const auto& mouse = mouse_event.mouse();
+            if (mouse.button == ftxui::Mouse::Right && mouse.motion == ftxui::Mouse::Pressed &&
+                app_.OpenEditorContextMenu(mouse.x, mouse.y)) {
+                return true;
+            }
+        }
+    }
+
     // Let FTXUI route menu events through the component tree. Calling
     // MenuBarComponent::OnEvent directly from this outer CatchEvent changes
     // layers in the middle of a mouse sequence when an item opens a modal.

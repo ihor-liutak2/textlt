@@ -22,6 +22,8 @@ public:
     void PushSnapshotForTyping(const std::string& input, State state, bool has_selection);
     bool Undo(State current_state, State* restored_state);
     bool Redo(State current_state, State* restored_state);
+    bool CanUndo() const { return !undo_stack_.empty(); }
+    bool CanRedo() const { return !redo_stack_.empty(); }
 
 private:
     static constexpr size_t kMaxHistory = 100;

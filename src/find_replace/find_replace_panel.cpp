@@ -157,7 +157,14 @@ void FindReplacePanel::SetTarget(FindTarget* target) {
     if (open_) Refresh();
 }
 
-void FindReplacePanel::Open(FindReplaceTab tab) {
+void FindReplacePanel::Open(FindReplaceTab tab, std::optional<std::string> query) {
+    if (query) {
+        query_ = std::move(*query);
+        query_cursor_ = query_.size();
+        query_select_all_ = false;
+        selected_ = 0;
+        result_scroll_ = 0;
+    }
     open_ = true;
     focused_ = true;
     tab_ = tab;

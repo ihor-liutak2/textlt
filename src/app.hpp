@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,7 @@
 #include "shortcut_store.hpp"
 #include "cloud_tts_pipeline.hpp"
 #include "config_manager.hpp"
+#include "context_menu_component.hpp"
 #include "editor_component.hpp"
 #include "editor_keymap.hpp"
 #include "editor_config.hpp"
@@ -334,12 +336,16 @@ private:
     void CommandEditCopy();
     void CommandEditPaste();
     void CommandEditToggleComment();
-    void CommandEditToggleCase();
+    void CommandEditChangeCase(transform::CaseMode mode);
+    void CommandEditorIndentRight();
+    void CommandFindSelection();
+    void CommandCopyFilePath();
+    bool OpenEditorContextMenu(int x, int y);
     void CommandEditConvertIndents4To2();
     void CommandEditConvertIndents2To4();
     void CommandEditFind();
     void CommandEditReplace();
-    void OpenFindPanel(bool replace_tab);
+    void OpenFindPanel(bool replace_tab, std::optional<std::string> query = std::nullopt);
     void CloseFindPanel();
     void SyncFindPanelTarget();
     void RestoreNotesSidebarForFindPanel();
@@ -407,6 +413,7 @@ private:
     DistractionModeController distraction_controller_;
     std::vector<Theme> themes_;
     Theme current_theme_;
+    ContextMenuComponent editor_context_menu_;
     ftxui::App screen_;
     AppEventDispatcher app_event_dispatcher_;
     GitManager git_manager_;

@@ -88,6 +88,7 @@ bool DocumentSession::Convert2To4Spaces() {
 }
 
 bool DocumentSession::IndentLines(size_t tab_size) {
+    if (read_only) return false;
     EnsureValidBuffer();
     const HistoryManager::State before = CurrentState();
     transform::TransformResult result = transform::IndentLines(
@@ -110,6 +111,7 @@ bool DocumentSession::IndentLines(size_t tab_size) {
 }
 
 bool DocumentSession::OutdentLines(size_t tab_size) {
+    if (read_only) return false;
     EnsureValidBuffer();
     const HistoryManager::State before = CurrentState();
     transform::TransformResult result = transform::OutdentLines(
@@ -131,13 +133,21 @@ bool DocumentSession::OutdentLines(size_t tab_size) {
     return true;
 }
 
-bool DocumentSession::ToggleCase() {
-    EnsureValidBuffer();
-    const HistoryManager::State before = CurrentState();
-    transform::TransformResult result = transform::ToggleCase(
-        lines,
+bool DocumentSession::CanOutdentLines() const {
+    return !read_only && transform::CanOutdentLines(lines,
         {CursorCol(), CursorRow()},
         {HasSelection(), SelectionState().anchor_x, SelectionState().anchor_y});
+}
+
+bool DocumentSession::ChangeCase(transform::CaseMode mode) {
+    if (read_only) return false;
+    EnsureValidBuffer();
+    const HistoryManager::State before = CurrentState();
+    transform::TransformResult result = transform::ChangeCase(
+        lines,
+        {CursorCol(), CursorRow()},
+        {HasSelection(), SelectionState().anchor_x, SelectionState().anchor_y},
+        mode);
     if (!result.changed) return false;
 
     history.PushSnapshot(before);

@@ -55,6 +55,7 @@ void DocumentSession::EndTypingGroup() {
 }
 
 bool DocumentSession::Undo() {
+    if (read_only) return false;
     HistoryManager::State state;
     if (!history.Undo(CurrentState(), &state)) {
         return false;
@@ -64,6 +65,7 @@ bool DocumentSession::Undo() {
 }
 
 bool DocumentSession::Redo() {
+    if (read_only) return false;
     HistoryManager::State state;
     if (!history.Redo(CurrentState(), &state)) {
         return false;

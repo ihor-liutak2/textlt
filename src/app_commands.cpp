@@ -132,7 +132,15 @@ void TextltApp::InitializeCommands() {
     add("edit.copy", "Copy", "Edit", "Ctrl+C", [this] { CommandEditCopy(); });
     add("edit.paste", "Paste", "Edit", "Ctrl+V", [this] { CommandEditPaste(); });
     add("edit.toggle_comment", "Toggle Comment", "Edit", "Ctrl+/", [this] { CommandEditToggleComment(); });
-    add("edit.toggle_case", "Toggle Case", "Edit", "Ctrl+T", [this] { CommandEditToggleCase(); });
+    add("edit.toggle_case", "Toggle Case", "Edit", "Ctrl+T", [this] { CommandEditChangeCase(transform::CaseMode::Toggle); });
+    add("edit.uppercase", "UPPERCASE", "Edit", "", [this] { CommandEditChangeCase(transform::CaseMode::Upper); });
+    add("edit.lowercase", "lowercase", "Edit", "", [this] { CommandEditChangeCase(transform::CaseMode::Lower); });
+    add("edit.indent_right", "Indent Right", "Edit", "", [this] { CommandEditorIndentRight(); });
+    add("edit.indent_left", "Indent Left", "Edit", "", [this] {
+        editor_keymap_.RunAction(*this, "editor.outdent_lines");
+    });
+    add("edit.find_selection", "Find Selection", "Edit", "", [this] { CommandFindSelection(); });
+    add("file.copy_path", "Copy File Path", "File", "", [this] { CommandCopyFilePath(); });
     add("edit.convert_indents_4_to_2", "Convert Indents 4 to 2", "Edit", "", [this] { CommandEditConvertIndents4To2(); });
     add("edit.convert_indents_2_to_4", "Convert Indents 2 to 4", "Edit", "", [this] { CommandEditConvertIndents2To4(); });
     add("edit.find", "Find", "Edit", "Ctrl+F", [this] { CommandEditFind(); });

@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cstddef>
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -33,7 +34,7 @@ public:
     void SetTarget(FindTarget* target);
     FindTarget* Target() const { return target_; }
 
-    void Open(FindReplaceTab tab);
+    void Open(FindReplaceTab tab, std::optional<std::string> query = std::nullopt);
     void Close();
     bool IsOpen() const { return open_; }
 

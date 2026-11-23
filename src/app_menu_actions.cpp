@@ -217,16 +217,6 @@ void TextltApp::CommandEditToggleComment() {
 }
 
 
-void TextltApp::CommandEditToggleCase() {
-    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-    FocusEditor();
-    editor_ptr->ToggleCase();
-    active_action_ = "Toggle Case";
-    CloseDropdown();
-    screen_.PostEvent(ftxui::Event::Custom);
-}
-
-
 void TextltApp::CommandEditConvertIndents4To2() {
     auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
     FocusEditor();

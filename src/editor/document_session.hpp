@@ -133,7 +133,8 @@ public:
     bool Convert2To4Spaces();
     bool IndentLines(size_t tab_size);
     bool OutdentLines(size_t tab_size);
-    bool ToggleCase();
+    bool CanOutdentLines() const;
+    bool ChangeCase(transform::CaseMode mode);
     bool MoveLineUp();
     bool MoveLineDown();
     bool DuplicateLine();

@@ -64,7 +64,7 @@ namespace textlt {
         bool IndentLines();
         bool OutdentLines();
         void ToggleComment();
-        void ToggleCase();
+        bool ChangeCase(transform::CaseMode mode);
         void DeleteWordBackward();
         void DeleteWordForward();
         void Undo();
