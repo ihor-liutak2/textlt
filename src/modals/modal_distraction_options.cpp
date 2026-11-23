@@ -1,3 +1,5 @@
+#include "editor/clipboard_controller.hpp"
+
 #include "modal_distraction_options.hpp"
 
 #include <algorithm>
@@ -69,7 +71,7 @@ DistractionOptionsContent::DistractionOptionsContent(
         option.transform = [this](ftxui::InputState state) {
             return ResolveTheme(theme_).InputTransform(std::move(state));
         };
-        return ftxui::Input(value, "", option);
+        return ClipboardController::MakeInput(value, "", option);
     };
     column_width_input_component_ = make_input(&column_width_input_, &column_width_cursor_);
     column_gap_input_component_ = make_input(&column_gap_input_, &column_gap_cursor_);

@@ -9,6 +9,7 @@
 #include "ftxui/dom/elements.hpp"
 
 #include "ui_button.hpp"
+#include "ui_selectable_input.hpp"
 
 namespace textlt {
 namespace {
@@ -121,21 +122,14 @@ GitSettingsModalContent::GitSettingsModalContent(
     };
     remote_menu_ = ftxui::Menu(&remote_labels_, &selected_remote_, remote_menu_option);
 
-    ftxui::InputOption remote_name_option;
-    remote_name_option.multiline = false;
-    remote_name_option.transform = [this](ftxui::InputState state) {
+    ftxui::InputOption input_option;
+    input_option.multiline = false;
+    input_option.transform = [this](ftxui::InputState state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
         return theme.InputTransform(std::move(state));
     };
-    remote_name_input_component_ = ftxui::Input(&remote_name_input_, "remote name", remote_name_option);
-
-    ftxui::InputOption remote_url_option;
-    remote_url_option.multiline = false;
-    remote_url_option.transform = [this](ftxui::InputState state) {
-        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return theme.InputTransform(std::move(state));
-    };
-    remote_url_input_component_ = ftxui::Input(&remote_url_input_, "remote url", remote_url_option);
+    remote_name_input_component_ = MakeSelectableInput(remote_name_input_, "remote name", input_option);
+    remote_url_input_component_ = MakeSelectableInput(remote_url_input_, "remote url", input_option);
 
     refresh_remotes_button_ = MakeTextButton("Refresh", [this] { RefreshRemotes(); });
     add_remote_button_ = MakeTextButton("Add", [this] { AddRemote(); });
@@ -144,16 +138,10 @@ GitSettingsModalContent::GitSettingsModalContent(
     remove_remote_button_ = MakeTextButton("Remove", [this] { RemoveRemote(); });
     test_remote_button_ = MakeTextButton("Test", [this] { TestRemote(); });
 
-    ftxui::InputOption identity_option;
-    identity_option.multiline = false;
-    identity_option.transform = [this](ftxui::InputState state) {
-        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return theme.InputTransform(std::move(state));
-    };
-    local_name_input_component_ = ftxui::Input(&local_name_input_, "local user.name", identity_option);
-    local_email_input_component_ = ftxui::Input(&local_email_input_, "local user.email", identity_option);
-    global_name_input_component_ = ftxui::Input(&global_name_input_, "global user.name", identity_option);
-    global_email_input_component_ = ftxui::Input(&global_email_input_, "global user.email", identity_option);
+    local_name_input_component_ = MakeSelectableInput(local_name_input_, "local user.name", input_option);
+    local_email_input_component_ = MakeSelectableInput(local_email_input_, "local user.email", input_option);
+    global_name_input_component_ = MakeSelectableInput(global_name_input_, "global user.name", input_option);
+    global_email_input_component_ = MakeSelectableInput(global_email_input_, "global user.email", input_option);
 
     refresh_identity_button_ = MakeTextButton("Refresh", [this] { RefreshIdentity(); });
     save_local_identity_button_ = MakeTextButton("Save local", [this] { SaveLocalIdentity(); });
@@ -163,13 +151,7 @@ GitSettingsModalContent::GitSettingsModalContent(
     local_config_button_ = MakeTextButton("Local", [this] { SetConfigScope(false); });
     global_config_button_ = MakeTextButton("Global", [this] { SetConfigScope(true); });
 
-    ftxui::InputOption config_filter_option;
-    config_filter_option.multiline = false;
-    config_filter_option.transform = [this](ftxui::InputState state) {
-        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return theme.InputTransform(std::move(state));
-    };
-    auto config_filter_input = ftxui::Input(&config_filter_, "filter config", config_filter_option);
+    auto config_filter_input = MakeSelectableInput(config_filter_, "filter config", input_option);
     config_filter_input_component_ = ftxui::CatchEvent(
         config_filter_input,
         [this, config_filter_input](ftxui::Event event) {
@@ -202,13 +184,7 @@ GitSettingsModalContent::GitSettingsModalContent(
         }
     });
 
-    ftxui::InputOption confirm_input_option;
-    confirm_input_option.multiline = false;
-    confirm_input_option.transform = [this](ftxui::InputState state) {
-        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        return theme.InputTransform(std::move(state));
-    };
-    confirm_input_component_ = ftxui::Input(&confirm_typed_text_, "confirmation", confirm_input_option);
+    confirm_input_component_ = MakeSelectableInput(confirm_typed_text_, "confirmation", input_option);
     confirm_confirm_button_ = MakeTextButton("Confirm", [this] { ConfirmPendingAction(); });
     confirm_cancel_button_ = MakeTextButton("Cancel", [this] { CancelPendingAction(); });
     auto confirm_controls = ftxui::Container::Vertical({
@@ -647,8 +623,8 @@ void GitSettingsModalContent::CopyConfig() {
         }
         text += line;
     }
-    write_clipboard_(text);
-    status_ = "Copied config lines.";
+    status_ = write_clipboard_(text)
+        ? "Copied config lines." : ClipboardController::kWriteFailed;
 }
 
 void GitSettingsModalContent::SetConfigScope(bool global_scope) {

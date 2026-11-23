@@ -304,8 +304,6 @@ void RemoteFilesModalContent::CopySelectedPath() {
         SetStatus("Nothing to copy.", true);
         return;
     }
-    if (copy_text_) {
-        copy_text_(text);
-    }
-    SetStatus("Copied path.");
+    const bool written = copy_text_ && copy_text_(text);
+    SetStatus(written ? "Copied path." : ClipboardController::kWriteFailed, !written);
 }

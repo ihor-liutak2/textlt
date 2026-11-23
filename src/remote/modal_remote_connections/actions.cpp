@@ -538,18 +538,14 @@ void RemoteConnectionsModalContent::CloseHelp() {
 }
 
 void RemoteConnectionsModalContent::CopyHelpUrl() {
-    if (write_clipboard_) {
+    const bool written = write_clipboard_ &&
         write_clipboard_("https://www.dropbox.com/developers/apps");
-        SetStatus("Copied Dropbox developer apps URL to clipboard.");
-    } else {
-        SetStatus("Clipboard is not available.", true);
-    }
+    SetStatus(written ? "Copied Dropbox developer apps URL to clipboard."
+                      : ClipboardController::kWriteFailed, !written);
 }
 
 void RemoteConnectionsModalContent::CopyActionMessage() {
-    if (!write_clipboard_) {
-        SetStatus("Clipboard is not available.", true);
-        return;
+    if (!write_clipboard_ || !write_clipboard_(ActionMessageText())) {
+        SetStatus(ClipboardController::kWriteFailed, true);
     }
-    write_clipboard_(ActionMessageText());
 }

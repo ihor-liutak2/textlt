@@ -375,8 +375,8 @@ void GitModalContent::CopyServerOutput() {
         status_ = "No server output to copy.";
         return;
     }
-    write_clipboard_(server_output_);
-    status_ = "Server output copied.";
+    status_ = write_clipboard_(server_output_)
+        ? "Server output copied." : ClipboardController::kWriteFailed;
 }
 
 void GitModalContent::CopyBranchOutput() {
@@ -396,8 +396,8 @@ void GitModalContent::CopyBranchOutput() {
         }
         output += branch_labels_[index];
     }
-    write_clipboard_(output);
-    status_ = "Branch output copied.";
+    status_ = write_clipboard_(output)
+        ? "Branch output copied." : ClipboardController::kWriteFailed;
 }
 
 void GitModalContent::RebuildBranchLabels() {

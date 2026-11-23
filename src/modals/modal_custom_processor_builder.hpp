@@ -1,5 +1,7 @@
 #pragma once
 
+#include "editor/clipboard_controller.hpp"
+
 #include <functional>
 #include <memory>
 #include <string>
@@ -18,8 +20,8 @@ namespace textlt {
 
 class CustomProcessorBuilderModalContent : public IModalContent {
 public:
-    using ReadClipboardCallback = std::function<std::string()>;
-    using WriteClipboardCallback = std::function<void(const std::string& text)>;
+    using ReadClipboardCallback = ClipboardController::ReadCallback;
+    using WriteClipboardCallback = ClipboardController::WriteCallback;
     using CloseCallback = std::function<void()>;
 
     CustomProcessorBuilderModalContent(

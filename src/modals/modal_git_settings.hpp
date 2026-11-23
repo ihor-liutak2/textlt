@@ -1,5 +1,7 @@
 #pragma once
 
+#include "editor/clipboard_controller.hpp"
+
 #include <functional>
 #include <memory>
 #include <string>
@@ -18,7 +20,7 @@ namespace textlt {
 
 class GitSettingsModalContent : public IModalContent {
 public:
-    using WriteClipboardCallback = std::function<void(const std::string&)>;
+    using WriteClipboardCallback = ClipboardController::WriteCallback;
     using CloseCallback = std::function<void()>;
 
     GitSettingsModalContent(

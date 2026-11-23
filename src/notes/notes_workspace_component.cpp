@@ -127,14 +127,12 @@ NotesWorkspaceComponent::NotesWorkspaceComponent(
     StatusCallback on_status,
     DocumentsCallback on_documents,
     ActionsCallback on_actions,
-    ClipboardReadCallback read_clipboard,
     ClipboardWriteCallback write_clipboard,
     std::filesystem::path root)
     : theme_(theme),
       on_status_(std::move(on_status)),
       on_documents_(std::move(on_documents)),
       on_actions_(std::move(on_actions)),
-      read_clipboard_(std::move(read_clipboard)),
       write_clipboard_(std::move(write_clipboard)),
       repository_(std::move(root)),
       session_(nullptr) {
@@ -902,7 +900,15 @@ bool NotesWorkspaceComponent::HandleTextFieldEvent(std::string& value, size_t& c
     if (event == ftxui::Event::End) { cursor = value.size(); return true; }
     if (IsBackspace(event) && cursor > 0) { size_t previous = textlt::utils::PreviousUtf8CodepointStart(value, cursor); value.erase(previous, cursor - previous); cursor = previous; on_change(); return true; }
     if (IsDelete(event) && cursor < value.size()) { size_t next = textlt::utils::NextUtf8CodepointStart(value, cursor); value.erase(cursor, next - cursor); on_change(); return true; }
-    if (event.is_character() && !event.input().empty() && static_cast<unsigned char>(event.input()[0]) >= 0x20) { value.insert(cursor, event.input()); cursor += event.input().size(); on_change(); return true; }
+    const auto pasted = ClipboardController::PastedText(event, false);
+    if (pasted || (event.is_character() && !event.input().empty() &&
+                   static_cast<unsigned char>(event.input()[0]) >= 0x20)) {
+        const auto& text = pasted ? *pasted : event.input();
+        value.insert(cursor, text);
+        cursor += text.size();
+        on_change();
+        return true;
+    }
     return false;
 }
 
@@ -952,26 +958,31 @@ bool NotesWorkspaceComponent::HandleEditorEvent(ftxui::Event event) {
     }
     if (IsCtrl(event, 'a') && focus_ == FocusArea::Body) { session_.SelectAll(); return true; }
     if (IsCtrl(event, 'c') && focus_ == FocusArea::Body) {
-        if (write_clipboard_ && session_.HasSelection()) write_clipboard_(session_.SelectedText());
+        if (session_.HasSelection() &&
+            (!write_clipboard_ || !write_clipboard_(session_.SelectedText()))) {
+            Notify(ClipboardController::kWriteFailed);
+        }
         return true;
     }
     if (IsCtrl(event, 'x') && focus_ == FocusArea::Body) {
         if (session_.HasSelection()) {
-            if (write_clipboard_) write_clipboard_(session_.SelectedText());
+            if (!write_clipboard_ || !write_clipboard_(session_.SelectedText())) {
+                Notify(ClipboardController::kWriteFailed);
+                return true;
+            }
             session_.DeleteSelection();
             TouchAndSave();
         }
         return true;
     }
-    if (MatchesPasteShortcut(event) && focus_ == FocusArea::Body) {
-        if (read_clipboard_) {
-            const std::string value = read_clipboard_();
-            if (!value.empty()) {
-                session_.Insert(value);
+    if (focus_ == FocusArea::Body) {
+        if (const auto text = ClipboardController::PastedText(event)) {
+            if (!text->empty()) {
+                session_.Insert(*text);
                 TouchAndSave();
             }
+            return true;
         }
-        return true;
     }
     if (IsCtrl(event, 'z')) { session_.Undo(); TouchAndSave(); return true; }
     if (IsCtrl(event, 'y')) { session_.Redo(); TouchAndSave(); return true; }
@@ -1032,18 +1043,6 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
                 CommitTitleEditor();
             } else if (title_editor_cancel_box_.Contain(event.mouse().x, event.mouse().y)) {
                 CloseTitleEditor();
-            }
-            return true;
-        }
-        if (MatchesPasteShortcut(event)) {
-            if (read_clipboard_) {
-                std::string value = read_clipboard_();
-                for (char& character : value) {
-                    if (character == '\r' || character == '\n') character = ' ';
-                }
-                title_editor_input_.insert(title_editor_cursor_, value);
-                title_editor_cursor_ += value.size();
-                LimitTitleEditorInput();
             }
             return true;
         }
@@ -1435,11 +1434,10 @@ void NotesWorkspaceComponent::CopyCurrentParagraph() {
         std::regex::icase);
     std::smatch link;
     if (std::regex_search(text, link, markdown_link)) {
-        write_clipboard_(link[1].matched ? link[1].str() : link[2].str());
-        Notify("Copied link address");
+        Notify(write_clipboard_(link[1].matched ? link[1].str() : link[2].str())
+            ? "Copied link address" : ClipboardController::kWriteFailed);
     } else {
-        write_clipboard_(text);
-        Notify("Copied paragraph");
+        Notify(write_clipboard_(text) ? "Copied paragraph" : ClipboardController::kWriteFailed);
     }
 }
 

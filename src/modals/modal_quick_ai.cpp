@@ -167,7 +167,6 @@ AiPromptRequest MakeRequest(int mode, const std::string& source_text,
 class QuickAiModalContent final : public IModalContent {
 public:
     QuickAiModalContent(const Theme* theme, std::function<void()> redraw,
-        std::function<std::string()> read_clipboard,
         std::function<bool(const std::string&)> write_clipboard);
     ~QuickAiModalContent() override;
 
@@ -197,13 +196,10 @@ private:
     void SetResult(std::string text, bool complete = false);
     void Cancel();
     void ApplyPending();
-    bool HandlePaste(const Event& event);
-    Component FocusedPasteTarget() const;
-    void ResetPaste();
+    bool HandleClipboardEvent(const Event& event);
 
     const Theme& theme_;
     std::function<void()> redraw_;
-    std::function<std::string()> read_clipboard_;
     std::function<bool(const std::string&)> write_clipboard_;
     QuickAiModal::ApplyResult apply_result_;
     AiBackendSettings settings_;
@@ -217,10 +213,6 @@ private:
     std::string result_;
     bool result_complete_ = false;
     std::string status_;
-
-    bool bracketed_paste_ = false;
-    Component paste_target_;
-    std::string paste_text_;
 
     bool busy_ = false;
     std::thread worker_;
@@ -238,12 +230,11 @@ private:
 
 QuickAiModalContent::QuickAiModalContent(
     const Theme* theme, std::function<void()> redraw,
-    std::function<std::string()> read_clipboard,
     std::function<bool(const std::string&)> write_clipboard)
     : theme_(theme ? *theme : []() -> const Theme& {
           static const Theme fallback = FallbackTheme();
           return fallback;
-      }()), redraw_(std::move(redraw)), read_clipboard_(std::move(read_clipboard)),
+      }()), redraw_(std::move(redraw)),
       write_clipboard_(std::move(write_clipboard)) {
     for (const auto& mode : kModes) {
         modes_.emplace_back(mode.name);
@@ -287,9 +278,9 @@ QuickAiModalContent::QuickAiModalContent(
     auto body = Container::Vertical({
         Container::Horizontal({mode_dropdown_, translate_box_}),
         Maybe(languages, &translate_),
-        Container::Horizontal({source_input_, result_input_}),
+        Container::Horizontal({ClipboardController::WithPaste(source_input_, true), result_input_}),
     });
-    container_ = CatchEvent(body, [this](Event event) { return HandlePaste(event); });
+    container_ = CatchEvent(body, [this](Event event) { return HandleClipboardEvent(event); });
 }
 
 QuickAiModalContent::~QuickAiModalContent() {
@@ -421,7 +412,6 @@ void QuickAiModalContent::Open(AiBackendSettings settings, std::string source, Q
 
 void QuickAiModalContent::Close() {
     Cancel();
-    ResetPaste();
     apply_result_ = {};
     source_.clear();
     source_input_->Reset();
@@ -437,7 +427,6 @@ void QuickAiModalContent::Cancel() {
 
 void QuickAiModalContent::Clear() {
     Cancel();
-    ResetPaste();
     source_.clear();
     source_input_->Reset();
     SetResult({});
@@ -556,97 +545,27 @@ void QuickAiModalContent::CopyResult() {
     }
 }
 
-Component QuickAiModalContent::FocusedPasteTarget() const {
-    for (const Component& field : {Component(source_input_), from_.input, to_.input}) {
-        if (field->Focused()) {
-            return field;
-        }
+bool QuickAiModalContent::HandleClipboardEvent(const Event& event) {
+    if (!ShortcutKeyMatchesEvent({ShortcutKeyModifier::Ctrl, "C"}, event)) {
+        return false;
     }
-    return {};
-}
-
-void QuickAiModalContent::ResetPaste() {
-    bracketed_paste_ = false;
-    paste_target_.reset();
-    paste_text_.clear();
-}
-
-bool QuickAiModalContent::HandlePaste(const Event& event) {
-    if (!bracketed_paste_ && ShortcutKeyMatchesEvent({ShortcutKeyModifier::Ctrl, "C"}, event)) {
-        if (result_input_->Focused() && result_input_->AllSelected()) {
-            CopyResult();
-            return true;
-        }
-        if (source_input_->Focused() && source_input_->AllSelected()) {
-            status_ = write_clipboard_ && write_clipboard_(source_) ? "Source copied." : "Cannot write to the clipboard.";
-            return true;
-        }
-    }
-    const auto paste = [this](const Component& field, std::string value) {
-        if (!field || !field->Focused() || value.empty()) {
-            return;
-        }
-        std::string normalized;
-        for (size_t i = 0; i < value.size(); ++i) {
-            const unsigned char ch = value[i];
-            if (ch == '\r') {
-                if (i + 1 == value.size() || value[i + 1] != '\n') {
-                    normalized += '\n';
-                }
-            } else if (ch == '\n' || ch == '\t' || (ch >= ' ' && ch != 127)) {
-                normalized += static_cast<char>(ch);
-            }
-        }
-        if (field != source_input_) {
-            while (!normalized.empty() && normalized.back() == '\n') {
-                normalized.pop_back();
-            }
-            if (normalized.find_first_of("\n\t") != std::string::npos) {
-                status_ = "Paste a language name on one line.";
-                return;
-            }
-        }
-        if (!normalized.empty()) {
-            field->OnEvent(Event::Character(normalized));
-        }
-    };
-
-    if (event.input() == "\x1B[200~") {
-        ResetPaste();
-        bracketed_paste_ = true;
-        paste_target_ = FocusedPasteTarget();
+    if (result_input_->Focused() && result_input_->AllSelected()) {
+        CopyResult();
         return true;
     }
-    if (bracketed_paste_) {
-        if (event == Event::Custom || event.is_cursor_position()) {
-            return false;
-        }
-        if (event.input() == "\x1B[201~") {
-            auto target = paste_target_;
-            auto value = std::move(paste_text_);
-            ResetPaste();
-            paste(target, std::move(value));
-        } else if (paste_target_ && (event.is_character() || event == Event::Return || event == Event::Tab)) {
-            paste_text_ += event.input();
-        }
+    if (source_input_->Focused() && source_input_->AllSelected()) {
+        status_ = write_clipboard_ && write_clipboard_(source_)
+            ? "Source copied." : ClipboardController::kWriteFailed;
         return true;
-    }
-    if (ShortcutKeyMatchesEvent({ShortcutKeyModifier::Ctrl, "V"}, event) ||
-        ShortcutKeyMatchesEvent({ShortcutKeyModifier::CtrlShift, "V"}, event)) {
-        const auto field = FocusedPasteTarget();
-        if (field && read_clipboard_) {
-            paste(field, read_clipboard_());
-            return true;
-        }
     }
     return false;
 }
 
 QuickAiModal::QuickAiModal(const Theme* theme, std::function<void()> redraw,
-    std::function<void()> request_close, std::function<std::string()> read_clipboard,
+    std::function<void()> request_close,
     std::function<bool(const std::string&)> write_clipboard) {
     content_ = std::make_shared<QuickAiModalContent>(
-        theme, std::move(redraw), std::move(read_clipboard), std::move(write_clipboard));
+        theme, std::move(redraw), std::move(write_clipboard));
     modal_ = std::make_shared<ModalWindow>(content_, theme, request_close);
     modal_->SetBodyFrameScrolling(false);
     modal_->SetFooterButtons({

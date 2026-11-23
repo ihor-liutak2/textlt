@@ -1,6 +1,7 @@
 #include "app.hpp"
 
 #include "path_utils.hpp"
+#include "ui_selectable_input.hpp"
 
 #include <filesystem>
 #include <optional>
@@ -123,7 +124,8 @@ void TextltApp::OpenRenameProject(const std::string& id) {
 
     rename_project_id_ = project->id;
     project_name_ = project->name;
-    project_name_cursor_position_ = static_cast<int>(project_name_.size());
+    *project_name_selection_ = {};
+    project_name_selection_->cursor = static_cast<int>(project_name_.size());
     rename_project_error_.clear();
     CloseDropdown();
     SetActiveLayer(UiLayer::RenameProject);

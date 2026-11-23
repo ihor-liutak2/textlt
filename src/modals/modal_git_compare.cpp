@@ -251,8 +251,8 @@ void GitModalContent::CopyCompareDiff() {
         return;
     }
 
-    write_clipboard_(compare_diff_text_);
-    status_ = "Compare diff copied.";
+    status_ = write_clipboard_(compare_diff_text_)
+        ? "Compare diff copied." : ClipboardController::kWriteFailed;
 }
 
 ftxui::Element GitModalContent::RenderCompareTab() {

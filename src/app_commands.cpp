@@ -303,13 +303,16 @@ bool TextltApp::RunCommand(const std::string& command_id) {
     }
 
     if (workspace_mode_ == WorkspaceMode::Notes) {
+        if (command_id == "edit.paste") {
+            CommandEditPaste();
+            return true;
+        }
         const std::pair<const char*, const char*> note_edit_commands[] = {
             {"edit.undo", "Ctrl+Z"},
             {"edit.redo", "Ctrl+Y"},
             {"edit.select_all", "Ctrl+A"},
             {"edit.cut", "Ctrl+X"},
             {"edit.copy", "Ctrl+C"},
-            {"edit.paste", "Ctrl+V"},
         };
         for (const auto& mapping : note_edit_commands) {
             if (command_id == mapping.first) {

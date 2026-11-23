@@ -14,7 +14,6 @@
 #include "ai/ai_backend.hpp"
 #include "ftxui/component/component_options.hpp"
 #include "remote/remote_command_runner.hpp"
-#include "shortcut_key.hpp"
 #include "ui_button.hpp"
 #include "ui_selectable_input.hpp"
 
@@ -83,7 +82,6 @@ class AiSettingsModalContent final : public IModalContent {
 public:
     AiSettingsModalContent(const Theme* theme, EditorConfig* config,
         std::function<void()> redraw, std::function<void()> close,
-        std::function<std::string()> read_clipboard,
         std::function<bool(const std::string&)> write_clipboard);
     ~AiSettingsModalContent() override;
 
@@ -124,9 +122,6 @@ private:
         bool* password = nullptr, std::function<void()> change = {});
     Component MakeKeyVisibilityButton(ProviderForm& form);
     Component MakeGoCheckbox(ProviderForm& form);
-    Component FocusedInput() const;
-    bool HandlePaste(const Event& event);
-    void PasteInto(const Component& input, std::string text);
     void ResetInputState();
     Element RenderOverview();
     Element RenderProvider(const ProviderForm& form);
@@ -148,7 +143,6 @@ private:
     const Theme& theme_;
     EditorConfig* config_;
     std::function<void()> redraw_;
-    std::function<std::string()> read_clipboard_;
     std::function<bool(const std::string&)> write_clipboard_;
     std::vector<ProviderForm> forms_;
     std::vector<std::string> overview_labels_;
@@ -164,9 +158,6 @@ private:
     RemoteCommandControl command_;
 
     std::vector<std::shared_ptr<InputSelection>> input_selections_;
-    bool terminal_paste_active_ = false;
-    Component terminal_paste_target_;
-    std::string terminal_paste_text_;
 
     Component tabs_;
     Component overview_;
@@ -181,10 +172,9 @@ private:
 AiSettingsModalContent::AiSettingsModalContent(
     const Theme* theme, EditorConfig* config,
     std::function<void()> redraw, std::function<void()> close,
-    std::function<std::string()> read_clipboard,
     std::function<bool(const std::string&)> write_clipboard)
     : theme_(theme ? *theme : DefaultModalTheme()), config_(config),
-      redraw_(std::move(redraw)), read_clipboard_(std::move(read_clipboard)),
+      redraw_(std::move(redraw)),
       write_clipboard_(std::move(write_clipboard)) {
     for (const auto provider : {AiProvider::Ollama, AiProvider::OpenCodeGo, AiProvider::ChatGpt,
             AiProvider::Claude, AiProvider::Mimo}) {
@@ -271,7 +261,7 @@ AiSettingsModalContent::AiSettingsModalContent(
             CloseInfo();
             return true;
         }
-        return !info_panel_ && HandlePaste(event);
+        return false;
     });
 }
 
@@ -328,7 +318,8 @@ Component AiSettingsModalContent::MakeInput(
     }
     return CatchEvent(input, [input, &value, change = std::move(change)](Event event) {
         // FTXUI also fires on_change for caret moves with the mouse.
-        if (!event.is_character() && event != Event::Backspace && event != Event::Delete) {
+        if (!event.is_character() && !ClipboardController::IsPasteEvent(event) &&
+            event != Event::Backspace && event != Event::Delete) {
             return false;
         }
         const std::string before = value;
@@ -377,75 +368,7 @@ Component AiSettingsModalContent::MakeGoCheckbox(ProviderForm& form) {
     return Checkbox(std::move(option));
 }
 
-Component AiSettingsModalContent::FocusedInput() const {
-    if (tab_ == 0) {
-        return {};
-    }
-    const auto& form = forms_[tab_ - 1];
-    for (const auto& input : {form.endpoint_input, form.key_input, form.model_input, form.effort_input}) {
-        if (input && input->Focused()) {
-            return input;
-        }
-    }
-    return {};
-}
-
-bool AiSettingsModalContent::HandlePaste(const Event& event) {
-    if (event.input() == "\x1B[200~") {
-        terminal_paste_active_ = true;
-        terminal_paste_target_ = FocusedInput();
-        terminal_paste_text_.clear();
-        return true;
-    }
-    if (terminal_paste_active_) {
-        if (event == Event::Custom || event.is_cursor_position()) {
-            return false;
-        }
-        if (event.input() == "\x1B[201~") {
-            terminal_paste_active_ = false;
-            const auto input = std::exchange(terminal_paste_target_, {});
-            auto text = std::exchange(terminal_paste_text_, {});
-            if (input && input->Focused()) {
-                PasteInto(input, std::move(text));
-            }
-        } else if (terminal_paste_target_ && !event.is_mouse()) {
-            terminal_paste_text_ += event.input();
-        }
-        return true;
-    }
-    if (!ShortcutKeyMatchesEvent({ShortcutKeyModifier::Ctrl, "V"}, event) &&
-        !ShortcutKeyMatchesEvent({ShortcutKeyModifier::CtrlShift, "V"}, event)) {
-        return false;
-    }
-    const auto input = FocusedInput();
-    if (!input || !read_clipboard_) {
-        return false;
-    }
-    PasteInto(input, read_clipboard_());
-    return true;
-}
-
-void AiSettingsModalContent::PasteInto(const Component& input, std::string text) {
-    while (!text.empty() && (text.back() == '\r' || text.back() == '\n')) {
-        text.pop_back();
-    }
-    if (text.empty()) {
-        SetMessage("Clipboard has no text to paste.", true);
-        return;
-    }
-    if (std::any_of(text.begin(), text.end(),
-            [](unsigned char ch) { return ch < ' ' || ch == 127; })) {
-        SetMessage("Paste a single line into this field.", true);
-        return;
-    }
-    input->OnEvent(Event::Character(std::move(text)));
-    SetMessage("Pasted into the selected field.");
-}
-
 void AiSettingsModalContent::ResetInputState() {
-    terminal_paste_active_ = false;
-    terminal_paste_target_.reset();
-    terminal_paste_text_.clear();
     for (const auto& selection : input_selections_) {
         *selection = {};
     }
@@ -982,11 +905,10 @@ Element AiSettingsModalContent::RenderCustomFooter() {
 
 AiSettingsModal::AiSettingsModal(
     const Theme* theme, EditorConfig* config, std::function<void()> request_redraw,
-    std::function<std::string()> read_clipboard,
     std::function<bool(const std::string&)> write_clipboard) {
     content_ = std::make_shared<AiSettingsModalContent>(
         theme, config, std::move(request_redraw), [this] { Close(); },
-        std::move(read_clipboard), std::move(write_clipboard));
+        std::move(write_clipboard));
     modal_ = std::make_shared<ModalWindow>(content_, theme, [this] { Close(); });
     modal_->SetBodyFrameScrolling(false);
 }

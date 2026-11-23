@@ -202,8 +202,8 @@ void GitModalContent::CopyStatusPaths() {
         return;
     }
 
-    write_clipboard_(PathListToText(paths));
-    status_ = "Copied " + std::to_string(paths.size()) + " path(s).";
+    status_ = write_clipboard_(PathListToText(paths))
+        ? "Copied " + std::to_string(paths.size()) + " path(s)." : ClipboardController::kWriteFailed;
 }
 
 void GitModalContent::CopyDiff() {
@@ -215,8 +215,8 @@ void GitModalContent::CopyDiff() {
         status_ = "No diff to copy.";
         return;
     }
-    write_clipboard_(diff_text_);
-    status_ = "Diff copied.";
+    status_ = write_clipboard_(diff_text_)
+        ? "Diff copied." : ClipboardController::kWriteFailed;
 }
 
 void GitModalContent::CopyCommitOutput() {
@@ -228,8 +228,8 @@ void GitModalContent::CopyCommitOutput() {
         status_ = "No commit output to copy.";
         return;
     }
-    write_clipboard_(commit_output_);
-    status_ = "Commit output copied.";
+    status_ = write_clipboard_(commit_output_)
+        ? "Commit output copied." : ClipboardController::kWriteFailed;
 }
 
 void GitModalContent::CommitStagedFiles() {

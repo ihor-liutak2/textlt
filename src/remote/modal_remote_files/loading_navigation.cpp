@@ -146,15 +146,19 @@ void RemoteFilesModalContent::LoadPanel(PanelSide side, const std::string& path)
     }
 
     panel.entries.insert(panel.entries.end(), listed.begin(), listed.end());
+    panel.widest_name = 0;
     panel.entry_labels.reserve(panel.entries.size());
     for (const RemoteEntry& entry : panel.entries) {
         panel.entry_labels.push_back(entry.name);
+        panel.widest_name = std::max(panel.widest_name, ftxui::string_width(entry.name));
     }
     panel.boxes.resize(panel.entries.size());
     panel.selected = panel.entries.empty()
         ? 0
         : std::clamp(panel.selected, 0, static_cast<int>(panel.entries.size()) - 1);
     panel.scroll_offset = 0;
+    panel.name_scroll_offset = 0;
+    panel.scrollbar_drag.reset();
     SetPanelStatus(side, panel.entries.empty() ? "Directory is empty." : "Ready.");
 }
 
@@ -203,10 +207,13 @@ void RemoteFilesModalContent::SelectEntry(PanelSide side, int index) {
         return;
     }
     panel.selected = std::clamp(index, 0, static_cast<int>(panel.entries.size()) - 1);
+    const int visible_rows = std::max(1, panel.visible_rows);
+    const int max_offset = std::max(0, static_cast<int>(panel.entries.size()) - visible_rows);
+    panel.scroll_offset = std::min(panel.scroll_offset, max_offset);
     if (panel.selected < panel.scroll_offset) {
         panel.scroll_offset = panel.selected;
-    } else if (panel.selected >= panel.scroll_offset + kVisibleRows) {
-        panel.scroll_offset = panel.selected - kVisibleRows + 1;
+    } else if (panel.selected >= panel.scroll_offset + visible_rows) {
+        panel.scroll_offset = panel.selected - visible_rows + 1;
     }
 }
 

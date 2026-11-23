@@ -70,12 +70,6 @@ bool SearchFilesModal::OnEvent(ftxui::Event event) {
 
 bool SearchFilesModalContent::HandleEvent(ftxui::Event event) {
     if (selected_tab_ == 0) {
-        if (query_input_ && query_input_->Focused() &&
-            MatchesPasteShortcut(event)) {
-            PasteSearchQuery();
-            return true;
-        }
-
         if (event.is_mouse() && query_input_ && query_input_->Focused()) {
             const ftxui::Mouse& mouse = event.mouse();
             if (mouse.button == ftxui::Mouse::Left &&

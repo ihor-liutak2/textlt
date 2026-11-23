@@ -1,3 +1,5 @@
+#include "editor/clipboard_controller.hpp"
+
 #include "modals/modal_action_editor.hpp"
 
 #include <algorithm>
@@ -56,15 +58,15 @@ ActionEditorModalContent::ActionEditorModalContent(
         return option;
     };
 
-    title_input_ = ftxui::Input(&title_, "Short descriptive title",
+    title_input_ = ClipboardController::MakeInput(&title_, "Short descriptive title",
         make_options(&title_, &title_cursor_, false,
             actions::kActionMetadataCharacterLimit));
     for (int index = 0; index < 4; ++index) {
         const size_t tab = static_cast<size_t>(index);
-        caption_inputs_[tab] = ftxui::Input(&captions_[tab], "Optional caption",
+        caption_inputs_[tab] = ClipboardController::MakeInput(&captions_[tab], "Optional caption",
             make_options(&captions_[tab], &caption_cursors_[tab], false,
                 actions::kActionCaptionCharacterLimit));
-        content_inputs_[tab] = ftxui::Input(&contents_[tab],
+        content_inputs_[tab] = ClipboardController::MakeInput(&contents_[tab],
             "Exact text copied to the clipboard",
             make_options(&contents_[tab], &content_cursors_[tab], true, 0));
 

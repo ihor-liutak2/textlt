@@ -70,19 +70,19 @@ void SearchFilesModalContent::PasteSearchQuery() {
         return;
     }
 
-    const std::string text = read_clipboard_();
-    if (text.empty()) {
-        status_ = "Clipboard is empty.";
-        return;
-    }
+    read_clipboard_([this](std::optional<std::string> text) {
+        if (!text || text->empty()) {
+            status_ = text ? "Clipboard has no text." : "Could not read the clipboard.";
+            return;
+        }
+        query_ = ClipboardController::NormalizeText(*text, false);
+        query_cursor_position_ = static_cast<int>(query_.size());
+        status_ = "Search text pasted.";
 
-    query_ = text;
-    query_cursor_position_ = static_cast<int>(query_.size());
-    status_ = "Search text pasted.";
-
-    if (query_input_) {
-        query_input_->TakeFocus();
-    }
+        if (query_input_) {
+            query_input_->TakeFocus();
+        }
+    });
 }
 
 void SearchFilesModalContent::ClearSearchQuery() {
@@ -108,11 +108,11 @@ void SearchFilesModalContent::CopyResultText() {
     ClampResultSelection();
     const auto& match = summary_.matches[static_cast<size_t>(selected_result_)];
     if (match.line_number == 0) {
-        write_clipboard_(ToDisplayPath(match.path.filename()));
-        status_ = "Copied filename.";
+        status_ = write_clipboard_(ToDisplayPath(match.path.filename()))
+            ? "Copied filename." : ClipboardController::kWriteFailed;
     } else {
-        write_clipboard_(match.line_text);
-        status_ = "Copied matching line.";
+        status_ = write_clipboard_(match.line_text)
+            ? "Copied matching line." : ClipboardController::kWriteFailed;
     }
 }
 
@@ -148,8 +148,8 @@ void SearchFilesModalContent::CopyResultPaths() {
         stream << paths[index];
     }
 
-    write_clipboard_(stream.str());
-    status_ = "Copied " + std::to_string(paths.size()) + " path(s).";
+    status_ = write_clipboard_(stream.str())
+        ? "Copied " + std::to_string(paths.size()) + " path(s)." : ClipboardController::kWriteFailed;
 }
 
 void SearchFilesModalContent::MoveResultSelection(int delta) {

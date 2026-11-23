@@ -60,6 +60,8 @@
 
 namespace textlt {
 
+struct InputSelection;
+
 class TextltApp {
     friend class AppEventDispatcher;
     friend class EditorKeymap;
@@ -266,6 +268,7 @@ private:
     ftxui::Element RenderRenameProjectPanel();
     BottomBarRowState CurrentBottomBarRowState();
     bool HandleGlobalEvent(ftxui::Event event);
+    void DeliverClipboardText(std::optional<std::string> text);
     int DropdownX() const;
     void OpenGoToLinePanel();
     void OpenDistractionPagePanel();
@@ -307,7 +310,6 @@ private:
         const std::string& connection_id,
         std::string& error);
     bool CanDeleteRemoteConnection(const std::string& connection_id, std::string& error) const;
-    bool HandleTerminalBracketedPaste(ftxui::Event event);
     
     // Built-in command actions. UI surfaces and shortcuts call these through command IDs.
     void CommandFileNew();
@@ -463,15 +465,12 @@ private:
     UiLayer active_layer_ = UiLayer::Main;
     int active_layer_index_ = static_cast<int>(UiLayer::Main);
     int goto_line_input_cursor_position_ = 0;
-    int project_name_cursor_position_ = 0;
     bool sidebar_has_focus_ = false;
     bool show_goto_line_bar_ = false;
     NavigationPopupMode navigation_popup_mode_ = NavigationPopupMode::GoToLine;
     bool exit_after_save_as_ = false;
-    bool terminal_bracketed_paste_active_ = false;
     WorkspaceMode workspace_mode_ = WorkspaceMode::Documents;
     int workspace_mode_index_ = static_cast<int>(WorkspaceMode::Documents);
-    std::string terminal_bracketed_paste_buffer_;
     std::string workspace_project_id_;
     std::shared_ptr<MenuBarComponent> menu_bar_;
     ftxui::Component top_bar_row_;
@@ -483,6 +482,7 @@ private:
     ftxui::Component goto_line_go_button_;
     ftxui::Component goto_line_cancel_button_;
     ftxui::Component goto_line_popup_container_;
+    std::shared_ptr<InputSelection> project_name_selection_;
     ftxui::Component project_name_input_;
     ftxui::Component rename_project_button_;
     ftxui::Component cancel_rename_project_button_;

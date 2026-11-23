@@ -19,7 +19,6 @@ public:
         const Theme* theme,
         EditorConfig* config,
         std::function<void()> request_redraw = {},
-        std::function<std::string()> read_clipboard = {},
         std::function<bool(const std::string&)> write_clipboard = {});
 
     ftxui::Component View() const;

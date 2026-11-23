@@ -15,6 +15,10 @@
 #include "theme.hpp"
 #include "modals/modal_action_editor.hpp"
 
+namespace textlt {
+struct InputSelection;
+}
+
 namespace textlt::actions {
 
 class ActionsWorkspaceComponent : public ftxui::ComponentBase {
@@ -129,7 +133,7 @@ private:
     size_t item_scroll_ = 0;
     Dialog dialog_ = Dialog::None;
     std::string name_input_;
-    int name_cursor_ = 0;
+    std::shared_ptr<InputSelection> name_selection_;
     ftxui::Component name_component_;
     std::unique_ptr<textlt::ActionEditorModal> action_editor_modal_;
     ftxui::Box pages_box_;

@@ -200,11 +200,10 @@ void TextltApp::CommandEditCopy() {
 
 
 void TextltApp::CommandEditPaste() {
-    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
     CloseDropdown();
-    FocusEditor();
-    const auto result = clipboard_controller_.PasteIntoEditor(*editor_ptr);
-    active_action_ = result.message;
+    clipboard_controller_.ReadText([this](std::optional<std::string> text) {
+        DeliverClipboardText(std::move(text));
+    });
 }
 
 

@@ -1,3 +1,5 @@
+#include "editor/clipboard_controller.hpp"
+
 #include "modals/modal_theme_colors.hpp"
 
 #include <algorithm>
@@ -139,7 +141,7 @@ void ThemeColorsModalContent::BuildComponents() {
             const Theme& theme = theme_ ? *theme_ : FallbackTheme();
             return theme.InputTransform(std::move(state));
         };
-        inputs_.push_back(ftxui::Input(&field.value, "#RRGGBB", option));
+        inputs_.push_back(ClipboardController::MakeInput(&field.value, "#RRGGBB", option));
     }
 
     for (int group = 0; group < 4; ++group) {

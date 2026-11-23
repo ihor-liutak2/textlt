@@ -7,7 +7,6 @@
 #include <cstdlib>
 #include <filesystem>
 #include <functional>
-#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -17,6 +16,7 @@
 #include "ftxui/component/component_options.hpp"
 #include "theme.hpp"
 #include "ui_button.hpp"
+#include "ui_selectable_input.hpp"
 #include "file_manager.hpp"
 #include "editor/document_session.hpp"
 
@@ -38,11 +38,11 @@ Theme ResolveConfiguredTheme(
 class BracketedPasteModeGuard {
 public:
     BracketedPasteModeGuard() {
-        std::cout << "\x1B[?2004h" << std::flush;
+        ClipboardController::SetBracketedPasteMode(true);
     }
 
     ~BracketedPasteModeGuard() {
-        std::cout << "\x1B[?2004l" << std::flush;
+        ClipboardController::SetBracketedPasteMode(false);
     }
 };
 
@@ -82,6 +82,7 @@ TextltApp::TextltApp()
       document_workspace_(),
       layout_controller_(document_workspace_, &distraction_controller_),
       document_file_controller_(file_manager_, document_workspace_),
+      clipboard_controller_([this] { screen_.PostEvent(ftxui::Event::Custom); }),
       remote_config_store_(),
       project_store_(),
       text_editor_(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_)),
@@ -183,8 +184,8 @@ TextltApp::TextltApp()
           [this] { CloseSidebarShortcutModal(); }),
       custom_processor_builder_modal_(
           &current_theme_,
-          [this] { return clipboard_controller_.ReadText(); },
-          [this](const std::string& text) { clipboard_controller_.WriteText(text); }),
+          [this](ClipboardController::PasteCallback deliver) { clipboard_controller_.ReadText(std::move(deliver)); },
+          [this](const std::string& text) { return clipboard_controller_.WriteText(text); }),
       recent_files_modal_(
           &current_theme_,
           &document_file_controller_,
@@ -204,11 +205,11 @@ TextltApp::TextltApp()
               [this](const FileSearchMatch& match, std::string& error) {
                   return OpenSearchFileMatch(match, error);
               },
-              [this] {
-                  return clipboard_controller_.ReadText();
+              [this](ClipboardController::PasteCallback deliver) {
+                  clipboard_controller_.ReadText(std::move(deliver));
               },
               [this](const std::string& text) {
-                  clipboard_controller_.WriteText(text);
+                  return clipboard_controller_.WriteText(text);
               }),
       files_modal_(
           &current_theme_,
@@ -253,7 +254,7 @@ TextltApp::TextltApp()
           &current_theme_,
           &remote_config_store_,
           [this](const std::string& text) {
-              clipboard_controller_.WriteText(text);
+              return clipboard_controller_.WriteText(text);
           },
           [this](
               const std::string& project_id,
@@ -278,7 +279,7 @@ TextltApp::TextltApp()
               return opened;
           },
           [this](const std::string& text) {
-              clipboard_controller_.WriteText(text);
+              return clipboard_controller_.WriteText(text);
           }),
       git_modal_(
           &current_theme_,
@@ -305,7 +306,7 @@ TextltApp::TextltApp()
                   error);
           },
           [this](const std::string& text) {
-              clipboard_controller_.WriteText(text);
+              return clipboard_controller_.WriteText(text);
           },
           [this] { screen_.PostEvent(ftxui::Event::Custom); }),
       tts_modal_(
@@ -342,13 +343,11 @@ TextltApp::TextltApp()
           &current_theme_,
           [this] { screen_.PostEvent(ftxui::Event::Custom); },
           [this] { CloseQuickAiModal(); },
-          [this] { return clipboard_controller_.ReadText(); },
           [this](const std::string& text) { return clipboard_controller_.WriteText(text); }),
       ai_settings_modal_(
           &current_theme_,
           &editor_config_,
           [this] { screen_.PostEvent(ftxui::Event::Custom); },
-          [this] { return clipboard_controller_.ReadText(); },
           [this](const std::string& text) { return clipboard_controller_.WriteText(text); }),
       assistant_settings_modal_(
           &current_theme_,
@@ -421,8 +420,7 @@ TextltApp::TextltApp()
         },
         [this] { ShowDocumentsWorkspace(); },
         [this] { ShowActionsWorkspace(); },
-        [this] { return clipboard_controller_.ReadText(); },
-        [this](const std::string& text) { clipboard_controller_.WriteText(text); });
+        [this](const std::string& text) { return clipboard_controller_.WriteText(text); });
     auto notes_component = std::static_pointer_cast<notes::NotesWorkspaceComponent>(
         notes_workspace_component_);
     notes_component->SetColumnsChangedCallback([this](int columns) {
@@ -547,7 +545,7 @@ TextltApp::TextltApp()
     goto_line_input_option.transform = [this](ftxui::InputState state) {
         return current_theme_.InputTransform(std::move(state));
     };
-    goto_line_input_component_ = ftxui::Input(
+    goto_line_input_component_ = ClipboardController::MakeInput(
         &goto_line_input_, "line number", goto_line_input_option);
     goto_line_go_button_ = ftxui::Button(MakePopupFlatButtonOption(
         "Go", [this] { SubmitGoToLine(); }, &current_theme_, ButtonRole::Primary));
@@ -561,12 +559,13 @@ TextltApp::TextltApp()
 
     ftxui::InputOption project_name_option;
     project_name_option.multiline = false;
-    project_name_option.cursor_position = &project_name_cursor_position_;
     project_name_option.on_enter = [this] { SubmitRenameProject(); };
     project_name_option.transform = [this](ftxui::InputState state) {
         return current_theme_.InputTransform(std::move(state));
     };
-    project_name_input_ = ftxui::Input(&project_name_, "Project name", project_name_option);
+    project_name_selection_ = std::make_shared<InputSelection>();
+    project_name_input_ = MakeSelectableInput(project_name_, project_name_selection_->cursor,
+        "Project name", std::move(project_name_option), project_name_selection_);
     rename_project_button_ = ftxui::Button(MakePopupFlatButtonOption(
         "Rename", [this] { SubmitRenameProject(); }, &current_theme_, ButtonRole::Primary));
     cancel_rename_project_button_ = ftxui::Button(MakePopupFlatButtonOption(
@@ -587,7 +586,7 @@ TextltApp::TextltApp()
     git_settings_modal_.Configure(
         &current_theme_,
         &git_manager_,
-        [this](const std::string& text) { clipboard_controller_.WriteText(text); },
+        [this](const std::string& text) { return clipboard_controller_.WriteText(text); },
         [this] { CloseGitSettingsModal(); });
 
     root_container_ = ftxui::Container::Tab({

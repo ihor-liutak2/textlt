@@ -1,89 +1,186 @@
 #include "editor/clipboard_controller.hpp"
 
-#include <chrono>
-#include <cstddef>
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
-#include <optional>
-#include <string>
-#include <system_error>
+#include <limits>
 #include <thread>
+#include <utility>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 #include "editor_component.hpp"
 
 namespace textlt {
 namespace {
 
-constexpr int kClipboardWriteAttempts = 4;
-constexpr int kClipboardRetryDelayMs = 30;
+constexpr std::string_view kPasteStart = "\x1B[200~";
+constexpr std::string_view kPasteEnd = "\x1B[201~";
+constexpr std::string_view kOsc52 = "\x1B]52;";
+
+bool StartsWith(std::string_view input, std::string_view prefix) {
+    return input.substr(0, prefix.size()) == prefix;
+}
+
+bool EndsWith(std::string_view input, std::string_view suffix) {
+    return input.size() >= suffix.size() && input.substr(input.size() - suffix.size()) == suffix;
+}
+
+bool WriteTerminal(std::string_view bytes) {
+    return std::fwrite(bytes.data(), 1, bytes.size(), stdout) == bytes.size() &&
+        std::fflush(stdout) == 0;
+}
+
+#ifdef _WIN32
+
+bool OpenClipboardWithRetry(HWND owner) {
+    for (int attempt = 0; attempt < 4; ++attempt) {
+        if (OpenClipboard(owner)) {
+            return true;
+        }
+        if (attempt < 3) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        }
+    }
+    return false;
+}
+
+std::optional<std::string> ReadNativeClipboard() {
+    if (!OpenClipboardWithRetry(nullptr)) {
+        return std::nullopt;
+    }
+    std::optional<std::string> text;
+    const HANDLE data = GetClipboardData(CF_UNICODETEXT);
+    if (data) {
+        if (const auto* begin = static_cast<const wchar_t*>(GlobalLock(data))) {
+            const auto end = begin + GlobalSize(data) / sizeof(wchar_t);
+            const auto terminator = std::find(begin, end, L'\0');
+            const auto length = terminator - begin;
+            if (length < std::numeric_limits<int>::max() && terminator != end) {
+                const int bytes = WideCharToMultiByte(
+                    CP_UTF8, WC_ERR_INVALID_CHARS, begin, static_cast<int>(length), nullptr, 0, nullptr, nullptr);
+                if (bytes > 0) {
+                    text.emplace(bytes, '\0');
+                    if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, begin,
+                            static_cast<int>(length), text->data(), bytes, nullptr, nullptr)) {
+                        text.reset();
+                    }
+                } else if (length == 0) {
+                    text.emplace();
+                }
+            }
+            GlobalUnlock(data);
+        }
+    }
+    CloseClipboard();
+    return text;
+}
+
+bool WriteNativeClipboard(const std::string& text) {
+    std::string windows_text;
+    for (size_t index = 0; index < text.size(); ++index) {
+        const char ch = text[index];
+        if (ch == '\r' || ch == '\n') {
+            windows_text += "\r\n";
+            if (ch == '\r' && index + 1 < text.size() && text[index + 1] == '\n') {
+                ++index;
+            }
+        } else {
+            windows_text += ch;
+        }
+    }
+    if (windows_text.size() >= std::numeric_limits<int>::max()) {
+        return false;
+    }
+    const int length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+        windows_text.c_str(), -1, nullptr, 0);
+    if (length == 0) {
+        return false;
+    }
+    HGLOBAL data = GlobalAlloc(GMEM_MOVEABLE, static_cast<size_t>(length) * sizeof(wchar_t));
+    if (!data) {
+        return false;
+    }
+    auto* buffer = static_cast<wchar_t*>(GlobalLock(data));
+    if (!buffer) {
+        GlobalFree(data);
+        return false;
+    }
+    const bool converted = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+        windows_text.c_str(), -1, buffer, length) == length;
+    GlobalUnlock(data);
+
+    bool written = false;
+    const HWND owner = converted ? CreateWindowExW(0, L"STATIC", L"", 0,
+        0, 0, 0, 0, HWND_MESSAGE, nullptr, GetModuleHandleW(nullptr), nullptr) : nullptr;
+    if (owner) {
+        if (OpenClipboardWithRetry(owner)) {
+            written = EmptyClipboard() && SetClipboardData(CF_UNICODETEXT, data);
+            CloseClipboard();
+        }
+        DestroyWindow(owner);
+    }
+    if (!written) {
+        GlobalFree(data);
+    }
+    return written;
+}
+
+#else
+
+bool HasEnvironment(const char* variable) {
+    const char* value = std::getenv(variable);
+    return value && *value;
+}
 
 bool CommandAvailable(const std::string& command) {
-#ifdef _WIN32
-    const std::string check_command = "where " + command + " >nul 2>nul";
-#else
-    const std::string check_command = "command -v " + command + " >/dev/null 2>&1";
-#endif
-    return std::system(check_command.c_str()) == 0;
+    return std::system(("command -v " + command + " >/dev/null 2>&1").c_str()) == 0;
 }
 
 bool IsWslEnvironment() {
-#ifdef _WIN32
-    return false;
-#else
-    static const bool is_wsl = [] {
-        if (std::getenv("WSL_INTEROP") || std::getenv("WSL_DISTRO_NAME")) {
-            return true;
-        }
-        std::error_code error;
-        if (std::filesystem::exists("/proc/sys/fs/binfmt_misc/WSLInterop", error)) {
-            return true;
-        }
-        return CommandAvailable("clip.exe");
-    }();
-    return is_wsl;
-#endif
+    if (HasEnvironment("WSL_INTEROP") || HasEnvironment("WSL_DISTRO_NAME")) {
+        return true;
+    }
+    std::error_code error;
+    return std::filesystem::exists("/proc/sys/fs/binfmt_misc/WSLInterop", error) ||
+        CommandAvailable("powershell.exe");
 }
 
-FILE* OpenPipe(const std::string& command, const char* mode) {
-#ifdef _WIN32
-    return _popen(command.c_str(), mode);
-#else
-    return popen(command.c_str(), mode);
-#endif
-}
-
-int ClosePipe(FILE* pipe) {
-#ifdef _WIN32
-    return _pclose(pipe);
-#else
-    return pclose(pipe);
-#endif
+bool CanUseOsc52() {
+    const char* term = std::getenv("TERM");
+    return (HasEnvironment("SSH_CONNECTION") || HasEnvironment("SSH_TTY") || HasEnvironment("SSH_CLIENT")) &&
+        isatty(STDIN_FILENO) && isatty(STDOUT_FILENO) && term && *term &&
+        std::string_view(term) != "dumb";
 }
 
 bool WriteTextToPipe(const std::string& command, const std::string& text) {
-#ifdef _WIN32
-    FILE* pipe = OpenPipe(command, "w");
-#else
     // A helper can exit before reading stdin, for example if its display is
     // unavailable. Keep the pipe open and drain it before reporting its status.
-    FILE* pipe = OpenPipe(
-        "{ " + command + "; status=$?; cat; exit \"$status\"; } >/dev/null 2>&1", "w");
-#endif
+    const std::string script =
+        "{ " + command + "; status=$?; cat; exit \"$status\"; } >/dev/null 2>&1";
+    FILE* pipe = popen(script.c_str(), "w");
     if (!pipe) {
         return false;
     }
 
     const size_t written = std::fwrite(text.data(), 1, text.size(), pipe);
     const int flush_status = std::fflush(pipe);
-    const int close_status = ClosePipe(pipe);
+    const int close_status = pclose(pipe);
     return written == text.size() && flush_status == 0 && close_status == 0;
 }
 
 std::optional<std::string> ReadTextFromPipe(const std::string& command) {
     std::string clipboard_text;
     char buffer[256];
-    FILE* pipe = OpenPipe(command, "r");
+    FILE* pipe = popen(command.c_str(), "r");
     if (!pipe) {
         return std::nullopt;
     }
@@ -92,30 +189,10 @@ std::optional<std::string> ReadTextFromPipe(const std::string& command) {
         clipboard_text.append(buffer, count);
     }
     const bool read_ok = !std::ferror(pipe);
-    if (ClosePipe(pipe) != 0 || !read_ok) {
+    if (pclose(pipe) != 0 || !read_ok) {
         return std::nullopt;
     }
     return clipboard_text;
-}
-
-// Windows can briefly own the clipboard while the user is copying elsewhere.
-// A single clip.exe attempt then fails even though a retry would succeed.
-bool WriteTextToClipExe(const std::string& text) {
-#ifdef _WIN32
-    const std::string command = "clip.exe 2>nul";
-#else
-    const std::string command = "clip.exe";
-#endif
-    for (int attempt = 0; attempt < kClipboardWriteAttempts; ++attempt) {
-        if (WriteTextToPipe(command, text)) {
-            return true;
-        }
-        if (attempt + 1 < kClipboardWriteAttempts) {
-            std::this_thread::sleep_for(
-                std::chrono::milliseconds(kClipboardRetryDelayMs));
-        }
-    }
-    return false;
 }
 
 std::string Base64Encode(const std::string& input) {
@@ -165,19 +242,30 @@ int Base64Value(char character) {
     return -1;
 }
 
-std::string Base64Decode(const std::string& input) {
+std::optional<std::string> Base64Decode(std::string_view input) {
+    while (!input.empty() && (input.back() == '\r' || input.back() == '\n')) {
+        input.remove_suffix(1);
+    }
+    const size_t padding = input.find('=');
+    if (padding != std::string_view::npos) {
+        const auto suffix = input.substr(padding);
+        if (input.size() % 4 != 0 || (suffix != "=" && suffix != "==")) {
+            return std::nullopt;
+        }
+        input = input.substr(0, padding);
+    }
+    if (input.size() % 4 == 1) {
+        return std::nullopt;
+    }
+
     std::string output;
     output.reserve(input.size() * 3 / 4);
-
     unsigned int accumulator = 0;
     int bits = 0;
     for (char character : input) {
-        if (character == '=') {
-            break;
-        }
         const int value = Base64Value(character);
         if (value < 0) {
-            continue;
+            return std::nullopt;
         }
         accumulator = (accumulator << 6) | static_cast<unsigned int>(value);
         bits += 6;
@@ -189,10 +277,7 @@ std::string Base64Decode(const std::string& input) {
     return output;
 }
 
-// clip.exe writes bytes using the Windows console code page, so non-ASCII
-// action text can be lost. The PowerShell path transports the payload as
-// base64 and retries Set-Clipboard while the clipboard is locked.
-bool WriteTextToWindowsClipboardWithPowerShell(const std::string& text) {
+bool WriteWslClipboard(const std::string& text) {
     if (!CommandAvailable("powershell.exe")) {
         return false;
     }
@@ -209,7 +294,10 @@ bool WriteTextToWindowsClipboardWithPowerShell(const std::string& text) {
     return WriteTextToPipe(command, Base64Encode(text));
 }
 
-std::optional<std::string> ReadTextFromWindowsClipboard() {
+std::optional<std::string> ReadWslClipboard() {
+    if (!CommandAvailable("powershell.exe")) {
+        return std::nullopt;
+    }
     const auto encoded = ReadTextFromPipe(
         "powershell.exe -NoProfile -NonInteractive -Command "
         "'$ErrorActionPreference=\"Stop\";$text=Get-Clipboard -Raw;"
@@ -222,74 +310,191 @@ std::optional<std::string> ReadTextFromWindowsClipboard() {
     return Base64Decode(*encoded);
 }
 
-bool HasDisplay(const char* variable) {
-    const char* value = std::getenv(variable);
-    return value && *value;
+
+struct ClipboardBackend {
+    const char* tool;
+    const char* command;
+    bool wayland;
+};
+
+constexpr ClipboardBackend kReadBackends[] = {
+    {"wl-paste", "wl-paste --no-newline --type text 2>/dev/null", true},
+    {"xclip", "xclip -selection clipboard -o 2>/dev/null", false},
+    {"xsel", "xsel --clipboard --output 2>/dev/null", false},
+};
+
+constexpr ClipboardBackend kWriteBackends[] = {
+    {"wl-copy", "wl-copy --type 'text/plain;charset=utf-8'", true},
+    {"xclip", "xclip -selection clipboard -i", false},
+    {"xsel", "xsel --clipboard --input", false},
+};
+
+bool BackendAvailable(const ClipboardBackend& backend) {
+    const char* session = std::getenv("XDG_SESSION_TYPE");
+    const bool has_display = backend.wayland
+        ? HasEnvironment("WAYLAND_DISPLAY") || HasEnvironment("WAYLAND_SOCKET") ||
+            (session && std::string_view(session) == "wayland")
+        : HasEnvironment("DISPLAY");
+    return has_display && CommandAvailable(backend.tool);
 }
 
-bool WriteTextToDesktopClipboard(const std::string& text) {
-    if (HasDisplay("WAYLAND_DISPLAY") &&
-        WriteTextToPipe("wl-copy --type 'text/plain;charset=utf-8'", text)) {
+std::optional<std::string> ReadNativeClipboard() {
+    if (IsWslEnvironment()) {
+        if (auto text = ReadWslClipboard()) {
+            return text;
+        }
+    }
+    for (const auto& backend : kReadBackends) {
+        if (BackendAvailable(backend)) {
+            if (auto text = ReadTextFromPipe(backend.command)) {
+                return text;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+bool WriteNativeClipboard(const std::string& text) {
+    if (IsWslEnvironment() && WriteWslClipboard(text)) {
         return true;
     }
-    return HasDisplay("DISPLAY") &&
-        (WriteTextToPipe("xclip -selection clipboard -i", text) ||
-         WriteTextToPipe("xsel --clipboard --input", text));
+    for (const auto& backend : kWriteBackends) {
+        if (BackendAvailable(backend) && WriteTextToPipe(backend.command, text)) {
+            return true;
+        }
+    }
+    return false;
 }
 
-std::string ReadTextFromDesktopClipboard() {
-    if (HasDisplay("WAYLAND_DISPLAY")) {
-        if (auto text = ReadTextFromPipe("wl-paste --no-newline --type text 2>/dev/null")) {
-            return *text;
-        }
-    }
-    if (HasDisplay("DISPLAY")) {
-        if (auto text = ReadTextFromPipe("xclip -selection clipboard -o 2>/dev/null")) {
-            return *text;
-        }
-        return ReadTextFromPipe("xsel --clipboard --output 2>/dev/null").value_or("");
-    }
-    return {};
-}
+#endif
 
 } // namespace
 
-std::string ClipboardController::ReadText() const {
-#ifdef _WIN32
-    return ReadTextFromPipe("powershell -NoProfile -Command Get-Clipboard 2>nul").value_or("");
-#else
-    if (IsWslEnvironment()) {
-        if (auto text = ReadTextFromWindowsClipboard()) {
-            return *text;
+ClipboardController::ClipboardController(std::function<void()> request_redraw)
+    : request_redraw_(std::move(request_redraw)) {}
+
+ClipboardController::~ClipboardController() {
+    StopReadTimer();
+}
+
+void ClipboardController::StopReadTimer() {
+    if (read_timer_.joinable()) {
+        {
+            const std::lock_guard lock(read_timer_mutex_);
+            read_timer_stopped_ = true;
+        }
+        read_timer_condition_.notify_one();
+        read_timer_.join();
+    }
+}
+
+void ClipboardController::ReadText(PasteCallback deliver) {
+#ifndef _WIN32
+    if (CanUseOsc52()) {
+        const auto now = std::chrono::steady_clock::now();
+        if (now < terminal_clipboard_deadline_) {
+            deliver(std::nullopt);
+            return;
+        }
+        if (WriteTerminal("\x1B]52;c;?\x1B\\")) {
+            terminal_clipboard_read_ = std::move(deliver);
+            terminal_clipboard_deadline_ = now + std::chrono::seconds(1);
+            if (request_redraw_) {
+                StopReadTimer();
+                read_timer_stopped_ = false;
+                read_timer_ = std::thread([this, deadline = terminal_clipboard_deadline_] {
+                    std::unique_lock lock(read_timer_mutex_);
+                    if (!read_timer_condition_.wait_until(lock, deadline,
+                            [this] { return read_timer_stopped_; })) {
+                        lock.unlock();
+                        request_redraw_();
+                    }
+                });
+            }
+            return;
         }
     }
-    return ReadTextFromDesktopClipboard();
 #endif
+    deliver(ReadNativeClipboard());
 }
 
 bool ClipboardController::WriteText(const std::string& text) const {
-    if (text.empty()) {
+    if (text.empty() || text.find('\0') != std::string::npos) {
         return false;
     }
+#ifndef _WIN32
+    if (CanUseOsc52()) {
+        // OSC 52 has no write acknowledgement.
+        WriteTerminal("\x1B]52;c;" + Base64Encode(text) + "\x1B\\");
+        return false;
+    }
+#endif
+    return WriteNativeClipboard(text);
+}
 
-#ifdef _WIN32
-    return WriteTextToClipExe(text);
-#else
-    if (IsWslEnvironment() &&
-        (WriteTextToWindowsClipboardWithPowerShell(text) ||
-         (CommandAvailable("clip.exe") && WriteTextToClipExe(text)))) {
+void ClipboardController::SetBracketedPasteMode(bool enabled) {
+    WriteTerminal(enabled ? "\x1B[?2004h" : "\x1B[?2004l");
+}
+
+bool ClipboardController::HandleTerminalEvent(
+    const ftxui::Event& event, const PasteCallback& deliver) {
+    const std::string_view input = event.input();
+#ifndef _WIN32
+    if (terminal_clipboard_read_ && std::chrono::steady_clock::now() >= terminal_clipboard_deadline_) {
+        auto callback = std::exchange(terminal_clipboard_read_, {});
+        callback(ReadNativeClipboard());
+    }
+#endif
+    if (event == ftxui::Event::Custom || event.is_cursor_position()) {
+        return false;
+    }
+    if (input.size() >= kPasteStart.size() + kPasteEnd.size() &&
+        StartsWith(input, kPasteStart) && EndsWith(input, kPasteEnd)) {
+        terminal_clipboard_read_ = {};
+        deliver(std::string(input.substr(kPasteStart.size(),
+            input.size() - kPasteStart.size() - kPasteEnd.size())));
         return true;
     }
-
-    return WriteTextToDesktopClipboard(text);
+#ifndef _WIN32
+    if (StartsWith(input, kOsc52)) {
+        auto callback = std::exchange(terminal_clipboard_read_, {});
+        terminal_clipboard_deadline_ = {};
+        StopReadTimer();
+        if (callback) {
+            auto response = input.substr(kOsc52.size());
+            const auto delimiter = response.find(';');
+            if (delimiter != std::string_view::npos &&
+                (response.substr(0, delimiter) == "c" || delimiter == 0)) {
+                response.remove_prefix(delimiter + 1);
+                if (EndsWith(response, "\x1B\\")) {
+                    response.remove_suffix(2);
+                    callback(Base64Decode(response));
+                } else if (EndsWith(response, "\a")) {
+                    response.remove_suffix(1);
+                    callback(Base64Decode(response));
+                } else {
+                    callback(std::nullopt);
+                }
+            } else {
+                callback(std::nullopt);
+            }
+        }
+        return true;
+    }
+    // A focus or input change can invalidate the target of a pending read.
+    terminal_clipboard_read_ = {};
 #endif
+    return false;
 }
 
 ClipboardController::ActionResult ClipboardController::CutFromEditor(EditorComponent& editor) const {
+    if (editor.IsReadOnly()) {
+        return {false, "Document is read-only"};
+    }
     if (editor.HasSelection()) {
         const std::string selected_text = editor.GetSelectedText();
         if (!WriteText(selected_text)) {
-            return {false, "Could not write to the system clipboard"};
+            return {false, kWriteFailed};
         }
         editor.DeleteSelection();
         return {true, "Cut selection to clipboard"};
@@ -301,7 +506,7 @@ ClipboardController::ActionResult ClipboardController::CutFromEditor(EditorCompo
     }
 
     if (!WriteText(current_line)) {
-        return {false, "Could not write to the system clipboard"};
+        return {false, kWriteFailed};
     }
     editor.DeleteCurrentLine();
     return {true, "Cut line to clipboard"};
@@ -311,7 +516,7 @@ ClipboardController::ActionResult ClipboardController::CopyFromEditor(EditorComp
     if (editor.HasSelection()) {
         const std::string selected_text = editor.GetSelectedText();
         return {false, WriteText(selected_text)
-            ? "Copied selection to clipboard" : "Could not write to the system clipboard"};
+            ? "Copied selection to clipboard" : kWriteFailed};
     }
 
     const std::string current_line = editor.GetCurrentLineText();
@@ -320,17 +525,19 @@ ClipboardController::ActionResult ClipboardController::CopyFromEditor(EditorComp
     }
 
     return {false, WriteText(current_line)
-        ? "Copied line to clipboard" : "Could not write to the system clipboard"};
+        ? "Copied line to clipboard" : kWriteFailed};
 }
 
-ClipboardController::ActionResult ClipboardController::PasteIntoEditor(EditorComponent& editor) const {
-    const std::string clipboard_text = ReadText();
-    if (clipboard_text.empty()) {
-        return {false, "Clipboard empty."};
+ClipboardController::ActionResult ClipboardController::PasteIntoEditor(
+    EditorComponent& editor, const std::string& text) {
+    if (editor.IsReadOnly()) {
+        return {false, "Document is read-only"};
     }
-
-    editor.InsertText(clipboard_text);
-    return {true, "Pasted text (" + std::to_string(clipboard_text.size()) + " chars)"};
+    if (text.empty()) {
+        return {false, "Clipboard has no text."};
+    }
+    editor.InsertText(text);
+    return {true, "Pasted text (" + std::to_string(text.size()) + " bytes)"};
 }
 
 } // namespace textlt

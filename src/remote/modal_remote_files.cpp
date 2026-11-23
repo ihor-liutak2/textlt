@@ -17,14 +17,21 @@
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/mouse.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "ftxui/dom/node.hpp"
+#include "ftxui/screen/terminal.hpp"
 #include "editor_utils.hpp"
 #include "ui_button.hpp"
+#include "ui_horizontal_scroll.hpp"
+#include "ui_scrollbar.hpp"
 #include "remote/remote_dialog_theme.hpp"
 
 namespace textlt {
 namespace {
 
-constexpr int kVisibleRows = 14;
+constexpr int kNamePrefixWidth = 5;
+constexpr int kTypeWidth = 6;
+constexpr int kSizeWidth = 10;
+constexpr int kDetailsMinPanelWidth = 30;
 constexpr int kDoubleClickMinMs = 80;
 constexpr int kDoubleClickMaxMs = 500;
 
@@ -192,6 +199,27 @@ RemoteEntry LocalOverwriteMetadata(const std::filesystem::path& path) {
 }
 
 } // namespace
+
+class RemoteFilesModalContent::PanelComponent final : public ftxui::ComponentBase {
+public:
+    PanelComponent(RemoteFilesModalContent& content, PanelSide side, ftxui::Component menu)
+        : content_(content), side_(side) {
+        Add(std::move(menu));
+    }
+
+    using ftxui::ComponentBase::CaptureMouse;
+
+    ftxui::Element OnRender() override { return content_.RenderPanel(side_); }
+
+    bool OnEvent(ftxui::Event event) override {
+        return content_.HandlePanelEvent(side_, event, *this) ||
+            ftxui::ComponentBase::OnEvent(std::move(event));
+    }
+
+private:
+    RemoteFilesModalContent& content_;
+    PanelSide side_;
+};
 
 #include "remote/modal_remote_files/setup.cpp"
 #include "remote/modal_remote_files/render.cpp"

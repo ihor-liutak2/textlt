@@ -1,3 +1,5 @@
+#include "editor/clipboard_controller.hpp"
+
 #include "modal_files.hpp"
 
 #include <algorithm>

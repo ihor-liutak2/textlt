@@ -44,6 +44,10 @@ FetchContent_Declare(ftxui
     ${CMAKE_COMMAND}
       -DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/patches/ftxui-v7-alt-utf8.patch
       -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_patch_once.cmake
+    COMMAND
+    ${CMAKE_COMMAND}
+      -DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/patches/ftxui-v7-paste.patch
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_patch_once.cmake
 )
 
 FetchContent_MakeAvailable(ftxui)
@@ -203,7 +207,6 @@ add_executable(textlt
   src/app_command_registry.cpp
   src/app_event_dispatcher.cpp
   src/app_commands.cpp
-  src/app_terminal_paste.cpp
   src/layout_controller.cpp
   src/app_modals.cpp
   src/app_menu_actions.cpp
@@ -249,6 +252,7 @@ add_executable(textlt
   src/editor/document_workspace.cpp
   src/editor/document_file_controller.cpp
   src/editor/clipboard_controller.cpp
+  src/editor/clipboard_input.cpp
   src/notes/note_document.cpp
   src/notes/markdown_importer.cpp
   src/notes/note_serializer.cpp
@@ -378,7 +382,7 @@ if(WIN32)
     WIN32_LEAN_AND_MEAN
     _CRT_SECURE_NO_WARNINGS
   )
-  target_link_libraries(textlt PRIVATE shell32 ole32 advapi32)
+  target_link_libraries(textlt PRIVATE shell32 ole32 advapi32 user32)
   if(MINGW)
     target_link_options(textlt PRIVATE -municode)
   endif()
@@ -438,6 +442,7 @@ add_executable(textlt_keyboard_shortcuts_test
 
 add_executable(textlt_terminal_alt_utf8_test
   tests/terminal_alt_utf8_test.cpp
+  src/editor/clipboard_input.cpp
 )
 
 add_executable(textlt_syntax_highlighter_test
@@ -451,6 +456,7 @@ add_executable(textlt_syntax_highlighter_test
 
 add_executable(textlt_quick_text_panel_test
   tests/quick_text_panel_test.cpp
+  src/editor/clipboard_input.cpp
   src/modals/modal_text_processors.cpp
   src/modals/modal_window.cpp
   src/text_parser_manager.cpp
@@ -500,6 +506,7 @@ add_executable(textlt_actions_workspace_test
   src/actions/action_repository.cpp
   src/actions/actions_workspace_component.cpp
   src/modals/modal_action_editor.cpp
+  src/editor/clipboard_input.cpp
   src/modals/modal_window.cpp
   src/theme.cpp
 )
@@ -517,6 +524,7 @@ add_executable(textlt_notes_workspace_actions_test
   src/notes/note_repository.cpp
   src/notes/note_session.cpp
   src/notes/notes_workspace_component.cpp
+  src/editor/clipboard_input.cpp
   src/editor_utils.cpp
   src/theme.cpp
 )
@@ -569,6 +577,7 @@ target_include_directories(textlt_keyboard_shortcuts_test PRIVATE
 )
 
 target_include_directories(textlt_terminal_alt_utf8_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${ftxui_SOURCE_DIR}/src
 )
 

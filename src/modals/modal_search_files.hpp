@@ -1,5 +1,7 @@
 #pragma once
 
+#include "editor/clipboard_controller.hpp"
+
 #include <array>
 #include <filesystem>
 #include <functional>
@@ -24,8 +26,8 @@ class SearchFilesModalContent : public IModalContent {
 public:
     using RootProvider = std::function<std::vector<FileSearchRoot>()>;
     using OpenMatchCallback = std::function<bool(const FileSearchMatch& match, std::string& error)>;
-    using ReadClipboardCallback = std::function<std::string()>;
-    using WriteClipboardCallback = std::function<void(const std::string& text)>;
+    using ReadClipboardCallback = ClipboardController::ReadCallback;
+    using WriteClipboardCallback = ClipboardController::WriteCallback;
     using CloseCallback = std::function<void()>;
 
     SearchFilesModalContent(

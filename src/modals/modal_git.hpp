@@ -1,5 +1,7 @@
 #pragma once
 
+#include "editor/clipboard_controller.hpp"
+
 #include <atomic>
 #include <filesystem>
 #include <functional>
@@ -29,7 +31,7 @@ public:
         const std::string& right_title,
         const std::string& right_content,
         std::string& error)>;
-    using WriteClipboardCallback = std::function<void(const std::string&)>;
+    using WriteClipboardCallback = ClipboardController::WriteCallback;
     using CloseCallback = std::function<void()>;
     using RequestRedrawCallback = std::function<void()>;
 

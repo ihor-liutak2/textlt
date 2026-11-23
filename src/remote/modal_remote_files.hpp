@@ -1,5 +1,7 @@
 #pragma once
 
+#include "editor/clipboard_controller.hpp"
+
 #include <chrono>
 #include <filesystem>
 #include <functional>
@@ -31,7 +33,7 @@ class RemoteFilesModalContent : public IModalContent {
 public:
     using StartDirectoryProvider = std::function<std::filesystem::path()>;
     using OpenLocalFileCallback = std::function<bool(const std::filesystem::path&, std::string&)>;
-    using CopyTextCallback = std::function<void(const std::string&)>;
+    using CopyTextCallback = ClipboardController::WriteCallback;
     using CloseCallback = std::function<void()>;
 
     RemoteFilesModalContent(
@@ -46,7 +48,7 @@ public:
     ftxui::Element Render() override;
     ftxui::Component GetMainComponent() override { return container_; }
     std::string GetTitle() override { return "Remote Files"; }
-    ModalSizePreference GetModalSizePreference() const override { return {120, 32}; }
+    ModalSizePreference GetModalSizePreference() const override;
     ModalFrameStyle GetModalFrameStyle() const override {
         return ModalFrameStyle::TitleInBorder;
     }
@@ -72,6 +74,9 @@ private:
         CopyToLocalOverwrite,
     };
 
+    class PanelComponent;
+    class PanelEntries;
+
     struct PanelState {
         std::string title;
         std::string path;
@@ -83,6 +88,12 @@ private:
         std::vector<ftxui::Box> boxes;
         int selected = 0;
         int scroll_offset = 0;
+        int visible_rows = 1;
+        int widest_name = 0;
+        int name_scroll_offset = 0;
+        ftxui::Box scrollbar_box{1, 0, 1, 0};
+        ftxui::CapturedMouse scrollbar_drag;
+        int scrollbar_grab_column = 0;
         std::string status;
         bool status_is_error = false;
         int last_clicked_entry = -1;
@@ -99,9 +110,10 @@ private:
         ButtonSize size = ButtonSize::Normal);
     ftxui::Component MakePathInput(PanelSide side);
     ftxui::Element RenderPanel(PanelSide side);
-    ftxui::Element RenderEntryRow(PanelSide side, size_t index);
+    ftxui::Element RenderEntryRow(PanelSide side, size_t index, bool show_details);
     ftxui::Element RenderOperationRow();
-    bool HandlePanelEvent(PanelSide side, ftxui::Event event);
+    bool HandlePanelEvent(PanelSide side, ftxui::Event event, PanelComponent& component);
+    bool HandleScrollbarMouse(PanelSide side, ftxui::Event& event, PanelComponent& component);
     bool HandleGlobalContentEvent(ftxui::Event event);
     int EntryIndexAtMouse(const PanelState& panel, const ftxui::Mouse& mouse) const;
 

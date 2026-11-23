@@ -1,5 +1,6 @@
 #include "find_replace/find_replace_panel.hpp"
 
+#include "editor/clipboard_controller.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
@@ -460,8 +461,9 @@ bool FindReplacePanel::HandleFieldKey(ftxui::Event event, std::string& value,
         cursor = value.size();
         return true;
     }
-    if (event.is_character()) {
-        const std::string input = event.input();
+    const auto pasted = ClipboardController::PastedText(event, false);
+    if (pasted || event.is_character()) {
+        const std::string input = pasted ? *pasted : event.input();
         if (input.empty() || static_cast<unsigned char>(input[0]) < 0x20) {
             return false;
         }

@@ -5,6 +5,7 @@
 #include <string>
 #include <utility>
 
+#include "editor/clipboard_controller.hpp"
 #include "ftxui/component/component.hpp"
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/mouse.hpp"
@@ -17,6 +18,7 @@ struct InputSelection {
     ftxui::Box box{1, 0, 1, 0};
     std::chrono::steady_clock::time_point last_click{};
     bool all_selected = false;
+    int cursor = 0;
 };
 
 inline ftxui::Component MakeSelectableInput(
@@ -34,11 +36,12 @@ inline ftxui::Component MakeSelectableInput(
         Element element = transform ? transform(std::move(state)) : std::move(state.element);
         return selection->all_selected ? element | inverted : element;
     };
+    const bool multiline = option.multiline();
     auto input = Input(&value, std::move(placeholder), std::move(option));
     auto view = Renderer(input, [input, selection] {
         return input->Render() | reflect(selection->box);
     });
-    return CatchEvent(view, [input, &value, &cursor, selection, password](Event event) {
+    auto selectable = CatchEvent(view, [input, &value, &cursor, selection, password](Event event) {
         if (event.is_mouse()) {
             const auto& mouse = event.mouse();
             if (mouse.button != Mouse::Left || mouse.motion != Mouse::Pressed) return false;
@@ -81,6 +84,14 @@ inline ftxui::Component MakeSelectableInput(
         }
         return false;
     });
+    return ClipboardController::WithPaste(selectable, multiline);
+}
+
+inline ftxui::Component MakeSelectableInput(
+    std::string& value, std::string placeholder, ftxui::InputOption option) {
+    auto selection = std::make_shared<InputSelection>();
+    return MakeSelectableInput(value, selection->cursor, std::move(placeholder),
+        std::move(option), selection);
 }
 
 } // namespace textlt

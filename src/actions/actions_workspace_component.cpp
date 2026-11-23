@@ -1,5 +1,6 @@
 #include "actions/actions_workspace_component.hpp"
 
+#include "editor/clipboard_controller.hpp"
 #include <algorithm>
 #include <cctype>
 
@@ -8,6 +9,7 @@
 #include "ftxui/component/event.hpp"
 #include "ftxui/component/mouse.hpp"
 #include "ui_button.hpp"
+#include "ui_selectable_input.hpp"
 
 namespace textlt::actions {
 namespace {
@@ -231,8 +233,9 @@ ActionsWorkspaceComponent::ActionsWorkspaceComponent(const Theme* theme,
     GroupsChangedCallback groups_changed, std::filesystem::path storage_path)
     : theme_(theme), status_(std::move(status)), clipboard_(std::move(clipboard)),
       groups_changed_(std::move(groups_changed)), repository_(std::move(storage_path)) {
-    ftxui::InputOption name_options; name_options.cursor_position = &name_cursor_;
-    name_component_ = ftxui::Input(&name_input_, "name", name_options);
+    name_selection_ = std::make_shared<InputSelection>();
+    name_component_ = MakeSelectableInput(name_input_, name_selection_->cursor, "name",
+        ftxui::InputOption{}, name_selection_);
     Add(name_component_);
     action_editor_modal_ = std::make_unique<textlt::ActionEditorModal>(
         theme_, [this](const ActionItem& item, std::string& error) {
@@ -327,7 +330,11 @@ void ActionsWorkspaceComponent::SelectGroup(const std::string& id) {
 
 void ActionsWorkspaceComponent::Notify(const std::string& message) { if (status_) status_(message); }
 void ActionsWorkspaceComponent::OpenNameDialog(Dialog dialog, std::string value) {
-    dialog_ = dialog; name_input_ = std::move(value); name_cursor_ = static_cast<int>(name_input_.size()); name_component_->TakeFocus();
+    dialog_ = dialog;
+    name_input_ = std::move(value);
+    *name_selection_ = {};
+    name_selection_->cursor = static_cast<int>(name_input_.size());
+    name_component_->TakeFocus();
 }
 void ActionsWorkspaceComponent::CloseDialog() { dialog_ = Dialog::None; TakeFocus(); }
 void ActionsWorkspaceComponent::AfterMutation(const std::string& message) {

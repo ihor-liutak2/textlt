@@ -34,7 +34,7 @@ SearchFilesModalContent::SearchFilesModalContent(
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
         return theme.InputTransform(std::move(state));
     };
-    query_input_ = ftxui::Input(&query_, "text to search", query_option);
+    query_input_ = ClipboardController::MakeInput(&query_, "text to search", query_option);
     search_paste_button_ = MakeTextButton("Paste", [this] { PasteSearchQuery(); });
     search_clear_button_ = MakeTextButton("Clear", [this] { ClearSearchQuery(); });
 
@@ -89,7 +89,7 @@ SearchFilesModalContent::SearchFilesModalContent(
         return theme.InputTransform(std::move(state));
     };
     filter_name_input_component_ =
-    ftxui::Input(&filter_name_input_, "filter name", filter_name_option);
+    ClipboardController::MakeInput(&filter_name_input_, "filter name", filter_name_option);
 
     ftxui::InputOption filter_value_option;
     filter_value_option.multiline = false;
@@ -101,12 +101,12 @@ SearchFilesModalContent::SearchFilesModalContent(
         return theme.InputTransform(std::move(state));
     };
     filter_value_input_component_ =
-    ftxui::Input(&filter_value_input_, "file masks", filter_value_option);
+    ClipboardController::MakeInput(&filter_value_input_, "file masks", filter_value_option);
 
-    context_before_input_component_ = ftxui::Make<ContextInput>(
-        context_before_, theme_, [this] { ExecuteSearch(); });
-    context_after_input_component_ = ftxui::Make<ContextInput>(
-        context_after_, theme_, [this] { ExecuteSearch(); });
+    context_before_input_component_ = ClipboardController::WithPaste(ftxui::Make<ContextInput>(
+        context_before_, theme_, [this] { ExecuteSearch(); }), false);
+    context_after_input_component_ = ClipboardController::WithPaste(ftxui::Make<ContextInput>(
+        context_after_, theme_, [this] { ExecuteSearch(); }), false);
 
     ftxui::MenuOption directory_option = ftxui::MenuOption::Vertical();
     directory_option.entries_option.transform = [this](const ftxui::EntryState& state) {

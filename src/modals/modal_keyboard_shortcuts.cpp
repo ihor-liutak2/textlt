@@ -10,6 +10,7 @@
 #include "ftxui/dom/elements.hpp"
 
 #include "ui_button.hpp"
+#include "ui_scrollbar.hpp"
 
 namespace textlt {
 namespace {
@@ -111,13 +112,18 @@ ftxui::Component KeyboardShortcutsModalContent::MakeFooterButton(
 
 void KeyboardShortcutsModalContent::Open() {
     captured_shortcuts_.clear();
+    scrollbar_grab_row_.reset();
     status_ = "Press shortcuts while this modal is open: editor means this terminal delivers the key to TextLT.";
     status_is_error_ = false;
     RebuildActionList();
+    EnsureSelectionVisible();
     SyncSelectionFromBinding();
+    action_menu_->TakeFocus();
 }
 
-void KeyboardShortcutsModalContent::Close() {}
+void KeyboardShortcutsModalContent::Close() {
+    scrollbar_grab_row_.reset();
+}
 
 ShortcutContext KeyboardShortcutsModalContent::CurrentContext() const {
     return tab_index_ == 0 ? ShortcutContext::Menu : ShortcutContext::Text;
@@ -321,6 +327,7 @@ void KeyboardShortcutsModalContent::SetTab(int tab_index) {
     selected_action_ = 0;
     selected_modifier_ = 0;
     action_top_row_ = 0;
+    scrollbar_grab_row_.reset();
     RebuildModifierList();
     RebuildActionList();
     SyncSelectionFromBinding();
@@ -345,6 +352,45 @@ void KeyboardShortcutsModalContent::EnsureSelectionVisible() {
     }
 }
 
+bool KeyboardShortcutsModalContent::HandleActionScroll(const ftxui::Mouse& mouse) {
+    using ftxui::Mouse;
+    if (scrollbar_grab_row_ && mouse.motion == Mouse::Released) {
+        scrollbar_grab_row_.reset();
+        return true;
+    }
+
+    const ScrollbarMetrics bar(kVisibleActionRows, static_cast<int>(bindings_.size()), action_top_row_);
+    if (action_list_box_.Contain(mouse.x, mouse.y) &&
+        (mouse.button == Mouse::WheelUp || mouse.button == Mouse::WheelDown)) {
+        const int delta = mouse.button == Mouse::WheelUp ? -3 : 3;
+        action_top_row_ = std::clamp(action_top_row_ + delta, 0, bar.max_offset);
+        return true;
+    }
+
+    if (bar.max_offset == 0) {
+        return false;
+    }
+    const int row = mouse.y - action_scrollbar_box_.y_min;
+    if (mouse.button == Mouse::Left && mouse.motion == Mouse::Pressed &&
+        action_scrollbar_box_.Contain(mouse.x, mouse.y)) {
+        action_menu_->TakeFocus();
+        const int within_thumb = row - bar.thumb_start;
+        if (within_thumb >= 0 && within_thumb < bar.thumb_length) {
+            scrollbar_grab_row_ = within_thumb;
+            return true;
+        }
+        scrollbar_grab_row_ = bar.thumb_length / 2;
+    } else if (!scrollbar_grab_row_ || mouse.motion != Mouse::Moved) {
+        return false;
+    }
+
+    const int thumb_start = std::clamp(row - *scrollbar_grab_row_, 0, bar.Travel());
+    if (thumb_start != bar.thumb_start) {
+        action_top_row_ = bar.OffsetForThumb(thumb_start);
+    }
+    return true;
+}
+
 bool KeyboardShortcutsModalContent::HandleEvent(ftxui::Event event) {
     if (event == ftxui::Event::Escape) {
         if (close_callback_) {
@@ -352,16 +398,19 @@ bool KeyboardShortcutsModalContent::HandleEvent(ftxui::Event event) {
         }
         return true;
     }
+    if (event.is_mouse() && HandleActionScroll(event.mouse())) {
+        return true;
+    }
     if (RecordCapturedShortcutEvent(event)) {
         return true;
     }
     if (event == ftxui::Event::ArrowDown && action_menu_->Focused()) {
         MoveSelection(1);
-        return false;
+        return true;
     }
     if (event == ftxui::Event::ArrowUp && action_menu_->Focused()) {
         MoveSelection(-1);
-        return false;
+        return true;
     }
     if (event == ftxui::Event::Tab) {
         SetTab(tab_index_ == 0 ? 1 : 0);
@@ -379,10 +428,11 @@ bool KeyboardShortcutsModalContent::HandleEvent(ftxui::Event event) {
             SetTab(1);
             return true;
         }
-        for (int index = action_top_row_;
-             index < static_cast<int>(action_row_boxes_.size());
-             ++index) {
+        const int end = std::min(static_cast<int>(action_row_boxes_.size()),
+            action_top_row_ + kVisibleActionRows);
+        for (int index = action_top_row_; index < end; ++index) {
             if (action_row_boxes_[index].Contain(mouse.x, mouse.y)) {
+                action_menu_->TakeFocus();
                 selected_action_ = index;
                 EnsureSelectionVisible();
                 // A command change discards the un-applied picker state and
@@ -487,6 +537,13 @@ ftxui::Element KeyboardShortcutsModalContent::RenderActionList() const {
     while (rows.size() < static_cast<size_t>(kVisibleActionRows)) {
         rows.push_back(text(""));
     }
+    const ScrollbarMetrics bar(kVisibleActionRows, static_cast<int>(bindings_.size()), action_top_row_);
+    Elements track;
+    for (int row = 0; row < kVisibleActionRows; ++row) {
+        const bool thumb = row >= bar.thumb_start && row < bar.thumb_start + bar.thumb_length;
+        track.push_back(text(thumb ? "┃" : "│") |
+            color(thumb ? theme.modal_accent : theme.modal_border));
+    }
     return vbox({
         hbox({
             text("Category") | bold | size(WIDTH, EQUAL, 14),
@@ -495,7 +552,10 @@ ftxui::Element KeyboardShortcutsModalContent::RenderActionList() const {
             text("State") | bold | size(WIDTH, EQUAL, 13),
         }) | color(theme.modal_accent),
         separator(),
-        vbox(std::move(rows)) | size(HEIGHT, EQUAL, kVisibleActionRows),
+        hbox({
+            vbox(std::move(rows)) | xflex,
+            vbox(std::move(track)) | reflect(action_scrollbar_box_),
+        }) | size(HEIGHT, EQUAL, kVisibleActionRows) | reflect(action_list_box_),
     }) | border | size(WIDTH, EQUAL, 82);
 }
 

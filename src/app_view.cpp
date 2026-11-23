@@ -1,5 +1,6 @@
 #include "app.hpp"
 
+#include "keyboard_shortcuts.hpp"
 #include <algorithm>
 #include <filesystem>
 #include <utility>
@@ -320,8 +321,35 @@ bool TextltApp::ActiveModalIsOpen() const {
     return false;
 }
 
+void TextltApp::DeliverClipboardText(std::optional<std::string> text) {
+    if (!text || text->empty()) {
+        active_action_ = text ? "Clipboard has no text." : "Could not read the clipboard.";
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+    const auto paste = ClipboardController::PasteEvent(std::move(*text));
+    if (!app_event_dispatcher_.Handle(paste)) {
+        renderer_->OnEvent(paste);
+    }
+}
+
 bool TextltApp::HandleGlobalEvent(ftxui::Event event) {
-    return app_event_dispatcher_.Handle(std::move(event));
+    const auto deliver = [this](std::optional<std::string> text) {
+        DeliverClipboardText(std::move(text));
+    };
+    if (clipboard_controller_.HandleTerminalEvent(event, deliver)) {
+        return true;
+    }
+    const bool documents = ActiveLayer() == UiLayer::Main &&
+        workspace_mode_ == WorkspaceMode::Documents && !find_panel_focus_;
+    if (documents && app_event_dispatcher_.Handle(event)) {
+        return true;
+    }
+    if (MatchesPasteShortcut(event)) {
+        clipboard_controller_.ReadText(deliver);
+        return true;
+    }
+    return !documents && app_event_dispatcher_.Handle(std::move(event));
 }
 
 } // namespace textlt

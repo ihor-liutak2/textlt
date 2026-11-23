@@ -1,0 +1,79 @@
+--- a/src/ftxui/component/terminal_input_parser.cpp
++++ b/src/ftxui/component/terminal_input_parser.cpp
+@@ -101,7 +101,7 @@
+     return;
+   }
+   timeout_ = 0;
+-  if (!pending_.empty()) {
++  if (!bracketed_paste_ && !pending_.empty()) {
+     Send(SPECIAL);
+   }
+ }
+@@ -109,6 +109,13 @@
+ void TerminalInputParser::Add(char c) {
+   pending_ += c;
+   timeout_ = 0;
++  if (bracketed_paste_) {
++    if (pending_.size() >= 6 && pending_.compare(pending_.size() - 6, 6, "\x1B[201~") == 0) {
++      bracketed_paste_ = false;
++      Send(SPECIAL);
++    }
++    return;
++  }
+   position_ = -1;
+   Send(Parse());
+ }
+@@ -137,6 +144,11 @@
+       return;
+ 
+     case SPECIAL: {
++      if (pending_ == "\x1B[200~") {
++        // Keep the framed payload byte-for-byte until the closing marker.
++        bracketed_paste_ = true;
++        return;
++      }
+       auto it = g_uniformize.find(pending_);
+       if (it != g_uniformize.end()) {
+         pending_ = it->second;
+@@ -452,10 +464,13 @@
+ }
+ 
+ TerminalInputParser::Output TerminalInputParser::ParseOSC() {
+-  // Parse until the string terminator ST.
++  // OSC can end with BEL or the string terminator ST.
+   while (true) {
+     if (!Eat()) {
+       return UNCOMPLETED;
++    }
++    if (Current() == '\a') {
++      return SPECIAL;
+     }
+     if (Current() != '\x1B') {
+       continue;
+--- a/src/ftxui/component/terminal_input_parser.hpp
++++ b/src/ftxui/component/terminal_input_parser.hpp
+@@ -89,6 +89,7 @@
+   int position_ = -1;
+   int timeout_ = 0;
+   std::string pending_;
++  bool bracketed_paste_ = false;
+ };
+ 
+ }  // namespace ftxui
+--- a/src/ftxui/component/input.cpp
++++ b/src/ftxui/component/input.cpp
+@@ -377,11 +377,11 @@
+   bool OnEvent(Event event) override {
+     cursor_position() = util::clamp(cursor_position(), 0, (int)content->size());
+ 
++    if (event.is_character()) {
++      return HandleCharacter(event.character());
++    }
+     if (event == Event::Return) {
+       return HandleReturn();
+-    }
+-    if (event.is_character()) {
+-      return HandleCharacter(event.character());
+     }
+     if (event.is_mouse()) {
+       return HandleMouse(event);

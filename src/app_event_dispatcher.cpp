@@ -197,12 +197,6 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
         return event.is_mouse() ? false : app_.menu_bar_->OnEvent(event);
     }
 
-    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Documents &&
-        !app_.find_panel_focus_ &&
-        app_.HandleTerminalBracketedPaste(event)) {
-        return true;
-    }
-
     if (app_.find_panel_open_ && app_.find_replace_panel_) {
         if (event == ftxui::Event::Escape) {
             app_.CloseFindPanel();
@@ -230,6 +224,17 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
                 app_.screen_.PostEvent(ftxui::Event::Custom);
                 return true;
             }
+        }
+    }
+
+    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Documents) {
+        if (const auto text = ClipboardController::PastedText(event)) {
+            if (!app_.find_panel_focus_) {
+                auto editor = std::static_pointer_cast<EditorComponent>(app_.text_editor_);
+                app_.FocusEditor();
+                app_.active_action_ = ClipboardController::PasteIntoEditor(*editor, *text).message;
+            }
+            return true;
         }
     }
 
@@ -288,11 +293,6 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
 
     if (HandleEditorEvent(event)) {
         return true;
-    }
-
-    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Documents &&
-        MatchesShortcut(event, ShortcutModifier::CtrlShift, 'v')) {
-        return app_.RunCommand("edit.paste");
     }
 
     return HandleFunctionKeyEvent(event);

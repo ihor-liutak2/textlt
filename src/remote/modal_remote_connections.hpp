@@ -1,5 +1,7 @@
 #pragma once
 
+#include "editor/clipboard_controller.hpp"
+
 #include <functional>
 #include <memory>
 #include <string>
@@ -24,7 +26,7 @@ struct InputSelection;
 class RemoteConnectionsModalContent : public IModalContent {
 public:
     using CloseCallback = std::function<void()>;
-    using WriteClipboardCallback = std::function<void(const std::string&)>;
+    using WriteClipboardCallback = ClipboardController::WriteCallback;
     using AssignProjectCallback = std::function<bool(
         const std::string& project_id,
         const std::string& connection_id,

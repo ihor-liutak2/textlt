@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -65,6 +66,7 @@ private:
     void SetTab(int tab_index);
     void MoveSelection(int delta);
     void EnsureSelectionVisible();
+    bool HandleActionScroll(const ftxui::Mouse& mouse);
     bool RecordCapturedShortcutEvent(const ftxui::Event& event);
     std::string BindingStateLabel(const ShortcutBindingView& binding) const;
     ftxui::Element RenderTabs() const;
@@ -80,6 +82,7 @@ private:
     int tab_index_ = 0;
     int selected_action_ = 0;
     int action_top_row_ = 0;
+    std::optional<int> scrollbar_grab_row_;
     int selected_modifier_ = 0;
     int selected_key_ = 0;
     std::vector<ShortcutBindingView> bindings_;
@@ -94,6 +97,8 @@ private:
     // bounds for mouse hit testing.
     mutable ftxui::Box menu_tab_box_;
     mutable ftxui::Box text_tab_box_;
+    mutable ftxui::Box action_list_box_{1, 0, 1, 0};
+    mutable ftxui::Box action_scrollbar_box_{1, 0, 1, 0};
     mutable std::vector<ftxui::Box> action_row_boxes_;
 
     ftxui::Component menu_tab_button_;

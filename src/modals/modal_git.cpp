@@ -155,7 +155,7 @@ GitModalContent::GitModalContent(
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
         return theme.InputTransform(std::move(state));
     };
-    commit_message_input_ = ftxui::Input(&commit_message_, "commit message", commit_message_option);
+    commit_message_input_ = ClipboardController::MakeInput(&commit_message_, "commit message", commit_message_option);
     commit_button_ = MakeTextButton("Commit", [this] { CommitStagedFiles(); });
     copy_commit_output_button_ = MakeTextButton("Copy output", [this] { CopyCommitOutput(); });
 
@@ -189,7 +189,7 @@ GitModalContent::GitModalContent(
             ftxui::color(theme.modal_foreground);
     };
     branch_input_component_ =
-        ftxui::Input(&branch_input_value_, "", popup_input_option);
+        ClipboardController::MakeInput(&branch_input_value_, "", popup_input_option);
     branch_input_confirm_button_ = MakeTextButton("Confirm", [this] { ConfirmBranchInput(); });
     branch_input_cancel_button_ = MakeTextButton("Cancel", [this] { CancelBranchInput(); });
     branch_input_container_ = ftxui::CatchEvent(
@@ -219,7 +219,7 @@ GitModalContent::GitModalContent(
         return theme.InputTransform(std::move(state));
     };
     auto remote_filter_input =
-        ftxui::Input(&remote_branch_filter_, "filter remote branches", remote_filter_option);
+        ClipboardController::MakeInput(&remote_branch_filter_, "filter remote branches", remote_filter_option);
     remote_filter_input_component_ = ftxui::CatchEvent(
         remote_filter_input,
         [this, remote_filter_input](ftxui::Event event) {
@@ -253,7 +253,7 @@ GitModalContent::GitModalContent(
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
         return theme.InputTransform(std::move(state));
     };
-    auto tag_filter_input = ftxui::Input(&tag_filter_, "filter tags", tag_filter_option);
+    auto tag_filter_input = ClipboardController::MakeInput(&tag_filter_, "filter tags", tag_filter_option);
     tag_filter_input_component_ = ftxui::CatchEvent(
         tag_filter_input,
         [this, tag_filter_input](ftxui::Event event) {
@@ -284,7 +284,7 @@ GitModalContent::GitModalContent(
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
         return theme.InputTransform(std::move(state));
     };
-    tag_name_input_component_ = ftxui::Input(&tag_name_input_, "tag name", tag_name_option);
+    tag_name_input_component_ = ClipboardController::MakeInput(&tag_name_input_, "tag name", tag_name_option);
 
     ftxui::InputOption tag_message_option;
     tag_message_option.multiline = false;
@@ -292,7 +292,7 @@ GitModalContent::GitModalContent(
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
         return theme.InputTransform(std::move(state));
     };
-    tag_message_input_component_ = ftxui::Input(&tag_message_input_, "optional message", tag_message_option);
+    tag_message_input_component_ = ClipboardController::MakeInput(&tag_message_input_, "optional message", tag_message_option);
 
     create_tag_button_ = MakeTextButton("Create tag", [this] { CreateTag(); });
     move_tag_button_ = MakeTextButton("Move to HEAD", [this] { MoveSelectedTag(); });
@@ -341,7 +341,7 @@ GitModalContent::GitModalContent(
     open_compare_diff_button_ = MakeTextButton("Open unified diff", [this] { OpenCompareUnifiedDiff(); });
     copy_compare_diff_button_ = MakeTextButton("Copy diff", [this] { CopyCompareDiff(); });
 
-    confirm_input_component_ = ftxui::Input(&confirm_typed_text_, "confirmation", popup_input_option);
+    confirm_input_component_ = ClipboardController::MakeInput(&confirm_typed_text_, "confirmation", popup_input_option);
     auto checkbox_option = ftxui::CheckboxOption::Simple();
     checkbox_option.transform = [](const ftxui::EntryState& state) {
         auto label = ftxui::text(state.label);
@@ -1014,8 +1014,8 @@ void GitModalContent::CopyLogCommitDetails() {
         }
     }
 
-    write_clipboard_(text);
-    status_ = "Commit details copied.";
+    status_ = write_clipboard_(text)
+        ? "Commit details copied." : ClipboardController::kWriteFailed;
 }
 
 void GitModalContent::RebuildLogBranchLabels() {

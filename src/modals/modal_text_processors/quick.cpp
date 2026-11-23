@@ -28,7 +28,7 @@ void TextProcessorsModalContent::BuildQuickControls() {
     ftxui::InputOption input;
     input.multiline = false;
     input.on_enter = [this] { RemoveQuick(); };
-    remove_input_ = ftxui::Input(&remove_number_, "Slot number", input);
+    remove_input_ = ClipboardController::MakeInput(&remove_number_, "Slot number", input);
     quick_controls_ = ftxui::Container::Vertical({
         ftxui::Maybe(quick_menu_, [this] { return !removing_; }),
         ftxui::Maybe(remove_input_, [this] { return removing_; }),

@@ -110,12 +110,20 @@ textlt
 textlt path/to/file.cpp
 ```
 
-For **Copy Path**, **Ctrl+C**, and **Ctrl+V** on a Linux desktop, install
-`wl-clipboard` on Wayland or `xclip` on X11 (`xsel` also works).
-On Ubuntu and elementary OS, run `sudo apt install wl-clipboard xclip` to
-cover both session types. In WSL, TextLT uses the Windows clipboard through
-Windows PowerShell when WSL interoperability is enabled. **Ctrl+Shift+V**
-also pastes, including when the terminal handles the shortcut itself.
+TextLT automatically detects the system clipboard. On Linux, it uses
+`wl-copy` and `wl-paste` on Wayland, or `xclip` or `xsel` on X11.
+On Debian-based distributions, the Linux installer detects the graphical
+session and installs `wl-clipboard` for Wayland or `xclip` and `xsel` for X11
+if the helpers are missing. Windows uses the native Unicode
+clipboard. WSL uses Windows PowerShell when interoperability is available
+and falls back to the Linux helpers.
+
+Use **Ctrl+V** or **Ctrl+Shift+V** to paste in the editor and in text fields.
+Terminal-provided paste also goes to the focused field. Over SSH, TextLT
+uses OSC 52 when the terminal permits clipboard access. OSC 52 writes
+have no acknowledgement, so TextLT reports that it could not confirm the
+write. If the terminal blocks OSC 52 reads, use the terminal's own paste
+shortcut.
 
 To uninstall TextLT from Linux:
 

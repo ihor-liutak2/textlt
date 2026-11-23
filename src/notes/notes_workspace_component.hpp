@@ -1,5 +1,7 @@
 #pragma once
 
+#include "editor/clipboard_controller.hpp"
+
 #include <chrono>
 #include <filesystem>
 #include <functional>
@@ -26,14 +28,12 @@ public:
     using StatusCallback = std::function<void(const std::string&)>;
     using DocumentsCallback = std::function<void()>;
     using ActionsCallback = std::function<void()>;
-    using ClipboardReadCallback = std::function<std::string()>;
-    using ClipboardWriteCallback = std::function<void(const std::string&)>;
+    using ClipboardWriteCallback = ClipboardController::WriteCallback;
     NotesWorkspaceComponent(
         const Theme* theme,
         StatusCallback on_status,
         DocumentsCallback on_documents,
         ActionsCallback on_actions,
-        ClipboardReadCallback read_clipboard,
         ClipboardWriteCallback write_clipboard,
         std::filesystem::path root = {});
     ftxui::Element OnRender() override;
@@ -196,7 +196,6 @@ private:
     StatusCallback on_status_;
     DocumentsCallback on_documents_;
     ActionsCallback on_actions_;
-    ClipboardReadCallback read_clipboard_;
     ClipboardWriteCallback write_clipboard_;
     NoteRepository repository_;
     NoteSession session_;

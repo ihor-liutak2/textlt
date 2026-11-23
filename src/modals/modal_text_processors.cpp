@@ -1,3 +1,5 @@
+#include "editor/clipboard_controller.hpp"
+
 #include "modal_text_processors.hpp"
 
 #include "app_resources.hpp"
@@ -163,7 +165,7 @@ TextProcessorsModalContent::TextProcessorsModalContent(
             const Theme& theme = theme_ ? *theme_ : FallbackTheme();
             return theme.InputTransform(std::move(state));
         };
-        param_inputs_.push_back(ftxui::Input(&param_values_[index], "", option));
+        param_inputs_.push_back(ClipboardController::MakeInput(&param_values_[index], "", option));
     }
 
     ftxui::InputOption repeat_option;
@@ -174,7 +176,7 @@ TextProcessorsModalContent::TextProcessorsModalContent(
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
         return theme.InputTransform(std::move(state));
     };
-    repeat_input_ = ftxui::Input(&repeat_count_, "1", repeat_option);
+    repeat_input_ = ClipboardController::MakeInput(&repeat_count_, "1", repeat_option);
 
     ftxui::CheckboxOption checkbox_option = ftxui::CheckboxOption::Simple();
     checkbox_option.transform = [this](const ftxui::EntryState& state) {

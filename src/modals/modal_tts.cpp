@@ -1,3 +1,5 @@
+#include "editor/clipboard_controller.hpp"
+
 #include "modal_tts.hpp"
 
 #include <algorithm>
@@ -249,12 +251,12 @@ TtsModalContent::TtsModalContent(
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
         return theme.InputTransform(std::move(state));
     };
-    title_input_ = ftxui::Input(&metadata_title_, "title", input_option);
-    author_input_ = ftxui::Input(&metadata_author_, "author", input_option);
-    series_input_ = ftxui::Input(&metadata_series_, "series", input_option);
-    genre_input_ = ftxui::Input(&metadata_genre_, "genre", input_option);
+    title_input_ = ClipboardController::MakeInput(&metadata_title_, "title", input_option);
+    author_input_ = ClipboardController::MakeInput(&metadata_author_, "author", input_option);
+    series_input_ = ClipboardController::MakeInput(&metadata_series_, "series", input_option);
+    genre_input_ = ClipboardController::MakeInput(&metadata_genre_, "genre", input_option);
     series_index_input_ =
-        ftxui::Input(&metadata_series_index_, "series index", input_option);
+        ClipboardController::MakeInput(&metadata_series_index_, "series index", input_option);
     ftxui::MenuOption language_option = ftxui::MenuOption::Vertical();
     language_option.on_change = [this] {
         RebuildVoiceOptions();

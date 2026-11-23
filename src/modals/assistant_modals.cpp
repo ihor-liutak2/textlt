@@ -1,3 +1,5 @@
+#include "editor/clipboard_controller.hpp"
+
 #include "assistant_modals.hpp"
 
 #include <cstdio>
@@ -276,16 +278,16 @@ AssistantSettingsModalContent::AssistantSettingsModalContent(
         }
         return input;
     };
-    piper_server_port_input_ = ftxui::Input(
+    piper_server_port_input_ = ClipboardController::MakeInput(
         &piper_server_port_, "59123", server_input_option);
-    piper_server_noise_scale_input_ = ftxui::Input(
+    piper_server_noise_scale_input_ = ClipboardController::MakeInput(
         &piper_server_noise_scale_, "0.667", server_input_option);
-    piper_server_sentence_silence_input_ = ftxui::Input(
+    piper_server_sentence_silence_input_ = ClipboardController::MakeInput(
         &piper_server_sentence_silence_, "0.15", server_input_option);
     if (piper_server_speaker_id_.empty()) {
         piper_server_speaker_id_ = "0";
     }
-    piper_server_speaker_id_input_ = ftxui::Input(
+    piper_server_speaker_id_input_ = ClipboardController::MakeInput(
         &piper_server_speaker_id_, "0", server_input_option);
     ftxui::CheckboxOption server_checkbox_option = ftxui::CheckboxOption::Simple();
     server_checkbox_option.transform = [this](const ftxui::EntryState& state) {

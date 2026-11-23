@@ -124,7 +124,7 @@ CustomProcessorBuilderModalContent::CustomProcessorBuilderModalContent(
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
         return theme.InputTransform(std::move(state));
     };
-    request_input_ = ftxui::Input(&request_text_, "Describe what this processor should do", request_option);
+    request_input_ = ClipboardController::MakeInput(&request_text_, "Describe what this processor should do", request_option);
 
     ftxui::InputOption json_option;
     json_option.multiline = true;
@@ -133,7 +133,7 @@ CustomProcessorBuilderModalContent::CustomProcessorBuilderModalContent(
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
         return theme.InputTransform(std::move(state));
     };
-    json_input_ = ftxui::Input(&json_text_, "Paste AI JSON object here", json_option);
+    json_input_ = ClipboardController::MakeInput(&json_text_, "Paste AI JSON object here", json_option);
 
     auto processor_option = ftxui::MenuOption::Vertical();
     processor_option.entries_option.transform = [this](const ftxui::EntryState& state) {
@@ -274,9 +274,14 @@ void CustomProcessorBuilderModalContent::CopyPrompt() {
         return;
     }
 
-    last_copied_prompt_request_ = CurrentPromptRequest();
+    auto request = CurrentPromptRequest();
+    if (!write_clipboard_(BuildCustomProcessorAiPrompt(request))) {
+        status_ = ClipboardController::kWriteFailed;
+        status_is_error_ = true;
+        return;
+    }
+    last_copied_prompt_request_ = std::move(request);
     has_last_copied_prompt_request_ = true;
-    write_clipboard_(BuildCustomProcessorAiPrompt(last_copied_prompt_request_));
     status_ = "Copied AI prompt. Paste it into an AI chat, then paste the JSON result back here.";
     status_is_error_ = false;
 }
@@ -287,15 +292,17 @@ void CustomProcessorBuilderModalContent::PasteJson() {
         status_is_error_ = true;
         return;
     }
-    json_text_ = read_clipboard_();
-    json_cursor_ = static_cast<int>(json_text_.size());
-    if (json_text_.empty()) {
-        status_ = "Clipboard is empty.";
-        status_is_error_ = true;
-        return;
-    }
-    status_ = "Pasted JSON candidate from clipboard.";
-    status_is_error_ = false;
+    read_clipboard_([this](std::optional<std::string> text) {
+        if (!text || text->empty()) {
+            status_ = text ? "Clipboard has no text." : "Could not read the clipboard.";
+            status_is_error_ = true;
+            return;
+        }
+        json_text_ = ClipboardController::NormalizeText(*text);
+        json_cursor_ = static_cast<int>(json_text_.size());
+        status_ = "Pasted JSON candidate from clipboard.";
+        status_is_error_ = false;
+    });
 }
 
 void CustomProcessorBuilderModalContent::ValidateJson() {
@@ -308,8 +315,10 @@ void CustomProcessorBuilderModalContent::ValidateJson() {
                 has_last_copied_prompt_request_) {
                 repair_request = last_copied_prompt_request_;
             }
-            write_clipboard_(BuildCustomProcessorRepairPrompt(repair_request, json_text_, error));
-            status_ = error + " Repair prompt copied to clipboard.";
+            const bool written =
+                write_clipboard_(BuildCustomProcessorRepairPrompt(repair_request, json_text_, error));
+            status_ = error + " " + (written ? "Repair prompt copied to clipboard."
+                                             : ClipboardController::kWriteFailed);
         } else {
             status_ = error + " Clipboard write is not configured, so repair prompt was not copied.";
         }

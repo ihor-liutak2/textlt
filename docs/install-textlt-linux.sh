@@ -42,6 +42,45 @@ require_tool() {
   fi
 }
 
+install_clipboard_helpers() {
+  command -v apt-get >/dev/null 2>&1 || return 0
+
+  local session_type="${XDG_SESSION_TYPE:-}"
+  if [[ -z "$session_type" ]]; then
+    if [[ -n "${WAYLAND_DISPLAY:-}" || -n "${WAYLAND_SOCKET:-}" ]]; then
+      session_type=wayland
+    elif [[ -n "${DISPLAY:-}" ]]; then
+      session_type=x11
+    fi
+  fi
+
+  local -a packages
+  case "${session_type,,}" in
+    wayland)
+      if command -v wl-copy >/dev/null 2>&1 && command -v wl-paste >/dev/null 2>&1; then
+        return 0
+      fi
+      packages=(wl-clipboard)
+      ;;
+    x11)
+      if command -v xclip >/dev/null 2>&1 && command -v xsel >/dev/null 2>&1; then
+        return 0
+      fi
+      packages=(xclip xsel)
+      ;;
+    *) return 0 ;;
+  esac
+
+  local -a install=(apt-get install -y "${packages[@]}")
+  if [[ "$(id -u)" != 0 ]]; then
+    install=(sudo "${install[@]}")
+  fi
+  echo "Installing TextLT clipboard helpers for $session_type (${packages[*]})..."
+  if ! "${install[@]}"; then
+    echo "Could not install clipboard helpers. Install them with 'sudo apt install ${packages[*]}'." >&2
+  fi
+}
+
 require_tool tar
 mkdir -p "$INSTALL_ROOT" "$APP_DIR" "$BIN_DIR"
 
@@ -117,6 +156,8 @@ if ! TEXTLT_CHECK_RUNTIME_ONLY=1 "$APP_DIR/textlt"; then
   echo "After fixing the reported package or network issue, run: textlt" >&2
   exit 1
 fi
+
+install_clipboard_helpers
 
 echo ""
 echo "TextLT $VERSION installed to: $APP_DIR"

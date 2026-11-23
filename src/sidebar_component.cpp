@@ -13,6 +13,8 @@
 #include "ftxui/component/event.hpp"
 #include "ftxui/dom/node.hpp"
 #include "ftxui/screen/string.hpp"
+#include "ui_horizontal_scroll.hpp"
+#include "ui_scrollbar.hpp"
 #include "workspace_tabs.hpp"
 
 namespace textlt {
@@ -46,47 +48,6 @@ ftxui::Color SidebarBorderColor(const Theme& theme) {
     return theme.gutter;
 }
 
-std::string VisibleLabel(const std::string& label, int offset, int width) {
-    if (offset == 0 && ftxui::string_width(label) <= width) {
-        return label;
-    }
-    const auto glyphs = ftxui::Utf8ToGlyphs(label);
-    const int end = std::min(offset + width, static_cast<int>(glyphs.size()));
-    std::string visible;
-    for (int column = offset; column < end; ++column) {
-        const std::string& glyph = glyphs[column];
-        const int glyph_width = ftxui::string_width(glyph);
-        // A full-width glyph must fit on both sides of the viewport.
-        if (column == offset && glyph_width == 0) {
-            visible += ' ';
-        } else if (column != end - 1 || glyph_width != 2) {
-            visible += glyph;
-        }
-    }
-    return visible;
-}
-
-int BoxWidth(const ftxui::Box& box) {
-    return box.IsEmpty() ? 0 : box.x_max - box.x_min + 1;
-}
-
-struct HorizontalScrollbar {
-    int width;
-    int max_offset;
-    int thumb_width = 0;
-    int thumb_start = 0;
-
-    HorizontalScrollbar(int viewport_width, int label_width, int offset)
-        : width(viewport_width), max_offset(std::max(0, label_width - width)) {
-        if (width > 0 && max_offset > 0) {
-            thumb_width = std::max(1, static_cast<int>(1LL * width * width / label_width));
-            thumb_start = static_cast<int>(1LL * offset * Travel() / max_offset);
-        }
-    }
-
-    int Travel() const { return width - thumb_width; }
-};
-
 } // namespace
 
 class SidebarPanel::EntryList final : public ftxui::Node {
@@ -118,7 +79,7 @@ public:
             AddRow(sidebar_.RenderEntry(index, width, theme_), y);
         }
 
-        const HorizontalScrollbar scrollbar(width, sidebar_.widest_label_, sidebar_.label_scroll_offset_);
+        const ScrollbarMetrics scrollbar(width, sidebar_.widest_label_, sidebar_.label_scroll_offset_);
         if (scrollbar.max_offset == 0) {
             sidebar_.scrollbar_drag_.reset();
             return;
@@ -134,8 +95,8 @@ public:
         };
         AddRow(hbox({
             track(scrollbar.thumb_start),
-            text(std::string(scrollbar.thumb_width, ' ')) | bgcolor(theme_.modal_selected_item_bg),
-            track(width - scrollbar.thumb_start - scrollbar.thumb_width),
+            text(std::string(scrollbar.thumb_length, ' ')) | bgcolor(theme_.modal_selected_item_bg),
+            track(width - scrollbar.thumb_start - scrollbar.thumb_length),
         }), box.y_max);
     }
 
@@ -706,8 +667,8 @@ bool SidebarPanel::HandleScrollbarMouse(const ftxui::Event& event, const ftxui::
         return true;
     }
 
-    const HorizontalScrollbar scrollbar(BoxWidth(scrollbar_box_), widest_label_, label_scroll_offset_);
-    if (scrollbar.width == 0 || scrollbar.max_offset == 0) {
+    const ScrollbarMetrics scrollbar(BoxWidth(scrollbar_box_), widest_label_, label_scroll_offset_);
+    if (scrollbar.length == 0 || scrollbar.max_offset == 0) {
         return false;
     }
 
@@ -733,11 +694,11 @@ bool SidebarPanel::HandleScrollbarMouse(const ftxui::Event& event, const ftxui::
             return false;
         }
         const int relative_to_thumb = column - scrollbar.thumb_start;
-        if (relative_to_thumb >= 0 && relative_to_thumb < scrollbar.thumb_width) {
+        if (relative_to_thumb >= 0 && relative_to_thumb < scrollbar.thumb_length) {
             scrollbar_grab_column_ = relative_to_thumb;
             return true;
         }
-        scrollbar_grab_column_ = scrollbar.thumb_width / 2;
+        scrollbar_grab_column_ = scrollbar.thumb_length / 2;
     } else if (!scrollbar_drag_ || mouse.motion != Mouse::Moved) {
         return false;
     }
@@ -745,7 +706,7 @@ bool SidebarPanel::HandleScrollbarMouse(const ftxui::Event& event, const ftxui::
     const int travel = scrollbar.Travel();
     const int thumb_start = std::clamp(column - scrollbar_grab_column_, 0, travel);
     if (thumb_start != scrollbar.thumb_start) {
-        label_scroll_offset_ = static_cast<int>((1LL * thumb_start * scrollbar.max_offset + travel - 1) / travel);
+        label_scroll_offset_ = scrollbar.OffsetForThumb(thumb_start);
     }
     return true;
 }

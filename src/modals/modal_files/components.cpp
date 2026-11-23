@@ -94,7 +94,7 @@ void FilesModalContent::RebuildComponents() {
             ftxui::bgcolor(theme.modal_input_bg) |
             ftxui::color(theme.modal_input_fg);
     };
-    operation_input_ = ftxui::Input(
+    operation_input_ = ClipboardController::MakeInput(
         &pending_operation_input_value_,
         "name",
         operation_option);

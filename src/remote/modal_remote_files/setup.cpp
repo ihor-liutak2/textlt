@@ -55,27 +55,17 @@ RemoteFilesModalContent::RemoteFilesModalContent(
             SetStatus("No error to copy.");
             return;
         }
-        if (copy_text_) {
-            copy_text_(error_footer_);
-        }
-        SetStatus("Error copied to clipboard.");
+        const bool written = copy_text_ && copy_text_(error_footer_);
+        SetStatus(written ? "Error copied to clipboard." : ClipboardController::kWriteFailed, !written);
     }, ButtonRole::Cancel, ButtonVariant::AccentEdges, "⧉");
 
     local_path_input_ = MakePathInput(PanelSide::Local);
     remote_path_input_ = MakePathInput(PanelSide::Remote);
 
-    auto local_menu = ftxui::Menu(
-        &local_panel_.entry_labels,
-        &local_panel_.selected);
-    local_list_component_ = ftxui::CatchEvent(
-        ftxui::Renderer(local_menu, [this] { return RenderPanel(PanelSide::Local); }),
-        [this](ftxui::Event event) { return HandlePanelEvent(PanelSide::Local, std::move(event)); });
-    auto remote_menu = ftxui::Menu(
-        &remote_panel_.entry_labels,
-        &remote_panel_.selected);
-    remote_list_component_ = ftxui::CatchEvent(
-        ftxui::Renderer(remote_menu, [this] { return RenderPanel(PanelSide::Remote); }),
-        [this](ftxui::Event event) { return HandlePanelEvent(PanelSide::Remote, std::move(event)); });
+    local_list_component_ = ftxui::Make<PanelComponent>(*this, PanelSide::Local,
+        ftxui::Menu(&local_panel_.entry_labels, &local_panel_.selected));
+    remote_list_component_ = ftxui::Make<PanelComponent>(*this, PanelSide::Remote,
+        ftxui::Menu(&remote_panel_.entry_labels, &remote_panel_.selected));
 
     ftxui::InputOption operation_option;
     operation_option.multiline = false;
@@ -85,7 +75,7 @@ RemoteFilesModalContent::RemoteFilesModalContent(
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
         return RemoteDialogInputTransform(theme, std::move(state));
     };
-    operation_input_ = ftxui::Input(&pending_input_value_, "name", operation_option);
+    operation_input_ = ClipboardController::MakeInput(&pending_input_value_, "name", operation_option);
     MakeTextButton(confirm_button_, "Confirm", [this] { ConfirmPendingOperation(); },
         ButtonRole::Primary, ButtonVariant::AccentEdges);
     MakeTextButton(cancel_button_, "Cancel", [this] { CancelPendingOperation(); },
@@ -168,7 +158,7 @@ ftxui::Component RemoteFilesModalContent::MakePathInput(PanelSide side) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
         return RemoteDialogInputTransform(theme, std::move(state));
     };
-    return ftxui::Input(&panel.path_input, side == PanelSide::Local ? "local path" : "remote path", option);
+    return ClipboardController::MakeInput(&panel.path_input, side == PanelSide::Local ? "local path" : "remote path", option);
 }
 
 void RemoteFilesModalContent::Open(
@@ -208,6 +198,8 @@ void RemoteFilesModalContent::Open(
 
 void RemoteFilesModalContent::Close() {
     CancelPendingOperation();
+    local_panel_.scrollbar_drag.reset();
+    remote_panel_.scrollbar_drag.reset();
     local_panel_.entries.clear();
     remote_panel_.entries.clear();
     local_panel_.entry_labels.clear();
