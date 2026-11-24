@@ -14,10 +14,7 @@ void TextltApp::ShowNotesWorkspace() {
     CloseDropdown();
     workspace_mode_ = WorkspaceMode::Notes;
     workspace_mode_index_ = static_cast<int>(workspace_mode_);
-    if (menu_bar_) {
-        menu_bar_->SetNotesMenuVisible(true);
-        menu_bar_->SetActionsMenuVisible(false);
-    }
+    UpdateWorkspaceMenus();
     sidebar_has_focus_ = false;
     if (notes_workspace_component_) {
         auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_);
@@ -47,10 +44,7 @@ void TextltApp::ShowDocumentsWorkspace() {
     }
     workspace_mode_ = WorkspaceMode::Documents;
     workspace_mode_index_ = static_cast<int>(workspace_mode_);
-    if (menu_bar_) {
-        menu_bar_->SetNotesMenuVisible(false);
-        menu_bar_->SetActionsMenuVisible(false);
-    }
+    UpdateWorkspaceMenus();
     if (sidebar_panel_) {
         // The Actions workspace temporarily owns the shared Sidebar's list.
         // Restore a document collection before rendering Documents again. This

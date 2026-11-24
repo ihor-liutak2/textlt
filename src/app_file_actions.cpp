@@ -1,5 +1,7 @@
 #include "app.hpp"
 
+#include "connect_workspace.hpp"
+
 #include <algorithm>
 #include <filesystem>
 #include <memory>
@@ -138,7 +140,9 @@ bool TextltApp::ConfirmFilesModalAction(
     std::string& error) {
     bool success = false;
 
-    if (mode == FilesModalMode::Open) {
+    if (mode == FilesModalMode::SendConnectFile) {
+        success = connect_workspace_->SendFile(path, error);
+    } else if (mode == FilesModalMode::Open) {
         success = OpenFile(Utf8FromPath(path), error);
     } else if (mode == FilesModalMode::SaveAs) {
         success = SaveFile(Utf8FromPath(path), error);

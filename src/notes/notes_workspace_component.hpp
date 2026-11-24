@@ -1,5 +1,7 @@
 #pragma once
 
+#include "workspace_tabs.hpp"
+
 #include "editor/clipboard_controller.hpp"
 
 #include <chrono>
@@ -54,6 +56,9 @@ public:
     bool IsEditing() const { return editing_; }
     bool HasOpenContextMenu() const { return context_menu_.IsOpen(); }
     bool HandleContextMenuEvent(ftxui::Event event);
+    void SetConnectCallback(std::function<void()> callback) {
+        workspace_tabs_.SetConnectCallback(std::move(callback));
+    }
     void SetClipboardReader(ClipboardController::ReadCallback reader) {
         read_clipboard_ = std::move(reader);
     }
@@ -82,6 +87,10 @@ public:
     bool ReplaceTextTarget(const TextTarget& target, const std::string& replacement, std::string& error);
     void NewNote();
     bool ImportNote(std::string title, std::vector<NoteBlock> blocks, std::string& error);
+    bool ImportNoteTo(std::string title, std::vector<NoteBlock> blocks,
+                      const std::string& section_id, std::string& error);
+    const NoteDocument* SelectedNote() const;
+    const std::vector<NoteSection>& Sections() const { return repository_.Sections(); }
     // Opens the card selected in the overview. Does nothing (with a status
     // message) when there is no editable note selection.
     void EditSelectedNote();
@@ -206,8 +215,7 @@ private:
 
     const Theme* theme_ = nullptr;
     StatusCallback on_status_;
-    DocumentsCallback on_documents_;
-    ActionsCallback on_actions_;
+    WorkspaceTabs workspace_tabs_;
     ClipboardWriteCallback write_clipboard_;
     ClipboardController::ReadCallback read_clipboard_;
     NoteRepository repository_;
@@ -265,9 +273,6 @@ private:
     std::string title_editor_input_;
     size_t title_editor_cursor_ = 0;
     ftxui::Box sidebar_box_;
-    ftxui::Box documents_tab_box_;
-    ftxui::Box notes_tab_box_;
-    ftxui::Box actions_tab_box_;
     ftxui::Box sidebar_notes_tab_box_;
     ftxui::Box sidebar_content_tab_box_;
     ftxui::Box sidebar_content_box_;

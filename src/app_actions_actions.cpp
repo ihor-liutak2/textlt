@@ -37,7 +37,7 @@ void TextltApp::ShowActionsWorkspace() {
     CloseDropdown();
     workspace_mode_ = WorkspaceMode::Actions;
     workspace_mode_index_ = static_cast<int>(workspace_mode_);
-    menu_bar_->SetNotesMenuVisible(false); menu_bar_->SetActionsMenuVisible(true);
+    UpdateWorkspaceMenus();
     SyncActionsProjectContext(); RefreshActionsSidebar();
     auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_); sidebar->ShowActions();
     auto actions_workspace = std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_);

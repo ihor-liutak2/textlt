@@ -1,5 +1,8 @@
 #include "app.hpp"
 
+#include "connect_workspace.hpp"
+#include "connect_content.hpp"
+
 #include "path_utils.hpp"
 
 #include <algorithm>
@@ -424,6 +427,9 @@ TextltApp::TextltApp()
         [this](const std::string& text) { return clipboard_controller_.WriteText(text); });
     auto notes_component = std::static_pointer_cast<notes::NotesWorkspaceComponent>(
         notes_workspace_component_);
+    notes_component->SetConnectCallback([this] { RunCommand("connect.open"); });
+    std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->SetConnectCallback(
+        [this] { RunCommand("connect.open"); });
     notes_component->SetClipboardReader([this](ClipboardController::PasteCallback deliver) {
         clipboard_controller_.ReadText(std::move(deliver));
     });
@@ -529,7 +535,24 @@ TextltApp::TextltApp()
         notes_workspace_component_,
         actions_workspace_component_,
     }, &workspace_mode_index_);
-    auto body_content = ftxui::Container::Horizontal({sidebar_panel_, workspace_content});
+    connect_workspace_ = ftxui::Make<connect_ui::ConnectWorkspace>(
+        current_theme_, [this] { screen_.PostEvent(ftxui::Event::Custom); },
+        WorkspaceTabs::Callbacks{
+            [this] { RunCommand("docs.open"); },
+            [this] { RunCommand("notes.toggle"); },
+            [this] { RunCommand("actions.open"); },
+            {},
+        },
+        [this] { OpenFilesModal(FilesModalMode::SendConnectFile); },
+        [] { return FileManager::UserDownloadsDirectory(false); },
+        EditorConfig::DefaultConfigPath().parent_path() / "localsend.pem");
+    connect_workspace_->RegisterContentHandler(MakeNoteConnectHandler(*notes_component));
+    connect_workspace_->RegisterContentHandler(MakeActionConnectHandler(
+        *std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_)));
+    auto body_content = ftxui::Container::Tab({
+        ftxui::Container::Horizontal({sidebar_panel_, workspace_content}),
+        connect_workspace_,
+    }, &connect_body_index_);
     body_container_ = ftxui::CatchEvent(body_content, [this](ftxui::Event event) {
         return app_event_dispatcher_.HandleBodyEvent(event);
     });
@@ -597,6 +620,10 @@ TextltApp::TextltApp()
         [this](const std::string& text) { return clipboard_controller_.WriteText(text); },
         [this] { CloseGitSettingsModal(); });
 
+    connect_settings_modal_.Configure(current_theme_, *connect_workspace_,
+        [this](const std::string& text) { return clipboard_controller_.WriteText(text); },
+        [this] { CloseConnectSettingsModal(); });
+
     root_container_ = ftxui::Container::Tab({
         main_container_,
         help_dialog_.View(),
@@ -623,6 +650,7 @@ TextltApp::TextltApp()
         assistant_settings_modal_.View(),
         rename_project_popup_,
         remove_project_popup_,
+        connect_settings_modal_.View(),
     }, &active_layer_index_);
 
     renderer_ = ftxui::Renderer(root_container_, [this] { return Render(); });
@@ -648,6 +676,7 @@ void TextltApp::Run() {
     screen_.ForceHandleCtrlC(false);
     BracketedPasteModeGuard bracketed_paste_mode_guard;
     screen_.Loop(global_shortcuts_);
+    connect_workspace_->Stop();
     if (notes_workspace_component_) {
         std::string error;
         std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_)->Save(error);

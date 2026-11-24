@@ -315,6 +315,7 @@ void TextltApp::OpenFilesModal(FilesModalMode mode) {
             mode == FilesModalMode::Import ? "Import" :
             mode == FilesModalMode::ImportActions ? "Import Actions" :
             mode == FilesModalMode::ImportNotesMarkdown ? "Import Markdown into Notes" :
+            mode == FilesModalMode::SendConnectFile ? "Send File" :
             mode == FilesModalMode::OpenFolder ? "Open Folder" :
             mode == FilesModalMode::SelectDirectory ? "Add Project" :
             "Files") +

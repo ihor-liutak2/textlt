@@ -717,11 +717,15 @@ void ActionsWorkspaceComponent::ClearActionSearchHighlights() {
 
 bool ActionsWorkspaceComponent::ImportActions(
     std::vector<ActionItem> items, std::string& error) {
+    return ImportActionsTo(std::move(items), selected_group_id_, selected_page_id_, error);
+}
+
+bool ActionsWorkspaceComponent::ImportActionsTo(std::vector<ActionItem> items,
+    const std::string& group_id, const std::string& page_id, std::string& error) {
     const size_t count = items.size();
-    if (!repository_.AppendItems(
-            selected_group_id_, selected_page_id_, std::move(items), error)) {
-        return false;
-    }
+    if (!repository_.AppendItems(group_id, page_id, std::move(items), error)) return false;
+    selected_group_id_ = group_id;
+    selected_page_id_ = page_id;
     NormalizeSelection();
     const ActionPage* page = SelectedPage();
     if (page && page->items.size() >= count) {

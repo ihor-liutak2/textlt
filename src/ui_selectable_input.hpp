@@ -27,6 +27,7 @@ inline ftxui::Component MakeSelectableInput(
     using namespace ftxui;
     option.cursor_position = &cursor;
     const auto password = option.password;
+    const auto on_change = option.on_change;
     auto transform = std::move(option.transform);
     option.transform = [selection, transform = std::move(transform)](InputState state) {
         if (!state.focused) {
@@ -41,7 +42,7 @@ inline ftxui::Component MakeSelectableInput(
     auto view = Renderer(input, [input, selection] {
         return input->Render() | reflect(selection->box);
     });
-    auto selectable = CatchEvent(view, [input, &value, &cursor, selection, password](Event event) {
+    auto selectable = CatchEvent(view, [input, &value, &cursor, selection, password, on_change](Event event) {
         if (event.is_mouse()) {
             const auto& mouse = event.mouse();
             if (mouse.button != Mouse::Left || mouse.motion != Mouse::Pressed) return false;
@@ -70,7 +71,9 @@ inline ftxui::Component MakeSelectableInput(
             selection->all_selected = false;
             value.clear();
             cursor = 0;
-            return !event.is_character();
+            if (event.is_character()) return false;
+            if (on_change) on_change();
+            return true;
         }
         if (event == Event::ArrowLeft || event == Event::ArrowLeftCtrl ||
             event == Event::ArrowRight || event == Event::ArrowRightCtrl) {

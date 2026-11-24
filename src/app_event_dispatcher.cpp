@@ -2,6 +2,8 @@
 
 #include "app.hpp"
 
+#include "connect_workspace.hpp"
+
 #include <memory>
 #include <string>
 
@@ -65,7 +67,8 @@ bool AppEventDispatcher::Handle(ftxui::Event event) {
 }
 
 bool AppEventDispatcher::HandleBodyEvent(ftxui::Event event) {
-    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Notes) {
+    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Notes ||
+        app_.workspace_mode_ == TextltApp::WorkspaceMode::Connect) {
         return false;
     }
     if (IsPrimaryMousePress(event) && app_.ActiveLayer() == TextltApp::UiLayer::Main) {
@@ -230,6 +233,12 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
 
     if (app_.menu_bar_->IsDropdownOpen()) {
         return event.is_mouse() ? false : app_.menu_bar_->OnEvent(event);
+    }
+
+    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Connect) {
+        if (app_.connect_workspace_->Paste(event)) return true;
+        if (event.is_mouse()) return false;
+        return app_.RunMenuShortcut(event) || HandleFunctionKeyEvent(event);
     }
 
     if (app_.find_panel_open_ && app_.find_replace_panel_) {

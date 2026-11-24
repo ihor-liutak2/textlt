@@ -71,6 +71,9 @@ public:
     void CopyAllActions();
     bool HasSelectedPage() const;
     bool ImportActions(std::vector<ActionItem> items, std::string& error);
+    bool ImportActionsTo(std::vector<ActionItem> items, const std::string& group_id,
+                         const std::string& page_id, std::string& error);
+    const ActionItem* SelectedItem() const;
 
     // Structured action-list search used by the shared Find/Replace sidebar.
     struct ActionSearchResult {
@@ -104,7 +107,6 @@ private:
     const ActionGroup* SelectedGroup() const;
     bool CanDeleteGroup(const ActionGroup& group) const;
     const ActionPage* SelectedPage() const;
-    const ActionItem* SelectedItem() const;
     bool CopyActionBlock(const ActionItem& item, size_t block);
     void FlashCopyCaption(const std::string& item_id, size_t block);
     ActionsContextMenu::Result ExecuteContextCommand(

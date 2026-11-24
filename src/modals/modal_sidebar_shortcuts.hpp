@@ -30,7 +30,7 @@ public:
     ftxui::Element Render() override;
     ftxui::Component GetMainComponent() override { return container_; }
     std::string GetTitle() override { return "Quick Commands"; }
-    ModalSizePreference GetModalSizePreference() const override { return {34, 14}; }
+    ModalSizePreference GetModalSizePreference() const override { return {34, 15}; }
     ModalFrameStyle GetModalFrameStyle() const override { return ModalFrameStyle::TitleInBorder; }
     std::string GetFooterText() const override { return {}; }
 
@@ -44,6 +44,7 @@ private:
         char key;
         std::string label;
         std::string command_id;
+        bool switches_workspace = false;
     };
 
     void TriggerEntry(size_t index);

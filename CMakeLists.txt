@@ -202,7 +202,17 @@ target_link_libraries(textlt-piper-server PRIVATE textlt_civetweb)
 
 
 
+add_subdirectory(connect)
+
 add_executable(textlt
+  connect/ui/connect_workspace.cpp
+  connect/ui/connect_settings.cpp
+  connect/ui/network_diagnostics.cpp
+  connect/ui/connect_structured.cpp
+  connect/ui/download_destination.cpp
+  src/app_connect.cpp
+  src/connect_content.cpp
+  src/modals/modal_connect_settings.cpp
   src/app.cpp
   src/app_command_registry.cpp
   src/app_event_dispatcher.cpp
@@ -342,6 +352,7 @@ add_executable(textlt
 )
 
 target_include_directories(textlt PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/connect/ui
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party
   ${LibArchive_INCLUDE_DIRS}
@@ -352,6 +363,7 @@ target_compile_definitions(textlt PRIVATE
 )
 
 target_link_libraries(textlt PRIVATE
+  textlt::connect
   ftxui::screen
   ftxui::dom
   ftxui::component
@@ -386,7 +398,7 @@ if(WIN32)
     WIN32_LEAN_AND_MEAN
     _CRT_SECURE_NO_WARNINGS
   )
-  target_link_libraries(textlt PRIVATE shell32 ole32 advapi32 user32)
+  target_link_libraries(textlt PRIVATE shell32 ole32 advapi32 user32 iphlpapi)
   if(MINGW)
     target_link_options(textlt PRIVATE -municode)
   endif()

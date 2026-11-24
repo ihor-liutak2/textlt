@@ -30,6 +30,7 @@ enum class FilesModalMode {
     Import,
     ImportActions,
     ImportNotesMarkdown,
+    SendConnectFile,
     OpenFolder,
     SelectDirectory,
 };

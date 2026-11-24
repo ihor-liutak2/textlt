@@ -1,5 +1,7 @@
 #include "app.hpp"
 
+#include "connect_workspace.hpp"
+
 #include "keyboard_shortcuts.hpp"
 #include <algorithm>
 #include <filesystem>
@@ -53,6 +55,8 @@ BottomBarRowState TextltApp::CurrentBottomBarRowState() {
         state.workspace_label = "Notes";
     } else if (workspace_mode_ == WorkspaceMode::Actions) {
         state.workspace_label = "Action";
+    } else if (workspace_mode_ == WorkspaceMode::Connect) {
+        state.workspace_label = "Connect";
     } else {
         state.workspace_label = "Docs";
         state.line_ending = editor ? editor->ActiveLineEndingLabel() : "LF";
@@ -69,13 +73,14 @@ ftxui::Element TextltApp::Render() {
     using namespace ftxui;
 
 
-    const auto editor = std::static_pointer_cast<EditorComponent>(text_editor_);
+    connect_workspace_->DrainEvents();
+    const bool connect_selected = workspace_mode_ == WorkspaceMode::Connect;
     const bool distraction_mode = layout_controller_.IsDistractionModeActive();
-    SyncFindPanelTarget();
-    if (find_panel_open_ && find_replace_panel_) {
+    if (!connect_selected) SyncFindPanelTarget();
+    if (!connect_selected && find_panel_open_ && find_replace_panel_) {
         find_replace_panel_->Tick();
     }
-    const bool find_open = find_panel_open_ && find_replace_panel_;
+    const bool find_open = !connect_selected && find_panel_open_ && find_replace_panel_;
     const bool show_sidebar = !find_open && !distraction_mode &&
         ((workspace_mode_ == WorkspaceMode::Documents && editor_config_.show_file_explorer) ||
          (workspace_mode_ == WorkspaceMode::Actions && editor_config_.show_actions_sidebar));
@@ -87,15 +92,16 @@ ftxui::Element TextltApp::Render() {
         : emptyElement();
     UpdateFileMenuLabels();
     UpdateNotesMenuLabels();
-    RefreshOpenedDocumentsSidebar();
+    if (!connect_selected) RefreshOpenedDocumentsSidebar();
 
     Element top_menu_element = distraction_mode ? emptyElement() : menu_bar_->Render();
         
-    Element editor_workspace = editor_workspace_container_
-        ? editor_workspace_container_->Render() | xflex
+    Element editor_workspace = workspace_mode_ != WorkspaceMode::Documents ? emptyElement()
+        : editor_workspace_container_ ? editor_workspace_container_->Render() | xflex
         : text_editor_->Render() | xflex;
 
-    Element workspace = workspace_mode_ == WorkspaceMode::Notes && notes_workspace_component_
+    Element workspace = connect_selected ? connect_workspace_->Render()
+        : workspace_mode_ == WorkspaceMode::Notes && notes_workspace_component_
         ? (find_open
               ? hbox({find_panel_element, text("  "),
                       notes_workspace_component_->Render() | xflex}) | flex
@@ -202,6 +208,9 @@ ftxui::Element TextltApp::Render() {
     }
     if (git_settings_modal_.IsOpen()) {
         layers.push_back(git_settings_modal_.View()->Render() | clear_under | center);
+    }
+    if (connect_settings_modal_.IsOpen()) {
+        layers.push_back(connect_settings_modal_.View()->Render() | clear_under | center);
     }
     if (theme_dialog_.IsOpen()) {
         layers.push_back(theme_dialog_.View()->Render() | clear_under | center);
@@ -317,6 +326,7 @@ bool TextltApp::ActiveModalIsOpen() const {
         case UiLayer::RemoteFiles: return remote_files_modal_.IsOpen();
         case UiLayer::Git: return git_modal_.IsOpen();
         case UiLayer::GitSettings: return git_settings_modal_.IsOpen();
+        case UiLayer::ConnectSettings: return connect_settings_modal_.IsOpen();
         case UiLayer::Tts: return tts_modal_.IsOpen();
         case UiLayer::ViewLayout: return view_layout_modal_.IsOpen();
         case UiLayer::DistractionOptions: return distraction_options_modal_.IsOpen();

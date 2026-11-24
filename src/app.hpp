@@ -33,6 +33,7 @@
 #include "modals/modal_quick_ai.hpp"
 #include "modals/modal_git.hpp"
 #include "modals/modal_git_settings.hpp"
+#include "modals/modal_connect_settings.hpp"
 #include "modals/modal_recent_files.hpp"
 #include "modals/modal_tts.hpp"
 #include "modals/modal_view_layout.hpp"
@@ -77,6 +78,7 @@ private:
         Documents,
         Notes,
         Actions,
+        Connect,
     };
 
     enum class NavigationPopupMode {
@@ -115,6 +117,7 @@ private:
         AssistantSettings,
         RenameProject,
         RemoveProject,
+        ConnectSettings,
     };
 
     void SetActiveLayer(UiLayer layer);
@@ -285,6 +288,12 @@ private:
     void ToggleNotesWorkspace();
     void ShowNotesWorkspace();
     void ShowActionsWorkspace();
+    void ShowConnectWorkspace();
+    void ShareNoteViaConnect();
+    void ShareActionViaConnect();
+    void UpdateWorkspaceMenus();
+    void OpenConnectSettingsModal(ConnectSettingsTab tab);
+    void CloseConnectSettingsModal();
     void ShowDocumentsWorkspace();
     void RefreshActionsSidebar();
     void SyncActionsProjectContext();
@@ -434,6 +443,8 @@ private:
     ftxui::Component sidebar_panel_;
     ftxui::Component notes_workspace_component_;
     ftxui::Component actions_workspace_component_;
+    std::shared_ptr<connect_ui::ConnectWorkspace> connect_workspace_;
+    int connect_body_index_ = 0;
     std::unique_ptr<EditorFindTarget> editor_find_target_;
     std::unique_ptr<NotesFindTarget> notes_find_target_;
     std::unique_ptr<ActionsFindTarget> actions_find_target_;
@@ -455,6 +466,7 @@ private:
     RemoteFilesModal remote_files_modal_;
     GitModal git_modal_;
     GitSettingsModal git_settings_modal_;
+    ConnectSettingsModal connect_settings_modal_;
 
     CloudTtsPipeline cloud_tts_pipeline_;
     TtsModal tts_modal_;

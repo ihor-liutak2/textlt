@@ -14,7 +14,6 @@
 #include "keyboard_shortcuts.hpp"
 #include "modals/delete_confirmation_popup.hpp"
 #include "ui_button.hpp"
-#include "workspace_tabs.hpp"
 
 namespace textlt::notes {
 namespace {
@@ -132,8 +131,7 @@ NotesWorkspaceComponent::NotesWorkspaceComponent(
     std::filesystem::path root)
     : theme_(theme),
       on_status_(std::move(on_status)),
-      on_documents_(std::move(on_documents)),
-      on_actions_(std::move(on_actions)),
+      workspace_tabs_({std::move(on_documents), {}, std::move(on_actions), {}}),
       write_clipboard_(std::move(write_clipboard)),
       repository_(std::move(root)),
       session_(nullptr),
@@ -156,9 +154,7 @@ void NotesWorkspaceComponent::SetSidebarVisible(bool visible) {
     // hidden sidebar used to be do not trigger stale sidebar controls.
     const ftxui::Box empty_box{1, 0, 1, 0};
     sidebar_box_ = empty_box;
-    documents_tab_box_ = empty_box;
-    notes_tab_box_ = empty_box;
-    actions_tab_box_ = empty_box;
+    workspace_tabs_.ClearHitboxes();
     sidebar_notes_tab_box_ = empty_box;
     sidebar_content_tab_box_ = empty_box;
     sidebar_content_box_ = empty_box;
@@ -817,14 +813,31 @@ void NotesWorkspaceComponent::NewNote() {
 
 bool NotesWorkspaceComponent::ImportNote(
     std::string title, std::vector<NoteBlock> blocks, std::string& error) {
-    if (!Save(error)) return false;
+    return ImportNoteTo(std::move(title), std::move(blocks),
+                        trash_selected_ ? std::string{} : selected_section_id_, error);
+}
 
+const NoteDocument* NotesWorkspaceComponent::SelectedNote() const {
+    if (trash_selected_) return nullptr;
+    if (editing_) return session_.Note();
+    if (selected_card_ < 0 || static_cast<std::size_t>(selected_card_) >= visible_notes_.size()) return nullptr;
+    return &repository_.Notes()[visible_notes_[selected_card_]];
+}
+
+bool NotesWorkspaceComponent::ImportNoteTo(std::string title, std::vector<NoteBlock> blocks,
+                                           const std::string& section_id, std::string& error) {
+    if (!Save(error)) return false;
+    const auto& sections = repository_.Sections();
+    if (!section_id.empty() && std::none_of(sections.begin(), sections.end(), [&](const auto& section) {
+            return section.id == section_id && !section.deleted_at;
+        })) {
+        error = "The Notes destination no longer exists";
+        return false;
+    }
     NoteDocument note = MakeNewNote(repository_.DeviceId());
     note.title = std::move(title);
     note.blocks = std::move(blocks);
-    if (!selected_section_id_.empty() && !trash_selected_) {
-        note.section_id = selected_section_id_;
-    }
+    if (!section_id.empty()) note.section_id = section_id;
     if (!repository_.Save(note, error)) return false;
 
     repository_.Notes().insert(repository_.Notes().begin(), std::move(note));
@@ -1292,8 +1305,7 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
     if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left && event.mouse().motion == ftxui::Mouse::Pressed) {
         const auto& mouse = event.mouse();
         if (sidebar_visible_) {
-            if (documents_tab_box_.Contain(mouse.x, mouse.y)) { if (on_documents_) on_documents_(); return true; }
-            if (actions_tab_box_.Contain(mouse.x, mouse.y)) { if (on_actions_) on_actions_(); return true; }
+            if (workspace_tabs_.ActivateAt(mouse.x, mouse.y)) return true;
             if (sidebar_notes_tab_box_.Contain(mouse.x, mouse.y)) {
                 sidebar_content_selected_ = false;
                 if (!editing_) focus_ = FocusArea::Sidebar;
@@ -1543,8 +1555,7 @@ ftxui::Element NotesWorkspaceComponent::RenderSidebar() {
         return RenderModalFlatButton(theme, spec, selected) | reflect(box);
     };
     Elements rows = {
-        RenderWorkspaceTabs(theme, WorkspaceTab::Notes,
-            documents_tab_box_, notes_tab_box_, actions_tab_box_),
+        workspace_tabs_.Render(theme, WorkspaceTab::Notes),
         separator() | color(theme.gutter),
         hbox({
             tab("Notes", !sidebar_content_selected_, sidebar_notes_tab_box_),

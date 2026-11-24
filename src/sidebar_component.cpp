@@ -15,7 +15,6 @@
 #include "ftxui/screen/string.hpp"
 #include "ui_horizontal_scroll.hpp"
 #include "ui_scrollbar.hpp"
-#include "workspace_tabs.hpp"
 
 namespace textlt {
 namespace {
@@ -150,9 +149,8 @@ SidebarPanel::SidebarPanel(
       on_open_files_modal_(std::move(on_open_files_modal)),
       on_copy_path_(std::move(on_copy_path)),
       shortcut_label_provider_(std::move(shortcut_label_provider)),
-      on_open_notes_(std::move(on_open_notes)),
-      on_open_actions_(std::move(on_open_actions)),
-      on_open_documents_(std::move(on_open_documents)),
+      workspace_tabs_({std::move(on_open_documents), std::move(on_open_notes),
+                       std::move(on_open_actions), {}}),
       on_action_group_select_(std::move(on_action_group_select)),
       on_action_command_(std::move(on_action_command)),
       projects_provider_(std::move(projects_provider)),
@@ -180,12 +178,8 @@ ftxui::Element SidebarPanel::OnRender() {
     const ftxui::Color sidebar_text = SidebarTextColor(theme);
 
     return vbox({
-        RenderWorkspaceTabs(
-            theme,
-            mode_ == SidebarMode::Actions
-                ? WorkspaceTab::Actions
-                : WorkspaceTab::Documents,
-            documents_tab_box_, notes_tab_box_, actions_tab_box_),
+        workspace_tabs_.Render(theme, mode_ == SidebarMode::Actions
+            ? WorkspaceTab::Actions : WorkspaceTab::Documents),
         separator() | color(SidebarBorderColor(theme)),
         mode_ == SidebarMode::Actions
             ? emptyElement()
@@ -244,9 +238,7 @@ void SidebarPanel::ClearHitboxes() {
     project_tab_box_ = empty;
     projects_tab_box_ = empty;
     favorites_tab_box_ = empty;
-    notes_tab_box_ = empty;
-    actions_tab_box_ = empty;
-    documents_tab_box_ = empty;
+    workspace_tabs_.ClearHitboxes();
     action_primary_box_ = empty;
     action_secondary_box_ = empty;
     action_tertiary_box_ = empty;
@@ -285,23 +277,7 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
 
     if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left &&
         event.mouse().motion == ftxui::Mouse::Pressed &&
-        documents_tab_box_.Contain(event.mouse().x, event.mouse().y)) {
-        if (on_open_documents_) on_open_documents_();
-        return true;
-    }
-    if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left &&
-        event.mouse().motion == ftxui::Mouse::Pressed &&
-        actions_tab_box_.Contain(event.mouse().x, event.mouse().y)) {
-        if (on_open_actions_) on_open_actions_();
-        return true;
-    }
-    if (event.is_mouse() &&
-        event.mouse().button == ftxui::Mouse::Left &&
-        event.mouse().motion == ftxui::Mouse::Pressed &&
-        notes_tab_box_.Contain(event.mouse().x, event.mouse().y)) {
-        if (on_open_notes_) {
-            on_open_notes_();
-        }
+        workspace_tabs_.ActivateAt(event.mouse().x, event.mouse().y)) {
         return true;
     }
     if (event == ftxui::Event::ArrowDown) {

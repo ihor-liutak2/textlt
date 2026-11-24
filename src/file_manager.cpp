@@ -817,34 +817,43 @@ std::filesystem::path FileManager::UserDocumentsDirectory() {
     return home;
 }
 
-std::filesystem::path FileManager::UserDownloadsDirectory() {
-    const std::filesystem::path home = UserHomeDirectory();
+std::filesystem::path FileManager::UserDownloadsDirectory(bool fallback_to_home) {
+    const auto home = UserHomeDirectory();
 #ifdef _WIN32
-    const std::filesystem::path profile_downloads = home.empty()
-        ? std::filesystem::path()
-        : home / "Downloads";
-    if (IsReadableDirectory(profile_downloads)) {
-        return profile_downloads;
-    }
-
-    const std::filesystem::path known_folder = WindowsKnownFolder(FOLDERID_Downloads);
-    if (IsReadableDirectory(known_folder)) {
-        return known_folder;
-    }
-#else
-    const std::filesystem::path downloads = home.empty()
-        ? std::filesystem::path()
-        : home / "Downloads";
-    std::error_code error;
-    if (std::filesystem::is_directory(downloads, error)) {
-        return downloads;
+    const auto known_folder = WindowsKnownFolder(FOLDERID_Downloads);
+    if (!known_folder.empty()) return known_folder;
+#elif defined(__linux__)
+    const char* config_home = std::getenv("XDG_CONFIG_HOME");
+    const auto config = config_home && *config_home
+        ? PathFromUtf8Text(config_home) : home / ".config";
+    std::ifstream user_dirs(config / "user-dirs.dirs");
+    constexpr std::string_view prefix = "XDG_DOWNLOAD_DIR=\"";
+    for (std::string line; std::getline(user_dirs, line);) {
+        const auto start = line.find_first_not_of(" \t");
+        if (start == std::string::npos || line.compare(start, prefix.size(), prefix) != 0) continue;
+        std::string value;
+        bool closed = false;
+        for (std::size_t i = start + prefix.size(); i < line.size(); ++i) {
+            if (line[i] == '"') {
+                closed = true;
+                break;
+            }
+            if (line[i] == '\\' && i + 1 < line.size()) ++i;
+            value += line[i];
+        }
+        if (!closed || value.empty()) continue;
+        if (value == "$HOME") return home;
+        if (value.compare(0, 6, "$HOME/") == 0 && !home.empty()) {
+            return home / PathFromUtf8Text(value.substr(6)).relative_path();
+        }
+        auto path = PathFromUtf8Text(value);
+        if (path.is_absolute()) return path;
     }
 #endif
-
-    if (home.empty()) {
-        return CurrentProcessDirectory();
-    }
-    return home;
+    const auto downloads = home.empty() ? std::filesystem::path{} : home / "Downloads";
+    std::error_code error;
+    if (!fallback_to_home || std::filesystem::is_directory(downloads, error)) return downloads;
+    return home.empty() ? CurrentProcessDirectory() : home;
 }
 
 std::filesystem::path FileManager::CurrentProcessDirectory() {

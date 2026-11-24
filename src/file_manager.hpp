@@ -86,7 +86,7 @@ public:
 
     static std::filesystem::path UserHomeDirectory();
     static std::filesystem::path UserDocumentsDirectory();
-    static std::filesystem::path UserDownloadsDirectory();
+    static std::filesystem::path UserDownloadsDirectory(bool fallback_to_home = true);
     static std::filesystem::path CurrentProcessDirectory();
     static std::filesystem::path ResolvePath(
         const std::string& input,

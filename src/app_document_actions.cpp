@@ -1,5 +1,7 @@
 #include "app.hpp"
 
+#include "connect_workspace.hpp"
+
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -32,6 +34,10 @@ void TextltApp::FocusEditor() {
     // it was opened from. Taking focus on an editor child while Notes or
     // Actions is active makes Container::Tab select the Documents child even
     // though workspace_mode_ still renders the other workspace.
+    if (workspace_mode_ == WorkspaceMode::Connect) {
+        connect_workspace_->TakeFocus();
+        return;
+    }
     if (workspace_mode_ == WorkspaceMode::Notes) {
         workspace_mode_index_ = static_cast<int>(workspace_mode_);
         if (notes_workspace_component_) {
@@ -59,6 +65,7 @@ void TextltApp::FocusEditor() {
 
 
 void TextltApp::FocusSidebar() {
+    if (workspace_mode_ == WorkspaceMode::Connect) return;
     sidebar_has_focus_ = true;
     SetActiveLayer(UiLayer::Main);
     std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->FocusMenu();
@@ -66,6 +73,7 @@ void TextltApp::FocusSidebar() {
 
 
 void TextltApp::ToggleFileExplorer() {
+    if (workspace_mode_ == WorkspaceMode::Connect) return;
     if (workspace_mode_ == WorkspaceMode::Notes && notes_workspace_component_) {
         const bool visible = !editor_config_.show_notes_sidebar;
         editor_config_.show_notes_sidebar = visible;

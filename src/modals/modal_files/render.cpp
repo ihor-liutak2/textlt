@@ -304,6 +304,8 @@ ftxui::Element FilesModalContent::Render() {
 
 std::string FilesModalContent::ModeTitle() const {
     switch (mode_) {
+        case FilesModalMode::SendConnectFile:
+            return "Send File";
         case FilesModalMode::Open:
             return "Open";
         case FilesModalMode::SaveAs:
@@ -326,6 +328,8 @@ std::string FilesModalContent::ModeTitle() const {
 
 std::string FilesModalContent::FooterActionLabel(FilesModalMode mode) const {
     switch (mode) {
+        case FilesModalMode::SendConnectFile:
+            return "Send File";
         case FilesModalMode::Open:
             return "Open File";
         case FilesModalMode::SaveAs:

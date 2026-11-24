@@ -29,12 +29,13 @@ SidebarShortcutModalContent::SidebarShortcutModalContent(
       close_callback_(std::move(close_callback)),
       entries_({
           {'B', "Toggle sidebar", "sidebar.toggle_file_explorer"},
-          {'O', "Opened files (Docs)", "sidebar.show_opened_files"},
-          {'F', "Favorites (Docs)", "sidebar.show_favorites"},
-          {'D', "Folder (Docs)", "sidebar.show_project"},
-          {'P', "Projects (Docs)", "sidebar.show_projects"},
-          {'N', "Notes view", "notes.toggle"},
-          {'A', "Actions view", "actions.open"},
+          {'O', "Opened files (Docs)", "sidebar.show_opened_files", true},
+          {'F', "Favorites (Docs)", "sidebar.show_favorites", true},
+          {'D', "Folder (Docs)", "sidebar.show_project", true},
+          {'P', "Projects (Docs)", "sidebar.show_projects", true},
+          {'N', "Notes view", "notes.toggle", true},
+          {'A', "Actions view", "actions.open", true},
+          {'C', "Connect", "connect.open", true},
           {'M', "File manager", "file.open"},
           {'R', "Recent files", "file.recent"},
           {'S', "Search in files", "search.files"},
@@ -134,6 +135,10 @@ bool SidebarShortcutModalContent::HandleMouseEvent(ftxui::Event event) {
     }
 
     const int index = static_cast<int>(row - entry_boxes_.begin());
+    if (entries_[index].switches_workspace) {
+        TriggerEntry(static_cast<size_t>(index));
+        return true;
+    }
     const auto now = std::chrono::steady_clock::now();
     if (index == last_clicked_entry_ && now - last_click_time_ <= std::chrono::milliseconds(500)) {
         TriggerEntry(static_cast<size_t>(index));

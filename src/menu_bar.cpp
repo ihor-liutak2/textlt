@@ -67,6 +67,7 @@ MenuBarComponent::MenuBarComponent(
           " Options ",
           " Notes ",
           " Actions ",
+          " Connect ",
           " Tools ",
           " Help ",
           " Exit ",
@@ -122,6 +123,7 @@ MenuBarComponent::MenuBarComponent(
               {" Docs ", "docs.open"},
               {" Notes ", "notes.toggle"},
               {" Actions ", "actions.open"},
+              {" Connect ", "connect.open"},
               {" Smart Word Wrap [ ] ", "editor.toggle_smart_word_wrap"},
               {" Syntax Highlighting [X] ", "editor.toggle_syntax_highlighting"},
               {" Auto Pairing [X] ", "editor.toggle_auto_pairing"},
@@ -146,6 +148,7 @@ MenuBarComponent::MenuBarComponent(
               {" Bulleted List ", "notes.bullet_list"},
               {" Numbered List ", "notes.numbered_list"},
               {" Checklist ", "notes.checklist"},
+              {" Send via Connect… ", "notes.share_connect"},
           },
           {
               {" New Group ", "actions.new_group"},
@@ -166,6 +169,13 @@ MenuBarComponent::MenuBarComponent(
               {" Move Action Down ", "actions.move_down"},
               {" Copy Selected Action ", "actions.copy"},
               {" Copy All Actions ", "actions.copy_all"},
+              {" Send via Connect… ", "actions.share_connect"},
+          },
+          {
+              {" Connections... ", "connect.connections"},
+              {" Network... ", "connect.network"},
+              {" Identity... ", "connect.identity"},
+              {" Diagnostics... ", "connect.diagnostics"},
           },
           {
               {" TTS ", "tts.open_modal"},
@@ -234,6 +244,9 @@ MenuBarComponent::MenuBarComponent(
     }
     const int actions_index = MenuIndex(" Actions ");
     if (actions_index >= 0) actions_dropdown_items_ = dropdown_items_[static_cast<size_t>(actions_index)];
+    const int connect_index = MenuIndex(" Connect ");
+    if (connect_index >= 0) connect_dropdown_items_ = dropdown_items_[static_cast<size_t>(connect_index)];
+    SetConnectMenuVisible(false);
     SetActionsMenuVisible(false);
     SetNotesMenuVisible(false);
 }
@@ -464,48 +477,33 @@ void MenuBarComponent::SetFileFavoriteLabel(bool is_favorite) {
 }
 
 void MenuBarComponent::SetNotesMenuVisible(bool visible) {
-    if (notes_menu_visible_ == visible) {
-        return;
-    }
-
-    CloseDropdown();
-    const int current_notes_index = MenuIndex(" Notes ");
-    if (visible && current_notes_index < 0) {
-        const int tools_index = MenuIndex(" Tools ");
-        const size_t insertion = tools_index < 0
-            ? menu_entries_.size()
-            : static_cast<size_t>(tools_index);
-        menu_entries_.insert(menu_entries_.begin() + static_cast<std::ptrdiff_t>(insertion), " Notes ");
-        dropdown_items_.insert(
-            dropdown_items_.begin() + static_cast<std::ptrdiff_t>(insertion),
-            notes_dropdown_items_);
-    } else if (!visible && current_notes_index >= 0) {
-        menu_entries_.erase(menu_entries_.begin() + current_notes_index);
-        dropdown_items_.erase(dropdown_items_.begin() + current_notes_index);
-    }
-    notes_menu_visible_ = visible;
-    selected_menu_item_ = std::clamp(
-        selected_menu_item_,
-        0,
-        std::max(0, static_cast<int>(menu_entries_.size()) - 1));
-    selected_dropdown_item_ = 0;
-    RefreshCurrentDropdownEntries();
+    SetContextualMenu(" Notes ", notes_dropdown_items_, notes_menu_visible_, visible);
 }
 
 void MenuBarComponent::SetActionsMenuVisible(bool visible) {
-    if (actions_menu_visible_ == visible) return;
+    SetContextualMenu(" Actions ", actions_dropdown_items_, actions_menu_visible_, visible);
+}
+
+void MenuBarComponent::SetConnectMenuVisible(bool visible) {
+    SetContextualMenu(" Connect ", connect_dropdown_items_, connect_menu_visible_, visible);
+}
+
+void MenuBarComponent::SetContextualMenu(const std::string& label,
+                                         const std::vector<DropdownItem>& items,
+                                         bool& current, bool visible) {
+    if (current == visible) return;
     CloseDropdown();
-    const int current_index = MenuIndex(" Actions ");
-    if (visible && current_index < 0) {
-        const int tools_index = MenuIndex(" Tools ");
-        const size_t insertion = tools_index < 0 ? menu_entries_.size() : static_cast<size_t>(tools_index);
-        menu_entries_.insert(menu_entries_.begin() + static_cast<std::ptrdiff_t>(insertion), " Actions ");
-        dropdown_items_.insert(dropdown_items_.begin() + static_cast<std::ptrdiff_t>(insertion), actions_dropdown_items_);
-    } else if (!visible && current_index >= 0) {
-        menu_entries_.erase(menu_entries_.begin() + current_index);
-        dropdown_items_.erase(dropdown_items_.begin() + current_index);
+    const int index = MenuIndex(label);
+    if (visible && index < 0) {
+        const int tools = MenuIndex(" Tools ");
+        const auto insertion = tools < 0 ? static_cast<std::ptrdiff_t>(menu_entries_.size()) : tools;
+        menu_entries_.insert(menu_entries_.begin() + insertion, label);
+        dropdown_items_.insert(dropdown_items_.begin() + insertion, items);
+    } else if (!visible && index >= 0) {
+        menu_entries_.erase(menu_entries_.begin() + index);
+        dropdown_items_.erase(dropdown_items_.begin() + index);
     }
-    actions_menu_visible_ = visible;
+    current = visible;
     selected_menu_item_ = std::clamp(selected_menu_item_, 0,
         std::max(0, static_cast<int>(menu_entries_.size()) - 1));
     selected_dropdown_item_ = 0;

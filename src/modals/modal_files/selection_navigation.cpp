@@ -154,7 +154,7 @@ void FilesModalContent::ActivateSelected(bool double_click) {
 
     if (double_click || mode_ == FilesModalMode::Open ||
         mode_ == FilesModalMode::Import || mode_ == FilesModalMode::ImportActions ||
-        mode_ == FilesModalMode::ImportNotesMarkdown) {
+        mode_ == FilesModalMode::ImportNotesMarkdown || mode_ == FilesModalMode::SendConnectFile) {
         ConfirmSelected();
     }
 }
@@ -293,6 +293,7 @@ FileFilter FilesModalContent::FilterForMode() const {
         case FilesModalMode::OpenFolder:
         case FilesModalMode::None:
         case FilesModalMode::Open:
+        case FilesModalMode::SendConnectFile:
         case FilesModalMode::SaveAs:
             break;
     }

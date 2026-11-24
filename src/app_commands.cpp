@@ -163,6 +163,7 @@ void TextltApp::InitializeCommands() {
     add("notes.toggle", "Notes", "Options", "", [this] { CommandNotesToggle(); });
     add("docs.open", "Docs", "Options", "", [this] { ShowDocumentsWorkspace(); });
     add("notes.new", "New Note", "Notes", "", [this] { CommandNotesNew(); });
+    add("notes.share_connect", "Send via Connect…", "Notes", "", [this] { ShareNoteViaConnect(); });
     add("notes.import_markdown", "Import Markdown", "Notes", "",
         [this] { CommandNotesImportMarkdown(); });
     add("notes.edit_selected", "Edit Note", "Notes", "", [this] { CommandNotesEditSelected(); });
@@ -174,6 +175,15 @@ void TextltApp::InitializeCommands() {
     add("notes.bullet_list", "Bulleted List", "Notes", "", [this] { CommandNotesBulletList(); });
     add("notes.numbered_list", "Numbered List", "Notes", "", [this] { CommandNotesNumberedList(); });
     add("notes.checklist", "Checklist", "Notes", "", [this] { CommandNotesChecklist(); });
+    add("connect.open", "Connect", "Options", "", [this] { ShowConnectWorkspace(); });
+    add("connect.connections", "Connections", "Connect", "",
+        [this] { OpenConnectSettingsModal(ConnectSettingsTab::Connections); });
+    add("connect.network", "Network", "Connect", "",
+        [this] { OpenConnectSettingsModal(ConnectSettingsTab::Network); });
+    add("connect.identity", "Identity", "Connect", "",
+        [this] { OpenConnectSettingsModal(ConnectSettingsTab::Identity); });
+    add("connect.diagnostics", "Diagnostics", "Connect", "",
+        [this] { OpenConnectSettingsModal(ConnectSettingsTab::Diagnostics); });
     add("actions.open", "Actions", "Options", "", [this] { ShowActionsWorkspace(); });
     add("actions.new_group", "New Group", "Actions", "", [this] { CommandActionsNewGroup(); });
     add("actions.rename_group", "Rename Group", "Actions", "", [this] { CommandActionsRenameGroup(); });
@@ -185,6 +195,7 @@ void TextltApp::InitializeCommands() {
     add("actions.move_page_up", "Move Page Up", "Actions", "", [this] { CommandActionsMovePage(-1); });
     add("actions.move_page_down", "Move Page Down", "Actions", "", [this] { CommandActionsMovePage(1); });
     add("actions.add", "Add Action", "Actions", "", [this] { CommandActionsAdd(); });
+    add("actions.share_connect", "Send via Connect…", "Actions", "", [this] { ShareActionViaConnect(); });
     add("actions.import", "Import Actions", "Actions", "", [this] { CommandActionsImport(); });
     add("actions.edit", "Edit Action", "Actions", "", [this] { CommandActionsEdit(); });
     add("actions.delete", "Delete Action", "Actions", "", [this] { CommandActionsDelete(); });
@@ -303,6 +314,20 @@ bool TextltApp::RunCommand(const std::string& command_id) {
         ShowDocumentsWorkspace();
     }
 
+    if (workspace_mode_ == WorkspaceMode::Connect) {
+        const bool allowed = command_id.rfind("connect.", 0) == 0 ||
+            command_id.rfind("app.", 0) == 0 || command_id == "docs.open" ||
+            command_id == "notes.toggle" || command_id == "actions.open" ||
+            command_id == "edit.paste" ||
+            command_id == "sidebar.ctrl_b_file_explorer" ||
+            (IsWorkspaceModalCommand(command_id) && command_id.rfind("sidebar.", 0) != 0);
+        if (!allowed) {
+            active_action_ = "This command is unavailable in Connect view";
+            CloseDropdown();
+            screen_.PostEvent(ftxui::Event::Custom);
+            return true;
+        }
+    }
     if (workspace_mode_ == WorkspaceMode::Notes) {
         if (command_id == "edit.paste") {
             CommandEditPaste();
@@ -330,6 +355,7 @@ bool TextltApp::RunCommand(const std::string& command_id) {
             command_id.rfind("app.", 0) == 0 ||
             command_id == "file.save" ||
             command_id == "docs.open" ||
+            command_id == "connect.open" ||
             command_id == "actions.open" ||
             command_id == "edit.find" ||
             command_id == "edit.replace" ||
@@ -347,6 +373,7 @@ bool TextltApp::RunCommand(const std::string& command_id) {
             command_id.rfind("app.", 0) == 0 || command_id == "notes.toggle" ||
             command_id == "file.save" ||
             command_id == "docs.open" ||
+            command_id == "connect.open" ||
             command_id == "edit.find" ||
             command_id == "edit.replace" ||
             command_id == "sidebar.toggle_file_explorer" ||

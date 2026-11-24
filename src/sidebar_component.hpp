@@ -1,5 +1,7 @@
 #pragma once
 
+#include "workspace_tabs.hpp"
+
 #include <chrono>
 #include <filesystem>
 #include <functional>
@@ -118,6 +120,9 @@ public:
     // temporarily replaces the sidebar and its last layout must not capture
     // clicks in the reused area.
     void ClearHitboxes();
+    void SetConnectCallback(std::function<void()> callback) {
+        workspace_tabs_.SetConnectCallback(std::move(callback));
+    }
     void SetOpenedFiles(std::vector<OpenedFileEntry> opened_files, size_t active_index);
     void ShowOpenedFiles();
     void ShowProject();
@@ -240,9 +245,7 @@ private:
     OpenFilesModalCallback on_open_files_modal_;
     CopyPathCallback on_copy_path_;
     ShortcutLabelProvider shortcut_label_provider_;
-    OpenNotesCallback on_open_notes_;
-    OpenActionsCallback on_open_actions_;
-    OpenDocumentsCallback on_open_documents_;
+    WorkspaceTabs workspace_tabs_;
     ProjectIdCallback on_action_group_select_;
     ActionCommandCallback on_action_command_;
     ProjectsProvider projects_provider_;
@@ -278,9 +281,6 @@ private:
     ftxui::Box project_tab_box_;
     ftxui::Box projects_tab_box_;
     ftxui::Box favorites_tab_box_;
-    ftxui::Box notes_tab_box_;
-    ftxui::Box actions_tab_box_;
-    ftxui::Box documents_tab_box_;
     ftxui::Box action_primary_box_;
     ftxui::Box action_secondary_box_;
     ftxui::Box action_tertiary_box_;
