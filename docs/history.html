@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Follow TextLT from a lightweight terminal editor to an independent, local-first workspace for text, documents, and notes.">
+  <title>TextLT History — From Terminal Editor to Project Workspace</title>
+  <link rel="canonical" href="https://ihor-liutak2.github.io/textlt/history.html">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <link href="site.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous" defer></script>
+  <script src="navigation.js" defer></script>
+</head>
+<body>
+  <a class="skip-link btn btn-accent visually-hidden-focusable" href="#main-content">Skip to content</a>
+  <header class="sticky-top">
+    <nav id="siteNav" class="navbar navbar-expand-lg site-nav" aria-label="Main navigation" data-page="history"></nav>
+  </header>
+
+  <main id="main-content" tabindex="-1">
+    <section class="history-hero" aria-labelledby="historyTitle">
+      <div class="container">
+        <div class="history-intro">
+          <h1 id="historyTitle" class="display-4 fw-bold mb-3">The Story of <span class="text-gradient">TextLT</span></h1>
+          <p class="lead">From a lightweight terminal editor to an independent workspace for documents, notes, and reusable text.</p>
+          <p class="text-secondary mb-0">TextLT began with a practical idea. Editing text in a terminal should feel familiar, with menus, shortcuts, and direct selection. That same idea now guides a local-first workspace for creating, organizing, and transforming text, while keeping documents portable and under the user’s control.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="history-section" aria-labelledby="timelineTitle">
+      <div class="container">
+        <h2 id="timelineTitle" class="display-6 fw-bold mb-2">Development timeline</h2>
+        <p class="text-secondary mb-4">Dates follow the project’s commits and version tags.</p>
+        <ol class="history-timeline d-grid gap-3 mb-0" role="list">
+          <li>
+            <p class="history-date fw-semibold mb-2"><time datetime="2026-06-13">June 13, 2026</time></p>
+            <div class="glass-card p-3 p-lg-4">
+              <h3 class="h5">A lightweight terminal editor</h3>
+              <p class="text-secondary mb-0">The <a href="https://github.com/ihor-liutak2/textlt/commit/e325090">earliest recorded commit</a> contains a native C++ editor built with FTXUI. It already includes file browsing, familiar clipboard shortcuts, and keyboard and mouse selection. Undo and redo, search and replace, and syntax highlighting followed that day.</p>
+            </div>
+          </li>
+          <li>
+            <p class="history-date fw-semibold mb-2">June 14–22, 2026</p>
+            <div class="glass-card p-3 p-lg-4">
+              <h3 class="h5">A workspace for everyday editing</h3>
+              <p class="text-secondary mb-0">JSON themes and <a href="https://github.com/ihor-liutak2/textlt/commit/b73dfc5">file favorites</a> made the editor easier to make your own. The sidebar gained an <a href="https://github.com/ihor-liutak2/textlt/commit/644bb38">open files list</a> and Save All, followed by <a href="https://github.com/ihor-liutak2/textlt/commit/6516963">recent files</a>. Menus and dialogs kept these tools within reach.</p>
+            </div>
+          </li>
+          <li>
+            <p class="history-date fw-semibold mb-2">June 14–25, 2026</p>
+            <div class="glass-card p-3 p-lg-4">
+              <h3 class="h5">Git enters the workspace</h3>
+              <p class="text-secondary mb-0">Git support began in the <a href="https://github.com/ihor-liutak2/textlt/commit/ad49411">status bar and file sidebar</a> on June 14. On June 25, a <a href="https://github.com/ihor-liutak2/textlt/commit/607f25a">repository dialog</a> brought everyday Git actions into the editor.</p>
+            </div>
+          </li>
+          <li>
+            <p class="history-date fw-semibold mb-2"><time datetime="2026-06-20">June 20, 2026</time></p>
+            <div class="glass-card p-3 p-lg-4">
+              <h3 class="h5">Early distribution and the first site file</h3>
+              <p class="text-secondary mb-0">The <a href="https://github.com/ihor-liutak2/textlt/tree/v0.2.0">v0.2.0</a> tag points to a June 20 commit. A <a href="https://github.com/ihor-liutak2/textlt/commit/55a3caf">release workflow</a> added AppImage packaging, and the first site index served as a registry directory.</p>
+            </div>
+          </li>
+          <li>
+            <p class="history-date fw-semibold mb-2"><time datetime="2026-06-24">June 24, 2026</time></p>
+            <div class="glass-card p-3 p-lg-4">
+              <h3 class="h5">The application is split into components</h3>
+              <p class="text-secondary mb-0">June refactoring separated editing operations from the editor component, then <a href="https://github.com/ihor-liutak2/textlt/commit/ff398e6">split the application implementation across source files</a>. This made room for more focused changes to editing, file handling, and the interface.</p>
+            </div>
+          </li>
+          <li>
+            <p class="history-date fw-semibold mb-2">June 26–July 5, 2026</p>
+            <div class="glass-card p-3 p-lg-4">
+              <h3 class="h5">Reusable text transformations</h3>
+              <p class="text-secondary mb-0">The <a href="https://github.com/ihor-liutak2/textlt/commit/8976b26">Lua processor engine</a> included scripts for tasks such as normalizing spaces and unwrapping lines. Later changes added <a href="https://github.com/ihor-liutak2/textlt/commit/33216c3">built-in processors</a> and tools to <a href="https://github.com/ihor-liutak2/textlt/commit/63755ec">edit and manage custom processors</a>, so a cleanup could be applied again without repeating each edit.</p>
+            </div>
+          </li>
+          <li>
+            <p class="history-date fw-semibold mb-2">June 26–July 3, 2026</p>
+            <div class="glass-card p-3 p-lg-4">
+              <h3 class="h5">Text from more document formats</h3>
+              <p class="text-secondary mb-0">Import work began with <a href="https://github.com/ihor-liutak2/textlt/commit/2d0c417">DOCX and FB2</a> and expanded to <a href="https://github.com/ihor-liutak2/textlt/commit/59e2641">ODT and RTF</a>. Import brought text from document containers into the editor for further editing and processing.</p>
+            </div>
+          </li>
+          <li>
+            <p class="history-date fw-semibold mb-2">July 1–18, 2026</p>
+            <div class="glass-card p-3 p-lg-4">
+              <h3 class="h5">Editing beyond the local machine</h3>
+              <p class="text-secondary mb-0">The <a href="https://github.com/ihor-liutak2/textlt/commit/a365d87">first remote-file implementation</a> appeared July 1. Remote connection management continued to evolve through the July 18 tag <a href="https://github.com/ihor-liutak2/textlt/tree/v0.9.3">v0.9.3</a>. Remote file access extends the editing workflow to machines such as servers and virtual machines.</p>
+            </div>
+          </li>
+          <li>
+            <p class="history-date fw-semibold mb-2">July 4–6, 2026</p>
+            <div class="glass-card p-3 p-lg-4">
+              <h3 class="h5">A public installation guide</h3>
+              <p class="text-secondary mb-0">The July 4 tag <a href="https://github.com/ihor-liutak2/textlt/tree/v0.9.1">v0.9.1</a> was followed by a <a href="https://github.com/ihor-liutak2/textlt/commit/63755ec">product landing page</a> on July 5 with platform-specific installation guidance. Standalone <a href="https://github.com/ihor-liutak2/textlt/commit/60455b2">website installer scripts</a> followed on July 6.</p>
+            </div>
+          </li>
+          <li>
+            <p class="history-date fw-semibold mb-2">July 7–8, 2026</p>
+            <div class="glass-card p-3 p-lg-4">
+              <h3 class="h5">Documents, sessions, and views gain clearer roles</h3>
+              <p class="text-secondary mb-0">The July refactor clarified how the <a href="https://github.com/ihor-liutak2/textlt/commit/bbdf4a3">workspace binds documents to panes</a>, gave <a href="https://github.com/ihor-liutak2/textlt/commit/60de008">document sessions</a> a central role in runtime state, and separated <a href="https://github.com/ihor-liutak2/textlt/commit/b1ac603">viewport state</a> from the document. File state, input routing, and processor targeting also gained clearer owners.</p>
+            </div>
+          </li>
+          <li>
+            <p class="history-date fw-semibold mb-2"><time datetime="2026-07-23">July 23, 2026</time></p>
+            <div class="glass-card p-3 p-lg-4">
+              <h3 class="h5">Notes join the editor</h3>
+              <p class="text-secondary mb-0">A dedicated <a href="https://github.com/ihor-liutak2/textlt/commit/0750d0f">Notes workspace</a> introduced note documents, storage, and editing sessions. The change is included in the July 23 tag <a href="https://github.com/ihor-liutak2/textlt/tree/v0.9.5">v0.9.5</a>.</p>
+            </div>
+          </li>
+          <li>
+            <p class="history-date fw-semibold mb-2">November 3–23, 2026</p>
+            <div class="glass-card p-3 p-lg-4">
+              <h3 class="h5">From v0.9.7 to v1.0.0</h3>
+              <p class="text-secondary mb-0"><a href="https://github.com/ihor-liutak2/textlt/tree/v0.9.7">v0.9.7</a> was tagged on November 3 and documented use on Linux and Windows Subsystem for Linux. Folder-based projects arrived in <a href="https://github.com/ihor-liutak2/textlt/tree/v0.9.8">v0.9.8</a> on November 13, and <a href="https://github.com/ihor-liutak2/textlt/tree/v0.9.9">v0.9.9</a> on November 20 included Markdown import for Notes. The November 23 tag <a href="https://github.com/ihor-liutak2/textlt/tree/v1.0.0">v1.0.0</a> improved how projects reconnect to matching Notes and Actions groups.</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="history-section" aria-labelledby="todayTitle">
+      <div class="container">
+        <h2 id="todayTitle" class="display-6 fw-bold mb-3">Working with text today</h2>
+        <p class="history-intro text-secondary mb-4">TextLT brings editing, personal notes, and repeatable text work into a lightweight terminal workspace. Plain text and Markdown keep information portable across tools and operating systems.</p>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <article class="glass-card h-100 p-4">
+              <div class="feature-icon mb-3" aria-hidden="true">▤</div>
+              <h3 class="h5">Documents</h3>
+              <p class="text-secondary mb-0">Browse files, switch between open documents, and keep related files in projects. Use familiar keyboard shortcuts and mouse controls to edit.</p>
+            </article>
+          </div>
+          <div class="col-md-4">
+            <article class="glass-card h-100 p-4">
+              <div class="feature-icon mb-3" aria-hidden="true">✎</div>
+              <h3 class="h5">Notes and reusable text</h3>
+              <p class="text-secondary mb-0">Group working notes and drafts around a project. Keep frequently used messages and snippets in Actions so they’re easy to find and copy.</p>
+            </article>
+          </div>
+          <div class="col-md-4">
+            <article class="glass-card h-100 p-4">
+              <div class="feature-icon mb-3" aria-hidden="true">⚙</div>
+              <h3 class="h5">Processing and import</h3>
+              <p class="text-secondary mb-0">Apply built-in transformations, write a reusable Lua processor, or bring text in from other document formats.</p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="history-section" aria-labelledby="futureTitle">
+      <div class="container">
+        <h2 id="futureTitle" class="display-6 fw-bold mb-3">Looking ahead</h2>
+        <p class="text-secondary mb-4">Two proposals build on the editor’s local-first approach.</p>
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <article class="glass-card h-100 p-4">
+              <h3 class="h5">TextLT Connect</h3>
+              <p class="text-secondary mb-0">Explore direct exchange of text, notes, and files between trusted devices. <a href="roadmap.html#textlt-connect">Read the TextLT Connect proposal</a>.</p>
+            </article>
+          </div>
+          <div class="col-lg-6">
+            <article class="glass-card h-100 p-4">
+              <h3 class="h5">Structured documents</h3>
+              <p class="text-secondary mb-0">Explore optional structure and metadata for technical and scientific documents while keeping the text portable. <a href="roadmap.html#structured-documents">Read the structured documents proposal</a>.</p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="history-section pb-5" aria-labelledby="principlesTitle">
+      <div class="container">
+        <div class="glass-card p-4 p-lg-5">
+          <h2 id="principlesTitle" class="display-6 fw-bold mb-4">Development principles</h2>
+          <p class="history-intro text-secondary mb-4">Through each change, TextLT has kept everyday editing approachable and documents under the user’s control. The <a href="about.html#philosophyTitle">project philosophy</a> explains how those principles guide development.</p>
+          <div class="d-flex flex-wrap gap-3">
+            <a class="btn btn-accent" href="./#install">Install TextLT</a>
+            <a class="btn btn-outline-accent" href="./">Back to Home</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer py-4">
+    <div class="container footer-layout">
+      <div>
+        <div class="fw-bold">TextLT</div>
+        <small class="text-secondary">Independent, local-first text and document editing.</small>
+      </div>
+      <div class="d-flex flex-wrap gap-3 small">
+        <a class="link-soft" href="./">Home</a>
+        <a class="link-soft" href="https://github.com/ihor-liutak2/textlt/releases">Releases</a>
+        <a class="link-soft" href="https://github.com/ihor-liutak2/textlt">GitHub</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

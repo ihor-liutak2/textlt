@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Explore the C++ architecture behind TextLT’s terminal interface, document sessions, project workspaces, and reusable text processors.">
+  <title>TextLT Architecture — Native C++ and Terminal Workspaces</title>
+  <link rel="canonical" href="https://ihor-liutak2.github.io/textlt/architecture.html">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <link href="site.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous" defer></script>
+  <script src="navigation.js" defer></script>
+</head>
+<body>
+  <a class="skip-link btn btn-accent visually-hidden-focusable" href="#main-content">Skip to content</a>
+  <header class="sticky-top">
+    <nav id="siteNav" class="navbar navbar-expand-lg site-nav" aria-label="Main navigation" data-page="architecture"></nav>
+  </header>
+
+  <main id="main-content" tabindex="-1">
+    <section class="pt-5 pb-4" aria-labelledby="architectureTitle">
+      <div class="container">
+        <div class="col-lg-10">
+          <h1 id="architectureTitle" class="display-4 fw-bold mb-3">Designed for Simplicity. <span class="text-gradient">Engineered for Extensibility.</span></h1>
+          <p class="lead">Explore the technical architecture behind TextLT.</p>
+          <p class="text-secondary mb-0">TextLT brings document editing, personal notes, and reusable text tools into a native C++ terminal application. Its architecture keeps document state, interface behavior, and integrations in components with distinct responsibilities. Local storage and user configuration support the core workflow, with optional connections for work that reaches beyond the local machine.</p>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="architecture-section" aria-labelledby="overviewTitle">
+      <div class="container">
+        <h2 id="overviewTitle" class="display-6 fw-bold mb-3">A Modular Architecture</h2>
+        <p class="text-secondary">Documents, Notes, and Actions are three workspace modes. <code>TextltApp</code> composes their components, the menu and sidebar, and the dialogs. It connects the components through commands and callbacks and supplies shared facilities such as clipboard access and the active theme.</p>
+        <figure class="architecture-diagram glass-card p-3 p-lg-4 mb-3">
+          <figcaption class="h5 mb-3">Application composition and dependencies</figcaption>
+
+          <p class="fw-semibold mb-2">The terminal delivers input to the application</p>
+          <ol class="architecture-flow" role="list">
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">FTXUI</strong>
+              <span class="text-secondary">Runs the terminal event loop and renders the component tree.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">TextltApp</strong>
+              <span class="text-secondary">Initializes components and coordinates workspace modes and dialogs.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">Documents · Notes · Actions</strong>
+              <span class="text-secondary">Each mode presents its own editing or reuse workflow.</span>
+            </li>
+          </ol>
+
+          <p class="fw-semibold mb-2 mt-4">Project activation supplies context to the workspaces</p>
+          <ol class="architecture-flow" role="list">
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">TextltApp</strong>
+              <span class="text-secondary">Records the active project through ProjectStore.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">Active project context</strong>
+              <span class="text-secondary">Supplies the local root, project ID, and project name.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">Sidebar, Git, Notes, and Actions</strong>
+              <span class="text-secondary">Use the folder or project identifier to resolve their context.</span>
+            </li>
+          </ol>
+
+          <p class="fw-semibold mb-2 mt-4">Application commands can invoke optional services</p>
+          <ol class="architecture-flow" role="list">
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">Commands and dialogs</strong>
+              <span class="text-secondary">Request file operations, text processing, Git, or speech.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">Feature services</strong>
+              <span class="text-secondary">Use the relevant libraries, registries, or connection settings.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">System tools</strong>
+              <span class="text-secondary">Handle integrations such as Git, OpenSSH, curl, and Piper.</span>
+            </li>
+          </ol>
+        </figure>
+        <p class="small mb-0"><a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/app.cpp">Application composition</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/app_commands.cpp">Command registration</a></p>
+      </div>
+    </section>
+
+
+    <section class="architecture-section" aria-labelledby="terminalTitle">
+      <div class="container">
+        <h2 id="terminalTitle" class="display-6 fw-bold mb-3">Native Software. Terminal-Native Experience.</h2>
+        <p class="text-secondary">The entry point collects command-line paths, prepares startup resources, and constructs the app. The <code>--startup-check</code> path checks runtime prerequisites and initializes the workspace without entering the interactive loop. In normal use, <code>TextltApp::Run</code> starts FTXUI’s fullscreen loop and saves Notes and Actions when it exits.</p>
+        <p class="text-secondary">FTXUI’s screen, DOM, and component libraries handle the terminal display, element layout, and interactive controls. TextLT renders editor rows and syntax styles, with menus, mouse interaction, dialogs, and keyboard navigation in the same terminal session. Editing helpers work with UTF-8 text and account for character boundaries and display width. The terminal is the application’s primary UI, including when the program runs inside WSL.</p>
+        <p class="small mb-0"><a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/main.cpp">Entry point</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/editor_component/document_state.cpp">Editor rendering</a></p>
+      </div>
+    </section>
+
+
+    <section class="architecture-section" aria-labelledby="documentsTitle">
+      <div class="container">
+        <h2 id="documentsTitle" class="display-6 fw-bold mb-3">Documents as Independent Software Objects</h2>
+        <p class="text-secondary">A <code>DocumentSession</code> holds a <code>TextBuffer</code>, undo and redo history, and file state such as path, type, line ending, dirty status, and read-only status. A session can exist in memory before it has a file. <code>DocumentWorkspace</code> tracks open sessions and binds them to panes. Each pane’s <code>EditorViewport</code> holds scroll, cursor, and selection state, and the bound session uses that cursor state during editing.</p>
+        <figure class="architecture-diagram glass-card p-3 p-lg-4 mb-3">
+          <figcaption class="h5 mb-3">Document lifecycle and pane bindings</figcaption>
+
+          <p class="fw-semibold mb-2">Open and save</p>
+          <ol class="architecture-flow" role="list">
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">File commands</strong>
+              <span class="text-secondary">Open, save, or close through the application.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">DocumentFileController</strong>
+              <span class="text-secondary">Reuses an open session when a path matches and manages recent files and favorites.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">FileManager</strong>
+              <span class="text-secondary">Loads file content into sessions and writes session content back to disk.</span>
+            </li>
+          </ol>
+
+          <p class="fw-semibold mb-2 mt-4">Render and edit</p>
+          <ol class="architecture-flow" role="list">
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">DocumentWorkspace</strong>
+              <span class="text-secondary">Binds open sessions to panes and tracks active session and pane indices.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">EditorComponent</strong>
+              <span class="text-secondary">Uses the bound session and pane viewport to edit and render.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">DocumentSession</strong>
+              <span class="text-secondary">Owns the buffer and history. Editing uses the active cursor and selection state.</span>
+            </li>
+          </ol>
+        </figure>
+        <p class="text-secondary">The layout controller selects the visible arrangement and works with the workspace to assign sessions. Syntax highlighting tokenizes text for display, and the clipboard controller bridges editor operations with terminal paste and platform clipboard facilities. Document conversion extracts text for insertion into the editor.</p>
+        <p class="small mb-0"><a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/editor/document_session.hpp">Document session</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/editor/document_workspace.hpp">Workspace and pane state</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/editor/document_file_controller.cpp">File lifecycle</a></p>
+      </div>
+    </section>
+
+
+    <section class="architecture-section" aria-labelledby="workspaceTitle">
+      <div class="container">
+        <h2 id="workspaceTitle" class="display-6 fw-bold mb-3">A Coordinated Editing Environment</h2>
+        <p class="text-secondary">Input routing is shared. <code>AppEventDispatcher</code> checks the active UI layer and workspace, handles application shortcuts and focus, and lets FTXUI route ordinary main-screen mouse input through its component tree. Components such as the sidebar, editor, and dialogs still handle their own events. The command registry connects menu commands with the application operations they invoke.</p>
+        <figure class="architecture-diagram glass-card p-3 p-lg-4 mb-3">
+          <figcaption class="h5 mb-3">Input routing and layout</figcaption>
+
+          <p class="fw-semibold mb-2">Keyboard, focus, and modal routing</p>
+          <ol class="architecture-flow" role="list">
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">FTXUI event loop</strong>
+              <span class="text-secondary">Emits keyboard, mouse, and custom redraw events.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">AppEventDispatcher</strong>
+              <span class="text-secondary">Checks the active layer, routes workspace input, and hands off ordinary mouse hit-testing.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">Focused components or commands</strong>
+              <span class="text-secondary">A dialog, menu, sidebar, or workspace handles the event through FTXUI or the dispatcher.</span>
+            </li>
+          </ol>
+
+          <p class="fw-semibold mb-2 mt-4">Layout and focus</p>
+          <ol class="architecture-flow" role="list">
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">Layout commands</strong>
+              <span class="text-secondary">Switch among one, two, or three panes, or apply Distraction Mode.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">LayoutController</strong>
+              <span class="text-secondary">Calculates visible panes and coordinates pane focus.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">DocumentWorkspace</strong>
+              <span class="text-secondary">Maintains the pane assignments used by the editor.</span>
+            </li>
+          </ol>
+        </figure>
+        <p class="small mb-0"><a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/app_event_dispatcher.cpp">Event dispatcher</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/layout_controller.hpp">Layout controller</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/app_view.cpp">Application view</a></p>
+      </div>
+    </section>
+
+
+    <section class="architecture-section" aria-labelledby="projectsTitle">
+      <div class="container">
+        <h2 id="projectsTitle" class="display-6 fw-bold mb-3">Projects as Organizational Contexts</h2>
+        <p class="text-secondary">A project record has an ID, a name, a local folder, and an optional remote connection ID. <code>ProjectStore</code> persists records and the active project ID in <code>projects.json</code>. Registering an existing folder adds or reuses its record. Activating it changes the sidebar root and Git working directory and updates the Notes and Actions project contexts. The open-document list belongs to the shared workspace.</p>
+        <figure class="project-diagram glass-card p-3 p-lg-4 mb-3">
+          <figcaption class="project-hub p-3 rounded-4 border bg-black bg-opacity-25">
+            <strong class="d-block">Project record</strong>
+            <span class="text-secondary">A local folder and stable identifier within this installation</span>
+          </figcaption>
+          <ul class="project-branches" role="list">
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">Documents</strong>
+              <span class="text-secondary">The root sets the starting folder for browsing. Search uses the current sidebar folder.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">Notes group</strong>
+              <span class="text-secondary">A note section can reference the project ID.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">Actions group</strong>
+              <span class="text-secondary">An Actions group can reference the project ID.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">Remote connection</strong>
+              <span class="text-secondary">An optional connection ID resolves through the remote connection store.</span>
+            </li>
+          </ul>
+        </figure>
+        <p class="text-secondary">The project menu can assign, change, or unlink a connection. Opening the project’s remote files resolves the saved connection and opens the remote file dialog. New projects can relink a matching Notes group and merge matching Actions groups, so existing material can follow the project context.</p>
+        <p class="small mb-0"><a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/project_store.hpp">Project records</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/app_projects.cpp">Project activation and connection assignment</a></p>
+      </div>
+    </section>
+
+
+    <section class="architecture-section" aria-labelledby="notesTitle">
+      <div class="container">
+        <h2 id="notesTitle" class="display-6 fw-bold mb-3">Organized Textual Information</h2>
+        <p class="text-secondary">A <code>NoteDocument</code> is a structured record containing blocks such as headings, paragraphs, and list items. <code>NoteSession</code> supports editing those blocks. <code>NoteRepository</code> and its serializer maintain local <code>.tlnote</code> files and <code>sections.json</code>, including the project association for a section. The Notes workspace manages search, Markdown import, editing, and Trash restoration. Editor column preferences and note command shortcuts use the app’s settings.</p>
+        <p class="text-secondary">Project activation updates the Notes context inside the app. Note records carry revision and device metadata for local persistence. Cross-device synchronization is outside the current Notes workflow.</p>
+        <p class="small mb-0"><a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/notes/note_document.hpp">Note model</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/notes/note_repository.cpp">Note persistence</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/notes/notes_workspace_component.cpp">Notes workspace</a></p>
+      </div>
+    </section>
+
+
+    <section class="architecture-section" aria-labelledby="processingTitle">
+      <div class="container">
+        <h2 id="processingTitle" class="display-6 fw-bold mb-3">Extensible Text Processing</h2>
+        <p class="text-secondary">The Actions workspace stores groups, pages, cards, and labeled text blocks in <code>actions.json</code>. An Actions group can reference a project, and copying a card block sends its text through the shared clipboard. Text Processors are a separate tool that transforms document content or produces analysis reports.</p>
+        <figure class="architecture-diagram glass-card p-3 p-lg-4 mb-3">
+          <figcaption class="h5 mb-3">Actions and processor execution</figcaption>
+
+          <p class="fw-semibold mb-2">Reuse saved text</p>
+          <ol class="architecture-flow" role="list">
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">Actions repository</strong>
+              <span class="text-secondary">Loads project-linked groups, pages, and cards.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">Actions workspace</strong>
+              <span class="text-secondary">Select a labeled text block.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">ClipboardController</strong>
+              <span class="text-secondary">Copies the block for pasting into an editor or another application.</span>
+            </li>
+          </ol>
+
+          <p class="fw-semibold mb-2 mt-4">Apply a text processor</p>
+          <ol class="architecture-flow" role="list">
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">Document text</strong>
+              <span class="text-secondary">Select text or a whole document. Quick formatting can target a paragraph.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">Processor controls</strong>
+              <span class="text-secondary">Choose a registered operation, validate its parameters, and set repetition.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">TextParserManager</strong>
+              <span class="text-secondary">Executes a built-in C++ operation or calls the embedded Lua engine.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">Result</strong>
+              <span class="text-secondary">Apply replacement through the document session or show the report in the dialog.</span>
+            </li>
+          </ol>
+        </figure>
+        <p class="text-secondary">A bundled registry seeds the user’s processor definitions. A Lua processor supplies <code>transform(text, params)</code> and returns text. The runtime limits execution and exposes selected Lua libraries. The Custom Processor Builder validates and saves user definitions and scripts, allowing more transformations to be added without rebuilding the editor.</p>
+        <p class="small mb-0"><a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/actions/action_model.hpp">Actions model</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/text_parser_manager.cpp">Processor registry and execution</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/text_parser_lua_engine.cpp">Lua integration</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/modals/modal_text_processors/behavior.cpp">Result handling</a></p>
+      </div>
+    </section>
+
+
+    <section class="architecture-section" aria-labelledby="configurationTitle">
+      <div class="container">
+        <h2 id="configurationTitle" class="display-6 fw-bold mb-3">Configurable by Design</h2>
+        <p class="text-secondary">Settings, project records, connection definitions, and registries have separate loaders. They let users change preferences and choose supported operations without recompiling. The component structure and available external backends are defined in C++.</p>
+        <figure class="architecture-diagram glass-card p-3 p-lg-4 mb-3">
+          <figcaption class="h5 mb-3">Configuration consumers and integration boundaries</figcaption>
+
+          <p class="fw-semibold mb-2">Editor and interface preferences</p>
+          <ol class="architecture-flow" role="list">
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">config.json · shortcuts.json · theme JSON</strong>
+              <span class="text-secondary">Store editor preferences, binding overrides, and palette definitions.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">ConfigManager · ShortcutStore and ShortcutRegistry · theme loader</strong>
+              <span class="text-secondary">Load settings, resolve shortcuts, and construct the active theme.</span>
+            </li>
+          </ol>
+
+          <p class="fw-semibold mb-2 mt-4">Project and connection configuration</p>
+          <ol class="architecture-flow" role="list">
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">projects.json · remote_connections.json</strong>
+              <span class="text-secondary">Store workspace roots and named remote connections.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">ProjectStore · RemoteConfigStore</strong>
+              <span class="text-secondary">Resolve the active project and its optional connection ID.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">Remote provider</strong>
+              <span class="text-secondary">Calls OpenSSH for SFTP or curl for FTPS and Dropbox.</span>
+            </li>
+          </ol>
+
+          <p class="fw-semibold mb-2 mt-4">Processor, model, and voice settings</p>
+          <ol class="architecture-flow" role="list">
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">Processor definitions · provider profiles · Piper registry</strong>
+              <span class="text-secondary">Define operations and parameters, model preferences, and downloadable voices.</span>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <strong class="d-block">TextParserManager · AiBackend · PiperManager</strong>
+              <span class="text-secondary">Run processors locally, query configured model providers, or request local speech synthesis.</span>
+            </li>
+          </ol>
+        </figure>
+        <p class="small mb-0"><a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/config_manager.cpp">Application settings</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/shortcut_store.cpp">Shortcut persistence</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/remote/remote_config_store.cpp">Remote connection store</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/text_processors/default_text_parsers.json">Bundled processor registry</a></p>
+      </div>
+    </section>
+
+
+    <section class="architecture-section" aria-labelledby="keyboardTitle">
+      <div class="container">
+        <h2 id="keyboardTitle" class="display-6 fw-bold mb-3">Adapting to the User’s Terminal</h2>
+        <p class="text-secondary">FTXUI decodes character and special-key events. TextLT patches its FTXUI build to distinguish Ctrl+H from Backspace, recognize Alt with UTF-8 input, and support bracketed paste. Shortcut matching accepts several terminal encodings for modified navigation keys and recognizes Ukrainian keyboard equivalents for supported letter shortcuts. On Unix, a terminal guard temporarily adjusts flow control and signal handling and requests distinct modified-key reporting from compatible terminals.</p>
+        <p class="text-secondary">Menu and text actions register defaults in separate shortcut contexts. The registry matches incoming events against effective bindings, and the command registry or editor keymap runs the selected operation. The Keyboard Shortcuts dialog rejects collisions and combinations the terminal may reserve or collapse, and persists accepted changes in <code>shortcuts.json</code>. Users can restore defaults without rebuilding.</p>
+        <p class="small mb-0"><a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/shortcut_key.cpp">Shortcut matching</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/keyboard_shortcuts.hpp">Layout equivalents</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/terminal_flow_control_guard.cpp">Terminal settings guard</a></p>
+      </div>
+    </section>
+
+
+    <section class="architecture-section" aria-labelledby="themesTitle">
+      <div class="container">
+        <h2 id="themesTitle" class="display-6 fw-bold mb-3">A Customizable Visual Environment</h2>
+        <p class="text-secondary">A <code>Theme</code> holds colors consumed by the editor, syntax renderer, menus, dialogs, and other interface components. The loader checks the user directory before packaged locations. It uses the first directory with usable theme JSON files and falls back to a compiled palette. The picker previews themes, while the config stores the selected name and per-theme color overrides. Syntax tokenization and editing behavior remain separate from the choice of palette.</p>
+        <p class="small mb-0"><a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/theme.cpp">Theme loading</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/editor_config.cpp">Theme settings</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/modals/modal_theme_colors.cpp">Color editor</a></p>
+      </div>
+    </section>
+
+
+    <section class="architecture-section" aria-labelledby="integrationTitle">
+      <div class="container">
+        <h2 id="integrationTitle" class="display-6 fw-bold mb-3">Interoperability Without Unnecessary Complexity</h2>
+        <p class="text-secondary"><strong>Files and import.</strong> C++ filesystem and stream operations back local browsing and persistence. <code>TextImporter</code> uses LibArchive for containers and pugixml for XML. Supported imports such as DOCX, ODT, and FB2 yield text for the editor. RTF has its own conversion path.</p>
+        <p class="text-secondary"><strong>Remote files.</strong> A provider interface separates file navigation and transfers from the connection backend. SFTP uses OpenSSH’s <code>ssh</code> and <code>sftp</code> executables, FTPS uses external <code>curl</code> for FTP over TLS, and Dropbox uses its HTTP API through <code>RemoteHttpClient</code> and curl. Opening a remote file gives the editor a local cached copy. The Remote Files dialog explicitly uploads the saved copy with <strong>Sync Last</strong>.</p>
+        <p class="text-secondary"><strong>Git and subprocesses.</strong> <code>GitManager</code> runs the installed Git executable in the configured working directory and interprets its output for status, diffs, and repository commands. The remote command runner uses Windows process APIs or Unix process creation and pipes, including support for streaming output. Clipboard integration also varies by environment, with native Windows clipboard support and helpers for environments such as Wayland and WSL.</p>
+        <p class="small mb-0"><a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/text_importer.cpp">Document import</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/remote/remote_provider_factory.cpp">Remote providers</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/remote/remote_command_runner.cpp">Process runner</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/git_manager.cpp">Git integration</a></p>
+      </div>
+    </section>
+
+
+    <section class="architecture-section" aria-labelledby="servicesTitle">
+      <div class="container">
+        <h2 id="servicesTitle" class="display-6 fw-bold mb-3">Specialized Text Services</h2>
+        <p class="text-secondary"><strong>Rephrasing and translation.</strong> Quick AI takes a selection or paragraph from Docs or an open note. The modal builds a request from a rephrasing mode and optional source and target language instructions. <code>AiBackend</code> streams results from a configured local Ollama server or external provider. HTTP providers use the curl-backed client, while ChatGPT integration runs the Codex CLI app-server and exchanges JSON messages. Profiles store provider and model choices locally, and the settings dialog asks providers for their model catalog. Users can review, copy, or apply the returned text.</p>
+        <p class="text-secondary"><strong>Speech.</strong> The TTS pipeline prepares document chunks and caches generated WAV audio. The Piper voice registry lists downloadable voice assets. <code>PiperManager</code> resolves installed models and asks the separate, loopback <code>textlt-piper-server</code> to synthesize audio. That CivetWeb helper manages a persistent Piper child on supported Unix builds. The Windows build of the helper lacks that child backend. Playback uses an available system player and has separate playback controls.</p>
+        <p class="small mb-0"><a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/modals/modal_quick_ai.cpp">Quick AI request and result handling</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/ai/ai_backend.cpp">Provider execution</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/piper_manager.cpp">Piper manager</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/tools/piper_server/textlt_piper_server.cpp">Speech helper</a></p>
+      </div>
+    </section>
+
+
+    <section class="architecture-section" aria-labelledby="localTitle">
+      <div class="container">
+        <h2 id="localTitle" class="display-6 fw-bold mb-3">Local-First by Design</h2>
+        <p class="text-secondary">The editor runs locally and can open, edit, and save local files without a service account. Notes, Actions, preferences, and processor definitions are stored locally, and built-in and Lua processors run in the application process. Plain text and Markdown remain portable between tools. Configured remote connections, external model requests, and voice downloads use the network when invoked.</p>
+      </div>
+    </section>
+
+
+    <section class="architecture-section" aria-labelledby="stackTitle">
+      <div class="container">
+        <h2 id="stackTitle" class="display-6 fw-bold mb-3">Built on Established Technologies</h2>
+        <dl class="row g-3 mb-3">
+          <div class="col-md-6"><dt>C++17, C, and CMake</dt><dd class="text-secondary mb-0">The application is built in C++17. C dependencies include the embedded Lua runtime and the HTTP helper’s server library. CMake builds and installs the targets.</dd></div>
+          <div class="col-md-6"><dt>FTXUI 7.0.3</dt><dd class="text-secondary mb-0">Screen, DOM, and Component provide rendering, layout, the event loop, and interactive controls.</dd></div>
+          <div class="col-md-6"><dt>Lua 5.5.1 and nlohmann/json</dt><dd class="text-secondary mb-0">Embedded Lua executes custom processors. The vendored JSON library reads and writes settings, registries, and structured records.</dd></div>
+          <div class="col-md-6"><dt>LibArchive and pugixml</dt><dd class="text-secondary mb-0">Read archive entries and XML content for document imports.</dd></div>
+          <div class="col-md-6"><dt>curl, OpenSSH, Git, Piper, and CivetWeb</dt><dd class="text-secondary mb-0">Runtime executables handle network, version-control, and speech integrations. CivetWeb serves the separate local Piper helper.</dd></div>
+          <div class="col-md-6"><dt>CTest and Python</dt><dd class="text-secondary mb-0">CTest runs the repository’s C++ test executables and CMake checks, with an optional Python terminal test on Unix.</dd></div>
+        </dl>
+        <p class="text-secondary">Release CI packages Linux x64, Windows x64, and macOS arm64 builds. Linux also has an AppImage, and the project documents WSL usage.</p>
+        <p class="small mb-0"><a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/CMakeLists.txt">Build, dependencies, and tests</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/.github/workflows/release.yml">Release workflow</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/LICENSE">Project license</a></p>
+      </div>
+    </section>
+
+
+    <section class="architecture-section" aria-labelledby="engineeringTitle">
+      <div class="container">
+        <h2 id="engineeringTitle" class="display-6 fw-bold mb-3">Designed for Sustainable Evolution</h2>
+        <p class="text-secondary">The source separates document state and file lifecycle, Notes and Actions persistence, remote providers, and modal UI code. Shared helpers cover rendering controls, command registration, JSON storage, and subprocess execution. CMake pins or vendors selected dependencies, and the release workflow builds and runs CTest before packaging. Tests exercise document navigation, Notes and Actions persistence, shortcut handling, import, and remote providers.</p>
+        <p class="text-secondary">Technical references cover FTXUI layout and UI refactoring, and the remote module documents its runtime and transfer behavior. Future changes can build on these component boundaries and test targets.</p>
+        <p class="small mb-0"><a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/docs/ftxui-ui-refactoring-reference.md">FTXUI technical reference</a> · <a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/src/remote/README.md">Remote module documentation</a></p>
+      </div>
+    </section>
+
+
+    <section class="architecture-section" aria-labelledby="principlesTitle">
+      <div class="container">
+        <h2 id="principlesTitle" class="display-6 fw-bold mb-3">Architectural Principles</h2>
+        <dl class="architecture-principles mb-0">
+          <div class="glass-card p-3">
+            <dt>Separation of responsibilities</dt>
+            <dd class="text-secondary mb-0">A document session holds text and history, while a viewport holds pane-local state.</dd>
+          </div>
+          <div class="glass-card p-3">
+            <dt>Native execution</dt>
+            <dd class="text-secondary mb-0">The C++ application runs directly in the user’s terminal.</dd>
+          </div>
+          <div class="glass-card p-3">
+            <dt>Modular functionality</dt>
+            <dd class="text-secondary mb-0">Documents, Notes, and Actions have distinct data and interaction models.</dd>
+          </div>
+          <div class="glass-card p-3">
+            <dt>User control</dt>
+            <dd class="text-secondary mb-0">Users choose settings, configure connections, and explicitly upload remote edits.</dd>
+          </div>
+          <div class="glass-card p-3">
+            <dt>Local-first operation</dt>
+            <dd class="text-secondary mb-0">Core editing and local text processing use local files and runtime components.</dd>
+          </div>
+          <div class="glass-card p-3">
+            <dt>Configuration and customization</dt>
+            <dd class="text-secondary mb-0">Settings, key bindings, themes, and processor parameters can change at runtime.</dd>
+          </div>
+          <div class="glass-card p-3">
+            <dt>Interoperability</dt>
+            <dd class="text-secondary mb-0">Plain text, format import, and established external tools connect workflows.</dd>
+          </div>
+          <div class="glass-card p-3">
+            <dt>Extensibility</dt>
+            <dd class="text-secondary mb-0">Parameterized Lua processors add transformations through a defined entry point.</dd>
+          </div>
+          <div class="glass-card p-3">
+            <dt>Maintainability</dt>
+            <dd class="text-secondary mb-0">Component-specific tests exercise behavior at boundaries such as storage and input.</dd>
+          </div>
+          <div class="glass-card p-3">
+            <dt>Resource awareness</dt>
+            <dd class="text-secondary mb-0">Speech caches audio chunks, and the Lua engine sets execution limits.</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer py-4">
+    <div class="container footer-layout">
+      <div>
+        <div class="fw-bold">TextLT</div>
+        <small class="text-secondary">Independent, local-first text and document editing.</small>
+      </div>
+      <div class="d-flex flex-wrap gap-3 small">
+        <a class="link-soft" href="./">Home</a>
+        <a class="link-soft" href="features.html">Features</a>
+        <a class="link-soft" href="https://github.com/ihor-liutak2/textlt/releases">Releases</a>
+        <a class="link-soft" href="https://github.com/ihor-liutak2/textlt">GitHub</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

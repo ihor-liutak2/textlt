@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Explore Documents, Notes, and Actions in TextLT, a native C++ terminal workspace for editing, organizing, and transforming text.">
+  <title>TextLT Features — Documents, Notes, and Actions</title>
+  <link rel="canonical" href="https://ihor-liutak2.github.io/textlt/features.html">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <link href="site.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous" defer></script>
+  <script src="navigation.js" defer></script>
+</head>
+<body>
+  <a class="skip-link btn btn-accent visually-hidden-focusable" href="#main-content">Skip to content</a>
+  <header class="sticky-top">
+    <nav id="siteNav" class="navbar navbar-expand-lg site-nav" aria-label="Main navigation" data-page="features"></nav>
+  </header>
+
+  <main id="main-content" tabindex="-1">
+    <section class="pt-5 pb-4" aria-labelledby="featuresTitle">
+      <div class="container">
+        <div class="col-lg-9">
+          <h1 id="featuresTitle" class="display-4 fw-bold mb-3">Everything You Need to <span class="text-gradient">Work with Text</span></h1>
+          <p class="lead mb-3">A native terminal workspace for documents, notes, and powerful text actions.</p>
+          <p class="text-secondary mb-0">TextLT brings document editing, personal information, and reusable text tools together in a lightweight C++ application. Work with local files, choose your own settings, and connect to other systems when your work calls for it.</p>
+        </div>
+      </div>
+    </section>
+
+    <nav class="container pb-4" aria-label="Feature overview">
+      <ul class="row g-3 list-unstyled mb-0">
+        <li class="col-md-4">
+          <a class="feature-card feature-jump" href="#documents">
+            <span class="feature-icon mb-3" aria-hidden="true">▤</span>
+            <span class="d-block h4">Documents</span>
+            <span class="text-secondary">Your documents. Your workspace.</span>
+          </a>
+        </li>
+        <li class="col-md-4">
+          <a class="feature-card feature-jump" href="#notes">
+            <span class="feature-icon mb-3" aria-hidden="true">✎</span>
+            <span class="d-block h4">Notes</span>
+            <span class="text-secondary">Capture ideas. Organize information.</span>
+          </a>
+        </li>
+        <li class="col-md-4">
+          <a class="feature-card feature-jump" href="#actions">
+            <span class="feature-icon mb-3" aria-hidden="true">⎘</span>
+            <span class="d-block h4">Actions</span>
+            <span class="text-secondary">Do more with your text.</span>
+          </a>
+        </li>
+      </ul>
+    </nav>
+
+    <section id="documents" class="py-4" aria-labelledby="documentsTitle">
+      <div class="container">
+        <div class="glass-card p-3 p-lg-4">
+          <div class="row align-items-center g-4">
+            <div class="col-lg-5">
+              <h2 id="documentsTitle" class="display-6 fw-bold">Documents</h2>
+              <p class="text-secondary">Create and edit local text files in Docs. Browse folders, reopen recent files, pin favorites, and switch between open documents from the sidebar.</p>
+              <ul class="text-secondary mb-0">
+                <li>Assign open documents to a single editor pane or a two- or three-column layout.</li>
+                <li>Find and replace within a file, search from the current sidebar folder, and use syntax highlighting when editing source or configuration files.</li>
+                <li>Import text from DOCX, ODT, OTT, RTF, FB2, and zipped FB2 files.</li>
+                <li>Open a remote file in the same editor and upload the saved copy when you’re ready.</li>
+              </ul>
+            </div>
+            <div class="col-lg-7">
+              <div class="hero-card">
+                <img class="screenshot" src="media/images/docs-python.png" width="1308" height="784" loading="lazy" decoding="async"
+                     alt="Docs showing a syntax-highlighted Python file and a project sidebar.">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="notes" class="py-4" aria-labelledby="notesTitle">
+      <div class="container">
+        <div class="glass-card p-3 p-lg-4">
+          <div class="row align-items-center g-4">
+            <div class="col-lg-5">
+              <h2 id="notesTitle" class="display-6 fw-bold">Notes</h2>
+              <p class="text-secondary">Keep ideas, research, reminders, and drafts in a dedicated workspace. Browse by group, sort by title or date, and search note titles and content. Find or replace text inside an open note, and restore deleted notes from Trash.</p>
+              <ul class="text-secondary mb-0">
+                <li>Import Markdown and organize notes with headings, paragraphs, lists, and checklists.</li>
+                <li>Use two or three columns for longer notes. Assign menu shortcuts for creating, editing, and formatting notes.</li>
+                <li>Notes are stored as local <code>.tlnote</code> files in the platform’s app data directory. On Linux, <code>XDG_DATA_HOME</code> can set the data root.</li>
+              </ul>
+            </div>
+            <div class="col-lg-7">
+              <div class="hero-card">
+                <img class="screenshot" src="media/images/notes-three-columns.png" width="1308" height="784" loading="lazy" decoding="async"
+                     alt="A note with headings and lists open in a three-column layout.">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="actions" class="py-4" aria-labelledby="actionsTitle">
+      <div class="container">
+        <div class="glass-card p-3 p-lg-4">
+          <div class="row align-items-center g-4">
+            <div class="col-lg-5">
+              <h2 id="actionsTitle" class="display-6 fw-bold">Actions</h2>
+              <p class="text-secondary">Save reusable text as Actions cards. Organize cards into groups and pages, and give each card up to four separately labeled blocks. Click a label or use the context menu to copy a block for pasting into a document or another app.</p>
+              <h3 class="h5">Text Processors</h3>
+              <p class="text-secondary mb-0">Use the separate Text Processors tool to transform document text. Use the built-in Trim trailing spaces processor or unwrap imported lines with a configurable minimum line length. Use the Custom Processor Builder to validate, save, and manage reusable Lua processors with parameters.</p>
+            </div>
+            <div class="col-lg-7">
+              <div class="hero-card">
+                <img class="screenshot" src="media/images/actions.png" width="1308" height="784" loading="lazy" decoding="async"
+                     alt="An Actions page with reusable text cards and one card’s context menu open.">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="py-4" aria-labelledby="projectTitle">
+      <div class="container">
+        <h2 id="projectTitle" class="display-6 fw-bold">One Project. One Unified Workspace.</h2>
+        <p class="lead">Bring your documents, notes, actions, and remote resources together.</p>
+        <p class="text-secondary">Register an existing folder with <strong>Add Project</strong> or <strong>Add Current Folder as Project</strong>. Select a project in the sidebar to switch the folder and Git context and bring its Notes and Actions groups into reach. TextLT saves the project name, folder, optional connection, and active selection locally in <code>projects.json</code>.</p>
+        <div class="project-diagram glass-card p-3 p-lg-4 mb-4">
+          <div class="project-hub p-3 rounded-4 border bg-black bg-opacity-25">
+            <h3 class="h4 mb-1">Project</h3>
+            <p class="text-secondary mb-0">A named workspace rooted in a local folder</p>
+          </div>
+          <ul class="project-branches" role="list">
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <h4 class="h6">Documents</h4>
+              <p class="text-secondary mb-0">Browse and search files from the project folder.</p>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <h4 class="h6">Notes</h4>
+              <p class="text-secondary mb-0">Keep drafts and reference notes in a dedicated group.</p>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <h4 class="h6">Actions</h4>
+              <p class="text-secondary mb-0">Keep reusable text cards on pages in a project group.</p>
+            </li>
+            <li class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+              <h4 class="h6">Remote connection</h4>
+              <p class="text-secondary mb-0">Assign a saved connection and open its files from the project.</p>
+            </li>
+          </ul>
+        </div>
+        <p class="text-secondary">When you register a new project, TextLT can relink an existing same-name Notes group and merge matching Actions groups. Use <strong>Set/Change Connection</strong> in the Project menu to assign a remote connection.</p>
+        <h3 class="h5">Ways to use projects</h3>
+        <ul class="row g-3 list-unstyled text-secondary mb-0">
+          <li class="col-sm-6"><strong class="text-body">Software development.</strong> Keep source files with technical notes, release snippets, and a connection to a remote server.</li>
+          <li class="col-sm-6"><strong class="text-body">Scientific research.</strong> Keep research documents and observation notes together, with reusable text blocks and processors for cleaning up imported material.</li>
+          <li class="col-sm-6"><strong class="text-body">Technical documentation.</strong> Keep drafts, reference notes, and boilerplate in reach, and use Text Processors for consistent formatting.</li>
+          <li class="col-sm-6"><strong class="text-body">Personal projects.</strong> Give each project its own folder, working notes, and reusable checklists or messages.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="py-4" aria-labelledby="terminalTitle">
+      <div class="container">
+        <div class="glass-card p-4">
+          <h2 id="terminalTitle" class="h3">Built for the Terminal</h2>
+          <p class="text-secondary mb-0">TextLT uses C++ and FTXUI to provide a native, local terminal interface. Type directly in the editor, navigate by keyboard, or use mouse selection, menus, and dialogs. The editor supports UTF-8 text. Use Distraction Mode to hide workspace controls and focus on the document.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="py-4" aria-labelledby="intelligentTitle">
+      <div class="container">
+        <div class="glass-card p-4">
+          <h2 id="intelligentTitle" class="h3">Intelligent Text Tools</h2>
+          <p class="text-secondary">Optional <strong>Tools → Quick AI</strong> works on selected text or the current paragraph in Docs and open notes. Choose <strong>Standard</strong>, <strong>Fluency</strong>, <strong>Humanize</strong>, <strong>Formal</strong>, <strong>Academic</strong>, <strong>Simple</strong>, or <strong>Creative</strong> to guide the revision.</p>
+          <p class="text-secondary">Enable <strong>Translate</strong> to choose a target language and either select the source language or use <strong>Auto detect</strong>. Review the result, then choose <strong>Change</strong> to replace the source text or <strong>Copy Result</strong> to use the revision elsewhere.</p>
+          <p class="text-secondary mb-0">In <strong>Tools → AI Settings</strong>, select and activate a model from a local Ollama server or a configured external provider. The provider tabs include OpenCode, ChatGPT through the Codex CLI, Claude, and MiMo. Available models and effort settings depend on the provider. External providers receive the text you submit.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="py-4" aria-labelledby="speechTitle">
+      <div class="container">
+        <div class="glass-card p-4">
+          <h2 id="speechTitle" class="h3">Listen to Your Text</h2>
+          <p class="text-secondary">Listen to an open document with local Piper speech synthesis on a supported setup. The Windows build of the speech helper lacks the persistent Piper backend. Use the <strong>Run</strong> tab in <strong>Tools → TTS</strong> to prepare the selected document and start at the cursor. Use <strong>Play</strong>, <strong>Pause</strong>, <strong>Stop</strong>, or <strong>Next</strong> to listen through its sections.</p>
+          <p class="text-secondary mb-0"><strong>Tools → TTS Settings</strong> can fetch the voice registry, install Piper where a runtime package is available, and download, test, or delete voices. Browse the registry by language and save a voice for the selected document in the TTS <strong>Voice</strong> tab. The <strong>Library</strong> manages prepared documents and cached audio.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="py-4" aria-labelledby="remoteTitle">
+      <div class="container">
+        <div class="glass-card p-4">
+          <h2 id="remoteTitle" class="h3">Work Beyond Your Local Files</h2>
+          <p class="text-secondary">Configure SFTP through an OpenSSH host alias, FTP over TLS (FTPS) with explicit or implicit TLS, or Dropbox with a token file. Browse directories and copy files between the local and remote panels.</p>
+          <p class="text-secondary mb-0">Open remote text in Docs through a local cached copy. Save your edits locally, then choose <strong>Sync Last</strong> in Remote Files when you’re ready to upload the saved copy.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="py-4" aria-labelledby="gitTitle">
+      <div class="container">
+        <div class="glass-card p-4">
+          <h2 id="gitTitle" class="h3">Version Control Within Your Workspace</h2>
+          <p class="text-secondary mb-0">Open <strong>Tools → Git</strong> to inspect repository status and history, review diffs, stage or unstage files, and commit changes. Create and switch branches, compare revisions side by side or as a unified diff, and fetch or push using a configured remote. <strong>Git Settings</strong> provides controls for remote URLs and commit identity.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="py-4" aria-labelledby="personalizationTitle">
+      <div class="container">
+        <h2 id="personalizationTitle" class="display-6 fw-bold mb-3">Your Terminal. Your Workflow.</h2>
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <div class="glass-card h-100 p-4">
+              <h3 class="h4">Keyboard Shortcuts and Terminal Compatibility</h3>
+              <p class="text-secondary mb-0">Open <strong>Help → Keyboard Shortcuts</strong> to assign bindings in <strong>Menu shortcuts</strong> and <strong>Text shortcuts</strong>. Set shortcuts for document commands, note creation and formatting, Actions commands, or editor movement and selection. TextLT stores bindings in <code>shortcuts.json</code> and can reset them individually or together. The editor rejects terminal-reserved combinations and Ctrl+Alt bindings. Shift-only text bindings are limited to navigation keys and Tab.</p>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="glass-card h-100 p-4">
+              <h3 class="h4">Appearance and Themes</h3>
+              <p class="text-secondary mb-0">Preview a bundled light or dark palette in <strong>Options → Theme</strong>, or load a custom JSON theme. <strong>Help → Theme Color Settings</strong> lets you adjust and save editor, interface, dialog, and button colors using named colors or hex values. Theme files can define syntax highlighting colors. Editor options include line numbers, smart word wrap, and tab size.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="container py-5 text-center" aria-labelledby="installationTitle">
+      <h2 id="installationTitle" class="display-6 fw-bold mb-3">Install TextLT</h2>
+      <p class="text-secondary">Find installation instructions for Linux x64, Windows x64, and macOS on Apple Silicon.</p>
+      <a class="btn btn-accent btn-lg" href="./#install">View installation options</a>
+    </section>
+  </main>
+
+  <footer class="footer py-4">
+    <div class="container footer-layout">
+      <div>
+        <div class="fw-bold">TextLT</div>
+        <small class="text-secondary">Independent, local-first text and document editing.</small>
+      </div>
+      <div class="d-flex flex-wrap gap-3 small">
+        <a class="link-soft" href="./">Home</a>
+        <a class="link-soft" href="history.html">History</a>
+        <a class="link-soft" href="https://github.com/ihor-liutak2/textlt/releases">Releases</a>
+        <a class="link-soft" href="https://github.com/ihor-liutak2/textlt">GitHub</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

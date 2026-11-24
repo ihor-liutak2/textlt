@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Explore proposed TextLT research in document engineering, distributed text exchange, terminal interaction, and sustainable software.">
+  <title>TextLT Research &amp; Innovation — Text and Document Engineering</title>
+  <link rel="canonical" href="https://ihor-liutak2.github.io/textlt/research.html">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <link href="site.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous" defer></script>
+  <script src="navigation.js" defer></script>
+</head>
+<body>
+  <a class="skip-link btn btn-accent visually-hidden-focusable" href="#main-content">Skip to content</a>
+  <header class="sticky-top">
+    <nav id="siteNav" class="navbar navbar-expand-lg site-nav" aria-label="Main navigation" data-page="research"></nav>
+  </header>
+
+  <main id="main-content" tabindex="-1">
+    <section class="pt-5 pb-4" aria-labelledby="researchTitle">
+      <div class="container">
+        <div class="col-lg-10">
+          <h1 id="researchTitle" class="display-4 fw-bold mb-3">Research. Engineering. <span class="text-gradient">Innovation.</span></h1>
+          <p class="lead">Exploring independent technologies for the future of text and document workflows.</p>
+          <p class="text-secondary mb-0">TextLT is a native C++ terminal application and a practical foundation for experimental work on documents, information organization, and distributed text environments. The directions below are proposed investigations grounded in user ownership, interoperability, accessibility, software independence, and long-term maintainability.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="py-4" aria-labelledby="foundationTitle">
+      <div class="container">
+        <h2 id="foundationTitle" class="display-6 fw-bold">A Practical Foundation for Innovation</h2>
+        <p class="text-secondary">TextLT’s document sessions, local Notes storage, clipboard Actions, and project context provide a working application in which to study changes. Configurable terminal controls, text processors, and automated tests offer practical starting points for prototypes and evaluation.</p>
+        <figure class="architecture-diagram glass-card p-3 p-lg-4 mb-3">
+          <figcaption class="h5 mb-3">From the current platform to proposed engineering improvements</figcaption>
+          <ol class="architecture-flow" role="list">
+            <li class="p-3 p-md-2 p-lg-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25"><strong class="d-block">Existing TextLT platform</strong><span class="text-secondary">Select a current workflow or component.</span></li>
+            <li class="p-3 p-md-2 p-lg-3 rounded-4 roadmap-proposed"><strong class="d-block">Research questions</strong><span class="text-secondary">Define the problem and the behavior to investigate.</span></li>
+            <li class="p-3 p-md-2 p-lg-3 rounded-4 roadmap-proposed"><strong class="d-block">Experimental components</strong><span class="text-secondary">Prototype a model, interface, or algorithm.</span></li>
+            <li class="p-3 p-md-2 p-lg-3 rounded-4 roadmap-proposed"><strong class="d-block">Evaluation</strong><span class="text-secondary">Test against defined cases, measures, and reference methods.</span></li>
+            <li class="p-3 p-md-2 p-lg-3 rounded-4 roadmap-proposed"><strong class="d-block">Technological improvements</strong><span class="text-secondary">Consider integration or a reusable component if the evidence supports it.</span></li>
+          </ol>
+        </figure>
+        <div class="d-flex flex-wrap gap-2">
+          <a class="btn btn-outline-accent" href="architecture.html">Explore the architecture</a>
+          <a class="btn btn-outline-accent" href="use-cases.html">See practical use cases</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="py-4" aria-labelledby="directionsTitle">
+      <div class="container">
+        <h2 id="directionsTitle" class="display-6 fw-bold mb-3">Research Directions</h2>
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <article class="glass-card h-100 p-3 p-lg-4">
+              <h3 class="h4">Rethinking the Textual Document</h3>
+              <p class="text-secondary">Plain text is portable. Scientific articles, teaching material, and technical specifications may also need structure they can preserve across edits and applications.</p>
+              <dl class="mb-0">
+                <dt>Existing foundation</dt>
+                <dd class="text-secondary">TextLT separates document sessions and text buffers from pane state. Existing import tools extract text from several document formats.</dd>
+                <dt>Research questions</dt>
+                <dd class="text-secondary">Can document elements keep stable identities during edits? How should references and metadata stay consistent as paragraphs split, move, or disappear?</dd>
+                <dt>Proposed experiments</dt>
+                <dd class="text-secondary">Prototype optional metadata alongside plain text, paragraph identifiers, entity relationships, and document profiles or templates. Explore requirements traceability and consistency and completeness checks.</dd>
+                <dt>Potential outputs</dt>
+                <dd class="text-secondary mb-0">Experimental models and specifications, validation algorithms, a prototype, evaluation datasets, and technical documentation.</dd>
+              </dl>
+            </article>
+          </div>
+          <div class="col-lg-6">
+            <article class="glass-card h-100 p-3 p-lg-4">
+              <h3 class="h4">Text Beyond a Single Device</h3>
+              <p class="text-secondary">Text and notes often move among laptops, servers, and virtual machines. Each transfer or synchronization mechanism introduces choices about trust, integrity, and conflict handling.</p>
+              <dl class="mb-0">
+                <dt>Existing foundation</dt>
+                <dd class="text-secondary">TextLT can open a cached copy through a configured remote connection and explicitly upload a saved edit. Notes store local revision and device metadata. TextLT Connect and ongoing cross-device synchronization are roadmap proposals.</dd>
+                <dt>Research questions</dt>
+                <dd class="text-secondary">How can devices establish trust, verify content across a transfer, and identify or resolve conflicting changes without mandatory central infrastructure?</dd>
+                <dt>Proposed experiments</dt>
+                <dd class="text-secondary">Explore direct exchange and local discovery, trusted device registration, transfer verification, and independent synchronization. Compare ways to document interfaces so independent implementations can interoperate.</dd>
+                <dt>Potential outputs</dt>
+                <dd class="text-secondary mb-0">Prototype networking components, protocol specifications, reference implementations, interoperability tests, and reliability evaluations.</dd>
+              </dl>
+            </article>
+          </div>
+          <div class="col-lg-6">
+            <article class="glass-card h-100 p-3 p-lg-4">
+              <h3 class="h4">Reusable and Verifiable Text Operations</h3>
+              <p class="text-secondary">Repeated cleanup, conversion, and extraction steps become easier to compare and share when their inputs, parameters, and results are explicit.</p>
+              <dl class="mb-0">
+                <dt>Existing foundation</dt>
+                <dd class="text-secondary">Actions cards hold reusable clipboard text. The separate Text Processors tool uses registry definitions to run built-in operations and parameterized Lua scripts.</dd>
+                <dt>Research questions</dt>
+                <dd class="text-secondary">Can an operation be described independently of its implementation? How can pipelines validate parameters, handle errors, and reproduce results across projects?</dd>
+                <dt>Proposed experiments</dt>
+                <dd class="text-secondary">Prototype portable operation descriptions, composed transformations, and validation with reference inputs and expected outputs. Explore reusable Action collections and predictable processor execution.</dd>
+                <dt>Potential outputs</dt>
+                <dd class="text-secondary mb-0">Processing specifications, a prototype framework, reusable definitions, tests, and reference examples.</dd>
+              </dl>
+            </article>
+          </div>
+          <div class="col-lg-6">
+            <article class="glass-card h-100 p-3 p-lg-4">
+              <h3 class="h4">Connecting Documents, Notes, and Operations</h3>
+              <p class="text-secondary">A project’s drafts, decisions, reusable text, and remote files often need to be found together when work resumes.</p>
+              <dl class="mb-0">
+                <dt>Existing foundation</dt>
+                <dd class="text-secondary">A project sets the folder context and can link dedicated Notes and Actions groups and a remote connection. Open document sessions belong to the shared workspace.</dd>
+                <dt>Research questions</dt>
+                <dd class="text-secondary">Which information belongs in a portable project description? What workspace state helps a user resume work and reduces navigation effort?</dd>
+                <dt>Proposed experiments</dt>
+                <dd class="text-secondary">Prototype project metadata, reusable templates, relationships between resources, and project-specific restoration. Compare tasks that combine local files, notes, reusable text, and remote resources.</dd>
+                <dt>Potential outputs</dt>
+                <dd class="text-secondary mb-0">Information models, project configuration specifications, workspace prototypes, and workflow evaluation methods.</dd>
+              </dl>
+            </article>
+          </div>
+          <div class="col-lg-6">
+            <article class="glass-card h-100 p-3 p-lg-4">
+              <h3 class="h4">Making Terminal Software More Accessible</h3>
+              <p class="text-secondary">Terminals vary in how they report key combinations. Discoverable navigation and configurable controls can help users work across environments.</p>
+              <dl class="mb-0">
+                <dt>Existing foundation</dt>
+                <dd class="text-secondary">TextLT has configurable shortcuts, menus and dialogs, themes, UTF-8 editing, and optional speech playback on supported setups.</dd>
+                <dt>Research questions</dt>
+                <dd class="text-secondary">Which commands are difficult to discover? How do keyboard layouts, contrast, and terminal behavior affect navigation and text entry?</dd>
+                <dt>Proposed experiments</dt>
+                <dd class="text-secondary">Compare menu and shortcut designs, multilingual input, high-contrast palettes, speech workflows, and navigation in controlled studies. Record task completion, errors, keyboard compatibility, and participant feedback.</dd>
+                <dt>Potential outputs</dt>
+                <dd class="text-secondary mb-0">Prototype interactions, a terminal compatibility test matrix, reproducible task scripts, and usability findings if studies are conducted.</dd>
+              </dl>
+            </article>
+          </div>
+          <div class="col-lg-6">
+            <article class="glass-card h-100 p-3 p-lg-4">
+              <h3 class="h4">Keeping Digital Information Under User Control</h3>
+              <p class="text-secondary">Long-term access to documents depends on portable representations and the ability to choose where information is stored and exchanged.</p>
+              <dl class="mb-0">
+                <dt>Existing foundation</dt>
+                <dd class="text-secondary">Core editing and processing run locally. Users can work with plain-text files and configure external resources when needed.</dd>
+                <dt>Research questions</dt>
+                <dd class="text-secondary">Which dependencies are necessary for core workflows? Can documents and connection interfaces stay usable across independent implementations and operating environments?</dd>
+                <dt>Proposed experiments</dt>
+                <dd class="text-secondary">Investigate import and export, documented interchange, user-controlled storage and synchronization, and dependency analysis. These questions are relevant to European research on digital independence, open standards, accessible tools, and sustainable infrastructure.</dd>
+                <dt>Potential outputs</dt>
+                <dd class="text-secondary mb-0">Portability test cases, interchange specifications, and an assessment of dependencies and long-term document access.</dd>
+              </dl>
+            </article>
+          </div>
+          <div class="col-lg-6">
+            <article class="glass-card h-100 p-3 p-lg-4">
+              <h3 class="h4">Engineering Software for Long-Term Use</h3>
+              <p class="text-secondary">Sustainable software depends on maintenance effort, compatibility, and resource use across hardware and platforms.</p>
+              <dl class="mb-0">
+                <dt>Existing foundation</dt>
+                <dd class="text-secondary">The native C++ application has separate document, persistence, and integration components. CMake and CTest support builds and automated regression tests on Linux, Windows, and macOS in release CI.</dd>
+                <dt>Research questions</dt>
+                <dd class="text-secondary">How does added functionality affect coupling, compatibility, and maintenance? What resource costs emerge under comparable workloads?</dd>
+                <dt>Proposed experiments</dt>
+                <dd class="text-secondary">Measure startup, memory and CPU use, and energy where instrumentation permits. Study dependency changes, reproducible builds, regression behavior, and compatibility with older document and configuration data.</dd>
+                <dt>Potential outputs</dt>
+                <dd class="text-secondary mb-0">Measurement methods, reproducible experiments, technical reports, and engineering recommendations.</dd>
+              </dl>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="py-4" aria-labelledby="methodTitle">
+      <div class="container">
+        <h2 id="methodTitle" class="display-6 fw-bold">From Research Questions to Practical Results</h2>
+        <figure class="glass-card p-3 p-lg-4 mb-0">
+          <figcaption class="h5 roadmap-status mb-3">Proposed research lifecycle</figcaption>
+          <ol class="history-timeline d-grid gap-3 mb-0" role="list">
+            <li>
+              <p class="history-date fw-semibold mb-2">Stage 1</p>
+              <div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+                <h3 class="h6">Define the problem</h3>
+                <p class="text-secondary mb-0">Select a concrete challenge in document work, interaction, interoperability, or architecture.</p>
+              </div>
+            </li>
+            <li>
+              <p class="history-date fw-semibold mb-2">Stage 2</p>
+              <div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+                <h3 class="h6">Analyze existing solutions</h3>
+                <p class="text-secondary mb-0">Review related tools, technologies, standards, and reference approaches.</p>
+              </div>
+            </li>
+            <li>
+              <p class="history-date fw-semibold mb-2">Stage 3</p>
+              <div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+                <h3 class="h6">Develop a model</h3>
+                <p class="text-secondary mb-0">Specify a testable representation, interaction, architecture, or algorithm.</p>
+              </div>
+            </li>
+            <li>
+              <p class="history-date fw-semibold mb-2">Stage 4</p>
+              <div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+                <h3 class="h6">Build an experiment</h3>
+                <p class="text-secondary mb-0">Implement a prototype in a suitable component or separate test environment.</p>
+              </div>
+            </li>
+            <li>
+              <p class="history-date fw-semibold mb-2">Stage 5</p>
+              <div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+                <h3 class="h6">Evaluate</h3>
+                <p class="text-secondary mb-0">Define indicators, datasets, reference methods, experimental conditions, and acceptance criteria.</p>
+              </div>
+            </li>
+            <li>
+              <p class="history-date fw-semibold mb-2">Stage 6</p>
+              <div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+                <h3 class="h6">Verify and document</h3>
+                <p class="text-secondary mb-0">Record the setup, results, limitations, and steps needed to reproduce the evaluation.</p>
+              </div>
+            </li>
+            <li>
+              <p class="history-date fw-semibold mb-2">Stage 7</p>
+              <div class="p-3 rounded-4 border border-secondary-subtle bg-black bg-opacity-25">
+                <h3 class="h6">Decide how to use the results</h3>
+                <p class="text-secondary mb-0">Consider integration into TextLT, separate publication, or development as a reusable component.</p>
+              </div>
+            </li>
+          </ol>
+        </figure>
+      </div>
+    </section>
+
+    <section class="py-4" aria-labelledby="initiativesTitle">
+      <div class="container">
+        <h2 id="initiativesTitle" class="display-6 fw-bold">Technology Initiatives</h2>
+        <p class="text-secondary">Proposed research and development projects. Deliverables are possibilities for future work.</p>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <article class="glass-card roadmap-proposed h-100 p-3 p-lg-4">
+              <h3 class="h4">TextLT Connect</h3>
+              <p class="text-secondary">Moving text among working environments can require intermediate tools.</p>
+              <dl>
+                <dt>Research challenge</dt><dd class="text-secondary">Establish device trust and verify that a received item matches the selected source.</dd>
+                <dt>Proposed technology</dt><dd class="text-secondary">Prototype direct device exchange with documented interfaces.</dd>
+                <dt>Potential applications</dt><dd class="text-secondary">Developer handoffs, research notes, and exchanges between local and remote environments.</dd>
+                <dt>Potential deliverables</dt><dd class="text-secondary mb-0">A prototype, protocol draft, and transfer and interoperability tests.</dd>
+              </dl>
+              <a class="link-soft text-decoration-underline" href="roadmap.html#textlt-connect">Related roadmap direction for TextLT Connect</a>
+            </article>
+          </div>
+          <div class="col-md-6">
+            <article class="glass-card roadmap-proposed h-100 p-3 p-lg-4">
+              <h3 class="h4">Open Structured Text</h3>
+              <p class="text-secondary">Complex documents often need links and metadata that can survive revisions.</p>
+              <dl>
+                <dt>Research challenge</dt><dd class="text-secondary">Keep structure aligned with edits while preserving the underlying text.</dd>
+                <dt>Proposed technology</dt><dd class="text-secondary">Prototype an optional metadata layer with stable identifiers, references, and checks.</dd>
+                <dt>Potential applications</dt><dd class="text-secondary">Specifications, publications, research records, and teaching material.</dd>
+                <dt>Potential deliverables</dt><dd class="text-secondary mb-0">A document model, example corpus, and validation prototype.</dd>
+              </dl>
+              <a class="link-soft text-decoration-underline" href="roadmap.html#structured-documents">Related roadmap direction for Open Structured Text</a>
+            </article>
+          </div>
+          <div class="col-md-6">
+            <article class="glass-card roadmap-proposed h-100 p-3 p-lg-4">
+              <h3 class="h4">TextLT Action Framework</h3>
+              <p class="text-secondary">Repetitive text transformations are easier to reuse when their parameters and effects are documented.</p>
+              <dl>
+                <dt>Research challenge</dt><dd class="text-secondary">Describe operations portably and verify composed results.</dd>
+                <dt>Proposed technology</dt><dd class="text-secondary">Prototype structured processor definitions and a workflow test harness. Keep these distinct from clipboard Actions collections.</dd>
+                <dt>Potential applications</dt><dd class="text-secondary">Text normalization, publishing preparation, and recurring project cleanup.</dd>
+                <dt>Potential deliverables</dt><dd class="text-secondary mb-0">Operation specifications, example workflows, and regression tests.</dd>
+              </dl>
+              <a class="link-soft text-decoration-underline" href="roadmap.html#reusable-operations">Related roadmap direction for TextLT Action Framework</a>
+            </article>
+          </div>
+          <div class="col-md-6">
+            <article class="glass-card roadmap-proposed h-100 p-3 p-lg-4">
+              <h3 class="h4">Accessible Terminal Workspace</h3>
+              <p class="text-secondary">Terminal input and visual presentation vary among environments.</p>
+              <dl>
+                <dt>Research challenge</dt><dd class="text-secondary">Make commands easier to find and test navigation across keyboard layouts and emulators.</dd>
+                <dt>Proposed technology</dt><dd class="text-secondary">Prototype interaction, shortcut, contrast, and listening improvements.</dd>
+                <dt>Potential applications</dt><dd class="text-secondary">Terminal editing in teaching, research, and day-to-day work.</dd>
+                <dt>Potential deliverables</dt><dd class="text-secondary mb-0">Interface prototypes, keyboard test cases, and a usability evaluation plan.</dd>
+              </dl>
+              <a class="link-soft text-decoration-underline" href="roadmap.html#accessibility">Related roadmap direction for Accessible Terminal Workspace</a>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="py-4" aria-labelledby="evaluationTitle">
+      <div class="container">
+        <h2 id="evaluationTitle" class="display-6 fw-bold">Measurable Engineering Outcomes</h2>
+        <p class="text-secondary">Choose evaluation criteria and comparison methods before an experiment. Record workloads, platforms, versions, and uncertainty so another team can reproduce the evaluation.</p>
+        <dl class="architecture-principles mb-0">
+          <div class="glass-card p-3"><dt>Document engineering</dt><dd class="text-secondary mb-0">Structural consistency, metadata preservation, format compatibility, and validation correctness.</dd></div>
+          <div class="glass-card p-3"><dt>Distributed environments</dt><dd class="text-secondary mb-0">Transfer reliability and latency, content integrity, and consistency after changes or conflicts.</dd></div>
+          <div class="glass-card p-3"><dt>Text processing</dt><dd class="text-secondary mb-0">Transformation correctness, repeatability, error detection, and runtime for specified workloads.</dd></div>
+          <div class="glass-card p-3"><dt>Human–computer interaction</dt><dd class="text-secondary mb-0">Task completion time, interaction errors, key compatibility, and participant feedback.</dd></div>
+          <div class="glass-card p-3"><dt>Software sustainability</dt><dd class="text-secondary mb-0">Memory, CPU use, dependency complexity, maintainability indicators, and regression reliability.</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="py-4" aria-labelledby="collaborationTitle">
+      <div class="container">
+        <div class="glass-card p-4 p-lg-5">
+          <h2 id="collaborationTitle" class="display-6 fw-bold">Open to Research and Technology Collaboration</h2>
+          <p class="text-secondary">Universities, research institutions, independent developers, open-source communities, European technology organizations, and small and medium-sized software companies could explore prototype development, shared evaluation methods, or reference implementations. Topics include document engineering, distributed systems, accessible interfaces, open standards, and software sustainability.</p>
+          <a class="btn btn-accent" href="https://github.com/ihor-liutak2/textlt">Visit the public project repository</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="pt-4 pb-5" aria-labelledby="independenceTitle">
+      <div class="container">
+        <h2 id="independenceTitle" class="display-6 fw-bold">Independent Technology Development</h2>
+        <p class="text-secondary">Keep users in control of their information. Define component responsibilities, document interfaces, and favor engineering results that others can evaluate and reuse. Respect the project license and the terms of third-party dependencies when sharing software or results.</p>
+        <p class="mb-0"><a class="link-soft text-decoration-underline" href="https://github.com/ihor-liutak2/textlt/blob/47ea3dfa7e6632f74fca3d511db423a50f5eaf91/LICENSE">Read the repository license</a></p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer py-4">
+    <div class="container footer-layout">
+      <div>
+        <div class="fw-bold">TextLT</div>
+        <small class="text-secondary">Independent, local-first text and document editing.</small>
+      </div>
+      <div class="d-flex flex-wrap gap-3 small">
+        <a class="link-soft" href="./">Home</a>
+        <a class="link-soft" href="architecture.html">Architecture</a>
+        <a class="link-soft" href="roadmap.html">Roadmap</a>
+        <a class="link-soft" href="https://github.com/ihor-liutak2/textlt">GitHub</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

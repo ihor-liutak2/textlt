@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Explore practical TextLT workflows for development, research, education, technical writing, and everyday projects.">
+  <title>TextLT Use Cases — Practical Workflows for Text Projects</title>
+  <link rel="canonical" href="https://ihor-liutak2.github.io/textlt/use-cases.html">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <link href="site.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous" defer></script>
+  <script src="navigation.js" defer></script>
+  <script src="use-cases.js" defer></script>
+</head>
+<body>
+  <a class="skip-link btn btn-accent visually-hidden-focusable" href="#main-content">Skip to content</a>
+  <header class="sticky-top">
+    <nav id="siteNav" class="navbar navbar-expand-lg site-nav" aria-label="Main navigation" data-page="use-cases"></nav>
+  </header>
+
+  <main id="main-content" tabindex="-1">
+    <section class="pt-5 pb-4" aria-labelledby="useCasesTitle">
+      <div class="container">
+        <div class="col-lg-9">
+          <h1 id="useCasesTitle" class="display-4 fw-bold mb-3">Different Workflows. <span class="text-gradient">One Text Workspace.</span></h1>
+          <p class="lead">Discover how TextLT supports everyday work with documents, notes, and reusable actions.</p>
+          <p class="text-secondary mb-0">From research drafts to server configuration, related text often ends up spread across tools. TextLT is a native C++ terminal workspace that brings your files, notes, reusable text, and remote resources together around the project at hand.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="py-4" aria-labelledby="workflowTitle">
+      <div class="container">
+        <h2 id="workflowTitle" class="display-6 fw-bold">Everything Related to Your Project, Together</h2>
+        <p class="text-secondary">Register an existing folder as a project, then select it from the sidebar. The project sets the document browsing context and can link its own Notes group, Actions group, and saved remote connection. Choose a different project when moving between activities.</p>
+        <figure class="project-diagram glass-card p-3 p-lg-4 mb-3">
+          <figcaption class="project-hub p-3 rounded-4 border bg-black bg-opacity-25">
+            <strong class="d-block">Project</strong>
+            <span class="text-secondary">A named workspace rooted in a local folder</span>
+          </figcaption>
+          <ul class="project-branches" role="list">
+            <li class="p-3 rounded-4 border border-secondary-subtle"><strong class="d-block">Documents</strong><span class="text-secondary">Browse and edit project files.</span></li>
+            <li class="p-3 rounded-4 border border-secondary-subtle"><strong class="d-block">Notes group</strong><span class="text-secondary">Keep related ideas and findings together.</span></li>
+            <li class="p-3 rounded-4 border border-secondary-subtle"><strong class="d-block">Actions group</strong><span class="text-secondary">Copy reusable text from project pages.</span></li>
+            <li class="p-3 rounded-4 border border-secondary-subtle"><strong class="d-block">Remote connection</strong><span class="text-secondary">Browse an assigned remote environment.</span></li>
+          </ul>
+        </figure>
+        <p class="text-secondary mb-0">In the examples below, <strong class="text-body">Actions</strong> supply reusable clipboard text. <strong class="text-body">Text Processors</strong> apply built-in or Lua transformations to document text.</p>
+      </div>
+    </section>
+
+    <section id="project-examples" class="py-4" aria-labelledby="examplesTitle" hidden>
+      <div class="container">
+        <div class="glass-card p-3 p-lg-4">
+          <div class="row align-items-start g-4">
+            <div class="col-lg-4">
+              <h2 id="examplesTitle" class="h3">Explore an Example Project</h2>
+              <p class="text-secondary">Illustrative configurations for four kinds of work.</p>
+              <label class="form-label" for="example-project">Example project</label>
+              <select class="form-select" id="example-project" aria-controls="example-details">
+                <option value="software-development">Software Development</option>
+                <option value="scientific-research">Scientific Research</option>
+                <option value="system-administration">Server Administration</option>
+                <option value="personal-productivity">Personal Workspace</option>
+              </select>
+            </div>
+            <div class="col-lg-8">
+              <div id="example-details" class="p-3 p-md-4 border border-secondary-subtle rounded-4 bg-black bg-opacity-25" aria-live="polite" aria-atomic="true"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <nav class="container py-4" aria-labelledby="scenarioNavTitle">
+      <h2 id="scenarioNavTitle" class="h3">Browse Use Cases</h2>
+      <ul class="list-unstyled d-flex flex-wrap gap-2 mb-0">
+        <li><a class="btn btn-outline-accent btn-sm" href="#software-development">Software development</a></li>
+        <li><a class="btn btn-outline-accent btn-sm" href="#scientific-research">Scientific research</a></li>
+        <li><a class="btn btn-outline-accent btn-sm" href="#education">Education</a></li>
+        <li><a class="btn btn-outline-accent btn-sm" href="#system-administration">System administration</a></li>
+        <li><a class="btn btn-outline-accent btn-sm" href="#technical-documentation">Technical documentation</a></li>
+        <li><a class="btn btn-outline-accent btn-sm" href="#personal-productivity">Personal productivity</a></li>
+        <li><a class="btn btn-outline-accent btn-sm" href="#multilingual-writing">Multilingual writing</a></li>
+        <li><a class="btn btn-outline-accent btn-sm" href="#distributed-work">Distributed work</a></li>
+      </ul>
+    </nav>
+
+    <section id="software-development" class="py-3" aria-labelledby="software-development-title">
+      <div class="container">
+        <div class="glass-card p-3 p-lg-4">
+          <h2 id="software-development-title" class="h3">A Practical Workspace for Software Developers</h2>
+          <p class="text-secondary">Keep source files, configuration, and technical notes in reach while you work in the terminal.</p>
+          <div class="row g-4">
+            <div class="col-lg-5">
+              <div class="border border-secondary-subtle rounded-4 bg-black bg-opacity-25 h-100 p-3 p-md-4">
+                <h3 class="h5 example-project-name">Backend Application Development</h3>
+                <dl class="mb-0 example-project-config">
+                  <div class="mb-2">
+                    <dt>Documents</dt>
+                    <dd class="text-secondary mb-0">Source and configuration files, README, technical notes, and test specifications.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Notes group</dt>
+                    <dd class="text-secondary mb-0">Implementation ideas, architecture decisions, investigation results, and known defects.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Actions group</dt>
+                    <dd class="text-secondary mb-0">A Release page with a commit summary template and reusable test-command text.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Remote connection</dt>
+                    <dd class="text-secondary mb-0">An optional SFTP connection to a development server.</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+            <div class="col-lg-7">
+              <h3 class="h5">Example workflow</h3>
+              <ol class="text-secondary ps-4 mb-0">
+                <li class="mb-2">Select the project and open the source or config file beside its README. Use syntax highlighting and Find and Replace while checking the relevant project note.</li>
+                <li class="mb-2">Copy the summary template from Actions. To transform selected source text, run a separate Text Processor, such as Trim trailing spaces.</li>
+                <li class="mb-2">Review the working diff in Tools → Git. Open Remote Files for the assigned server when the change also needs a remote review.</li>
+              </ol>
+              <p class="text-secondary mt-3 mb-0">Use TextLT alongside your build, test, and debugging tools.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="scientific-research" class="py-3" aria-labelledby="scientific-research-title">
+      <div class="container">
+        <div class="glass-card p-3 p-lg-4">
+          <h2 id="scientific-research-title" class="h3">A Workspace for Research and Scientific Writing</h2>
+          <p class="text-secondary">Keep the draft, extracted material, and research notes organized around a local project.</p>
+          <div class="row g-4">
+            <div class="col-lg-5">
+              <div class="border border-secondary-subtle rounded-4 bg-black bg-opacity-25 h-100 p-3 p-md-4">
+                <h3 class="h5 example-project-name">Scientific Research Publication</h3>
+                <dl class="mb-0 example-project-config">
+                  <div class="mb-2">
+                    <dt>Documents</dt>
+                    <dd class="text-secondary mb-0">Article drafts, study methods, experimental records, and a plain-text reference list.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Notes group</dt>
+                    <dd class="text-secondary mb-0">Hypotheses, literature notes, observations, and reviewer comments.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Actions group</dt>
+                    <dd class="text-secondary mb-0">A Manuscript page with an observation template and a reusable reviewer-response outline.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Remote connection</dt>
+                    <dd class="text-secondary mb-0">Optional SFTP access to text files on a research server.</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+            <div class="col-lg-7">
+              <h3 class="h5">Example workflow</h3>
+              <ol class="text-secondary ps-4 mb-0">
+                <li class="mb-2">Open the draft and references side by side. Record the source and interpretation of an observation in the project’s Notes group.</li>
+                <li class="mb-2">Paste the observation template from Actions. Use Normalize spaces or a configured Lua processor to clean selected text before moving it into the draft.</li>
+                <li class="mb-2">Review changes in Git if the draft is in a repository. For proofreading, listen on a supported system with Piper set up, or use an optional rephrasing mode and review the result.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="education" class="py-3" aria-labelledby="education-title">
+      <div class="container">
+        <div class="glass-card p-3 p-lg-4">
+          <h2 id="education-title" class="h3">Support Teaching and Learning</h2>
+          <p class="text-secondary">Teachers can organize preparation by course. Students can use the same folder-and-notes pattern for each class or assignment.</p>
+          <div class="row g-4">
+            <div class="col-lg-5">
+              <div class="border border-secondary-subtle rounded-4 bg-black bg-opacity-25 h-100 p-3 p-md-4">
+                <h3 class="h5 example-project-name">Software Engineering Course</h3>
+                <dl class="mb-0 example-project-config">
+                  <div class="mb-2">
+                    <dt>Documents</dt>
+                    <dd class="text-secondary mb-0">Lecture outlines, lab instructions, code examples, and project briefs.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Notes group</dt>
+                    <dd class="text-secondary mb-0">Learning objectives, questions, teaching observations, and study summaries.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Actions group</dt>
+                    <dd class="text-secondary mb-0">Reusable assignment headings, feedback text, and a lab checklist template.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Remote connection</dt>
+                    <dd class="text-secondary mb-0">Optional access to a configured lab server.</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+            <div class="col-lg-7">
+              <h3 class="h5">Example workflow</h3>
+              <ol class="text-secondary ps-4 mb-0">
+                <li class="mb-2">Register a course folder and open a lab handout beside its code sample. Keep unanswered questions in the course’s Notes group.</li>
+                <li class="mb-2">Copy an assignment outline from Actions, then use a Text Processor to clean up pasted text. Choose a theme and shortcuts that suit the terminal used in class.</li>
+                <li class="mb-2">Use Git to inspect tracked changes. With optional tools configured, review a suggested translation of an instruction or listen to a handout.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="system-administration" class="py-3" aria-labelledby="system-administration-title">
+      <div class="container">
+        <div class="glass-card p-3 p-lg-4">
+          <h2 id="system-administration-title" class="h3">Work Naturally Across Local and Remote Systems</h2>
+          <p class="text-secondary">Keep operational notes and configuration files close to the remote environment they describe.</p>
+          <div class="row g-4">
+            <div class="col-lg-5">
+              <div class="border border-secondary-subtle rounded-4 bg-black bg-opacity-25 h-100 p-3 p-md-4">
+                <h3 class="h5 example-project-name">Linux Server Administration</h3>
+                <dl class="mb-0 example-project-config">
+                  <div class="mb-2">
+                    <dt>Documents</dt>
+                    <dd class="text-secondary mb-0">Service configuration, deployment notes, runbooks, and extracted log text.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Notes group</dt>
+                    <dd class="text-secondary mb-0">Maintenance procedures, investigation findings, and operational checklists.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Actions group</dt>
+                    <dd class="text-secondary mb-0">A Maintenance page with an incident summary template and command snippets to copy.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Remote connection</dt>
+                    <dd class="text-secondary mb-0">An assigned SFTP connection configured through an OpenSSH host alias.</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+            <div class="col-lg-7">
+              <h3 class="h5">Example workflow</h3>
+              <ol class="text-secondary ps-4 mb-0">
+                <li class="mb-2">Select the server project and open its Remote Files view. Open a remote configuration file in Docs and review the relevant runbook note.</li>
+                <li class="mb-2">Use Find and Replace for a specific text change. Copy command snippets from Actions for use in a separate terminal session.</li>
+                <li class="mb-2">Save the local cached copy. In Remote Files, choose Sync Last when ready to upload the saved edit.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="technical-documentation" class="py-3" aria-labelledby="technical-documentation-title">
+      <div class="container">
+        <div class="glass-card p-3 p-lg-4">
+          <h2 id="technical-documentation-title" class="h3">Organize Complex Documentation Workflows</h2>
+          <p class="text-secondary">Bring specifications, instructions, terminology, and editorial review into one text workflow.</p>
+          <div class="row g-4">
+            <div class="col-lg-5">
+              <div class="border border-secondary-subtle rounded-4 bg-black bg-opacity-25 h-100 p-3 p-md-4">
+                <h3 class="h5 example-project-name">Technical Product Documentation</h3>
+                <dl class="mb-0 example-project-config">
+                  <div class="mb-2">
+                    <dt>Documents</dt>
+                    <dd class="text-secondary mb-0">Markdown guides, requirements, installation steps, and a terminology list.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Notes group</dt>
+                    <dd class="text-secondary mb-0">Questions for developers, documentation decisions, and review observations.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Actions group</dt>
+                    <dd class="text-secondary mb-0">Standard support wording, procedure outlines, and release-note boilerplate.</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+            <div class="col-lg-7">
+              <h3 class="h5">Example workflow</h3>
+              <ol class="text-secondary ps-4 mb-0">
+                <li class="mb-2">Open the guide beside the terminology list. Import text from a supported document such as a DOCX draft for reuse in the Markdown guide.</li>
+                <li class="mb-2">Unwrap broken lines with Text Processors, paste approved wording from Actions, and inspect the saved changes in Git.</li>
+                <li class="mb-2">Listen to the draft with Piper on a supported setup, or review an optional rephrasing result before editing the final copy.</li>
+              </ol>
+              <p class="text-secondary mt-3 mb-0">See the <a href="roadmap.html">Roadmap</a> for proposed structured document and validation capabilities.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="personal-productivity" class="py-3" aria-labelledby="personal-productivity-title">
+      <div class="container">
+        <div class="glass-card p-3 p-lg-4">
+          <h2 id="personal-productivity-title" class="h3">Keep Everyday Information Organized</h2>
+          <p class="text-secondary">Use separate project folders and Notes groups for work, study, and personal interests.</p>
+          <div class="row g-4">
+            <div class="col-lg-5">
+              <div class="border border-secondary-subtle rounded-4 bg-black bg-opacity-25 h-100 p-3 p-md-4">
+                <h3 class="h5 example-project-name">Personal Workspace</h3>
+                <dl class="mb-0 example-project-config">
+                  <div class="mb-2">
+                    <dt>Documents</dt>
+                    <dd class="text-secondary mb-0">Personal plans, lists, working drafts, and reference files.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Notes group</dt>
+                    <dd class="text-secondary mb-0">Ideas, reminders, learning notes, and short observations stored locally.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Actions group</dt>
+                    <dd class="text-secondary mb-0">A Weekly Review page with reflection prompts and a reusable packing checklist.</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+            <div class="col-lg-7">
+              <h3 class="h5">Example workflow</h3>
+              <ol class="text-secondary ps-4 mb-0">
+                <li class="mb-2">Open a recurring plan from Recent Files or Favorites. Capture an idea in the project’s Notes group so it stays with the right activity in local Notes storage.</li>
+                <li class="mb-2">Copy a checklist from Actions and paste it into a working document. Use Normalize spaces when bringing in text from another source.</li>
+                <li class="mb-2">Choose a theme or shortcut bindings for the terminal, then use Distraction Mode while writing.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="multilingual-writing" class="py-3" aria-labelledby="multilingual-writing-title">
+      <div class="container">
+        <div class="glass-card p-3 p-lg-4">
+          <h2 id="multilingual-writing-title" class="h3">Work With Text Across Languages</h2>
+          <p class="text-secondary">Work on language variants in UTF-8 text and record the reasoning behind terminology choices.</p>
+          <div class="row g-4">
+            <div class="col-lg-5">
+              <div class="border border-secondary-subtle rounded-4 bg-black bg-opacity-25 h-100 p-3 p-md-4">
+                <h3 class="h5 example-project-name">Multilingual Documentation</h3>
+                <dl class="mb-0 example-project-config">
+                  <div class="mb-2">
+                    <dt>Documents</dt>
+                    <dd class="text-secondary mb-0">Originals, translated drafts, language-specific versions, and a glossary.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Notes group</dt>
+                    <dd class="text-secondary mb-0">Vocabulary, translation observations, and terminology decisions.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Actions group</dt>
+                    <dd class="text-secondary mb-0">Reusable headings and formatting templates shared across language versions.</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+            <div class="col-lg-7">
+              <h3 class="h5">Example workflow</h3>
+              <ol class="text-secondary ps-4 mb-0">
+                <li class="mb-2">Open the source and target documents. Select a passage in an editable copy and open Tools → Quick AI. With no selection, Docs uses the current paragraph.</li>
+                <li class="mb-2">With a model active in AI Settings, choose a mode such as Fluency or Formal. To translate, enable Translate, choose a target language, and select the source language or Auto detect. Select Do.</li>
+                <li class="mb-2">Review the result. Use Change to replace eligible source text, or Copy Result to paste into a separate draft. On a supported Piper setup, choose an installed voice for the language and use Tools → TTS to listen from the cursor before saving.</li>
+              </ol>
+              <p class="text-secondary mt-3 mb-0">Quick AI is optional and uses a configured local Ollama server or external provider. Review wording and terminology before using a result.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="distributed-work" class="py-3" aria-labelledby="distributed-work-title">
+      <div class="container">
+        <div class="glass-card p-3 p-lg-4">
+          <h2 id="distributed-work-title" class="h3">Your Workspace, Wherever You Work</h2>
+          <p class="text-secondary">Use a consistent terminal workflow on Linux, in WSL, or in a compatible Linux environment on a server or virtual machine.</p>
+          <div class="row g-4">
+            <div class="col-lg-5">
+              <div class="border border-secondary-subtle rounded-4 bg-black bg-opacity-25 h-100 p-3 p-md-4">
+                <h3 class="h5 example-project-name">Distributed Editing Workspace</h3>
+                <dl class="mb-0 example-project-config">
+                  <div class="mb-2">
+                    <dt>Documents</dt>
+                    <dd class="text-secondary mb-0">Local references, environment-specific configuration files, and handoff notes.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Notes group</dt>
+                    <dd class="text-secondary mb-0">Setup details and terminal-specific shortcut choices.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Actions group</dt>
+                    <dd class="text-secondary mb-0">Reusable handoff messages, environment checklists, and command text.</dd>
+                  </div>
+                  <div class="mb-2">
+                    <dt>Remote connection</dt>
+                    <dd class="text-secondary mb-0">A configured remote connection for file access from the current TextLT instance.</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+            <div class="col-lg-7">
+              <h3 class="h5">Example workflow</h3>
+              <ol class="text-secondary ps-4 mb-0">
+                <li class="mb-2">Run the Linux build in the Linux environment, including WSL. The native Windows x64 build is a separate release.</li>
+                <li class="mb-2">Use Help → Keyboard Shortcuts to adapt bindings to the keys your terminal sends. Set a theme locally and use the sidebar to switch projects and documents.</li>
+                <li class="mb-2">Browse the assigned remote connection from TextLT. When editing a remote file, save the cached copy and upload it explicitly with Sync Last.</li>
+              </ol>
+              <p class="text-secondary mt-3 mb-0">The <a href="roadmap.html">Roadmap</a> describes proposed TextLT Connect device exchange and independent synchronization.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="py-5" aria-labelledby="valueTitle">
+      <div class="container">
+        <div class="glass-card p-4 p-lg-5">
+          <div class="row align-items-center g-4">
+            <div class="col-lg-5">
+              <h2 id="valueTitle" class="display-6 fw-bold">Less Switching. More Focus.</h2>
+              <p class="text-secondary">A shared workspace can reduce trips between tools. Keep related information under your control, reuse text and transformations, and open associated remote files as needed. Configure the keyboard and interface for the terminal you work in.</p>
+              <div class="d-flex flex-wrap gap-2">
+                <a class="btn btn-accent" href="./#install">Install TextLT</a>
+                <a class="btn btn-outline-accent" href="features.html">Features</a>
+                <a class="btn btn-outline-accent" href="architecture.html">Architecture</a>
+                <a class="btn btn-outline-accent" href="roadmap.html">Roadmap</a>
+              </div>
+            </div>
+            <div class="col-lg-7">
+              <figure class="mb-0">
+                <div class="hero-card">
+                  <img class="screenshot" src="media/images/sidebar.png" width="1308" height="784" loading="lazy" decoding="async"
+                       alt="TextLT’s Projects sidebar next to an open document in Solarized Light.">
+                </div>
+                <figcaption class="text-secondary small mt-2">The Projects sidebar beside an open document.</figcaption>
+              </figure>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer py-4">
+    <div class="container footer-layout">
+      <div>
+        <div class="fw-bold">TextLT</div>
+        <small class="text-secondary">Independent, local-first text and document editing.</small>
+      </div>
+      <div class="d-flex flex-wrap gap-3 small">
+        <a class="link-soft" href="./">Home</a>
+        <a class="link-soft" href="features.html">Features</a>
+        <a class="link-soft" href="https://github.com/ihor-liutak2/textlt/releases">Releases</a>
+        <a class="link-soft" href="https://github.com/ihor-liutak2/textlt">GitHub</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
