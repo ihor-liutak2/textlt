@@ -35,11 +35,21 @@ struct NetworkDiagnostics {
     NetworkEnvironment host;
     std::string wsl_mode;
     bool wsl = false;
+    std::string wsl_distribution;
+};
+
+struct DiagnosticAddress {
+    std::string ip;
+    std::string label;
+    bool can_bind;
+    bool windows_host;
 };
 
 NetworkDiagnostics InspectLocalNetwork();
 void InspectSupplementalNetwork(NetworkDiagnostics& diagnostics, const std::atomic<bool>& cancelled);
 bool IsAutomaticLocalSendAddress(const std::string& address);
 std::string SelectLanIPv4(const NetworkEnvironment& environment);
+std::vector<DiagnosticAddress> DiagnosticAddresses(const NetworkDiagnostics& network,
+                                                   const std::string& textlt_ip);
 
 } // namespace textlt::connect_ui

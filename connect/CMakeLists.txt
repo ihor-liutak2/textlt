@@ -15,6 +15,7 @@ endif()
 find_package(OpenSSL 3.0 REQUIRED COMPONENTS SSL Crypto)
 
 add_library(textlt_connect STATIC
+  src/identity.cpp
   src/service.cpp
   src/providers/localsend/https.cpp
   src/providers/localsend/localsend_provider.cpp

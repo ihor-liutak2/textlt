@@ -1,10 +1,10 @@
 #include "https.hpp"
 
+#include "../../identity.hpp"
+
 #include <algorithm>
 #include <array>
-#include <cstdio>
 #include <limits>
-#include <system_error>
 
 #include <openssl/pem.h>
 #include <openssl/rand.h>
@@ -12,66 +12,11 @@
 namespace textlt::connect::localsend {
 namespace {
 
-namespace fs = std::filesystem;
 constexpr std::size_t kChunk = 64 * 1024;
 constexpr std::size_t kMaxControl = 1024 * 1024;
 
 [[noreturn]] void IdentityError() {
     throw Error{TransferFailure::TlsFailure, "could not load or create the LocalSend identity"};
-}
-
-void GenerateIdentity(const fs::path& path) {
-    std::error_code error;
-    if (!path.parent_path().empty()) fs::create_directories(path.parent_path(), error);
-    if (error) IdentityError();
-    const auto staging = path.parent_path() / (".localsend-identity-" + RandomToken());
-    if (!fs::create_directory(staging, error)) IdentityError();
-    struct Cleanup {
-        fs::path directory;
-        ~Cleanup() {
-            std::error_code ignored;
-            fs::remove(directory / "identity.pem", ignored);
-            fs::remove(directory, ignored);
-        }
-    } cleanup{staging};
-#ifndef _WIN32
-    fs::permissions(staging, fs::perms::owner_all, error);
-    if (error) IdentityError();
-#endif
-    const auto temporary = staging / "identity.pem";
-#ifdef _WIN32
-    auto* file = _wfopen(temporary.c_str(), L"wb");
-#else
-    auto* file = std::fopen(temporary.c_str(), "wb");
-#endif
-    if (!file) IdentityError();
-    const auto close_file = [](FILE* stream) { std::fclose(stream); };
-    std::unique_ptr<FILE, decltype(close_file)> output(file, close_file);
-    std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> key(
-        EVP_PKEY_Q_keygen(nullptr, nullptr, "EC", "prime256v1"), EVP_PKEY_free);
-    std::unique_ptr<X509, decltype(&X509_free)> certificate(X509_new(), X509_free);
-    if (!key || !certificate) IdentityError();
-    auto* cert = certificate.get();
-    auto* name = X509_get_subject_name(cert);
-    if (X509_set_version(cert, 2) != 1 ||
-        ASN1_INTEGER_set(X509_get_serialNumber(cert), 1) != 1 ||
-        !X509_gmtime_adj(X509_getm_notBefore(cert), -3600) ||
-        !X509_gmtime_adj(X509_getm_notAfter(cert), 315360000L) ||
-        X509_set_pubkey(cert, key.get()) != 1 ||
-        X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC,
-            reinterpret_cast<const unsigned char*>("TextLT LocalSend"), -1, -1, 0) != 1 ||
-        X509_set_issuer_name(cert, name) != 1 ||
-        !X509_sign(cert, key.get(), EVP_sha256()) ||
-        PEM_write_X509(file, cert) != 1 ||
-        PEM_write_PrivateKey(file, key.get(), nullptr, nullptr, 0, nullptr, nullptr) != 1 ||
-        std::fflush(file) != 0) IdentityError();
-    if (std::fclose(output.release()) != 0) IdentityError();
-#ifndef _WIN32
-    fs::permissions(temporary, fs::perms::owner_read | fs::perms::owner_write, error);
-    if (error) IdentityError();
-#endif
-    fs::create_hard_link(temporary, path, error);
-    if (error && error != std::errc::file_exists) IdentityError();
 }
 
 std::optional<std::string> Digest(X509* certificate) {
@@ -123,8 +68,7 @@ std::optional<std::string> NormalizeFingerprint(std::string_view fingerprint) {
 }
 
 std::string LoadIdentity(ssl::context& context, const std::filesystem::path& path) {
-    if (path.empty()) IdentityError();
-    if (!fs::exists(path)) GenerateIdentity(path);
+    if (!detail::EnsureIdentityFile(path, "TextLT LocalSend")) IdentityError();
     // PEM files contain both the certificate and the corresponding key.
     const auto filename = path.u8string();
     context.use_certificate_chain_file(filename);
@@ -181,13 +125,21 @@ boost::system::error_code Https::Wait(Milliseconds timeout, Initiate initiate, T
     return result;
 }
 
-void Https::Connect(const tcp::endpoint& address, const std::string& fingerprint, Milliseconds timeout) {
+std::string Https::Connect(const tcp::endpoint& address, Milliseconds timeout) {
     const auto deadline = Clock::now() + timeout;
     Wait(timeout, [&](auto done) { Socket().async_connect(address, done); });
     Wait(std::chrono::duration_cast<Milliseconds>(deadline - Clock::now()),
          [&](auto done) { stream_.async_handshake(ssl::stream_base::client, done); },
          TransferFailure::TlsFailure);
-    if (Fingerprint() != fingerprint) {
+    auto fingerprint = Fingerprint();
+    if (!fingerprint) {
+        throw Error{TransferFailure::PeerAuthenticationFailed, "LocalSend peer did not present a certificate"};
+    }
+    return std::move(*fingerprint);
+}
+
+void Https::Connect(const tcp::endpoint& address, const std::string& fingerprint, Milliseconds timeout) {
+    if (Connect(address, timeout) != fingerprint) {
         throw Error{TransferFailure::PeerAuthenticationFailed, "LocalSend peer certificate fingerprint mismatch"};
     }
 }

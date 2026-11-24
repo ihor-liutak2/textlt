@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <functional>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 #include "textlt/connect/provider.hpp"
@@ -44,8 +45,17 @@ struct LocalSendOptions {
     std::vector<std::string> local_addresses;
     // Runs on a worker thread after verified HTTPS traffic with a non-local address.
     std::function<void()> report_verified_peer;
+    // Runs on a worker thread after an authenticated mobile peer reaches the listener.
+    std::function<void()> report_incoming_mobile_peer;
 };
 
-std::unique_ptr<IConnectProvider> MakeLocalSendProvider(LocalSendOptions options);
+class ILocalSendProvider : public IConnectProvider {
+public:
+    // Resolves an IPv4 address with an optional port. Completion arrives as a LocalSendConnectResult.
+    virtual ProviderResult ConnectByIp(std::string_view endpoint) = 0;
+    virtual ProviderResult RefreshPeers() = 0;
+};
+
+std::unique_ptr<ILocalSendProvider> MakeLocalSendProvider(LocalSendOptions options);
 
 } // namespace textlt::connect

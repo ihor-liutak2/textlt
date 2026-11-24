@@ -41,18 +41,18 @@ Elements PreviewLines(std::string_view preview, int width) {
 } // namespace
 
 void ConnectWorkspace::RegisterContentHandler(std::unique_ptr<connect::ContentHandler> handler) {
-    if (!running_) content_.RegisterHandler(std::move(handler));
+    if (!Running()) content_.RegisterHandler(std::move(handler));
 }
 
 void ConnectWorkspace::InitializeStructuredControls() {
     structured_menu_ = Menu(&choice_labels_, &choice_index_);
-    structured_send_ = MakeRoleButton(&theme_, ButtonRole::Primary, "Send snapshot", [this] {
+    structured_send_ = FlatAction("Send snapshot", ButtonRole::Primary, [this] {
         ConfirmStructuredChoice();
     });
-    structured_import_ = MakeRoleButton(&theme_, ButtonRole::Primary, "Import copy", [this] {
+    structured_import_ = FlatAction("Import copy", ButtonRole::Primary, [this] {
         ConfirmStructuredChoice();
     });
-    structured_close_ = MakeRoleButton(&theme_, ButtonRole::Cancel, "Close", [this] {
+    structured_close_ = FlatAction("Close", ButtonRole::Cancel, [this] {
         CloseStructuredPicker();
     });
     structured_picker_ = Container::Vertical({
@@ -79,7 +79,7 @@ void ConnectWorkspace::Share(TransferMetadata metadata, StructuredPayload payloa
 }
 
 bool ConnectWorkspace::Supports(const Conversation& chat, const TransferMetadata& metadata) const {
-    return running_ && chat.online && metadata.schema_version &&
+    return Running() && chat.online && metadata.schema_version &&
         std::any_of(chat.authenticated_capabilities.begin(), chat.authenticated_capabilities.end(),
             [&](const Capability& capability) {
                 return capability.type_id == metadata.type_id &&
@@ -216,7 +216,7 @@ Element ConnectWorkspace::RenderStructuredPicker(int width) {
             share_peers_.push_back(key);
             choice_labels_.push_back(chat.name + " [" + key.second + "]");
         }
-        if (choice_labels_.empty()) rows.push_back(text(running_ ? "No trusted peer supports this version"
+        if (choice_labels_.empty()) rows.push_back(text(Running() ? "No trusted peer supports this version"
                                                                   : "Start Connect networking to send") | dim);
     } else if (auto* message = PreviewMessage()) {
         rows.push_back(text("Received item preview") | bold);

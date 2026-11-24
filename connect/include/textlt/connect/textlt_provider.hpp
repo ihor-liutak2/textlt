@@ -1,6 +1,8 @@
 #pragma once
 
 #include <chrono>
+#include <filesystem>
+#include <string_view>
 
 #include "textlt/connect/provider.hpp"
 
@@ -44,6 +46,15 @@ struct TextLTProviderOptions {
 
 // Reads a PEM leaf certificate and returns its SHA-256 fingerprint as colon-separated hex.
 std::optional<std::string> TextLTCertificateFingerprint(const std::string& certificate_pem);
+
+struct TextLTPairingIdentity {
+    std::string peer_id;
+    std::string fingerprint;
+};
+
+std::optional<std::string> EnsureTextLTIdentity(const std::filesystem::path& pem);
+std::optional<std::string> MakeTextLTPairingCode(std::string_view peer_id, std::string_view fingerprint);
+std::optional<TextLTPairingIdentity> ParseTextLTPairingCode(std::string_view code);
 
 // Call Start and Stop from the owner thread. Event sinks can run concurrently on worker threads and
 // must return promptly without throwing. A sink may call Accept, Decline, Send, or Cancel.

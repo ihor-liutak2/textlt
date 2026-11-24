@@ -1,5 +1,8 @@
 #include "tls.hpp"
 
+#include "../../identity.hpp"
+#include "discovery.hpp"
+
 #include <openssl/err.h>
 #include <openssl/pem.h>
 
@@ -37,6 +40,17 @@ std::array<unsigned char, 32> ParseFingerprint(std::string_view text) {
             ConfigurationError("invalid SHA-256 fingerprint");
         }
         fingerprint[i] = static_cast<unsigned char>(high * 16 + low);
+    }
+    return fingerprint;
+}
+
+std::string FormatFingerprint(const std::array<unsigned char, 32>& digest, bool separated = true) {
+    constexpr char digits[] = "0123456789ABCDEF";
+    std::string fingerprint;
+    for (const auto byte : digest) {
+        if (separated && !fingerprint.empty()) fingerprint += ':';
+        fingerprint += digits[byte >> 4];
+        fingerprint += digits[byte & 15];
     }
     return fingerprint;
 }
@@ -166,6 +180,10 @@ void ThrowTlsError(SSL* ssl, int error, bool authenticating) {
 
 namespace textlt::connect {
 
+namespace {
+constexpr std::string_view kPairingPrefix = "TextLT1/";
+}
+
 std::optional<std::string> TextLTCertificateFingerprint(const std::string& certificate_pem) {
     const std::unique_ptr<BIO, decltype(&BIO_free)> input(
         BIO_new_file(certificate_pem.c_str(), "rb"), BIO_free);
@@ -178,14 +196,47 @@ std::optional<std::string> TextLTCertificateFingerprint(const std::string& certi
         return std::nullopt;
     }
 
-    constexpr char digits[] = "0123456789ABCDEF";
-    std::string fingerprint;
-    for (const auto byte : digest) {
-        if (!fingerprint.empty()) fingerprint += ':';
-        fingerprint += digits[byte >> 4];
-        fingerprint += digits[byte & 15];
+    return detail::FormatFingerprint(digest);
+}
+
+std::optional<std::string> EnsureTextLTIdentity(const std::filesystem::path& pem) {
+    if (!detail::EnsureIdentityFile(pem, "TextLT")) return {};
+    const auto path = pem.u8string();
+    auto fingerprint = TextLTCertificateFingerprint(path);
+    if (!fingerprint) return {};
+    try {
+        const detail::TlsContext identity({path, path, *fingerprint});
+    } catch (const detail::TlsError&) {
+        return {};
     }
     return fingerprint;
+}
+
+std::optional<std::string> MakeTextLTPairingCode(std::string_view peer_id, std::string_view fingerprint) {
+    if (!detail::ValidDiscoveryId(peer_id)) return {};
+    try {
+        return std::string(kPairingPrefix) + std::string(peer_id) + "/" +
+            detail::FormatFingerprint(detail::ParseFingerprint(fingerprint), false);
+    } catch (const detail::TlsError&) {
+        return {};
+    }
+}
+
+std::optional<TextLTPairingIdentity> ParseTextLTPairingCode(std::string_view code) {
+    const auto first = code.find_first_not_of(" \t\r\n");
+    if (first == std::string_view::npos) return {};
+    code = code.substr(first, code.find_last_not_of(" \t\r\n") - first + 1);
+    if (code.substr(0, kPairingPrefix.size()) != kPairingPrefix) return {};
+    code.remove_prefix(kPairingPrefix.size());
+    const auto separator = code.find('/');
+    const auto peer_id = code.substr(0, separator);
+    if (separator == std::string_view::npos || !detail::ValidDiscoveryId(peer_id)) return {};
+    try {
+        return TextLTPairingIdentity{std::string(peer_id),
+            detail::FormatFingerprint(detail::ParseFingerprint(code.substr(separator + 1)))};
+    } catch (const detail::TlsError&) {
+        return {};
+    }
 }
 
 } // namespace textlt::connect

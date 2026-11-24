@@ -91,6 +91,25 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
     LoadSettings();
     navigator_ = CatchEvent(Renderer([](bool) { return emptyElement(); }),
                             [this](Event event) { return NavigatorEvent(event); });
+    toggle_native_ = ProviderToggle(native_running_, [this] { ToggleNative(); });
+    toggle_localsend_ = ProviderToggle(localsend_runtime_.listening, [this] { ToggleLocalSend(); });
+    auto refresh_local = ButtonOption::Simple();
+    refresh_local.on_click = [this] { RefreshLocalSendPeers(); };
+    refresh_local.transform = [this](const EntryState& state) {
+        auto spec = ButtonSpecFromLabel(Terminal::Size().dimx < 54 ? "Refresh" : "Refresh peers",
+            ButtonRole::Utility, ButtonVariant::Minimal, ButtonSize::Compact);
+        spec.enabled = localsend_runtime_.listening;
+        return RenderModalFlatButton(theme_, spec, state.focused);
+    };
+    refresh_localsend_ = Button(std::move(refresh_local));
+    auto connect_by_ip = ButtonOption::Simple();
+    connect_by_ip.on_click = [this] { ConnectLocalSendByIp(); };
+    connect_by_ip.transform = [this](const EntryState& state) {
+        const auto spec = ButtonSpecFromLabel(Terminal::Size().dimx < 54 ? "By IP" : "Connect by IP",
+            ButtonRole::Utility, ButtonVariant::Minimal, ButtonSize::Compact);
+        return RenderModalFlatButton(theme_, spec, state.focused);
+    };
+    connect_by_ip_ = Button(std::move(connect_by_ip));
     InputOption input;
     input.multiline = false;
     input.cursor_position = &cursor_;
@@ -99,15 +118,15 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
         return theme_.InputTransform(std::move(state));
     };
     composer_ = ClipboardController::MakeInput(&draft_, "Type a message", std::move(input));
-    send_ = MakeRoleButton(&theme_, ButtonRole::Primary, "Send", [this] { Send(); });
-    accept_ = MakeRoleButton(&theme_, ButtonRole::Primary, "Accept", [this] { Decide(true); });
-    decline_ = MakeRoleButton(&theme_, ButtonRole::Cancel, "Decline", [this] { Decide(false); });
-    send_file_ = MakeRoleButton(&theme_, ButtonRole::Utility, "Send File…", [this] {
+    send_ = FlatAction("Send", ButtonRole::Primary, [this] { Send(); });
+    accept_ = FlatAction("Accept", ButtonRole::Primary, [this] { Decide(true); });
+    decline_ = FlatAction("Decline", ButtonRole::Cancel, [this] { Decide(false); });
+    send_file_ = FlatAction("Send File…", ButtonRole::Utility, [this] {
         if (CanSendFile()) pick_file_();
     });
-    cancel_transfer_ = MakeRoleButton(&theme_, ButtonRole::Cancel, "Cancel transfer", [this] { CancelTransfer(); });
-    draft_file_ = MakeRoleButton(&theme_, ButtonRole::Utility, "Send as .txt", [this] { SendDraftAsFile(); });
-    retry_pin_ = MakeRoleButton(&theme_, ButtonRole::Primary, "Retry", [this] { RetryPin(); });
+    cancel_transfer_ = FlatAction("Cancel transfer", ButtonRole::Cancel, [this] { CancelTransfer(); });
+    draft_file_ = FlatAction("Send as .txt", ButtonRole::Utility, [this] { SendDraftAsFile(); });
+    retry_pin_ = FlatAction("Retry", ButtonRole::Primary, [this] { RetryPin(); });
     InputOption pin_option;
     pin_option.multiline = false;
     pin_option.password = true;
@@ -120,6 +139,10 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
     Add(send_file_);
     Add(cancel_transfer_);
     Add(navigator_);
+    Add(toggle_native_);
+    Add(toggle_localsend_);
+    Add(refresh_localsend_);
+    Add(connect_by_ip_);
     Add(composer_);
     Add(send_);
     Add(accept_);
@@ -127,12 +150,29 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
     active_ = composer_;
     InitializeStructuredControls();
     service_ = std::make_unique<ConnectService>();
-    auto provider = MakeTextLTProvider({});
-    providers_.push_back(provider->Id());
-    service_->RegisterProvider(std::move(provider));
-    auto localsend = MakeLocalSendProvider({});
-    providers_.push_back(localsend->Id());
-    service_->RegisterProvider(std::move(localsend));
+    providers_ = {kTextLTProviderId, kLocalSendProviderId};
+}
+
+Component ConnectWorkspace::FlatAction(std::string label, ButtonRole role, std::function<void()> action) const {
+    auto option = ButtonOption::Simple();
+    option.label = label;
+    option.on_click = std::move(action);
+    option.transform = [this, spec = ButtonSpecFromLabel(std::move(label), role, ButtonVariant::Minimal,
+                                                        ButtonSize::Compact)](const EntryState& state) {
+        return RenderModalFlatButton(theme_, spec, state.focused);
+    };
+    return Button(std::move(option));
+}
+
+Component ConnectWorkspace::ProviderToggle(bool& running, std::function<void()> toggle) const {
+    auto option = ButtonOption::Simple();
+    option.on_click = std::move(toggle);
+    option.transform = [this, &running](const EntryState& state) {
+        const auto spec = ButtonSpecFromLabel(running ? "Stop" : "Start",
+            running ? ButtonRole::Cancel : ButtonRole::Primary, ButtonVariant::Minimal, ButtonSize::Compact);
+        return RenderModalFlatButton(theme_, spec, state.focused);
+    };
+    return Button(std::move(option));
 }
 
 ConnectWorkspace::~ConnectWorkspace() {
@@ -149,15 +189,16 @@ std::vector<std::pair<std::string, std::string>> ConnectWorkspace::DiscoveredPee
     return peers;
 }
 
-void ConnectWorkspace::Start() {
-    if (running_) {
-        status_ = "Stop networking before applying changes";
+void ConnectWorkspace::StartNative() {
+    const auto listen_port = Port(settings_.listen_port.empty() ? kDefaultNativePort : settings_.listen_port);
+    const auto peer_port = settings_.peer_ip.empty() ? std::optional<std::uint16_t>{0} :
+        Port(settings_.peer_port.empty() ? kDefaultNativePort : settings_.peer_port);
+    if (!listen_port || !peer_port || (!settings_.peer_ip.empty() && !*peer_port)) {
+        status_ = "Enter a port between 1 and 65535. Use 0 to disable the TextLT listener.";
         return;
     }
-    const auto listen_port = Port(settings_.listen_port);
-    const auto peer_port = Port(settings_.peer_port);
-    if (!listen_port || !peer_port) {
-        status_ = "Enter a port between 1 and 65535, or leave it blank";
+    if (!*listen_port && !*peer_port && !settings_.discovery) {
+        status_ = "Configure a TextLT listener, peer, or LAN discovery in Connect Settings";
         return;
     }
 
@@ -167,8 +208,7 @@ void ConnectWorkspace::Start() {
     if ((*listen_port && is_loopback(settings_.listen_ip)) ||
         (*peer_port && is_loopback(settings_.peer_ip)) ||
         (settings_.discovery && is_loopback(settings_.discovery_ip.empty()
-                                           ? settings_.listen_ip : settings_.discovery_ip)) ||
-        (settings_.localsend && is_loopback(settings_.localsend_interface))) {
+                                           ? settings_.listen_ip : settings_.discovery_ip))) {
         status_ = "Use a non-loopback IPv4 address for Connect";
         return;
     }
@@ -185,111 +225,130 @@ void ConnectWorkspace::Start() {
         return result.handler && !result.handler->Validate(*metadata.schema_version, payload);
     };
     options.timeout = std::chrono::seconds(60);
-    if (!settings_.peer_fingerprint.empty() || !settings_.certificate.empty() || !settings_.private_key.empty()) {
-        // Browsing discovery only needs an interface. A sender or listener needs all TLS fields.
-        if (options.listen_port || options.peer_port || !settings_.peer_id.empty() ||
-            !settings_.peer_fingerprint.empty()) {
-            options.tls = TextLTTlsOptions{settings_.certificate, settings_.private_key,
-                                           settings_.peer_fingerprint};
-        }
+    if (!settings_.peer_fingerprint.empty()) {
+        options.tls = TextLTTlsOptions{settings_.certificate, settings_.private_key,
+                                       settings_.peer_fingerprint};
+    } else if (options.listen_port || options.peer_port) {
+        status_ = "Pair a peer in Connect Settings → Connections before starting TextLT";
+        return;
     }
     if (!settings_.peer_id.empty() && options.tls) options.trusted_discovery_peer_id = settings_.peer_id;
     if (settings_.discovery) {
         const auto& ip = settings_.discovery_ip.empty() ? settings_.listen_ip : settings_.discovery_ip;
         options.discovery = TextLTDiscoveryOptions{ip, settings_.local_id, settings_.display_name};
     }
-    if (!settings_.peer_id.empty() && !options.tls && (options.listen_port || options.peer_port)) {
-        status_ = "A trusted peer ID requires a certificate, key, and fingerprint";
-        return;
-    }
-
-    auto service = std::make_unique<ConnectService>();
     auto provider = MakeTextLTProvider(std::move(options));
-    auto* transport = provider.get();
-    service->RegisterProvider(std::move(provider));
-    LocalSendOptions localsend_options;
-    localsend_options.identity_file = localsend_identity_;
-    localsend_options.alias = settings_.localsend_alias;
-    localsend_options.multicast_address = settings_.localsend_group;
-    const auto udp_port = Port(settings_.localsend_udp_port);
-    const auto https_port = Port(settings_.localsend_https_port);
-    localsend_runtime_ = {};
-    localsend_peer_verified_ = false;
-    if (settings_.localsend) {
-        auto previous = Diagnostics();
-        RefreshDiagnostics();
-        auto network = Diagnostics();
-        if (network.local.name == "macOS" && network.local.gateways.empty()) {
-            network.local.gateways = previous.local.gateways;
-        }
-        const auto& configured = settings_.localsend_interface;
-        const auto address = IsAutomaticLocalSendAddress(configured) ? SelectLanIPv4(network.local) : configured;
-        localsend_runtime_.interface_ip = address;
-        const bool eligible = std::any_of(network.local.addresses.begin(), network.local.addresses.end(),
-            [&](const auto& entry) { return entry.ipv4 && entry.usable && entry.address == address; });
-        if (!udp_port || !*udp_port || !https_port) {
-            localsend_runtime_.error = "Invalid LocalSend UDP or HTTPS port";
-        } else if (!eligible) {
-            localsend_runtime_.error = address.empty()
-                ? "LocalSend Auto could not find an eligible local IPv4 address"
-                : "LocalSend interface IPv4 is unavailable on this system";
-        } else {
-            localsend_options.listen_ip = address;
-            localsend_options.interface_ip = address;
-            localsend_options.discovery_port = *udp_port;
-            localsend_options.receive_port = *https_port;
-            for (const auto* environment : {&network.local, &network.host, &previous.host}) {
-                for (const auto& entry : environment->addresses) {
-                    if (entry.ipv4) localsend_options.local_addresses.push_back(entry.address);
-                }
-            }
-            localsend_options.report_runtime = [this](connect::LocalSendRuntime state) {
-                localsend_runtime_ = std::move(state);
-            };
-            localsend_options.report_verified_peer = [this] {
-                if (!localsend_peer_verified_.exchange(true)) redraw_();
-            };
-        }
-    }
-    auto localsend = MakeLocalSendProvider(std::move(localsend_options));
-    auto* local_transport = localsend.get();
-    service->RegisterProvider(std::move(localsend));
-
-    const auto sink = [this](ProviderEvent event) { QueueProviderEvent(std::move(event)); };
-    const bool start_native = *listen_port || *peer_port || settings_.discovery;
-    const auto native = start_native ? transport->Start(sink) : ProviderResult{};
-    const auto local = !settings_.localsend ? ProviderResult{}
-        : !localsend_runtime_.error.empty() ? ProviderResult{false, localsend_runtime_.error}
-        : local_transport->Start(sink);
-    if (!native.accepted && !local.accepted) {
-        status_ = !local.reason.empty() ? local.reason
-            : !native.reason.empty() ? native.reason : "Configure a Connect provider before starting";
+    const auto native = provider->Start([this](ProviderEvent event) { QueueProviderEvent(std::move(event)); });
+    if (!native.accepted) {
+        status_ = native.reason;
         return;
     }
-    service_ = std::move(service);
+    service_->RegisterProvider(std::move(provider));
     active_settings_ = settings_;
-    running_ = true;
-    status_ = !local.reason.empty() ? local.reason
-        : !native.reason.empty() ? native.reason : "Network running";
-    if (native.accepted && (*peer_port || (!settings_.peer_id.empty() && !settings_.peer_fingerprint.empty()))) {
+    active_settings_.peer_port = *peer_port ? std::to_string(*peer_port) : "";
+    native_running_ = true;
+    status_ = "TextLT running";
+    if (*peer_port || (!settings_.peer_id.empty() && !settings_.peer_fingerprint.empty())) {
         const auto id = !settings_.peer_id.empty() ? settings_.peer_id : kTextLTManualPeerId;
-        auto& chat = Get({transport->Id(), id});
+        auto& chat = Get({kTextLTProviderId, id});
         chat.configured = true;
         if (id == kTextLTManualPeerId) chat.name = "Manual TextLT peer";
-        if (!selected_) Select({transport->Id(), id});
+        if (!selected_) Select({kTextLTProviderId, id});
     }
 }
 
-void ConnectWorkspace::Stop() {
-    if (running_) {
-        for (const auto& provider : providers_) service_->FindProvider(provider)->Stop();
-        DrainEvents();
+void ConnectWorkspace::ToggleNative() {
+    if (native_running_) {
+        StopProvider(kTextLTProviderId);
+        native_running_ = false;
+        status_ = "TextLT stopped";
+    } else {
+        StartNative();
     }
-    running_ = false;
+}
+
+ProviderResult ConnectWorkspace::StartLocalSend() {
     localsend_runtime_ = {};
     localsend_peer_verified_ = false;
-    pin_.clear();
+    localsend_phone_reached_listener_ = false;
+    auto previous = Diagnostics();
+    RefreshDiagnostics();
+    auto network = Diagnostics();
+    if (network.local.name == "macOS" && network.local.gateways.empty()) {
+        network.local.gateways = previous.local.gateways;
+    }
+    const auto& configured = settings_.localsend_interface;
+    const auto address = IsAutomaticLocalSendAddress(configured) ? SelectLanIPv4(network.local) : configured;
+    localsend_runtime_.interface_ip = address;
+
+    const auto udp_port = Port(settings_.localsend_udp_port.empty() ? kDefaultLocalSendPort : settings_.localsend_udp_port);
+    const auto https_port = Port(settings_.localsend_https_port.empty() ? kDefaultLocalSendPort : settings_.localsend_https_port);
+    const bool eligible = std::any_of(network.local.addresses.begin(), network.local.addresses.end(),
+        [&](const auto& entry) { return entry.ipv4 && entry.usable && entry.address == address; });
+    if (!udp_port || !*udp_port || !https_port) {
+        localsend_runtime_.error = "Invalid LocalSend UDP or HTTPS port";
+    } else if (!eligible) {
+        localsend_runtime_.error = address.empty()
+            ? "LocalSend Auto could not find an eligible local IPv4 address"
+            : "LocalSend interface IPv4 is unavailable on this system";
+    }
+    if (!localsend_runtime_.error.empty()) return {false, localsend_runtime_.error};
+
+    LocalSendOptions options;
+    options.identity_file = localsend_identity_;
+    options.alias = settings_.localsend_alias;
+    options.multicast_address = settings_.localsend_group;
+    options.listen_ip = address;
+    options.interface_ip = address;
+    options.discovery_port = *udp_port;
+    options.receive_port = *https_port;
+    for (const auto* environment : {&network.local, &network.host, &previous.host}) {
+        for (const auto& entry : environment->addresses) {
+            if (entry.ipv4) options.local_addresses.push_back(entry.address);
+        }
+    }
+    options.report_runtime = [this](connect::LocalSendRuntime state) {
+        localsend_runtime_ = std::move(state);
+    };
+    options.report_verified_peer = [this] {
+        if (!localsend_peer_verified_.exchange(true)) redraw_();
+    };
+    options.report_incoming_mobile_peer = [this] {
+        if (!localsend_phone_reached_listener_.exchange(true)) redraw_();
+    };
+    auto provider = MakeLocalSendProvider(std::move(options));
+    auto result = provider->Start([this](ProviderEvent event) { QueueProviderEvent(std::move(event)); });
+    if (result.accepted) service_->RegisterProvider(std::move(provider));
+    return result;
+}
+
+void ConnectWorkspace::ToggleLocalSend() {
+    if (localsend_runtime_.listening) {
+        StopProvider(kLocalSendProviderId);
+        localsend_peer_verified_ = false;
+        localsend_phone_reached_listener_ = false;
+        if (active_ == refresh_localsend_) toggle_localsend_->TakeFocus();
+        status_ = "LocalSend stopped";
+        return;
+    }
+    const auto result = StartLocalSend();
+    status_ = result.accepted ? "LocalSend running" : result.reason;
+}
+
+void ConnectWorkspace::RefreshLocalSendPeers() {
+    if (!localsend_runtime_.listening) return;
+    auto* provider = FindLocalSendProvider();
+    const auto result = provider->RefreshPeers();
+    status_ = result.accepted ? "LocalSend discovery requested" : result.reason;
+}
+
+void ConnectWorkspace::StopProvider(std::string_view provider) {
+    if (auto* transport = service_->FindProvider(provider)) transport->Stop();
+    service_->UnregisterProvider(provider);
+    DrainEvents();
+    if (selected_ && selected_->first == provider) pin_.clear();
     for (auto& [key, chat] : conversations_) {
+        if (key.first != provider) continue;
         chat.online = false;
         chat.configured = false;
         chat.supports_files = false;
@@ -299,7 +358,33 @@ void ConnectWorkspace::Stop() {
         chat.pin.clear();
         chat.offer.reset();
     }
+}
+
+void ConnectWorkspace::Stop() {
+    for (const auto& provider : providers_) StopProvider(provider);
+    native_running_ = false;
+    localsend_runtime_ = {};
+    localsend_peer_verified_ = false;
+    localsend_phone_reached_listener_ = false;
     status_ = "Network stopped";
+}
+
+ILocalSendProvider* ConnectWorkspace::FindLocalSendProvider() const {
+    return static_cast<ILocalSendProvider*>(service_->FindProvider(kLocalSendProviderId));
+}
+
+void ConnectWorkspace::ConnectLocalSendByIp() {
+    auto* provider = FindLocalSendProvider();
+    if (!provider || !localsend_runtime_.listening) {
+        status_ = "Start LocalSend before connecting by IP";
+        return;
+    }
+    if (settings_.localsend_peer_endpoint.empty()) {
+        status_ = "Enter the peer IP in Connect Settings → LocalSend";
+        return;
+    }
+    const auto result = provider->ConnectByIp(settings_.localsend_peer_endpoint);
+    status_ = result.accepted ? "Connecting to LocalSend peer…" : result.reason;
 }
 
 void ConnectWorkspace::QueueProviderEvent(ProviderEvent event) {
@@ -346,12 +431,16 @@ void ConnectWorkspace::Select(const PeerKey& key) {
 
 void ConnectWorkspace::Send() {
     if (draft_.empty()) return;
-    if (!running_ || !selected_) {
-        status_ = running_ ? "Select a connection to send" : "Start networking before sending";
+    if (!Running() || !selected_) {
+        status_ = Running() ? "Select a connection to send" : "Start networking before sending";
         return;
     }
     auto* provider = service_->FindProvider(selected_->first);
-    if (!provider) return;
+    if (!provider) {
+        status_ = selected_->first == kLocalSendProviderId ? "Start LocalSend before sending"
+                                                         : "Start TextLT networking before sending";
+        return;
+    }
 
     if (OffersTextFile()) {
         status_ = "Inline text is limited to 16384 bytes. Use Send as .txt.";
@@ -379,7 +468,7 @@ void ConnectWorkspace::Send() {
 
 bool ConnectWorkspace::CanSendFile() {
     const auto* chat = Selected();
-    if (!running_ || !chat || !chat->online || !chat->supports_files) return false;
+    if (!Running() || !chat || !chat->online || !chat->supports_files) return false;
     if (selected_->first == kLocalSendProviderId) return true;
     return !active_settings_.peer_fingerprint.empty() &&
            (selected_->second == active_settings_.peer_id ||
@@ -479,7 +568,7 @@ void ConnectWorkspace::RetryPin() {
 
 void ConnectWorkspace::Decide(bool accept) {
     auto* chat = Selected();
-    if (!running_ || !chat || !chat->offer) return;
+    if (!Running() || !chat || !chat->offer) return;
     const auto& id = chat->offer->identity;
     auto* provider = service_->FindProvider(id.peer.provider_id);
     if (!provider) return;
@@ -610,6 +699,11 @@ void ConnectWorkspace::Handle(const IncomingConnectionFailure& failure) {
     status_ = failure.reason;
 }
 
+void ConnectWorkspace::Handle(const LocalSendConnectResult& result) {
+    status_ = result.message;
+    if (result.peer) Select({result.peer->provider_id, result.peer->peer_id});
+}
+
 Component ConnectWorkspace::ActiveChild() {
     return active_;
 }
@@ -673,7 +767,11 @@ bool ConnectWorkspace::OnEvent(Event event) {
     }
     if (!Focused()) return false;
     if (event == Event::Tab || event == Event::TabReverse) {
-        Components choices{navigator_, composer_, send_};
+        Components choices{navigator_, toggle_native_, toggle_localsend_};
+        if (localsend_runtime_.listening) choices.push_back(refresh_localsend_);
+        choices.push_back(connect_by_ip_);
+        choices.push_back(composer_);
+        choices.push_back(send_);
         if (CanSendFile()) choices.push_back(send_file_);
         if (OffersTextFile()) choices.push_back(draft_file_);
         if (Selected() && Selected()->waiting_for_pin) {
@@ -703,6 +801,9 @@ bool ConnectWorkspace::OnEvent(Event event) {
 
 bool ConnectWorkspace::NavigatorEvent(Event event) {
     if (event.is_mouse()) {
+        if (toggle_native_->OnEvent(event) || toggle_localsend_->OnEvent(event) ||
+            (localsend_runtime_.listening && refresh_localsend_->OnEvent(event)) ||
+            connect_by_ip_->OnEvent(event)) return true;
         if (Pressed(event)) {
             const auto mouse = event.mouse();
             for (const auto& [key, box] : peer_rows_) {
@@ -738,9 +839,28 @@ bool ConnectWorkspace::NavigatorEvent(Event event) {
 Element ConnectWorkspace::RenderNavigator(int width, bool show_workspace_tabs) {
     peer_rows_.clear();
     peer_rows_.reserve(conversations_.size());
+    const auto button = [](const Component& component) {
+        auto rendered = component->Render();
+        return component->Focused() ? rendered | focus : rendered;
+    };
+    const bool controls_focused = toggle_native_->Focused() || toggle_localsend_->Focused() ||
+        refresh_localsend_->Focused() || connect_by_ip_->Focused();
     Elements rows;
     for (const auto& provider : providers_) {
         rows.push_back(text(provider == kTextLTProviderId ? "TextLT" : provider == kLocalSendProviderId ? "LocalSend" : provider) | bold);
+        if (provider == kTextLTProviderId) {
+            rows.push_back(hbox({button(toggle_native_), filler()}));
+        } else if (provider == kLocalSendProviderId) {
+            auto toggle = button(toggle_localsend_);
+            auto refresh = button(refresh_localsend_);
+            if (width >= 29) {
+                rows.push_back(hbox({std::move(toggle), text(" "), std::move(refresh), filler()}));
+            } else {
+                rows.push_back(hbox({std::move(toggle), filler()}));
+                rows.push_back(hbox({std::move(refresh), filler()}));
+            }
+            rows.push_back(hbox({button(connect_by_ip_), filler()}));
+        }
         for (const auto& [key, chat] : conversations_) {
             if (key.first != provider) continue;
             peer_rows_.emplace_back(key, Box{});
@@ -754,7 +874,8 @@ Element ConnectWorkspace::RenderNavigator(int width, bool show_workspace_tabs) {
                 text(VisibleLabel(" " + detail, 0, status_width)) | size(WIDTH, EQUAL, status_width),
             });
             if (selected_ == key) {
-                row = row | inverted | focus;
+                row = row | inverted;
+                if (!controls_focused) row = row | focus;
             }
             rows.push_back(row | reflect(peer_rows_.back().second));
         }

@@ -19,6 +19,11 @@ RegistrationResult ConnectService::RegisterProvider(std::unique_ptr<IConnectProv
     return insertion.second ? RegistrationResult::Registered : RegistrationResult::DuplicateId;
 }
 
+void ConnectService::UnregisterProvider(std::string_view provider_id) {
+    const auto provider = providers_.find(provider_id);
+    if (provider != providers_.end()) providers_.erase(provider);
+}
+
 RegistrationResult ConnectService::RegisterHandler(std::unique_ptr<ContentHandler> handler) {
     if (!handler) {
         return RegistrationResult::InvalidRegistration;

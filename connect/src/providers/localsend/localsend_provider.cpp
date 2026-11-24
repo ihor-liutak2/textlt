@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <condition_variable>
 #include <map>
 #include <mutex>
@@ -35,6 +36,25 @@ constexpr auto kPeerLifetime = std::chrono::seconds(70);
 constexpr auto kAnnounceInterval = std::chrono::seconds(20);
 constexpr auto kPoll = std::chrono::milliseconds(20);
 
+std::optional<tcp::endpoint> ParseEndpoint(std::string_view value) {
+    const auto first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string_view::npos) return {};
+    value = value.substr(first, value.find_last_not_of(" \t\r\n") - first + 1);
+    const auto separator = value.find(':');
+    boost::system::error_code error;
+    const auto address = net::ip::make_address_v4(std::string(value.substr(0, separator)), error);
+    if (error || address.is_unspecified() || address.is_multicast() ||
+        address == net::ip::address_v4::broadcast()) return {};
+    std::uint16_t port = 53317;
+    if (separator != std::string_view::npos) {
+        const auto digits = value.substr(separator + 1);
+        const auto end = digits.data() + digits.size();
+        const auto result = std::from_chars(digits.data(), end, port);
+        if (result.ec != std::errc{} || result.ptr != end || port == 0) return {};
+    }
+    return tcp::endpoint(address, port);
+}
+
 std::vector<Capability> TextAndFiles() { return {{kTextTypeId, {}}, {kFileTypeId, {}}}; }
 
 struct PeerRecord {
@@ -42,6 +62,7 @@ struct PeerRecord {
     tcp::endpoint address;
     Clock::time_point expires;
     Clock::time_point next_reply{};
+    bool manual = false;
 };
 
 bool CompatibleVersion(const Json& json) {
@@ -183,7 +204,7 @@ struct Outgoing {
     std::optional<std::string> pin;
 };
 
-class LocalSendProvider final : public IConnectProvider {
+class LocalSendProvider final : public ILocalSendProvider {
 public:
     explicit LocalSendProvider(LocalSendOptions options) : options_(std::move(options)) {}
     ~LocalSendProvider() override { Stop(); }
@@ -279,10 +300,29 @@ public:
         discovery_.close(ignored);
         session_.reset();
         outgoing_.reset();
+        manual_endpoint_.reset();
+        refresh_requested_ = false;
         peers_.clear();
         context_.reset();
         sink_ = {};
         if (was_running) ReportRuntime({});
+    }
+
+    ProviderResult ConnectByIp(std::string_view address) override {
+        const auto endpoint = ParseEndpoint(address);
+        if (!endpoint) return {false, "Enter a peer IPv4 address or IPv4:port (default port 53317)"};
+        std::lock_guard lock(mutex_);
+        if (stopping_) return {false, "Enable LocalSend and start networking first"};
+        if (manual_endpoint_) return {false, "A LocalSend connection attempt is already running"};
+        manual_endpoint_ = *endpoint;
+        return {true, {}};
+    }
+
+    ProviderResult RefreshPeers() override {
+        std::lock_guard lock(mutex_);
+        if (stopping_) return {false, "Start LocalSend to refresh peers"};
+        refresh_requested_ = true;
+        return {true, {}};
     }
 
     ProviderResult Send(OutgoingTransfer transfer) override {
@@ -376,15 +416,16 @@ private:
             outcome.failure});
     }
 
-    bool Remember(PeerRecord peer, bool announce) {
-        if (peer.peer.identity.peer_id == fingerprint_) return false;
+    std::optional<bool> Remember(PeerRecord peer, bool announce) {
+        if (peer.peer.identity.peer_id == fingerprint_) return {};
         bool changed = false;
         bool reply = false;
         const auto now = Clock::now();
         {
             std::lock_guard lock(mutex_);
             auto found = peers_.find(peer.peer.identity.peer_id);
-            if (found == peers_.end() && peers_.size() >= kMaxPeers) return false;
+            if (found == peers_.end() && peers_.size() >= kMaxPeers) return {};
+            if (found != peers_.end() && found->second.manual && !peer.manual) return false;
             changed = found == peers_.end() || found->second.peer.display_name != peer.peer.display_name ||
                 found->second.address != peer.address;
             if (found != peers_.end()) peer.next_reply = found->second.next_reply;
@@ -428,6 +469,14 @@ private:
         try { options_.report_verified_peer(); } catch (...) {}
     }
 
+    void ReportIncomingPeer(const net::ip::address& address, const Json& info) const {
+        ReportVerifiedPeer(address);
+        if (options_.report_incoming_mobile_peer && !address.is_loopback() &&
+            info.contains("deviceType") && info["deviceType"] == "mobile") {
+            try { options_.report_incoming_mobile_peer(); } catch (...) {}
+        }
+    }
+
     void Register(const PeerRecord& peer) {
         try {
             Https request(*context_, stopping_);
@@ -446,12 +495,62 @@ private:
         if (!stopping_) Announce(false);
     }
 
+    LocalSendConnectResult ConnectDirect(const tcp::endpoint& endpoint) {
+        try {
+            Https request(*context_, stopping_);
+            const auto fingerprint = request.Connect(endpoint, options_.connect_timeout);
+            if (fingerprint == fingerprint_) return {{}, "Enter another device's LocalSend address"};
+            request.Post(kRegister, Info().dump(), options_.connect_timeout);
+            const auto response = request.ReadResponse(options_.connect_timeout);
+            if (response.result() != Status::ok) {
+                return {{}, "LocalSend registration returned HTTP " + std::to_string(response.result_int())};
+            }
+            auto info = Parse(response.body());
+            if (!info.is_object()) return {{}, "Invalid LocalSend registration response"};
+            // The response can omit these fields. Use the endpoint that completed TLS.
+            info["protocol"] = "https";
+            info["port"] = endpoint.port();
+            auto peer = ParsePeer(info, endpoint.address());
+            if (!peer) return {{}, "Invalid LocalSend registration response"};
+            if (peer->peer.identity.peer_id != fingerprint) {
+                return {{}, "LocalSend peer certificate fingerprint mismatch"};
+            }
+            peer->manual = true;
+            const auto identity = peer->peer.identity;
+            const auto name = peer->peer.display_name;
+            if (!Remember(std::move(*peer), false).has_value()) return {{}, "LocalSend peer list is full"};
+            ReportVerifiedPeer(endpoint.address());
+            return {identity, "Connected to " + name};
+        } catch (const Error& error) {
+            return {{}, "LocalSend connection failed: " + error.reason};
+        } catch (const std::exception&) {
+            return {{}, "Invalid LocalSend registration response"};
+        }
+    }
+
     void Discover() {
         std::array<char, 8192> bytes;
         auto next = Clock::now();
         while (!stopping_) {
+            std::optional<tcp::endpoint> endpoint;
+            {
+                std::lock_guard lock(mutex_);
+                endpoint = manual_endpoint_;
+            }
+            if (endpoint) {
+                try {
+                    auto result = ConnectDirect(*endpoint);
+                    {
+                        std::lock_guard lock(mutex_);
+                        manual_endpoint_.reset();
+                    }
+                    if (!stopping_) sink_(std::move(result));
+                } catch (const Cancelled&) {
+                    return;
+                }
+            }
             const auto now = Clock::now();
-            if (now >= next) {
+            if (refresh_requested_.exchange(false) || now >= next) {
                 Announce(true);
                 next = now + kAnnounceInterval;
             }
@@ -462,7 +561,7 @@ private:
                 try {
                     const auto json = Parse({bytes.data(), size});
                     const auto peer = ParsePeer(json, source.address());
-                    if (peer && Remember(*peer, json.value("announce", false))) Register(*peer);
+                    if (peer && Remember(*peer, json.value("announce", false)).value_or(false)) Register(*peer);
                 } catch (const Error&) {
                 } catch (const std::exception&) {
                 }
@@ -471,7 +570,7 @@ private:
             {
                 std::lock_guard lock(mutex_);
                 for (auto it = peers_.begin(); it != peers_.end();) {
-                    if (it->second.expires > now) {
+                    if (it->second.manual || it->second.expires > now) {
                         ++it;
                         continue;
                     }
@@ -626,7 +725,7 @@ private:
                     } else {
                         if (fingerprint && peer) {
                             Remember(*peer, false);
-                            ReportVerifiedPeer(address);
+                            ReportIncomingPeer(address, json);
                         }
                         client.Reply(Status::ok, Info().dump(), options_.connect_timeout);
                     }
@@ -727,7 +826,7 @@ private:
             client.Reply(Status::bad_request, {}, options_.connect_timeout);
             return;
         }
-        if (fingerprint) ReportVerifiedPeer(address);
+        if (fingerprint) ReportIncomingPeer(address, info);
         bool busy;
         {
             std::lock_guard lock(mutex_);
@@ -1063,10 +1162,12 @@ private:
     std::string fingerprint_;
     std::uint16_t receive_port_ = 0;
     std::atomic<bool> stopping_{true};
+    std::atomic<bool> refresh_requested_{false};
     std::thread browser_, server_, sender_;
     ProviderEventSink sink_;
     std::mutex mutex_;
     std::condition_variable changed_;
+    std::optional<tcp::endpoint> manual_endpoint_;
     std::map<std::string, PeerRecord> peers_;
     std::shared_ptr<Session> session_;
     std::shared_ptr<Outgoing> outgoing_;
@@ -1075,7 +1176,7 @@ private:
 } // namespace
 } // namespace localsend
 
-std::unique_ptr<IConnectProvider> MakeLocalSendProvider(LocalSendOptions options) {
+std::unique_ptr<ILocalSendProvider> MakeLocalSendProvider(LocalSendOptions options) {
     return std::make_unique<localsend::LocalSendProvider>(std::move(options));
 }
 

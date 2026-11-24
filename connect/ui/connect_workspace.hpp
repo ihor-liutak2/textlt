@@ -17,28 +17,32 @@
 namespace textlt {
 
 struct Theme;
+enum class ButtonRole;
 
 namespace connect_ui {
 
+inline constexpr char kDefaultNativePort[] = "53327";
+inline constexpr char kDefaultLocalSendPort[] = "53317";
+
 struct Settings {
     std::string peer_ip;
-    std::string peer_port;
+    std::string peer_port = kDefaultNativePort;
     std::string peer_id;
     std::string peer_fingerprint;
     std::string listen_ip;
-    std::string listen_port;
+    std::string listen_port = kDefaultNativePort;
     bool discovery = false;
     std::string discovery_ip;
     std::string local_id;
     std::string display_name;
     std::string certificate;
     std::string private_key;
-    bool localsend = false;
+    std::string localsend_peer_endpoint;
     std::string localsend_alias = "TextLT";
     std::string localsend_interface;
     std::string localsend_group = "224.0.0.167";
-    std::string localsend_udp_port = "53317";
-    std::string localsend_https_port = "53317";
+    std::string localsend_udp_port = kDefaultLocalSendPort;
+    std::string localsend_https_port = kDefaultLocalSendPort;
 };
 
 class ConnectWorkspace : public ftxui::ComponentBase {
@@ -56,17 +60,18 @@ public:
 
     Settings& Configuration() { return settings_; }
     bool SaveSettings();
+    connect::ProviderResult PairNativePeer(std::string_view code);
     void RefreshLocalIPv4();
     void RefreshDiagnostics();
     NetworkDiagnostics Diagnostics() const;
     const connect::LocalSendRuntime& LocalSendRuntime() const { return localsend_runtime_; }
     bool LocalSendPeerVerified() const { return localsend_peer_verified_; }
+    bool LocalSendPhoneReachedListener() const { return localsend_phone_reached_listener_; }
     bool UseLocalSendAddress(const std::string& address);
     const std::string& LocalIPv4() const { return local_ipv4_; }
     const std::string& Status() const { return status_; }
-    bool Running() const { return running_; }
+    bool Running() const { return native_running_ || localsend_runtime_.listening; }
     std::vector<std::pair<std::string, std::string>> DiscoveredPeers() const;
-    void Start();
     void Stop();
     void DrainEvents();
     bool Paste(ftxui::Event event);
@@ -108,6 +113,16 @@ private:
     Conversation* Selected();
     void Select(const PeerKey& key);
     void LoadSettings();
+    ftxui::Component FlatAction(std::string label, ButtonRole role, std::function<void()> action) const;
+    void StartNative();
+    void ToggleNative();
+    connect::ProviderResult StartLocalSend();
+    void ToggleLocalSend();
+    void RefreshLocalSendPeers();
+    void ConnectLocalSendByIp();
+    void StopProvider(std::string_view provider);
+    ftxui::Component ProviderToggle(bool& running, std::function<void()> toggle) const;
+    connect::ILocalSendProvider* FindLocalSendProvider() const;
     void Send();
     bool CanSendFile();
     std::string PeerRoute() const;
@@ -132,6 +147,7 @@ private:
     void Handle(const connect::ReceivedContent& content);
     void Handle(const connect::TransferEvent& transfer);
     void Handle(const connect::IncomingConnectionFailure& failure);
+    void Handle(const connect::LocalSendConnectResult& result);
     bool NavigatorEvent(ftxui::Event event);
     ftxui::Element RenderNavigator(int width, bool show_workspace_tabs);
     ftxui::Element RenderChat(int width);
@@ -151,10 +167,11 @@ private:
     std::thread diagnostics_worker_;
     connect::LocalSendRuntime localsend_runtime_;
     std::atomic<bool> localsend_peer_verified_{false};
+    std::atomic<bool> localsend_phone_reached_listener_{false};
     std::unique_ptr<connect::ConnectService> service_;
     connect::ConnectService content_;
     std::vector<std::string> providers_;
-    bool running_ = false;
+    bool native_running_ = false;
     std::string status_ = "Network stopped";
     std::mutex event_mutex_;
     std::deque<connect::ProviderEvent> events_;
@@ -170,6 +187,7 @@ private:
     ftxui::Box history_box_;
     int history_rows_ = 0;
     ftxui::Component navigator_, composer_, send_, accept_, decline_, send_file_, cancel_transfer_, draft_file_, pin_input_, retry_pin_;
+    ftxui::Component toggle_native_, toggle_localsend_, refresh_localsend_, connect_by_ip_;
     ftxui::Component active_;
 
     std::optional<std::pair<connect::TransferMetadata, connect::StructuredPayload>> pending_share_;

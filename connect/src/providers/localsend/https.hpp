@@ -37,6 +37,7 @@ class Https {
 public:
     Https(ssl::context& context, const std::atomic<bool>& stop, const std::atomic<bool>* cancel = nullptr);
     tcp::socket& Socket();
+    std::string Connect(const tcp::endpoint& address, Milliseconds timeout);
     void Connect(const tcp::endpoint& address, const std::string& fingerprint, Milliseconds timeout);
     void Accept(Milliseconds timeout);
     std::optional<std::string> Fingerprint();

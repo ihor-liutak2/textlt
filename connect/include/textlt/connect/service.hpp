@@ -22,6 +22,8 @@ struct HandlerResolution {
 class ConnectService {
 public:
     RegistrationResult RegisterProvider(std::unique_ptr<IConnectProvider> provider);
+    // Remove a stopped provider from the registry.
+    void UnregisterProvider(std::string_view provider_id);
     RegistrationResult RegisterHandler(std::unique_ptr<ContentHandler> handler);
 
     IConnectProvider* FindProvider(std::string_view provider_id) const;

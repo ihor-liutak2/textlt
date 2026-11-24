@@ -119,7 +119,12 @@ struct PeerCapabilities {
     std::vector<Capability> capabilities;
 };
 
+struct LocalSendConnectResult {
+    std::optional<PeerIdentity> peer;
+    std::string message;
+};
+
 using ProviderEvent = std::variant<Peer, IncomingOffer, TransferEvent, ReceivedContent,
-                                   IncomingConnectionFailure, PeerCapabilities>;
+                                   IncomingConnectionFailure, PeerCapabilities, LocalSendConnectResult>;
 
 } // namespace textlt::connect

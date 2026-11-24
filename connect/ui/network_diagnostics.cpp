@@ -55,6 +55,37 @@ bool IPv4Eligible(std::string_view address) {
     return first > 0 && first != 127 && first < 224;
 }
 
+bool HasIPv4DefaultRoute(const NetworkEnvironment& environment, const InterfaceAddress& address) {
+    return std::any_of(environment.gateways.begin(), environment.gateways.end(), [&](const auto& item) {
+        return item.interface_name == address.interface_name &&
+            (IPv4Eligible(item.address) || item.address == "On-link (IPv4)");
+    });
+}
+
+bool IsLanAdapter(const InterfaceAddress& address) {
+    return address.type == "Wi-Fi" || address.type == "Ethernet";
+}
+
+bool IsTunnel(const InterfaceAddress& address) {
+    const auto type = Lower(address.type);
+    const auto name = Lower(address.interface_name);
+    return type.find("tunnel") != std::string::npos || type == "ppp" || type == "point-to-point" ||
+        name.find("vpn") != std::string::npos || name.find("wireguard") != std::string::npos ||
+        name.find("tailscale") != std::string::npos || name.find("zerotier") != std::string::npos ||
+        name.rfind("utun", 0) == 0 || name.rfind("tun", 0) == 0 || name.rfind("tap", 0) == 0 ||
+        name.rfind("ppp", 0) == 0 || name.rfind("wg", 0) == 0;
+}
+
+bool IsUsefulIPv4(const NetworkEnvironment& environment, const InterfaceAddress& address) {
+    return address.ipv4 && IPv4Eligible(address.address) && address.type != "Loopback" &&
+        (address.status == "Up" || address.status.rfind("Up / ", 0) == 0) &&
+        address.status != "Up / No link" &&
+        (address.address.rfind("169.254.", 0) != 0 || Lower(address.origin) == "manual") &&
+        !IsTunnel(address) &&
+        ((address.type.rfind("Virtual", 0) != 0 && address.type != "Bridge") ||
+         HasIPv4DefaultRoute(environment, address));
+}
+
 std::string FormatAddress(int family, const void* data) {
     std::array<char, INET6_ADDRSTRLEN> buffer{};
 #ifdef _WIN32
@@ -337,6 +368,16 @@ NetworkDiagnostics InspectLocalNetwork() {
         result.host.name = "Windows host";
         result.host.notice = "Reading host interfaces…";
         result.wsl_mode = "Unknown";
+        std::ifstream release("/etc/os-release");
+        for (std::string line; std::getline(release, line);) {
+            if (line.rfind("NAME=", 0) != 0) continue;
+            result.wsl_distribution = line.substr(5);
+            auto& name = result.wsl_distribution;
+            if (name.size() >= 2 && name.front() == '"' && name.back() == '"') {
+                name = name.substr(1, name.size() - 2);
+            }
+            break;
+        }
     }
 #endif
     InspectInterfaces(result.local);
@@ -449,12 +490,8 @@ std::string SelectLanIPv4(const NetworkEnvironment& environment) {
     int best_score = -1;
     for (const auto& address : environment.addresses) {
         if (!address.usable || !address.ipv4 || address.host_only) continue;
-        const bool gateway = std::any_of(environment.gateways.begin(), environment.gateways.end(),
-            [&](const auto& item) {
-                return item.interface_name == address.interface_name &&
-                    (IPv4Eligible(item.address) || item.address == "On-link (IPv4)");
-            });
-        const bool physical_lan = address.type == "Wi-Fi" || address.type == "Ethernet";
+        const bool gateway = HasIPv4DefaultRoute(environment, address);
+        const bool physical_lan = IsLanAdapter(address);
         const int score = (address.address.compare(0, 8, "169.254.") == 0 ? 0 : 8) +
             (physical_lan ? 3 : 0) + (gateway ? 2 : 0);
         if (score > best_score) {
@@ -463,6 +500,54 @@ std::string SelectLanIPv4(const NetworkEnvironment& environment) {
         }
     }
     return best ? best->address : "";
+}
+
+std::vector<DiagnosticAddress> DiagnosticAddresses(const NetworkDiagnostics& network,
+                                                   const std::string& textlt_ip) {
+    struct RankedAddress {
+        DiagnosticAddress row;
+        int priority;
+    };
+    std::vector<RankedAddress> ranked;
+    const auto is_gateway = [&](const std::string& ip) {
+        for (const auto* environment : {&network.host, &network.local}) {
+            if (std::any_of(environment->gateways.begin(), environment->gateways.end(),
+                [&](const auto& gateway) { return gateway.address == ip; })) return true;
+        }
+        return false;
+    };
+    for (const auto* environment : {&network.host, &network.local}) {
+        const bool host = environment == &network.host;
+        const bool guest = network.wsl && !host;
+        const std::string platform = host || environment->name == "Native Windows" ? "Windows" :
+            guest && !network.wsl_distribution.empty() ? network.wsl_distribution :
+            environment->name == "macOS" ? "macOS" : "Linux";
+        for (const auto& address : environment->addresses) {
+            if (!IsUsefulIPv4(*environment, address) || is_gateway(address.address)) continue;
+            const bool routed = HasIPv4DefaultRoute(*environment, address);
+            const bool lan = IsLanAdapter(address);
+            const bool current = address.address == textlt_ip;
+            const int priority = host && lan && routed ? 4 : current ? 3 :
+                lan && routed ? 2 : lan || routed ? 1 : 0;
+            const auto kind = guest ? "WSL" : lan ? address.type : "Network";
+            const bool can_bind = std::any_of(network.local.addresses.begin(), network.local.addresses.end(),
+                [&](const auto& local) {
+                    return local.ipv4 && local.usable && local.address == address.address;
+                });
+            ranked.push_back({{address.address, platform + " · " + kind, can_bind, host}, priority});
+        }
+    }
+    std::stable_sort(ranked.begin(), ranked.end(), [](const auto& left, const auto& right) {
+        return left.priority > right.priority;
+    });
+    std::vector<DiagnosticAddress> result;
+    for (auto& entry : ranked) {
+        if (std::none_of(result.begin(), result.end(),
+            [&](const auto& row) { return row.ip == entry.row.ip; })) {
+            result.push_back(std::move(entry.row));
+        }
+    }
+    return result;
 }
 
 } // namespace textlt::connect_ui

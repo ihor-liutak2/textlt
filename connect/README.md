@@ -50,6 +50,9 @@ right column shows the selected conversation, incoming offers, and the
 message composer. Use **Send** or Enter in the composer. **Accept** and
 **Decline** apply to the selected conversation's offer. An outgoing message
 shows **Delivered** after the provider receives the acknowledgment.
+Use **Start** or **Stop** under **TextLT** or **LocalSend** in the left
+column to control each provider independently. **Refresh peers** sends a
+LocalSend discovery announcement while transfers continue.
 
 The **Connect** menu is displayed while this workspace is selected. Its
 entries open tabs of the same settings modal.
@@ -57,14 +60,25 @@ entries open tabs of the same settings modal.
 | Menu path | Settings |
 | --- | --- |
 | **Connect → Connections…** | Choose a discovered peer ID or enter a manual peer IPv4 address and port. Enter the expected SHA-256 fingerprint after verifying it independently. |
-| **Connect → Network…** | Enter the local listener address and port, optionally enable LAN discovery, and explicitly **Start** or **Stop** networking. A blank listener port supports sender-only or discovery-only use. |
+| **Connect → Network…** | Configure the TextLT listener address and port and optionally enable LAN discovery. Set the listener port to `0` for sender-only or discovery-only use. |
 | **Connect → Identity…** | Set the advertised peer ID and display name, choose local certificate and private key PEM paths, and read or copy the certificate fingerprint. |
 | **Connect → Diagnostics…** | Inspect assigned IPv4 and IPv6 addresses, default gateways, and LocalSend listener state. Select an address to copy it or configure LocalSend. |
 
-The existing provider uses one configured peer fingerprint at a time. To
-browse first, start discovery with a LAN interface and a blank listen port.
+The native provider uses one configured peer fingerprint at a time. TextLT
+creates a persistent local identity on first use with a combined certificate
+and private key PEM. Existing manually configured identities are used as saved.
+
+To pair two devices, open **Identity** on each and choose **Copy pairing code**.
+Exchange the codes directly with the device owners. Paste the other device's
+code under **Connections** and click **Pair peer** on both devices. Then
+choose **Start** under **TextLT** on both devices. Pairing enables LAN
+discovery and saves the verified fingerprint. For a manual route, enter the
+other device's IPv4 address and port after pairing.
+
+To browse first, set the listen port to `0`, enable LAN discovery, and choose
+**Start** under **TextLT**.
 Select a peer under Connections, enter the verified fingerprint and local
-certificate and key, then stop and start networking to apply the changes.
+certificate and key, then restart TextLT from the left column.
 To advertise a listener, use the same LAN address for the listener and the
 discovery interface and set a local peer ID and display name. Manual
 certificate setup and the two-device commands below use the same trust model
@@ -72,8 +86,10 @@ as the editor.
 
 Connect Settings automatically saves edits to `connect-settings.json` beside
 the editor configuration. The Network tab shows the detected non-loopback
-IPv4 address and uses it as the initial listen address. Enter the target
-device's IPv4 address in Connections when connecting manually. Conversations
+IPv4 address and uses it as the initial listen address. Native Connect uses
+TCP port `53327` by default. Set the listen port to `0` to disable the native
+listener. Enter the target device's IPv4 address in Connections when connecting
+manually. Saving settings leaves both providers in their current state. Conversations
 and drafts stay in the current editor session.
 Networking stays active when switching workspaces and stops on application
 exit. The workspace uses its own Connections column. Its FTXUI UI lives in
@@ -84,7 +100,7 @@ dependency listed above.
 ## Send a file from the editor
 
 1. Set up a trusted TextLT connection on both instances using the certificate
-   steps below. Start networking in **Connect → Network…** on both ends.
+   steps below. Choose **Start** under **TextLT** on both ends.
 2. Select the peer in **Options → Connect**. When the peer advertises file
    support or responds to the manual endpoint's TLS capability check,
    **Send File…** appears in the conversation. Choose a regular file in the
@@ -135,49 +151,42 @@ and ports, or on two devices with their respective LAN addresses.
 
 ## Inspect the network in Connect Settings
 
-Open **Options → Connect**, then **Connect → Diagnostics…**, or select **Diagnostics** from any Connect Settings tab. The tab lists the
-addresses currently assigned to local interfaces, including loopback,
-link-local, virtual, and VPN interfaces. It shows the prefix, interface
-status, and the type and address origin the OS reports. Linux and macOS
-show **Unknown** when their address enumeration provides no origin. Default gateways
-appear separately. **Refresh** rereads the current interfaces after a Wi-Fi
-change, VPN connection, or other network change. **Copy IP** copies the
-selected address without its prefix.
+Open **Options → Connect**, then **Connect → Diagnostics…**, or select
+**Diagnostics** in Connect Settings. The list puts active LAN addresses and
+TextLT's selected IPv4 address first. Select a row to see where it can be used.
+**Refresh** rereads the interfaces. **Copy IP** copies just the address.
 
-In WSL, **Linux guest (WSL)** and **Windows host** identify the two
-environments. The effective networking mode is **Unknown** if WSL cannot
-report it. Host data requires Windows PowerShell through WSL interop. If
-interop is unavailable, the guest addresses remain visible. **Host only**
-means the Windows address is unavailable to the Linux process.
+LocalSend normally chooses its interface automatically at Start. To override
+the choice, select an address TextLT can bind to and click **Use for LocalSend**.
+Apply the change with **Stop** and **Start** under **LocalSend** in the left
+column. Clear the interface field in the LocalSend settings tab to restore Auto.
 
-To choose an interface, select an eligible local IPv4 row and click
-**Use for LocalSend**. This saves the manual override. Apply it with
-**Stop** and **Start** from the LocalSend tab. Clear the interface field to
-restore Auto. At Start, Auto looks for an active non-loopback IPv4 address
-and prefers non-link-local addresses, active Wi-Fi or Ethernet, and
-interfaces with a default route. Diagnostics marks the address selected at Start.
+In WSL, the list labels the Windows and Linux addresses. A Windows address
+available only to the host can be used by TextLT running in Windows. When WSL
+uses NAT, a phone needs a Windows port forward to reach the WSL listener.
+Diagnostics confirms phone access after an authenticated mobile LocalSend
+client reaches that listener during the current session.
 
-Diagnostics reports configured and actual UDP discovery and TCP/HTTPS
-ports separately. For example, set HTTPS to `0` and start LocalSend to see
-the port assigned by the operating system. Bind and multicast results
-describe the most recent Start attempt and clear on Stop. Actual ports are
-shown while the sockets are open. Peer reachability starts as **Unverified** and changes
-only after verified HTTPS traffic with a non-local peer during the current
-session. Opening or refreshing the tab makes no network probe.
+Open **Info** for adapter details, gateways, the WSL networking mode, and
+LocalSend port and bind diagnostics. Setting the HTTPS port to `0` lets the
+system assign a free port, which appears in Info after Start.
 
 ## Exchange text and files with LocalSend
 
 1. Open **Options → Connect**, then **Connect → Network…**, and select the
-   **LocalSend** tab. Enable LocalSend and set an alias. The default multicast
+   **LocalSend** tab. Set an alias. The default multicast
    group is `224.0.0.167`, the default discovery UDP port is `53317`, and the default HTTPS receive port is
    `53317`. Leave the interface blank for Auto, or select an eligible IPv4
-   address in Diagnostics. Start networking. Connect
-   Settings reports bind conflicts. If another app on the same host already
+   address in Diagnostics. Close the settings and choose **Start** under
+   **LocalSend** in the left column. If another app on the same host already
    owns TCP port `53317`, choose a different HTTPS port for TextLT and keep
    the same discovery group and UDP port in both apps.
 2. In the official LocalSend app, enable HTTPS and start its receive service.
    The two applications should appear in each other's device list. In
    TextLT, select the peer under **LocalSend** in Connections.
+   If automatic discovery is unavailable, enter the peer's IPv4 address or
+   `IPv4:port` in the **LocalSend** tab, then choose **Connect by IP** in the left column. The
+   default peer port is `53317`. TextLT selects the peer for this session.
 3. Send a message from the composer or pick a regular file with **Send File…**.
    An ordinary `.txt` attachment arrives as a file. Messages over 16,384
    UTF-8 bytes can be sent with **Send as .txt**. If the receiver asks for

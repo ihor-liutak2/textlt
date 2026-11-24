@@ -1,7 +1,6 @@
 #include "modals/modal_connect_settings.hpp"
 
 #include <algorithm>
-#include <tuple>
 
 #include "connect_workspace.hpp"
 #include "editor/clipboard_controller.hpp"
@@ -51,10 +50,16 @@ public:
         });
         use_peer_ = Action("Use selected peer ID", [this] { UsePeer(); });
         body_.push_back(Container::Vertical({
+            Field("Peer pairing code from the other device", pairing_code_, false),
+            Action("Pair peer", [this] {
+                const auto result = workspace_.PairNativePeer(pairing_code_);
+                notice_ = result.reason;
+                if (result.accepted) pairing_code_.clear();
+            }, ButtonRole::Primary),
             peer_box_, use_peer_,
             Field("Trusted discovery peer ID", config.peer_id),
             Field("Manual peer IPv4 address", config.peer_ip),
-            Field("Manual peer port", config.peer_port),
+            Field("Manual peer port (default 53327)", config.peer_port),
             Field("Expected peer SHA-256 fingerprint", config.peer_fingerprint),
         }));
         auto discovery = SettingsCheckbox("Enable LAN discovery", config.discovery);
@@ -65,7 +70,7 @@ public:
                     color(theme_.modal_accent) | bold;
             }),
             Field("Listen IPv4 address", config.listen_ip),
-            Field("Listen port (blank disables listener)", config.listen_port),
+            Field("Listen port (default 53327, 0 = off)", config.listen_port),
             discovery,
             Field("Discovery interface IPv4 address (blank uses listen address)", config.discovery_ip),
         }));
@@ -79,6 +84,12 @@ public:
             notice_ = fingerprint_.empty() ? "Could not read a certificate at that path" : "Fingerprint read";
         });
         body_.push_back(Container::Vertical({
+            Action("Copy pairing code", [this] {
+                RefreshFingerprint();
+                const auto code = connect::MakeTextLTPairingCode(workspace_.Configuration().local_id, fingerprint_);
+                notice_ = !code ? "A valid local peer ID and certificate are required"
+                    : copy_(*code) ? "Pairing code copied" : ClipboardController::kWriteFailed;
+            }, ButtonRole::Primary),
             Field("Local peer ID", config.local_id),
             Field("Display name", config.display_name),
             Field("Local certificate PEM path", config.certificate),
@@ -88,16 +99,20 @@ public:
             }),
         }));
         body_.push_back(Container::Vertical({
-            SettingsCheckbox("Enable LocalSend", config.localsend),
+            Field("Peer IPv4 address or IPv4:port (default 53317)", config.localsend_peer_endpoint),
+            Field("Discovery UDP port (default 53317)", config.localsend_udp_port),
+            Field("HTTPS port (default 53317, 0 = free port)", config.localsend_https_port),
             Field("LocalSend alias", config.localsend_alias),
             Field("LocalSend interface IPv4 address (blank = Auto)", config.localsend_interface),
             Field("LocalSend multicast group", config.localsend_group),
-            Field("LocalSend discovery UDP port", config.localsend_udp_port),
-            Field("LocalSend HTTPS port (0 chooses free port)", config.localsend_https_port),
         }));
         auto address_option = MenuOption::Vertical();
+        address_option.on_change = [this] {
+            notice_.clear();
+            if (const auto* row = SelectedAddress()) selected_ip_ = row->ip;
+        };
         address_option.entries_option.transform = [this](const EntryState& state) {
-            auto row = hbox({text(state.active ? "› " : "  "), paragraph(state.label) | flex});
+            auto row = hbox({text(state.active ? "› " : "  "), text(state.label) | flex});
             return state.active ? row | bgcolor(theme_.modal_selected_item_bg) |
                 color(theme_.modal_selected_item_fg) : row;
         };
@@ -105,36 +120,28 @@ public:
         body_.push_back(Container::Vertical({
             Renderer(diagnostic_menu_, [this] { return RenderDiagnostics(); }),
         }));
-        auto refresh_diagnostics = Action("Refresh", [this] {
+        refresh_diagnostics_ = Action("Refresh", [this] {
             notice_.clear();
             workspace_.RefreshDiagnostics();
         });
-        auto copy_ip = Action("Copy IP", [this] {
+        copy_ip_ = Action("Copy IP", [this] {
             if (const auto* row = SelectedAddress()) {
-                notice_ = copy_(row->address.address) ? "IP address copied" : ClipboardController::kWriteFailed;
+                notice_ = copy_(row->ip) ? "IP address copied" : ClipboardController::kWriteFailed;
             }
         }, ButtonRole::Utility, [this] { return SelectedAddress() != nullptr; });
-        auto use_ip = Action("Use for LocalSend", [this] {
+        use_ip_ = Action("Use for LocalSend", [this] {
             const auto* row = SelectedAddress();
-            if (row && workspace_.UseLocalSendAddress(row->address.address)) {
-                notice_ = "LocalSend interface saved. Apply with Stop and Start.";
+            if (row && workspace_.UseLocalSendAddress(row->ip)) {
+                notice_ = workspace_.LocalSendRuntime().listening
+                    ? "Override saved. Stop and start LocalSend in the left column to apply it."
+                    : "Override saved for the next LocalSend start.";
             } else {
                 notice_ = "Could not set the LocalSend interface. Refresh and check the address.";
             }
         }, ButtonRole::Utility, [this] {
             const auto* row = SelectedAddress();
-            return row && row->address.usable && !row->address.host_only;
+            return row && row->can_bind;
         });
-        const auto start = [this] {
-            workspace_.Start();
-            notice_.clear();
-        };
-        const auto stop = [this] {
-            workspace_.Stop();
-            notice_.clear();
-        };
-        start_ = Action("Start", start, ButtonRole::Primary);
-        stop_ = Action("Stop", stop);
         close_ = Action("Close", close, ButtonRole::Cancel);
         info_ = Action("Info", [this] {
             info_open_ = 1;
@@ -146,10 +153,10 @@ public:
         body_tab_ = Container::Tab(body_, &selected_tab_);
         footer_tab_ = Container::Tab({
             Renderer([] { return emptyElement(); }),
-            Container::Horizontal({start_, stop_}),
+            Renderer([] { return emptyElement(); }),
             Container::Horizontal({refresh_fingerprint_, copy_fingerprint_}),
-            Container::Horizontal({Action("Start", start, ButtonRole::Primary), Action("Stop", stop)}),
-            Container::Horizontal({refresh_diagnostics, copy_ip, use_ip}),
+            Renderer([] { return emptyElement(); }),
+            Container::Horizontal({refresh_diagnostics_, copy_ip_, use_ip_}),
         }, &selected_tab_);
         auto main = Container::Vertical({
             tabs_row_, body_tab_, Container::Horizontal({footer_tab_, info_, close_}),
@@ -192,23 +199,35 @@ public:
     }
     Component GetMainComponent() override { return tree_; }
     std::string GetTitle() override { return "Connect Settings"; }
-    ModalSizePreference GetModalSizePreference() const override { return {104, 30}; }
+    ModalSizePreference GetModalSizePreference() const override {
+        const auto terminal = Terminal::Size();
+        return {std::clamp(terminal.dimx, 20, 104), std::clamp(terminal.dimy, 17, 35)};
+    }
     ModalFrameStyle GetModalFrameStyle() const override { return ModalFrameStyle::TitleInBorder; }
     std::string GetFooterText() const override { return {}; }
     bool HasCustomFooter() const override { return true; }
-    int GetCustomFooterHeight() const override { return 3; }
+    int GetCustomFooterHeight() const override {
+        const int width = Terminal::Size().dimx;
+        if (ShowingDiagnostics()) return width < 40 ? 3 : width < 64 ? 2 : 1;
+        return 3;
+    }
 
     Element Render() override {
         Elements tabs;
-        for (const auto& tab : tabs_) {
+        const auto focused = std::find_if(tabs_.begin(), tabs_.end(), [](const Component& tab) {
+            return tab->Focused();
+        });
+        const auto visible = focused == tabs_.end() ? tabs_.begin() + selected_tab_ : focused;
+        for (auto tab = tabs_.begin(); tab != tabs_.end(); ++tab) {
             if (!tabs.empty()) tabs.push_back(text(" "));
-            tabs.push_back(tab->Render());
+            auto label = (*tab)->Render();
+            tabs.push_back(tab == visible ? label | focus : label);
         }
         tabs.push_back(filler());
         auto settings = vbox({
             hbox(std::move(tabs)) | xframe,
             separator() | color(theme_.modal_border),
-            selected_tab_ == static_cast<int>(ConnectSettingsTab::Diagnostics)
+            ShowingDiagnostics()
                 ? body_[selected_tab_]->Render() | flex
                 : body_[selected_tab_]->Render() | vscroll_indicator | yframe | flex,
         }) | bgcolor(theme_.modal_background) | color(theme_.modal_foreground);
@@ -216,8 +235,26 @@ public:
     }
 
     Element RenderCustomFooter() override {
+        if (ShowingDiagnostics()) {
+            const int width = Terminal::Size().dimx;
+            if (info_open_) return emptyElement();
+            Elements rows;
+            auto close = hbox({info_->Render(), text(" "), close_->Render()});
+            if (width < 64) {
+                rows.push_back(hbox({refresh_diagnostics_->Render(), copy_ip_->Render()}));
+                if (width < 40) {
+                    rows.push_back(use_ip_->Render());
+                    rows.push_back(std::move(close));
+                } else {
+                    rows.push_back(hbox({use_ip_->Render(), filler(), std::move(close)}));
+                }
+            } else {
+                rows.push_back(hbox({footer_tab_->Render(), filler(), std::move(close)}));
+            }
+            return vbox(std::move(rows));
+        }
         return vbox({
-            text(notice_.empty() ? workspace_.Status() : notice_) | dim,
+            text(notice_) | dim,
             separator() | color(theme_.modal_border),
             info_open_ ? emptyElement() :
                 hbox({footer_tab_->Render(), filler(), info_->Render(), text(" "), close_->Render()}),
@@ -225,6 +262,10 @@ public:
     }
 
 private:
+    bool ShowingDiagnostics() const {
+        return selected_tab_ == static_cast<int>(ConnectSettingsTab::Diagnostics);
+    }
+
     Component SettingsCheckbox(const std::string& label, bool& value) {
         auto option = CheckboxOption::Simple();
         option.on_change = [this] { SaveSettings(); };
@@ -249,43 +290,39 @@ private:
         };
         static const Help help[] = {
             {"Connections", {
+                {"Pair peer", "Paste the code copied directly from the other device's Identity tab. Both devices must save each other's code before starting TextLT."},
                 {"Discovered peers", "Lists TextLT devices seen on your LAN. Use selected peer ID copies the highlighted ID into the field below."},
                 {"Trusted discovery peer ID", "The peer's Local peer ID. Use it to connect by discovery instead of entering a manual address and port."},
                 {"Manual peer IPv4 address", "The target device's non-loopback IPv4 address. Leave it blank when using discovery."},
-                {"Manual peer port", "The target's TextLT listen port. Leave it blank to use discovery."},
+                {"Manual peer port", "The target's TextLT listen port. Defaults to 53327. Clear the peer IPv4 address to use discovery."},
                 {"Expected peer SHA-256 fingerprint", "Enter the fingerprint you verified directly with the peer. Start networking again to apply connection changes."},
             }},
             {"Network", {
                 {"Listen IPv4 address", "The local IPv4 address accepting TextLT connections. The detected address appears above this input."},
-                {"Listen port", "The local TextLT TCP port. Leave it blank to disable incoming TextLT connections."},
+                {"Listen port", "The local TextLT TCP port defaults to 53327. Set it to 0 to run without a native listener."},
                 {"Enable LAN discovery", "Find TextLT peers on the LAN. A TLS listener with a local ID and display name also advertises itself."},
                 {"Discovery interface IPv4 address", "The local LAN adapter address used for multicast. Leave it blank to use the listen address."},
-                {"Start / Stop", "Start applies the current settings. Stop closes the Connect providers so you can reconfigure them."},
+                {"Apply settings", "Start TextLT in the left column. Restart TextLT there after editing settings for a running provider."},
             }},
             {"Identity", {
-                {"Local peer ID", "A unique, persistent ID this TextLT device advertises on the LAN."},
+                {"Copy pairing code", "Share this code directly with the device you want to pair. It contains your local peer ID and public certificate fingerprint."},
+                {"Local peer ID", "Choose a unique ID for native TextLT discovery. TextLT advertises it when LAN discovery is enabled and a TLS listener and display name are configured. LocalSend uses its own certificate fingerprint."},
                 {"Display name", "The name peers see in their Connections list."},
                 {"Local certificate PEM path", "The certificate your TextLT peers verify."},
                 {"Local private key PEM path", "The private key matching that certificate. Keep it on this device."},
                 {"Read / Copy fingerprint", "Read the certificate's SHA-256 fingerprint and copy it for independent verification with a peer."},
             }},
             {"LocalSend", {
-                {"Enable LocalSend", "Start the LocalSend provider alongside any configured TextLT connection."},
+                {"Peer address", "Enter the peer's IPv4 address or IPv4:port. Start LocalSend and choose Connect by IP in the left column. The peer must have HTTPS enabled."},
                 {"LocalSend alias", "The name shown to other LocalSend devices."},
                 {"Interface IPv4 address", "Leave this blank for Auto, or choose an eligible address in Diagnostics. This address controls the HTTPS listener and the multicast interface."},
                 {"Multicast group and discovery UDP port", "Use the same values as the other LocalSend devices. Defaults are 224.0.0.167 and 53317."},
                 {"HTTPS port", "The LocalSend receive port. Default is 53317. Use 0 to select a free port or choose another port after a bind conflict."},
             }},
-            {"Diagnostics", {
-                {"Interface addresses", "Inspect addresses assigned to each interface. When TextLT runs in WSL, Linux guest and Windows host addresses are labeled separately. Host only means the address is unavailable to the guest."},
-                {"Default gateways", "Routes to other networks. These are listed separately from assigned interface addresses."},
-                {"LocalSend ports", "Configured values come from Settings. Actual values come from open sockets. Bind and multicast results describe the most recent Start attempt."},
-                {"Peer reachability", "Remains unverified until LocalSend records certificate-verified HTTPS traffic with a non-local address during this session."},
-                {"Refresh / Copy IP / Use for LocalSend", "Read the current interfaces, copy the selected address, or save an eligible IPv4 address as the manual LocalSend override."},
-            }},
+            {"Diagnostics", {}},
         };
         const auto& tab = help[selected_tab_];
-        Elements rows;
+        Elements rows = ShowingDiagnostics() ? RenderDiagnosticDetails() : Elements{};
         for (const auto& [label, details] : tab.fields) {
             rows.push_back(text(label) | bold | color(theme_.modal_accent));
             rows.push_back(paragraph(details));
@@ -304,10 +341,10 @@ private:
             bgcolor(theme_.modal_background) | color(theme_.modal_foreground);
     }
 
-    Component Field(const std::string& label, std::string& value) {
+    Component Field(const std::string& label, std::string& value, bool save = true) {
         InputOption option;
         option.multiline = false;
-        option.on_change = [this] { SaveSettings(); };
+        if (save) option.on_change = [this] { SaveSettings(); };
         option.transform = [this](InputState state) {
             return theme_.InputTransform(std::move(state));
         };
@@ -341,7 +378,12 @@ private:
         selected_tab_ = tab;
         notice_.clear();
         if (tab == static_cast<int>(ConnectSettingsTab::Identity)) RefreshFingerprint();
-        if (tab == static_cast<int>(ConnectSettingsTab::Diagnostics)) workspace_.RefreshDiagnostics();
+        if (ShowingDiagnostics()) {
+            selected_address_ = 0;
+            selected_ip_.clear();
+            diagnostic_rows_.clear();
+            workspace_.RefreshDiagnostics();
+        }
         body_[tab]->TakeFocus();
     }
 
@@ -355,9 +397,9 @@ private:
         const auto& id = peers_[selected_peer_].first;
         if (config.peer_id != id) config.peer_fingerprint.clear();
         config.peer_id = id;
-        config.peer_port.clear();
+        config.peer_ip.clear();
         notice_ = workspace_.SaveSettings()
-            ? "Enter the independently verified peer fingerprint. Apply with Network > Start."
+            ? "Enter the independently verified peer fingerprint. Start TextLT in the left column to apply it."
             : "Could not save Connect settings";
     }
 
@@ -380,21 +422,69 @@ private:
         controls[(index + size + delta) % size]->TakeFocus();
     }
 
-    struct DiagnosticRow {
-        std::string environment;
-        connect_ui::InterfaceAddress address;
-
-        auto Key() const { return std::tie(environment, address.interface_name, address.address); }
-    };
-
-    const DiagnosticRow* SelectedAddress() const {
+    const connect_ui::DiagnosticAddress* SelectedAddress() const {
         if (selected_address_ < 0 || static_cast<std::size_t>(selected_address_) >= diagnostic_rows_.size()) {
             return nullptr;
         }
         return &diagnostic_rows_[selected_address_];
     }
 
+    std::string ExplainAddress(const connect_ui::DiagnosticAddress& row,
+                               const connect_ui::NetworkDiagnostics& network) const {
+        const auto& state = workspace_.LocalSendRuntime();
+        if (!row.can_bind) {
+            if (row.windows_host) {
+                return "Use this LAN address with TextLT running in Windows. TextLT in WSL cannot bind to it.";
+            }
+            return "This address is assigned to this system. TextLT cannot bind to it in its current state.";
+        }
+        const bool listening = state.listening && state.interface_ip == row.ip;
+        if (network.wsl) {
+            const std::string usage = row.windows_host ? "TextLT in Windows or WSL can listen on this LAN address."
+                : listening ? "TextLT in WSL is listening here." : "TextLT in WSL can listen here.";
+            if (listening && workspace_.LocalSendPhoneReachedListener()) {
+                return usage + " A phone reached the LocalSend listener this session.";
+            }
+            if (network.wsl_mode == "nat") {
+                return usage + " Phone access in NAT mode requires a Windows port forward.";
+            }
+            return usage + " Phone access is unconfirmed.";
+        }
+        return listening ? "Use this address for LocalSend on this device. TextLT is listening here."
+                         : "TextLT can listen on this address for connections from other devices on this network.";
+    }
+
     Element RenderDiagnostics() {
+        const auto network = workspace_.Diagnostics();
+        const auto& state = workspace_.LocalSendRuntime();
+        const auto& configured = workspace_.Configuration().localsend_interface;
+        const bool automatic = connect_ui::IsAutomaticLocalSendAddress(configured);
+        const auto preferred = !state.interface_ip.empty() ? state.interface_ip :
+            automatic ? connect_ui::SelectLanIPv4(network.local) : configured;
+        diagnostic_rows_ = connect_ui::DiagnosticAddresses(network, preferred);
+        diagnostic_labels_.clear();
+        selected_address_ = 0;
+        for (const auto& row : diagnostic_rows_) {
+            if (row.ip == selected_ip_) selected_address_ = static_cast<int>(diagnostic_labels_.size());
+            diagnostic_labels_.push_back(row.ip + "  " + row.label);
+        }
+
+        const auto* row = SelectedAddress();
+        Elements body{
+            text("IPv4 addresses") | bold | color(theme_.modal_accent),
+            row ? diagnostic_menu_->Render() | vscroll_indicator | yframe | size(HEIGHT, LESS_THAN, 7) :
+                  text("No usable IPv4 addresses found") | dim,
+            separator() | color(theme_.modal_border),
+        };
+        if (row) body.push_back(paragraph(ExplainAddress(*row, network)));
+        body.push_back(paragraph(automatic ? "LocalSend chooses its address automatically at Start."
+                                           : "LocalSend override: " + configured + ". Clear it in LocalSend to use Auto.") | dim);
+        if (!notice_.empty()) body.push_back(paragraph(notice_));
+        body.push_back(filler());
+        return vbox(std::move(body));
+    }
+
+    Elements RenderDiagnosticDetails() {
         using connect::LocalSendCheck;
         const auto check = [](LocalSendCheck result) {
             switch (result) {
@@ -411,10 +501,12 @@ private:
         const auto& state = workspace_.LocalSendRuntime();
         const bool automatic = connect_ui::IsAutomaticLocalSendAddress(config.localsend_interface);
         const auto network = workspace_.Diagnostics();
-        const auto configured_https = config.localsend_https_port.empty() || config.localsend_https_port == "0"
-            ? std::string("0 (Auto)") : config.localsend_https_port;
+        const auto configured_https = config.localsend_https_port == "0" ? std::string("0 (Auto)") :
+            config.localsend_https_port.empty() ? std::string(connect_ui::kDefaultLocalSendPort) : config.localsend_https_port;
         Elements summary{
-            paragraph("LocalSend UDP discovery  Configured " + config.localsend_udp_port +
+            text("LocalSend") | bold | color(theme_.modal_accent),
+            paragraph("LocalSend UDP discovery  Configured " +
+                      (config.localsend_udp_port.empty() ? connect_ui::kDefaultLocalSendPort : config.localsend_udp_port) +
                       "  Actual " + port(state.udp_port) + "  Bind " + check(state.udp_bind)),
             paragraph("LocalSend TCP/HTTPS  Configured " + configured_https +
                       "  Actual " + port(state.https_port) + "  Bind " + check(state.https_bind)),
@@ -427,53 +519,23 @@ private:
         };
         if (!state.error.empty()) summary.push_back(paragraph(state.error) | bold);
 
-        std::optional<DiagnosticRow> previous;
-        if (const auto* row = SelectedAddress()) previous = *row;
-        diagnostic_rows_.clear();
-        diagnostic_labels_.clear();
+        if (network.wsl) summary.push_back(paragraph("WSL networking mode: " + network.wsl_mode));
         for (const auto* environment : {&network.local, &network.host}) {
             if (environment->name.empty()) continue;
-            for (const auto& address : environment->addresses) {
-                diagnostic_rows_.push_back({environment->name, address});
-                const bool selected = environment == &network.local &&
-                    state.interface_ip == address.address && address.ipv4;
-                const std::string label = address.host_only ? "[Host only] " :
-                    selected ? "[Selected for LocalSend] " : "";
-                diagnostic_labels_.push_back(label + environment->name + " | " + address.interface_name +
-                    " | " + address.address + (address.prefix < 0 ? "" : "/" + std::to_string(address.prefix)) +
-                    " | " + address.status + " | Origin " + address.origin + " | " + address.type);
-            }
-        }
-        if (previous) {
-            const auto match = std::find_if(diagnostic_rows_.begin(), diagnostic_rows_.end(),
-                [&](const auto& row) { return row.Key() == previous->Key(); });
-            if (match != diagnostic_rows_.end()) selected_address_ = static_cast<int>(match - diagnostic_rows_.begin());
-        }
-        selected_address_ = std::clamp(selected_address_, 0,
-            std::max(0, static_cast<int>(diagnostic_rows_.size()) - 1));
-        summary.push_back(separator() | color(theme_.modal_border));
-        auto environment_title = network.local.name;
-        if (network.wsl) environment_title += "  |  Windows host  |  WSL mode " + network.wsl_mode;
-        summary.push_back(text(environment_title) | bold | color(theme_.modal_accent));
-        for (const auto* environment : {&network.local, &network.host}) {
+            summary.push_back(separator() | color(theme_.modal_border));
+            summary.push_back(text(environment->name) | bold | color(theme_.modal_accent));
             if (!environment->notice.empty()) summary.push_back(paragraph(environment->notice) | dim);
-        }
-        if (network.local.gateways.empty() && network.host.gateways.empty()) {
-            summary.push_back(text("Default gateways  None reported") | dim);
-        } else {
-            std::string gateways;
-            for (const auto* environment : {&network.local, &network.host}) {
-                for (const auto& gateway : environment->gateways) {
-                    if (!gateways.empty()) gateways += "  |  ";
-                    gateways += environment->name + " / " + gateway.interface_name + " " + gateway.address;
-                }
+            for (const auto& address : environment->addresses) {
+                const auto prefix = address.prefix < 0 ? "" : "/" + std::to_string(address.prefix);
+                summary.push_back(paragraph(address.address + prefix + "  " + address.interface_name +
+                    "  |  " + address.status + "  |  " + address.type + "  |  Origin " + address.origin +
+                    (address.host_only ? "  |  Host only" : "")));
             }
-            summary.push_back(paragraph("Default gateways  " + gateways) | dim);
+            for (const auto& gateway : environment->gateways) {
+                summary.push_back(paragraph("Default gateway " + gateway.address + "  " + gateway.interface_name));
+            }
         }
-        summary.push_back(text("Assigned interface addresses") | bold | color(theme_.modal_accent));
-        summary.push_back(diagnostic_labels_.empty() ? text("No assigned addresses reported") | dim :
-            diagnostic_menu_->Render() | vscroll_indicator | yframe | flex);
-        return vbox(std::move(summary));
+        return summary;
     }
 
     void RefreshFingerprint() {
@@ -489,15 +551,17 @@ private:
     int info_scroll_ = 0;
     int selected_peer_ = 0;
     int selected_address_ = 0;
-    std::vector<DiagnosticRow> diagnostic_rows_;
+    std::string selected_ip_;
+    std::vector<connect_ui::DiagnosticAddress> diagnostic_rows_;
     std::vector<std::string> diagnostic_labels_;
     Component diagnostic_menu_;
     std::vector<std::pair<std::string, std::string>> peers_;
     std::vector<std::string> peer_labels_;
-    std::string notice_, fingerprint_;
+    std::string notice_, fingerprint_, pairing_code_;
     Components tabs_, body_;
     Component tree_, tabs_row_, body_tab_, footer_tab_, peer_menu_, peer_box_, use_peer_;
-    Component start_, stop_, close_, refresh_fingerprint_, copy_fingerprint_, info_, close_info_;
+    Component refresh_diagnostics_, copy_ip_, use_ip_;
+    Component close_, refresh_fingerprint_, copy_fingerprint_, info_, close_info_;
 };
 
 void ConnectSettingsModal::Configure(const Theme& theme, connect_ui::ConnectWorkspace& workspace,
