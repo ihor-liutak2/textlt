@@ -3,15 +3,58 @@
 #include <algorithm>
 #include <chrono>
 #include <future>
+#include <sstream>
 #include <utility>
 
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "ftxui/dom/node.hpp"
+#include "ftxui/screen/string.hpp"
 
+#include "editor_utils.hpp"
 #include "ui_button.hpp"
+#include "ui_horizontal_scroll.hpp"
 
 namespace textlt {
 namespace {
+
+// The original content determines column sizing. Clip rows only after the layout assigns a width.
+class MeasuredLogPane final : public ftxui::Node {
+public:
+    MeasuredLogPane(int preferred_width, std::function<ftxui::Element(int)> render)
+        : preferred_width_(preferred_width), render_(std::move(render)) {}
+
+    void ComputeRequirement() override { requirement_.min_x = preferred_width_; }
+
+    void SetBox(ftxui::Box box) override {
+        Node::SetBox(box);
+        const int width = std::max(0, box.x_max - box.x_min + 1);
+        if (width != width_) {
+            width_ = width;
+            children_ = {render_(width)};
+            children_.front()->ComputeRequirement();
+        }
+        children_.front()->SetBox(box);
+    }
+
+private:
+    int preferred_width_;
+    int width_ = -1;
+    std::function<ftxui::Element(int)> render_;
+};
+
+std::string LogTextSlice(const std::string& text, int offset, int width) {
+    const auto start = utils::Utf8ByteIndexAtDisplayColumn(text, 0, offset);
+    auto end = utils::Utf8ByteIndexAtDisplayColumn(text, start, width);
+    if (!offset || start == text.size() || utils::Utf8DisplayWidth(text, 0, start) == static_cast<size_t>(offset)) {
+        return text.substr(start, end - start);
+    }
+    // Keep the remaining cells of a clipped wide glyph aligned with other rows.
+    const auto next = utils::NextUtf8CodepointStart(text, start);
+    const auto padding = std::min(static_cast<size_t>(width), utils::Utf8DisplayWidth(text, 0, next) - offset);
+    end = utils::Utf8ByteIndexAtDisplayColumn(text, next, width - padding);
+    return std::string(padding, ' ') + text.substr(next, end - next);
+}
 
 ButtonSpec GitButtonSpec(std::string label) {
     ButtonSpec spec;
@@ -487,7 +530,8 @@ GitModalContent::GitModalContent(
     };
     log_branch_menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        ftxui::Element row = ftxui::text(state.label);
+        ftxui::Element row = ftxui::text(LogTextSlice(state.label, log_branch_scroll_.offset,
+                                                      log_branch_scroll_.width));
         if (state.focused || state.active) {
             return row |
                 ftxui::bgcolor(theme.modal_selected_item_bg) |
@@ -514,7 +558,8 @@ GitModalContent::GitModalContent(
     };
     log_commit_menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        ftxui::Element row = ftxui::text(state.label);
+        ftxui::Element row = ftxui::text(LogTextSlice(state.label, log_commit_scroll_.offset,
+                                                      log_commit_scroll_.width));
         if (state.focused || state.active) {
             return row |
                 ftxui::bgcolor(theme.modal_selected_item_bg) |
@@ -969,6 +1014,7 @@ void GitModalContent::SelectLogBranch() {
         return;
     }
     log_commits_ = git_manager_->GetBranchCommits(branch);
+    log_commit_scroll_.offset = 0;
     RebuildLogCommitLabels();
     log_selected_commit_ = 0;
     if (!log_commits_.empty()) {
@@ -986,6 +1032,10 @@ void GitModalContent::SelectLogCommit() {
     if (hash.empty()) {
         log_has_commit_detail_ = false;
         return;
+    }
+    if (!log_has_commit_detail_ || log_commit_detail_.full_hash != hash) {
+        log_details_scroll_.offset = 0;
+        log_details_row_ = 0;
     }
     log_commit_detail_ = git_manager_->GetCommitDetail(hash);
     log_has_commit_detail_ = true;
@@ -1069,6 +1119,7 @@ void GitModalContent::RefreshLogs() {
         log_branches_ = git_manager_->GetLocalBranches(&current);
     }
 
+    log_branch_scroll_.offset = 0;
     RebuildLogBranchLabels();
     log_commits_.clear();
     RebuildLogCommitLabels();
@@ -1089,82 +1140,158 @@ void GitModalContent::RefreshLogs() {
         " branch(es).";
 }
 
+void GitModalContent::LogHorizontalScroll::Update(int viewport_width, int content_width) {
+    width = viewport_width;
+    limit = width > 0 ? std::max(0, content_width - width) : 0;
+    offset = std::min(offset, limit);
+    if (limit == 0) {
+        grab.reset();
+        return;
+    }
+    thumb_width = std::max(1, width * width / content_width);
+    thumb_start = static_cast<int>(static_cast<long long>(offset) * (width - thumb_width) / limit);
+}
+
+ftxui::Element GitModalContent::LogHorizontalScroll::Render(const Theme& theme) {
+    using namespace ftxui;
+    if (limit == 0) return emptyElement();
+    const auto rule = [](std::string_view glyph, int count) {
+        std::string line;
+        for (int i = 0; i < count; ++i) line += glyph;
+        return text(std::move(line));
+    };
+    auto scrollbar = hbox({
+        rule("─", thumb_start) | color(theme.modal_border),
+        rule("━", thumb_width) | color(theme.modal_accent),
+        rule("─", width - thumb_start - thumb_width) | color(theme.modal_border),
+    }) | size(WIDTH, EQUAL, width) | reflect(track);
+    return hbox({std::move(scrollbar), filler()}) | size(HEIGHT, EQUAL, 1);
+}
+
+bool GitModalContent::LogHorizontalScroll::HandleMouse(const ftxui::Mouse& mouse) {
+    using namespace ftxui;
+    if (limit == 0) return false;
+    if (mouse.motion == Mouse::Released && grab) {
+        grab.reset();
+        return true;
+    }
+    const bool pressed = mouse.button == Mouse::Left && mouse.motion == Mouse::Pressed &&
+        track.Contain(mouse.x, mouse.y);
+    if (!pressed && !(grab && mouse.motion == Mouse::Moved)) return false;
+    const int travel = width - thumb_width;
+    if (travel <= 0) return true;
+    const int column = mouse.x - track.x_min;
+    if (pressed) {
+        const int inside_thumb = column - thumb_start;
+        if (inside_thumb >= 0 && inside_thumb < thumb_width) {
+            grab = inside_thumb;
+            return true;
+        }
+        grab = thumb_width / 2;
+    }
+    const int start = std::clamp(column - *grab, 0, travel);
+    offset = static_cast<int>((static_cast<long long>(start) * limit + travel / 2) / travel);
+    return true;
+}
+
 ftxui::Element GitModalContent::RenderLogsTab() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    const auto header = [&](std::string title) { return text(std::move(title)) | bold | color(theme.modal_accent); };
+    const auto divider = [&] { return separator() | color(theme.modal_border); };
+    const auto list_pane = [&](std::string title, std::string empty, const Component& menu,
+                               const std::vector<std::string>& labels, LogHorizontalScroll& scroll) {
+        int longest = 0;
+        for (const auto& label : labels) longest = std::max(longest, string_width(label));
+        const int preferred_width = std::max(string_width(title),
+            labels.empty() ? string_width(empty) : longest + 1);
+        return std::make_shared<MeasuredLogPane>(preferred_width,
+            [title = std::move(title), empty = std::move(empty), menu, longest,
+             header, divider, &scroll, &theme, has_rows = !labels.empty()](int width) {
+                scroll.Update(std::max(0, width - 1), longest);
+                return vbox({
+                    header(title),
+                    divider(),
+                    (has_rows ? menu->Render() | vscroll_indicator : text(empty) | color(theme.modal_text_color)) |
+                        yframe | yflex,
+                    scroll.Render(theme),
+                });
+            });
+    };
+    Element branches = list_pane(std::string(log_remote_mode_ ? "Remote branches (" : "Local branches (") +
+        std::to_string(log_branches_.size()) + ")", "None.", log_branch_component_,
+        log_branch_labels_, log_branch_scroll_);
+    Element commits = list_pane("Commits", "No commits.", log_commit_component_, log_commit_labels_, log_commit_scroll_);
 
-    // Column headers.
-    std::string left_header =
-        (log_remote_mode_ ? "Remote branches" : "Local branches") +
-        std::string(" (") + std::to_string(log_branches_.size()) + ")";
-    std::string middle_header = "Commits";
-    std::string right_header = "Commit details";
-
-    // Left column: branch list.
-    Elements left_rows;
-    left_rows.push_back(text(left_header) | bold | color(theme.modal_accent));
-    left_rows.push_back(separator() | color(theme.modal_border));
-    if (log_branches_.empty()) {
-        left_rows.push_back(text("None.") | color(theme.modal_text_color) | frame | yflex);
-    } else {
-        left_rows.push_back(log_branch_component_->Render() |
-                            vscroll_indicator |
-                            frame |
-                            yflex);
-    }
-
-    // Middle column: commit list.
-    Elements middle_rows;
-    middle_rows.push_back(text(middle_header) | bold | color(theme.modal_accent));
-    middle_rows.push_back(separator() | color(theme.modal_border));
-    if (log_commits_.empty()) {
-        middle_rows.push_back(text("No commits.") | color(theme.modal_text_color) | frame | yflex);
-    } else {
-        middle_rows.push_back(log_commit_menu_->Render() |
-                              vscroll_indicator |
-                              frame |
-                              yflex);
-    }
-
-    // Right column: commit detail.
-    Elements right_rows;
-    right_rows.push_back(text(right_header) | bold | color(theme.modal_accent));
-    right_rows.push_back(separator() | color(theme.modal_border));
+    std::vector<std::pair<std::string, bool>> details;
+    int details_preferred_width = string_width("Commit details");
+    const auto add_detail = [&](std::string line, bool heading = false) {
+        details_preferred_width = std::max(details_preferred_width, string_width(line));
+        details.emplace_back(std::move(line), heading);
+    };
     if (!log_has_commit_detail_) {
-        right_rows.push_back(text("Select a commit to view details.") |
-                             color(theme.modal_text_color) |
-                             frame |
-                             yflex);
+        add_detail("Select a commit to view details.");
     } else {
-        const GitManager::CommitDetail& detail = log_commit_detail_;
-        right_rows.push_back(text("Hash: " + detail.full_hash) | color(theme.modal_text_color));
-        right_rows.push_back(text("Author: " + detail.author_name + " <" + detail.author_email + ">") |
-                             color(theme.modal_text_color));
-        right_rows.push_back(text("Date: " + detail.date) | color(theme.modal_text_color));
-        right_rows.push_back(text("") | color(theme.modal_text_color));
-        right_rows.push_back(text("Message:") | bold | color(theme.modal_accent));
-        right_rows.push_back(paragraph(detail.full_message) | color(theme.modal_text_color));
-        right_rows.push_back(text("") | color(theme.modal_text_color));
-        right_rows.push_back(text("Changed files:") | bold | color(theme.modal_accent));
-        if (detail.changed_files.empty()) {
-            right_rows.push_back(text("  (none)") | color(theme.modal_text_color));
-        } else {
-            for (const auto& file : detail.changed_files) {
-                right_rows.push_back(text("  " + file) | color(theme.modal_text_color));
-            }
-        }
-        right_rows.push_back(text("") | color(theme.modal_text_color) | yflex);
+        const auto& detail = log_commit_detail_;
+        add_detail("Hash: " + detail.full_hash);
+        add_detail("Author: " + detail.author_name + " <" + detail.author_email + ">");
+        add_detail("Date: " + detail.date);
+        add_detail("");
+        add_detail("Message:", true);
+        auto wrapped_message = paragraph(detail.full_message);
+        wrapped_message->ComputeRequirement();
+        details_preferred_width = std::max(details_preferred_width, wrapped_message->requirement().min_x);
+        std::istringstream message(detail.full_message);
+        for (std::string line; std::getline(message, line);) details.emplace_back(std::move(line), false);
+        add_detail("");
+        add_detail("Changed files:", true);
+        if (detail.changed_files.empty()) add_detail("  (none)");
+        for (const auto& file : detail.changed_files) add_detail("  " + file);
     }
+    int longest_detail = 0;
+    if (log_has_commit_detail_) {
+        for (const auto& [line, heading] : details) longest_detail = std::max(longest_detail, string_width(line));
+    }
+    Element detail_pane = std::make_shared<MeasuredLogPane>(details_preferred_width,
+        [this, details = std::move(details), longest_detail, header, divider, &theme](int width) {
+            log_details_scroll_.Update(std::max(0, width - 1), longest_detail);
+            log_details_row_ = std::clamp(log_details_row_, 0, static_cast<int>(details.size()) - 1);
+            Elements rows;
+            for (const auto& [line, heading] : details) {
+                auto label = LogTextSlice(line, log_details_scroll_.offset, log_details_scroll_.width);
+                rows.push_back(heading ? header(std::move(label)) : text(std::move(label)) | color(theme.modal_text_color));
+            }
+            return vbox({
+                header("Commit details"),
+                divider(),
+                vbox(std::move(rows)) | focusPosition(0, log_details_row_) | vscroll_indicator | yframe | yflex |
+                    reflect(log_details_box_),
+                log_details_scroll_.Render(theme),
+            });
+        });
 
-    return vbox({
-        hbox({
-            vbox(std::move(left_rows)) | xflex,
-            separator() | color(theme.modal_border),
-            vbox(std::move(middle_rows)) | xflex,
-            separator() | color(theme.modal_border),
-            vbox(std::move(right_rows)) | xflex,
-        }) | flex,
-    }) | bgcolor(theme.modal_background) | color(theme.modal_foreground);
+    if (!log_remote_mode_) {
+        Box branch_box, commit_box, detail_box;
+        const auto measure = [](const Element& pane, Box& box) {
+            pane->ComputeRequirement();
+            return emptyElement() | size(WIDTH, EQUAL, pane->requirement().min_x) | xflex | reflect(box);
+        };
+        auto natural = hbox({measure(branches, branch_box), divider(), measure(commits, commit_box),
+                             divider(), measure(detail_pane, detail_box)});
+        natural->ComputeRequirement();
+        natural->SetBox({0, GetModalSizePreference().width - 3, 0, 0});
+
+        const int commit_room = std::max(0, BoxWidth(commit_box) - string_width("Commits"));
+        const int detail_room = std::max(0, BoxWidth(detail_box) - string_width("Commit details"));
+        const int extra = std::min(15, commit_room + detail_room);
+        const int from_commits = std::clamp((extra + 1) / 2, std::max(0, extra - detail_room),
+                                            std::min(extra, commit_room));
+        branches = branches | size(WIDTH, EQUAL, BoxWidth(branch_box) + extra);
+        commits = commits | size(WIDTH, EQUAL, BoxWidth(commit_box) - from_commits);
+        detail_pane = detail_pane | size(WIDTH, EQUAL, BoxWidth(detail_box) - (extra - from_commits));
+    }
+    return hbox({branches | xflex, divider(), commits | xflex, divider(), detail_pane | xflex}) |
+        flex | bgcolor(theme.modal_background) | color(theme.modal_foreground);
 }
 
 bool GitModalContent::HandleEvent(ftxui::Event event) {
@@ -1186,6 +1313,22 @@ bool GitModalContent::HandleEvent(ftxui::Event event) {
         return true;
     }
 
+
+    if (selected_tab_ == static_cast<int>(Tab::Logs) && event.is_mouse()) {
+        const auto mouse = event.mouse();
+        if (log_branch_scroll_.HandleMouse(mouse) || log_commit_scroll_.HandleMouse(mouse) ||
+            log_details_scroll_.HandleMouse(mouse)) return true;
+        if (log_details_box_.Contain(mouse.x, mouse.y)) {
+            if (mouse.button == ftxui::Mouse::WheelDown) {
+                log_details_row_ += 3;
+                return true;
+            }
+            if (mouse.button == ftxui::Mouse::WheelUp) {
+                log_details_row_ = std::max(0, log_details_row_ - 3);
+                return true;
+            }
+        }
+    }
 
     if (selected_tab_ == static_cast<int>(Tab::Diff)) {
         const bool wheel_down = event.is_mouse() && event.mouse().button == ftxui::Mouse::WheelDown;

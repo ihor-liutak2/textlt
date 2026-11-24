@@ -7,6 +7,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -246,7 +247,24 @@ private:
     // Logs tab state.
     int log_selected_branch_ = 0;
     int log_selected_commit_ = 0;
-    int log_focus_column_ = 0; // 0 = branches, 1 = commits
+    struct LogHorizontalScroll {
+        void Update(int viewport_width, int content_width);
+        ftxui::Element Render(const Theme& theme);
+        bool HandleMouse(const ftxui::Mouse& mouse);
+
+        int offset = 0;
+        int width = 0;
+        int limit = 0;
+        int thumb_width = 0;
+        int thumb_start = 0;
+        ftxui::Box track;
+        std::optional<int> grab;
+    };
+    LogHorizontalScroll log_branch_scroll_;
+    LogHorizontalScroll log_commit_scroll_;
+    LogHorizontalScroll log_details_scroll_;
+    int log_details_row_ = 0;
+    ftxui::Box log_details_box_;
     bool log_remote_mode_ = false;
     std::vector<std::string> log_branches_;
     std::vector<std::string> log_branch_labels_;
