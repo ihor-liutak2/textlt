@@ -225,7 +225,7 @@ public:
 
         try {
             const auto address = net::ip::make_address_v4(options_.listen_ip);
-            const auto interface = net::ip::make_address_v4(options_.interface_ip);
+            const auto interface_address = net::ip::make_address_v4(options_.interface_ip);
             const auto multicast = net::ip::make_address_v4(options_.multicast_address);
             if (!multicast.is_multicast()) {
                 return StartFailure(runtime, "LocalSend discovery address must be IPv4 multicast");
@@ -262,9 +262,11 @@ public:
             runtime.udp_bind = LocalSendCheck::Succeeded;
             runtime.udp_port = discovery_.local_endpoint().port();
             runtime.multicast_join = LocalSendCheck::Failed;
-            discovery_.set_option(net::ip::multicast::join_group(multicast, interface));
+            discovery_.set_option(net::ip::multicast::join_group(multicast, interface_address));
             runtime.multicast_join = LocalSendCheck::Succeeded;
-            if (!interface.is_unspecified()) discovery_.set_option(net::ip::multicast::outbound_interface(interface));
+            if (!interface_address.is_unspecified()) {
+                discovery_.set_option(net::ip::multicast::outbound_interface(interface_address));
+            }
             discovery_.set_option(net::ip::multicast::enable_loopback(true));
             discovery_.set_option(net::ip::multicast::hops(1));
             discovery_.non_blocking(true);

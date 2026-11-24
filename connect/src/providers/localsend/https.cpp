@@ -53,7 +53,7 @@ std::string Hex(const unsigned char* bytes, std::size_t size) {
 
 std::string RandomToken() {
     std::array<unsigned char, 16> bytes{};
-    if (RAND_bytes(bytes.data(), bytes.size()) != 1) IdentityError();
+    if (RAND_bytes(bytes.data(), static_cast<int>(bytes.size())) != 1) IdentityError();
     return Hex(bytes.data(), bytes.size());
 }
 

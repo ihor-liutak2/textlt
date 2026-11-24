@@ -43,6 +43,7 @@ set_target_properties(textlt_connect PROPERTIES CXX_EXTENSIONS OFF)
 
 target_link_libraries(textlt_connect PRIVATE Threads::Threads ${TEXTLT_CONNECT_BOOST_TARGETS} OpenSSL::SSL OpenSSL::Crypto)
 if(WIN32)
+  target_compile_definitions(textlt_connect PRIVATE _WIN32_WINNT=0x0601)
   target_link_libraries(textlt_connect PRIVATE ws2_32)
 endif()
 

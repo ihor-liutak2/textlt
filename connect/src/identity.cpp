@@ -19,7 +19,7 @@ namespace fs = std::filesystem;
 
 std::string RandomSuffix() {
     std::array<unsigned char, 16> bytes{};
-    if (RAND_bytes(bytes.data(), bytes.size()) != 1) IdentityError();
+    if (RAND_bytes(bytes.data(), static_cast<int>(bytes.size())) != 1) IdentityError();
     constexpr char digits[] = "0123456789abcdef";
     std::string suffix;
     for (const auto byte : bytes) {
@@ -49,11 +49,12 @@ void GenerateIdentity(const fs::path& path, const char* common_name) {
 #endif
     const auto temporary = staging / "identity.pem";
 #ifdef _WIN32
-    auto* file = _wfopen(temporary.c_str(), L"wb");
+    FILE* file = nullptr;
+    if (_wfopen_s(&file, temporary.c_str(), L"wb") != 0) IdentityError();
 #else
     auto* file = std::fopen(temporary.c_str(), "wb");
-#endif
     if (!file) IdentityError();
+#endif
     const auto close_file = [](FILE* stream) { std::fclose(stream); };
     std::unique_ptr<FILE, decltype(close_file)> output(file, close_file);
     std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> key(

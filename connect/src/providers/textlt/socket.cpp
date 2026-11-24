@@ -160,8 +160,8 @@ Socket Socket::JoinMulticast(const std::string& interface_ip) {
 #endif
     const auto any = Endpoint("0.0.0.0", kDiscoveryPort);
     const auto group = Endpoint(kDiscoveryGroup, kDiscoveryPort);
-    const auto interface = Endpoint(interface_ip, 0);
-    const ip_mreq membership{group.sin_addr, interface.sin_addr};
+    const auto interface_address = Endpoint(interface_ip, 0).sin_addr;
+    const ip_mreq membership{group.sin_addr, interface_address};
     const MulticastOption enabled = 1;
     const auto set = [&](int level, int option, const auto& value) {
         return setsockopt(socket_handle.handle_, level, option,
@@ -176,7 +176,7 @@ Socket Socket::JoinMulticast(const std::string& interface_ip) {
         !set(IPPROTO_IP, IP_MULTICAST_ALL, joined_groups_only) ||
 #endif
         !set(IPPROTO_IP, IP_ADD_MEMBERSHIP, membership) ||
-        !set(IPPROTO_IP, IP_MULTICAST_IF, interface.sin_addr) ||
+        !set(IPPROTO_IP, IP_MULTICAST_IF, interface_address) ||
         !set(IPPROTO_IP, IP_MULTICAST_TTL, enabled) ||
         !set(IPPROTO_IP, IP_MULTICAST_LOOP, enabled)) {
         throw IoError::Connection;
