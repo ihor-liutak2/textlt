@@ -26,6 +26,7 @@
 
         if (!same_session && viewport_) {
             viewport_->CursorState() = initial_cursor_state;
+            viewport_->ResetHorizontalScroll();
         }
         BindViewportCursorState();
 

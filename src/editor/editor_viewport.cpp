@@ -27,7 +27,7 @@ size_t EstimateWrappedLineRows(const std::string& line, size_t visible_width) {
 } // namespace
 
 void EditorViewport::Reset() {
-    scroll_x = 0;
+    ResetHorizontalScroll();
     scroll_y = 0;
     wrapped_scroll_offset = 0;
     mouse_selecting = false;
@@ -39,6 +39,14 @@ void EditorViewport::Reset() {
     last_text_click_col_ = 0;
     text_click_count_ = 0;
     cursor_state = {};
+}
+
+void EditorViewport::ResetHorizontalScroll() {
+    scroll_x = 0;
+    horizontal_scrollbar_visible_ = false;
+    horizontal_pan_.reset();
+    horizontal_grab_.reset();
+    width_session_ = nullptr;
 }
 
 EditorCursorState& EditorViewport::CursorState() {
@@ -116,7 +124,7 @@ size_t EditorViewport::VisibleHeight() const {
     if (padding >= raw_height) {
         return 1;
     }
-    return raw_height - padding;
+    return std::max<size_t>(1, raw_height - padding - horizontal_scrollbar_visible_);
 }
 
 bool EditorViewport::ShouldShowLineNumbers(const EditorConfig* config) const {
@@ -147,6 +155,32 @@ size_t EditorViewport::VisibleTextWidth(const DocumentSession* session, const Ed
         available_text_width = std::min(available_text_width, options_.max_text_width);
     }
     return std::max<size_t>(available_text_width, 1);
+}
+
+HorizontalScrollbar EditorViewport::HorizontalScrollMetrics(
+    const DocumentSession& session, const EditorConfig* config) const {
+    if (!ShouldShowScrollbar() || IsDistractionMode() || (config && config->smart_word_wrap) ||
+        RawHeight() <= ContentTopPadding() + ContentBottomPadding() + 1) return {};
+
+    const auto version = session.buffer.Version();
+    if (width_session_ != &session || width_version_ != version) {
+        width_session_ = &session;
+        width_version_ = version;
+        longest_line_width_ = 0;
+        for (const auto& line : session.lines) {
+            longest_line_width_ = std::max(longest_line_width_, utils::Utf8DisplayWidth(line));
+        }
+    }
+    const size_t width = VisibleTextWidth(&session, config);
+    if (longest_line_width_ <= width) return {};
+    const size_t max_offset = longest_line_width_ - width + 1; // Room for the end-of-line caret.
+    const size_t thumb = std::max<size_t>(1, (width * width) / (longest_line_width_ + 1));
+    const size_t offset = std::min(scroll_x, max_offset);
+    return {width, max_offset, thumb, offset * (width - thumb) / max_offset};
+}
+
+bool EditorViewport::HasManualHorizontalScroll() const {
+    return horizontal_pan_.has_value();
 }
 
 size_t EditorViewport::TextLeftPadding(const DocumentSession* session, const EditorConfig* config) const {
@@ -269,6 +303,9 @@ size_t EditorViewport::EstimatedWrappedMaxScrollY(
 void EditorViewport::ScrollToCursor(DocumentSession& session, const EditorConfig* config) {
     session.ClampCursor();
 
+    const auto horizontal = HorizontalScrollMetrics(session, config);
+    horizontal_scrollbar_visible_ = horizontal.max_offset > 0;
+    if (!horizontal_scrollbar_visible_) horizontal_grab_.reset();
     const size_t visible_height = VisibleHeight();
     const bool smart_word_wrap = options_.distraction_mode ||
         (config && config->smart_word_wrap);
@@ -291,6 +328,8 @@ void EditorViewport::ScrollToCursor(DocumentSession& session, const EditorConfig
 
         scroll_y = std::min(scroll_y, max_scroll_y);
         scroll_x = 0;
+        horizontal_pan_.reset();
+        horizontal_grab_.reset();
         return;
     }
 
@@ -309,15 +348,19 @@ void EditorViewport::ScrollToCursor(DocumentSession& session, const EditorConfig
     }
 
     const size_t visible_width = VisibleTextWidth(&session, config);
-
-    if (session.CursorCol() < scroll_x) {
-        scroll_x = session.CursorCol();
+    if (horizontal_pan_ && horizontal_scrollbar_visible_ &&
+        horizontal_pan_->row == session.CursorRow() && horizontal_pan_->col == session.CursorCol() &&
+        horizontal_pan_->buffer_version == session.buffer.Version()) {
+        scroll_x = std::min(scroll_x, horizontal.max_offset);
+        return;
     }
-
+    horizontal_pan_.reset();
     const std::string& current_line = session.lines[session.CursorRow()];
-    while (scroll_x < session.CursorCol() &&
-           utils::Utf8DisplayWidth(current_line, scroll_x, session.CursorCol()) >= visible_width) {
-        scroll_x = utils::NextUtf8CodepointStart(current_line, scroll_x);
+    const size_t cursor_column = utils::Utf8DisplayWidth(current_line, 0, session.CursorCol());
+    if (cursor_column < scroll_x) {
+        scroll_x = cursor_column;
+    } else if (cursor_column - scroll_x >= visible_width) {
+        scroll_x = cursor_column - visible_width + 1;
     }
 
     if (utils::Utf8DisplayWidth(current_line) < visible_width) {
@@ -340,7 +383,7 @@ std::pair<size_t, size_t> EditorViewport::PositionAtMouse(
         (config && config->smart_word_wrap);
 
     size_t clicked_row = scroll_y;
-    size_t segment_start = scroll_x;
+    size_t segment_start = 0;
     size_t segment_end = session.lines[clicked_row].size();
     if (smart_word_wrap) {
         size_t visual_row = 0;
@@ -374,6 +417,8 @@ std::pair<size_t, size_t> EditorViewport::PositionAtMouse(
         clicked_row = std::clamp(
             static_cast<size_t>(std::max(0, raw_clicked_row)), size_t{0}, max_row);
         segment_end = session.lines[clicked_row].size();
+        return {clicked_row, utils::Utf8ByteIndexAtDisplayColumn(session.lines[clicked_row], 0,
+            scroll_x + static_cast<size_t>(std::max(0, relative_x)))};
     }
 
     const size_t clicked_col = std::min(segment_end, relative_x < 0
@@ -383,6 +428,41 @@ std::pair<size_t, size_t> EditorViewport::PositionAtMouse(
     return {clicked_row, clicked_col};
 }
 
+bool EditorViewport::HandleHorizontalScrollbar(
+    DocumentSession& session, const EditorConfig* config, const ftxui::Mouse& mouse,
+    const EditorViewportMouseCallbacks& callbacks) {
+    if (mouse.motion == ftxui::Mouse::Released && horizontal_grab_) {
+        horizontal_grab_.reset();
+        return true;
+    }
+    if (!horizontal_scrollbar_visible_) return false;
+    const bool dragging = horizontal_grab_ && mouse.motion == ftxui::Mouse::Moved;
+    const bool pressed = mouse.button == ftxui::Mouse::Left && mouse.motion == ftxui::Mouse::Pressed &&
+        mouse.y == horizontal_scrollbar_box.y_min && mouse.x >= box.x_min && mouse.x <= box.x_max;
+    if (!dragging && !pressed) return false;
+    if (pressed && !horizontal_scrollbar_box.Contain(mouse.x, mouse.y)) return true;
+
+    const auto bar = HorizontalScrollMetrics(session, config);
+    const int travel = static_cast<int>(bar.width - bar.thumb_width);
+    if (travel <= 0 || bar.max_offset == 0) return true;
+    const int column = mouse.x - horizontal_scrollbar_box.x_min;
+    if (pressed) {
+        if (callbacks.end_typing_group) callbacks.end_typing_group();
+        if (callbacks.take_focus) callbacks.take_focus();
+        mouse_selecting = false;
+        const int inside_thumb = column - static_cast<int>(bar.thumb_start);
+        if (inside_thumb >= 0 && inside_thumb < static_cast<int>(bar.thumb_width)) {
+            horizontal_grab_ = inside_thumb;
+            return true;
+        }
+        horizontal_grab_ = static_cast<int>(bar.thumb_width / 2);
+    }
+    const auto thumb_start = static_cast<size_t>(std::clamp(column - *horizontal_grab_, 0, travel));
+    scroll_x = (thumb_start * bar.max_offset + static_cast<size_t>(travel) / 2) / static_cast<size_t>(travel);
+    horizontal_pan_ = HorizontalPan{session.buffer.Version(), session.CursorRow(), session.CursorCol()};
+    return true;
+}
+
 bool EditorViewport::HandleMouseEvent(
     DocumentSession& session,
     const EditorConfig* config,
@@ -390,6 +470,7 @@ bool EditorViewport::HandleMouseEvent(
     const EditorViewportMouseCallbacks& callbacks) {
     session.SetActiveCursorState(&cursor_state);
     auto mouse = event.mouse();
+    if (HandleHorizontalScrollbar(session, config, mouse, callbacks)) return true;
 
     const bool inside_editor =
         mouse.x >= box.x_min && mouse.x <= box.x_max &&

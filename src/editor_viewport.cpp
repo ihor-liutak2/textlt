@@ -28,6 +28,8 @@ ftxui::Element EditorComponent::RenderViewport() {
     const bool syntax_highlighting = !config_ || config_->syntax_highlighting;
     const bool smart_word_wrap = (viewport_ && viewport_->IsDistractionMode()) ||
         (config_ && config_->smart_word_wrap);
+    const auto horizontal = session_ ? viewport_->HorizontalScrollMetrics(*session_, config_)
+                                     : HorizontalScrollbar{};
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     const std::string file_path = CurrentFilePath();
 
@@ -122,10 +124,14 @@ ftxui::Element EditorComponent::RenderViewport() {
         const size_t cursor_x = is_cursor_line
             ? utils::Utf8ByteIndexAtDisplayColumn(line_content, session_->CursorCol(), 0)
             : line_content.size();
-        const size_t render_start = smart_word_wrap ? segment.start : viewport_->scroll_x;
-        const size_t render_end = smart_word_wrap
-            ? segment.end
-            : utils::Utf8ByteIndexAtDisplayColumn(line_content, viewport_->scroll_x, visible_width);
+        const size_t render_start = segment.start;
+        const size_t render_end = segment.end;
+        if (!smart_word_wrap) {
+            const size_t start_column = utils::Utf8DisplayWidth(line_content, 0, render_start);
+            if (start_column > viewport_->scroll_x) {
+                line_parts.push_back(ftxui::text(std::string(start_column - viewport_->scroll_x, ' ')));
+            }
+        }
 
         size_t syntax_token_index = 0;
         if (syntax_tokens) {
@@ -210,15 +216,21 @@ ftxui::Element EditorComponent::RenderViewport() {
 
             const size_t skip = smart_word_wrap && line_index == viewport_->scroll_y
                 ? viewport_->wrapped_scroll_offset : 0;
-            const std::vector<utils::Utf8WrapSegment> segments = smart_word_wrap
-                ? utils::BuildUtf8WrapSegmentsLimited(
+            std::vector<utils::Utf8WrapSegment> segments;
+            if (smart_word_wrap) {
+                segments = utils::BuildUtf8WrapSegmentsLimited(
                     session_->lines[line_index],
                     visible_width,
-                    visible_height - rendered_content_rows + skip)
-                : std::vector<utils::Utf8WrapSegment>{utils::Utf8WrapSegment{
-                    viewport_->scroll_x,
-                    utils::Utf8ByteIndexAtDisplayColumn(
-                        session_->lines[line_index], viewport_->scroll_x, visible_width)}};
+                    visible_height - rendered_content_rows + skip);
+            } else {
+                const auto& line = session_->lines[line_index];
+                size_t start = utils::Utf8ByteIndexAtDisplayColumn(line, 0, viewport_->scroll_x);
+                if (start < line.size() && utils::Utf8DisplayWidth(line, 0, start) < viewport_->scroll_x) {
+                    start = utils::NextUtf8CodepointStart(line, start);
+                }
+                const size_t end = utils::Utf8ByteIndexAtDisplayColumn(line, 0, viewport_->scroll_x + visible_width);
+                segments.push_back({start, std::max(start, end)});
+            }
 
             for (size_t index = skip; index < segments.size(); ++index) {
                 if (rendered_content_rows >= visible_height) break;
@@ -234,8 +246,29 @@ ftxui::Element EditorComponent::RenderViewport() {
         ++rendered_content_rows;
     }
 
-    while (lines_elements.size() < raw_height) {
+    const bool show_horizontal = horizontal.max_offset > 0;
+    while (lines_elements.size() < raw_height - show_horizontal) {
         lines_elements.push_back(render_empty_row(visible_height > 0 ? visible_height - 1 : 0));
+    }
+    if (show_horizontal) {
+        const auto rule = [](std::string_view glyph, size_t count) {
+            std::string line;
+            for (size_t i = 0; i < count; ++i) line += glyph;
+            return ftxui::text(std::move(line));
+        };
+        auto track = ftxui::hbox({
+            rule("─", horizontal.thumb_start) | ftxui::color(theme.gutter),
+            rule("━", horizontal.thumb_width) | ftxui::color(theme.cursor),
+            rule("─", horizontal.width - horizontal.thumb_start - horizontal.thumb_width) |
+                ftxui::color(theme.gutter),
+        }) | ftxui::reflect(viewport_->horizontal_scrollbar_box);
+        lines_elements.push_back(ftxui::hbox({
+            blank_line_number(),
+            ftxui::text(std::string(text_left_padding, ' ')),
+            std::move(track),
+            ftxui::filler(),
+            ftxui::text(std::string(scrollbar_columns, ' ')),
+        }));
     }
 
     return ftxui::vbox(std::move(lines_elements)) | ftxui::reflect(viewport_->box);
@@ -293,22 +326,13 @@ void EditorComponent::UpdateScroll() {
         return;
     }
     viewport_->wrapped_scroll_offset = 0;
-    if (utils::Utf8ByteIndexAtDisplayColumn(line, viewport_->scroll_x, width) >=
-        match.x + match.length) {
-        return;
-    }
-
+    if (viewport_->HasManualHorizontalScroll()) return;
     // Keep the whole match visible when it fits, starting at the match otherwise.
-    size_t start = std::min(match.x + match.length, line.size());
-    size_t remaining = width;
-    while (start > viewport_->scroll_x) {
-        const size_t previous = utils::PreviousUtf8CodepointStart(line, start);
-        const size_t glyph_width = utils::Utf8DisplayWidth(line, previous, start);
-        if (glyph_width > remaining) break;
-        remaining -= glyph_width;
-        start = previous;
+    const size_t match_end = utils::Utf8DisplayWidth(line, 0, match.x + match.length);
+    if (match_end > viewport_->scroll_x + width) {
+        const size_t match_start = utils::Utf8DisplayWidth(line, 0, match.x);
+        viewport_->scroll_x = std::min(match_start, match_end - width);
     }
-    viewport_->scroll_x = std::min(start, match.x);
 }
 
 } // namespace textlt

@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -35,6 +36,13 @@ struct EditorViewportMouseCallbacks {
     std::function<void()> take_focus;
 };
 
+struct HorizontalScrollbar {
+    size_t width = 0;
+    size_t max_offset = 0;
+    size_t thumb_width = 0;
+    size_t thumb_start = 0;
+};
+
 class EditorViewport {
 public:
     void Reset();
@@ -58,6 +66,9 @@ public:
     bool ShouldShowScrollbar() const;
     size_t ScrollbarColumns() const;
     size_t VisibleTextWidth(const DocumentSession* session, const EditorConfig* config) const;
+    HorizontalScrollbar HorizontalScrollMetrics(const DocumentSession& session, const EditorConfig* config) const;
+    bool HasManualHorizontalScroll() const;
+    void ResetHorizontalScroll();
     size_t TextLeftPadding(const DocumentSession* session, const EditorConfig* config) const;
     size_t LineNumberWidth(const DocumentSession* session) const;
     std::string LineNumberText(size_t line_index, size_t width) const;
@@ -82,7 +93,7 @@ public:
         ftxui::Event event,
         const EditorViewportMouseCallbacks& callbacks = {});
 
-    size_t scroll_x = 0;
+    size_t scroll_x = 0; // Display cells, shared across unwrapped lines.
     size_t scroll_y = 0;
     size_t wrapped_scroll_offset = 0;
     bool mouse_selecting = false;
@@ -94,9 +105,19 @@ public:
     size_t last_text_click_col_ = 0;
     int text_click_count_ = 0;
     ftxui::Box box;
+    ftxui::Box horizontal_scrollbar_box;
     EditorCursorState cursor_state;
 
 private:
+    struct HorizontalPan {
+        std::uint64_t buffer_version;
+        size_t row;
+        size_t col;
+    };
+
+    bool HandleHorizontalScrollbar(DocumentSession& session, const EditorConfig* config,
+                                   const ftxui::Mouse& mouse, const EditorViewportMouseCallbacks& callbacks);
+
     struct EstimatedWrapMetricsCache {
         bool valid = false;
         std::uint64_t buffer_version = 0;
@@ -115,6 +136,12 @@ private:
         const ftxui::Mouse& mouse) const;
 
     EditorViewportOptions options_;
+    bool horizontal_scrollbar_visible_ = false;
+    std::optional<HorizontalPan> horizontal_pan_;
+    std::optional<int> horizontal_grab_;
+    mutable const DocumentSession* width_session_ = nullptr;
+    mutable std::uint64_t width_version_ = 0;
+    mutable size_t longest_line_width_ = 0;
     mutable EstimatedWrapMetricsCache estimated_wrap_metrics_cache_;
 };
 
