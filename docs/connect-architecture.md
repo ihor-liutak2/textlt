@@ -44,9 +44,12 @@ terminals. The adjacent pane contains scrollable conversation history,
 offer decisions, and the composer. The shared Sidebar and document
 Find/Replace panel are outside the active Connect component branch.
 
-Entering the workspace does not start the network. Settings take effect on
-**Network → Start**, using the existing TextLT endpoint, discovery, and
-single-peer pin settings. Notes and Actions use the same connection for snapshots. Workers enqueue provider events and request an
+The left column has independent **Start** and **Stop** controls for TextLT
+and LocalSend. Connect Settings saves configuration. The native TextLT
+listener defaults to TCP `53327`; LocalSend defaults to TCP and UDP `53317`.
+TextLT generates a local identity on first use unless one is configured.
+Pairing saves the peer ID and certificate fingerprint exchanged in the
+pairing code. Notes and Actions use the same connection for snapshots. Workers enqueue provider events and request an
 FTXUI wake-up. The editor drains the queue on the UI thread, including
 while a different workspace is selected. Switching workspaces retains the
 provider, selected conversation, and draft. Stop joins the provider workers,
@@ -68,12 +71,13 @@ mode comes from `wslinfo --networking-mode` when available. PowerShell and
 macOS route lookups run on a background worker. The editor build and
 existing installer use these OS facilities without extra runtime packages.
 
-The inventory drives both the Diagnostics picker and LocalSend Auto address
+The inventory drives both the IPv4 address list in Diagnostics and LocalSend Auto address
 selection on Start. A manual selection must still be an eligible IPv4
 address assigned to an interface visible to TextLT. Auto and manual modes
 bind HTTPS to the selected address and use it as the multicast interface.
 The UDP discovery socket binds the configured port and joins the configured
-multicast group on that interface.
+multicast group on that interface. Adapter and port details appear under
+the Diagnostics **Info** button.
 
 `LocalSendOptions` exposes optional runtime and verified-peer callbacks.
 The provider reports actual socket state after Start or Stop, including
@@ -353,8 +357,10 @@ type, certificate fingerprint, actual HTTPS port, HTTPS protocol,
 `download: false`, and `announce: true`. Discovery uses the datagram source
 IPv4 address. Announcements trigger an HTTPS registration request with a UDP
 `announce: false` fallback. The provider deduplicates by fingerprint and
-filters its own identity. TCP receive binding is exclusive and its errors
-surface in Connect Settings.
+filters its own identity. **Connect by IP** uses HTTPS registration at the
+specified IPv4 address and verifies the returned fingerprint against the
+peer's TLS certificate. TCP receive binding is exclusive and reports bind
+errors in the Connect workspace and Diagnostics.
 
 The adapter persists a self-signed certificate and its key in a LocalSend-only
 PEM. Fingerprints are uppercase hex SHA-256 of the DER certificate.

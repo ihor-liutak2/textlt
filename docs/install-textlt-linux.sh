@@ -23,9 +23,6 @@ ASSET="${TEXTLT_ASSET:-textlt-linux-x64.tar.gz}"
 INSTALL_ROOT="${TEXTLT_INSTALL_ROOT:-$HOME/.local/share/textlt}"
 APP_DIR="$INSTALL_ROOT/app"
 BIN_DIR="${TEXTLT_BIN_DIR:-$HOME/.local/bin}"
-CONFIG_DIR="$HOME/.config/textlt"
-XDG_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/textlt"
-LEGACY_CONFIG_FILE="$HOME/.textlt_config.json"
 ARCHIVE="${TMPDIR:-/tmp}/$ASSET"
 EXTRACT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/textlt-install.XXXXXX")"
 URL="${TEXTLT_DOWNLOAD_URL:-https://github.com/$REPO/releases/download/$VERSION/$ASSET}"
@@ -108,12 +105,7 @@ fi
 
 EXE_DIR="$(dirname "$EXE")"
 
-echo "Resetting TextLT configuration and bundled resources..."
-rm -rf "$CONFIG_DIR"
-if [[ "$XDG_CONFIG_DIR" != "$CONFIG_DIR" ]]; then
-  rm -rf "$XDG_CONFIG_DIR"
-fi
-rm -f "$LEGACY_CONFIG_FILE"
+echo "Updating the application while keeping your TextLT configuration..."
 
 # Older releases could leave bundled resources and managed local-AI files beside
 # app/. Piper voices remain in $INSTALL_ROOT/piper; obsolete AI files are removed.
@@ -154,6 +146,11 @@ export TERM=xterm-256color
 if ! TEXTLT_CHECK_RUNTIME_ONLY=1 "$APP_DIR/textlt"; then
   echo "TextLT was copied, but its runtime dependency check failed." >&2
   echo "After fixing the reported package or network issue, run: textlt" >&2
+  exit 1
+fi
+
+if [[ "$("$APP_DIR/textlt" --version)" != "textlt ${VERSION#v}" ]]; then
+  echo "Installed executable does not match TextLT $VERSION." >&2
   exit 1
 fi
 

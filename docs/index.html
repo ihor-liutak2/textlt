@@ -237,7 +237,7 @@
   </footer>
 
   <script>
-    const release = "v1.0.0";
+    const release = "v1.1.0";
     const releaseUrl = `https://github.com/ihor-liutak2/textlt/releases/tag/${release}`;
     const siteBase = "https://ihor-liutak2.github.io/textlt";
 
@@ -252,7 +252,7 @@ bash "$INSTALLER" "$TEXTLT_VERSION"`
       },
       windows: {
         title: "Windows installer",
-        description: "Downloads the Windows PowerShell installer and runs it. The installer downloads the selected TextLT release archive, installs TextLT under LocalAppData, creates textlt.cmd, and adds it to the user PATH.",
+        description: "Downloads the Windows PowerShell installer. It installs the native TextLT executable under LocalAppData and adds its directory to your user PATH.",
         code: `$TextltVersion = "${release}"
 $Installer = "$env:TEMP\\install-textlt-windows.ps1"
 Invoke-WebRequest -Uri "${siteBase}/install-textlt-windows.ps1" -OutFile $Installer
@@ -260,8 +260,9 @@ PowerShell -ExecutionPolicy Bypass -File $Installer -Version $TextltVersion`
       },
       macos: {
         title: "macOS installer",
-        description: "Downloads the macOS installer script and runs it. The installer downloads the Apple Silicon (arm64) release archive, installs TextLT into ~/.local/share/textlt/app, and creates ~/.local/bin/textlt.",
-        code: `TEXTLT_VERSION="${release}"
+        description: "Installs TextLT for Apple Silicon. The commands use Homebrew to install the required libarchive library first.",
+        code: `brew install libarchive
+TEXTLT_VERSION="${release}"
 INSTALLER="/tmp/install-textlt-macos.sh"
 curl -fsSL "${siteBase}/install-textlt-macos.sh" -o "$INSTALLER"
 bash "$INSTALLER" "$TEXTLT_VERSION"`

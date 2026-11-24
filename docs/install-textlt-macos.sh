@@ -32,9 +32,6 @@ fi
 INSTALL_ROOT="${TEXTLT_INSTALL_ROOT:-$HOME/.local/share/textlt}"
 APP_DIR="$INSTALL_ROOT/app"
 BIN_DIR="${TEXTLT_BIN_DIR:-$HOME/.local/bin}"
-CONFIG_DIR="$HOME/.config/textlt"
-XDG_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/textlt"
-LEGACY_CONFIG_FILE="$HOME/.textlt_config.json"
 ARCHIVE="${TMPDIR:-/tmp}/$ASSET"
 EXTRACT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/textlt-install.XXXXXX")"
 URL="${TEXTLT_DOWNLOAD_URL:-https://github.com/$REPO/releases/download/$VERSION/$ASSET}"
@@ -72,13 +69,16 @@ if [[ -z "$EXE" ]]; then
 fi
 
 EXE_DIR="$(dirname "$EXE")"
-
-echo "Resetting TextLT configuration and bundled resources..."
-rm -rf "$CONFIG_DIR"
-if [[ "$XDG_CONFIG_DIR" != "$CONFIG_DIR" ]]; then
-  rm -rf "$XDG_CONFIG_DIR"
+if ! ARCHIVE_VERSION="$("$EXE" --version)"; then
+  echo "TextLT could not start. Install libarchive with 'brew install libarchive' and try again." >&2
+  exit 1
 fi
-rm -f "$LEGACY_CONFIG_FILE"
+if [[ "$ARCHIVE_VERSION" != "textlt ${VERSION#v}" ]]; then
+  echo "The downloaded executable does not match TextLT $VERSION." >&2
+  exit 1
+fi
+
+echo "Updating the application while keeping your TextLT configuration..."
 
 # Older releases could leave bundled resources and managed local-AI files beside
 # app/. Piper voices remain in $INSTALL_ROOT/piper; obsolete AI files are removed.

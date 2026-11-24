@@ -30,10 +30,13 @@ fi
 if shared_library_is_missing 'libxml2'; then
   missing="$missing libxml2"
 fi
+if shared_library_is_missing '(libssl|libcrypto)\.so\.3'; then
+  missing="$missing openssl"
+fi
 
 if [ "${TEXTLT_CHECK_RUNTIME_ONLY:-}" = "1" ]; then
   if [ -z "$missing" ]; then
-    echo "TextLT runtime dependencies are available: curl ssh sftp libarchive libxml2"
+    echo "TextLT runtime dependencies are available: curl ssh sftp libarchive libxml2 OpenSSL"
     exit 0
   fi
   if [ -x "$INSTALLER" ]; then
@@ -49,7 +52,7 @@ if [ -n "$missing" ]; then
   else
     echo "TextLT missing runtime dependencies:$missing" >&2
     echo "Installer script was not found: $INSTALLER" >&2
-    echo "Install manually: curl, openssh-client, libarchive, and libxml2" >&2
+    echo "Install manually: curl, openssh-client, libarchive, libxml2, and OpenSSL 3" >&2
     exit 127
   fi
 fi

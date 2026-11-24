@@ -83,11 +83,11 @@ to use the result elsewhere. Double-click either text pane to select its content
 
 ### Install from Release
 
-Installing or upgrading resets TextLT configuration, custom themes, text-parser
-configuration, and downloaded registries so the release's current defaults and
-themes are used. Installed Piper/TTS voices are preserved. Legacy managed local
-AI runtimes and models are removed. Manage Ollama and its models separately
-before connecting them through AI Settings.
+Installing or upgrading replaces the bundled application and resources. Your
+configuration, Connect identities and pairings, and installed Piper/TTS voices
+are preserved.
+
+See the [v1.1.0 release notes](docs/releases/v1.1.0.md) for application changes.
 
 #### Linux (Debian, Ubuntu, Fedora, Arch, and others)
 
@@ -100,7 +100,7 @@ curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-linux.sh | bash
 Or install a specific version:
 
 ```bash
-curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-linux.sh | bash -s -- v1.0.0
+curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-linux.sh | bash -s -- v1.1.0
 ```
 
 After installing, start the editor from any terminal with:
@@ -142,7 +142,7 @@ irm https://ihor-liutak2.github.io/textlt/install-textlt-windows.ps1 | iex
 Or install a specific version:
 
 ```powershell
-$env:TEXTLT_VERSION = "v1.0.0"; irm https://ihor-liutak2.github.io/textlt/install-textlt-windows.ps1 | iex
+$env:TEXTLT_VERSION = "v1.1.0"; irm https://ihor-liutak2.github.io/textlt/install-textlt-windows.ps1 | iex
 ```
 
 Open a new PowerShell window after installing so Windows reloads `PATH`, then start the editor with:
@@ -158,7 +158,13 @@ To uninstall TextLT from Windows:
 Remove-Item "$env:LOCALAPPDATA\Programs\textlt" -Recurse -Force
 ```
 
-#### macOS (Intel and Apple Silicon)
+#### macOS (Apple Silicon)
+
+Install the release's archive library with Homebrew first:
+
+```bash
+brew install libarchive
+```
 
 One-liner install (downloads the latest release automatically):
 
@@ -169,7 +175,7 @@ curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-macos.sh | bash
 Or install a specific version:
 
 ```bash
-curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-macos.sh | bash -s -- v1.0.0
+curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-macos.sh | bash -s -- v1.1.0
 ```
 
 After installing, start the editor from any terminal with:
@@ -191,7 +197,7 @@ Install build dependencies on Debian, Ubuntu, or MX Linux:
 
 ```bash
 sudo apt update
-sudo apt install -y build-essential cmake git libcurl4-openssl-dev libarchive-dev
+sudo apt install -y build-essential cmake git libarchive-dev libboost-dev libssl-dev
 ```
 
 Clone and build:
@@ -229,9 +235,7 @@ triggering the terminal's native `Shift+mouse` screen selection.
 Install the built binary for the current user:
 
 ```bash
-mkdir -p "$HOME/.local/bin"
-cp build/textlt "$HOME/.local/bin/textlt"
-chmod +x "$HOME/.local/bin/textlt"
+cmake --install build --prefix "$HOME/.local"
 grep -qxF 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
 ```
 
@@ -253,7 +257,7 @@ cmake --build build --parallel "$(nproc)"
 ./build/textlt path/to/your/file.cpp
 ```
 
-TextLT is a terminal application. On Windows, run it from PowerShell, Windows Terminal, or another terminal emulator. The Windows installer creates a `textlt.cmd` wrapper so bundled resources such as `themes` and `resources` are loaded from the correct directory.
+TextLT is a terminal application. On Windows, run it from PowerShell, Windows Terminal, or another terminal emulator. The Windows installer puts the native executable on your user `PATH` alongside its bundled resources.
 
 ---
 

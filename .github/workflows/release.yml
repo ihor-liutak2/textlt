@@ -67,7 +67,9 @@ jobs:
             openssh-client \
             pulseaudio-utils \
             alsa-utils \
-            libarchive-dev
+            libarchive-dev \
+            libboost-dev \
+            libssl-dev
 
       - name: Configure
         run: |
@@ -76,6 +78,7 @@ jobs:
       - name: Build
         run: |
           cmake --build build --config Release --parallel 2
+          test "$(build/textlt --version)" = "textlt ${GITHUB_REF_NAME#v}"
 
       - name: Run tests
         run: |
@@ -194,7 +197,7 @@ jobs:
       - name: Install dependencies with vcpkg
         shell: pwsh
         run: |
-          vcpkg install libarchive --triplet x64-windows-static
+          vcpkg install libarchive openssl 'boost-asio[ssl]' boost-beast --triplet x64-windows-static
 
       - name: Check external runtime tools
         shell: pwsh
@@ -279,20 +282,25 @@ jobs:
 
       - name: Install build dependencies
         run: |
-          brew install cmake libarchive
+          brew install cmake libarchive boost openssl@3
           echo "LIBARCHIVE_PREFIX=$(brew --prefix libarchive)" >> "$GITHUB_ENV"
+          echo "OPENSSL_PREFIX=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
 
       - name: Configure
         run: |
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="$LIBARCHIVE_PREFIX" \
+            -DBoost_ROOT="$(brew --prefix boost)" \
+            -DOPENSSL_ROOT_DIR="$OPENSSL_PREFIX" \
+            -DOPENSSL_USE_STATIC_LIBS=TRUE \
             -DLibArchive_INCLUDE_DIR="$LIBARCHIVE_PREFIX/include" \
             -DLibArchive_LIBRARY="$LIBARCHIVE_PREFIX/lib/libarchive.dylib"
 
       - name: Build
         run: |
           cmake --build build --config Release --parallel 2
+          test "$(build/textlt --version)" = "textlt ${GITHUB_REF_NAME#v}"
 
       - name: Run tests
         run: |
@@ -331,6 +339,17 @@ jobs:
       - build-macos-arm64
 
     steps:
+      - uses: actions/checkout@v7
+
+      - name: Find release notes
+        id: notes
+        shell: bash
+        run: |
+          notes="docs/releases/$GITHUB_REF_NAME.md"
+          if [[ -f "$notes" ]]; then
+            printf 'path=%s\n' "$notes" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/download-artifact@v8
         with:
           path: release-assets
@@ -338,6 +357,9 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
+          body_path: ${{ steps.notes.outputs.path }}
+          generate_release_notes: ${{ steps.notes.outputs.path == '' }}
+          fail_on_unmatched_files: true
           files: |
             release-assets/textlt-linux-x64.tar.gz
             release-assets/TextLT-x86_64.AppImage

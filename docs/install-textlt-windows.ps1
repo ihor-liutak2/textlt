@@ -22,8 +22,6 @@ $Repo = if ($env:TEXTLT_REPO) { $env:TEXTLT_REPO } else { "ihor-liutak2/textlt" 
 $Asset = if ($env:TEXTLT_ASSET) { $env:TEXTLT_ASSET } else { "textlt-windows-x64.zip" }
 $InstallRoot = if ($env:TEXTLT_INSTALL_ROOT) { $env:TEXTLT_INSTALL_ROOT } else { Join-Path $env:LOCALAPPDATA "Programs\textlt" }
 $LegacyAppDir = Join-Path $InstallRoot "app"
-$ConfigDir = Join-Path $env:APPDATA "textlt"
-$LegacyConfigFile = Join-Path $env:USERPROFILE ".textlt_config.json"
 $Archive = Join-Path $env:TEMP $Asset
 $ExtractDir = Join-Path $env:TEMP ("textlt-install-" + [guid]::NewGuid().ToString("N"))
 $Url = if ($env:TEXTLT_DOWNLOAD_URL) { $env:TEXTLT_DOWNLOAD_URL } else { "https://github.com/$Repo/releases/download/$Version/$Asset" }
@@ -45,23 +43,7 @@ try {
 
     $ExeDir = Split-Path $Exe.FullName
 
-    Write-Host "Resetting TextLT configuration and bundled resources..."
-    Remove-Item $ConfigDir -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item $LegacyConfigFile -Force -ErrorAction SilentlyContinue
-
-    # Text parser configuration used XDG_CONFIG_HOME/HOME in some releases,
-    # including on Windows. Clear that exact TextLT directory when present.
-    if ($env:XDG_CONFIG_HOME) {
-        $XdgConfigDir = Join-Path $env:XDG_CONFIG_HOME "textlt"
-        if ($XdgConfigDir -ne $ConfigDir) {
-            Remove-Item $XdgConfigDir -Recurse -Force -ErrorAction SilentlyContinue
-        }
-    } elseif ($env:HOME) {
-        $HomeConfigDir = Join-Path $env:HOME ".config\textlt"
-        if ($HomeConfigDir -ne $ConfigDir) {
-            Remove-Item $HomeConfigDir -Recurse -Force -ErrorAction SilentlyContinue
-        }
-    }
+    Write-Host "Updating the application while keeping your TextLT configuration..."
 
     # Remove application-managed leftovers and obsolete managed local-AI files
     # from older releases. Installed Piper voices remain in the piper directory.
@@ -82,7 +64,7 @@ try {
         throw "Installed textlt.exe failed its version check with exit code $LASTEXITCODE."
     }
     $ExpectedVersion = $Version -replace '^v', ''
-    if ($VersionOutput -notmatch [regex]::Escape($ExpectedVersion)) {
+    if ($VersionOutput -ne "textlt $ExpectedVersion") {
         throw "Installed executable version mismatch: $VersionOutput"
     }
     & $InstalledExe --startup-check
