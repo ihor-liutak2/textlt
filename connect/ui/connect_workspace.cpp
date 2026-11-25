@@ -6,6 +6,7 @@
 #include <charconv>
 #include <fstream>
 #include <sstream>
+#include <utility>
 
 #include "editor/clipboard_controller.hpp"
 #include "ftxui/component/component.hpp"
@@ -91,9 +92,12 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
                                    std::function<void()> pick_file,
                                    std::function<std::filesystem::path()> downloads,
                                    std::filesystem::path localsend_identity,
-                                   std::function<void()> open_textlt_config)
+                                   std::function<void()> open_textlt_config,
+                                   std::function<bool(const std::string&)> write_clipboard)
     : theme_(theme), workspace_tabs_(std::move(workspaces)), redraw_(std::move(redraw)),
       pick_file_(std::move(pick_file)), downloads_(std::move(downloads)),
+      write_clipboard_(std::move(write_clipboard)),
+      message_menu_(theme, [this](const std::string& command) { ExecuteMessageCommand(command); }),
       localsend_identity_(std::move(localsend_identity)) {
     LoadSettings();
     LoadNativeConnections();
@@ -489,6 +493,7 @@ ConnectWorkspace::Conversation* ConnectWorkspace::Selected() {
 
 void ConnectWorkspace::Select(const PeerKey& key) {
     if (selected_ == key) return;
+    CloseMessageMenu();
     if (auto* chat = Selected()) {
         chat->draft = draft_;
         chat->pin = pin_;
@@ -827,6 +832,62 @@ bool ConnectWorkspace::Paste(Event event) {
     return composer_->OnEvent(std::move(event));
 }
 
+bool ConnectWorkspace::HandleMessageMenuEvent(Event event) {
+    if (message_menu_.IsOpen()) {
+        const bool handled = message_menu_.OnEvent(event);
+        if (!message_menu_.IsOpen()) message_menu_index_.reset();
+        if (handled) return true;
+    }
+    if (!event.is_mouse() || pending_share_ || preview_) return false;
+    const auto& mouse = event.mouse();
+    if (mouse.button != Mouse::Right || mouse.motion != Mouse::Pressed ||
+        !history_box_.Contain(mouse.x, mouse.y)) return false;
+
+    const auto row = std::find_if(message_rows_.begin(), message_rows_.end(), [&](const auto& entry) {
+        return entry.second.Contain(mouse.x, mouse.y);
+    });
+    if (row == message_rows_.end()) return false;
+    const auto* chat = Selected();
+    if (!chat || row->first >= chat->messages.size()) return false;
+    const auto& message = chat->messages[row->first];
+    const bool can_copy = write_clipboard_ && !message.text.empty();
+    message_menu_index_ = row->first;
+    message_menu_.Open(mouse.x, mouse.y, {
+        {"copy", "Copy", can_copy},
+        {"delete", "Delete"},
+        {"cut", "Cut", can_copy},
+    });
+    return true;
+}
+
+void ConnectWorkspace::CloseMessageMenu() {
+    message_menu_.Close();
+    message_menu_index_.reset();
+}
+
+Element ConnectWorkspace::RenderMessageMenu() {
+    return message_menu_.Render();
+}
+
+void ConnectWorkspace::ExecuteMessageCommand(const std::string& command) {
+    const auto index = std::exchange(message_menu_index_, std::nullopt);
+    auto* chat = Selected();
+    if (!chat || !index || *index >= chat->messages.size()) return;
+    const auto message = chat->messages.begin() + *index;
+    if (command != "delete") {
+        if (!write_clipboard_ || !write_clipboard_(message->text)) {
+            status_ = ClipboardController::kWriteFailed;
+            return;
+        }
+        if (command == "copy") {
+            status_ = "Message copied";
+            return;
+        }
+    }
+    chat->messages.erase(message);
+    status_ = command == "cut" ? "Message cut" : "Message deleted";
+}
+
 bool ConnectWorkspace::OnEvent(Event event) {
     if (event.is_mouse()) {
         const auto mouse = event.mouse();
@@ -1008,31 +1069,25 @@ Element ConnectWorkspace::RenderNavigator(int width, bool show_workspace_tabs) {
         }
     };
     for (const auto& provider : providers_) {
-        if (provider == kLocalSendProviderId && !compact) rows.push_back(separator() | color(theme_.gutter));
-        const auto label = provider == kTextLTProviderId ? "TextLT" : provider == kLocalSendProviderId ? "LocalSend" : provider;
-        if (provider == kTextLTProviderId) {
-            if (width >= 20) rows.push_back(hbox({text(label) | bold, filler(), button(toggle_native_)}));
-            else {
-                rows.push_back(text(label) | bold);
-                rows.push_back(hbox({button(toggle_native_), filler()}));
-            }
+        const bool native = provider == kTextLTProviderId;
+        if (!native && !compact) rows.push_back(separator() | color(theme_.gutter));
+        auto heading = text(native ? "TEXTLT" : "LOCALSEND") | bold | color(theme_.modal_accent);
+        auto toggle = button(native ? toggle_native_ : toggle_localsend_);
+        if (width >= 20) rows.push_back(hbox({std::move(heading), filler(), std::move(toggle)}));
+        else {
+            rows.push_back(std::move(heading));
+            rows.push_back(hbox({filler(), std::move(toggle)}));
+        }
+        if (native) {
             rows.push_back(hbox({button(textlt_config_), filler()}));
             append_online_apps(kTextLTProviderId, native_running_);
-        } else if (provider == kLocalSendProviderId) {
-            auto toggle = button(toggle_localsend_);
+        } else {
             auto refresh = button(refresh_localsend_);
             auto connect_by_ip = button(connect_by_ip_);
             if (compact && width >= 31) {
-                rows.push_back(hbox({text(label) | bold, filler(), std::move(toggle)}));
                 rows.push_back(hbox({std::move(refresh), std::move(connect_by_ip), filler()}));
             } else {
-                rows.push_back(text(label) | bold);
-                if (width >= 29) {
-                    rows.push_back(hbox({std::move(toggle), text(" "), std::move(refresh), filler()}));
-                } else {
-                    rows.push_back(hbox({std::move(toggle), filler()}));
-                    rows.push_back(hbox({std::move(refresh), filler()}));
-                }
+                rows.push_back(hbox({std::move(refresh), filler()}));
                 rows.push_back(hbox({std::move(connect_by_ip), filler()}));
             }
             append_online_apps(kLocalSendProviderId, localsend_runtime_.listening);
@@ -1071,26 +1126,40 @@ Element ConnectWorkspace::RenderNavigator(int width, bool show_workspace_tabs) {
 Element ConnectWorkspace::RenderChat(int width) {
     auto* chat = Selected();
     history_box_ = {};
-    if (pending_share_ || preview_) return RenderStructuredPicker(width);
+    message_rows_.clear();
+    if (pending_share_ || preview_) {
+        CloseMessageMenu();
+        return RenderStructuredPicker(width);
+    }
 
     Elements history;
+    int line_count = 0;
     preview_rows_boxes_.clear();
     if (chat) {
         preview_rows_boxes_.reserve(chat->messages.size());
+        message_rows_.reserve(chat->messages.size());
         for (std::size_t index = 0; index < chat->messages.size(); ++index) {
             const auto& message = chat->messages[index];
             const auto title = message.outgoing ? "You" : chat->name;
-            history.push_back(text(title + (message.status.empty() ? "" : "  " + message.status)) | bold);
-            AppendMessageLines(history, message.text, width);
+            Elements lines{text(title + (message.status.empty() ? "" : "  " + message.status)) | bold};
+            AppendMessageLines(lines, message.text, width);
             if (message.item) {
                 preview_rows_boxes_.emplace_back(index, Box{});
-                history.push_back(text(" Preview / Import…  " + message.import_status) | underlined |
-                                  reflect(preview_rows_boxes_.back().second));
+                lines.push_back(text(" Preview / Import…  " + message.import_status) | underlined |
+                                reflect(preview_rows_boxes_.back().second));
             }
+            line_count += static_cast<int>(lines.size());
+            auto entry = vbox(std::move(lines));
+            if (!message.file && !message.item && !message.sent_snapshot) {
+                message_rows_.emplace_back(index, Box{});
+                entry |= reflect(message_rows_.back().second);
+            }
+            history.push_back(std::move(entry));
         }
     }
     if (history.empty()) history.push_back(text(chat ? "No messages" : "Select a connection") | dim);
-    history_rows_ = static_cast<int>(history.size());
+    history_rows_ = std::max(1, line_count);
+    if (chat) chat->scroll = std::clamp(chat->scroll, 0, history_rows_ - 1);
     const int anchor = chat ? std::max(0, history_rows_ - 1 - chat->scroll) : 0;
 
     Elements body{

@@ -7,6 +7,7 @@ namespace textlt {
 
 void TextltApp::UpdateWorkspaceMenus() {
     connect_body_index_ = workspace_mode_ == WorkspaceMode::Connect ? 1 : 0;
+    if (!connect_body_index_ && connect_workspace_) connect_workspace_->CloseMessageMenu();
     if (!menu_bar_) return;
     menu_bar_->SetNotesMenuVisible(workspace_mode_ == WorkspaceMode::Notes);
     menu_bar_->SetActionsMenuVisible(workspace_mode_ == WorkspaceMode::Actions);

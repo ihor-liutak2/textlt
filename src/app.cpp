@@ -580,7 +580,8 @@ TextltApp::TextltApp()
         [this] { OpenFilesModal(FilesModalMode::SendConnectFile); },
         [] { return FileManager::UserDownloadsDirectory(false); },
         EditorConfig::DefaultConfigPath().parent_path() / "localsend.pem",
-        [this] { OpenTextLTConfigModal(); });
+        [this] { OpenTextLTConfigModal(); },
+        [this](const std::string& text) { return clipboard_controller_.WriteText(text); });
     connect_workspace_->RegisterContentHandler(MakeNoteConnectHandler(*notes_component));
     connect_workspace_->RegisterContentHandler(MakeActionConnectHandler(
         *std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_)));

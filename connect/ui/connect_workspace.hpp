@@ -8,6 +8,7 @@
 #include <set>
 #include <thread>
 
+#include "context_menu_component.hpp"
 #include "ftxui/component/component_base.hpp"
 #include "ftxui/dom/elements.hpp"
 #include "network_diagnostics.hpp"
@@ -58,7 +59,8 @@ class ConnectWorkspace : public ftxui::ComponentBase {
 public:
     ConnectWorkspace(const Theme& theme, std::function<void()> redraw, WorkspaceTabs::Callbacks workspaces,
                      std::function<void()> pick_file, std::function<std::filesystem::path()> downloads,
-                     std::filesystem::path localsend_identity, std::function<void()> open_textlt_config);
+                     std::filesystem::path localsend_identity, std::function<void()> open_textlt_config,
+                     std::function<bool(const std::string&)> write_clipboard);
     ~ConnectWorkspace() override;
 
     ftxui::Element OnRender() override;
@@ -98,6 +100,9 @@ public:
     void DrainEvents();
     void UpdateBrowserTheme();
     bool Paste(ftxui::Event event);
+    bool HandleMessageMenuEvent(ftxui::Event event);
+    void CloseMessageMenu();
+    ftxui::Element RenderMessageMenu();
     void RegisterContentHandler(std::unique_ptr<connect::ContentHandler> handler);
     void Share(connect::TransferMetadata metadata, connect::StructuredPayload payload);
     bool SendFile(const std::filesystem::path& path, std::string& error);
@@ -114,6 +119,7 @@ private:
         std::optional<connect::ReceivedContent> item = std::nullopt;
         std::string import_status;
         bool imported = false;
+        bool sent_snapshot = false;
     };
 
     struct Conversation {
@@ -174,6 +180,7 @@ private:
     void Handle(const connect::TransferEvent& transfer);
     void Handle(const connect::IncomingConnectionFailure& failure);
     void Handle(const connect::LocalSendConnectResult& result);
+    void ExecuteMessageCommand(const std::string& command);
     bool NavigatorEvent(ftxui::Event event);
     ftxui::Element RenderNavigator(int width, bool show_workspace_tabs);
     ftxui::Element RenderChat(int width);
@@ -183,6 +190,9 @@ private:
     std::function<void()> redraw_;
     std::function<void()> pick_file_;
     std::function<std::filesystem::path()> downloads_;
+    std::function<bool(const std::string&)> write_clipboard_;
+    ContextMenuComponent message_menu_;
+    std::optional<std::size_t> message_menu_index_;
     const std::filesystem::path localsend_identity_;
     std::string local_ipv4_;
     Settings settings_;
@@ -217,6 +227,7 @@ private:
     ftxui::Box workspace_box_;
     ftxui::Box navigator_box_;
     ftxui::Box history_box_;
+    std::vector<std::pair<std::size_t, ftxui::Box>> message_rows_;
     int history_rows_ = 0;
     ftxui::Component navigator_, composer_, send_, accept_, decline_, send_file_, cancel_transfer_, draft_file_, pin_input_, retry_pin_;
     ftxui::Component toggle_native_, textlt_config_, toggle_localsend_, refresh_localsend_, connect_by_ip_;

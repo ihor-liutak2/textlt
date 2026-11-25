@@ -348,7 +348,8 @@ private:
         const auto decided = [this] { return stopping_ || cancelled_ || decision_; };
         if (browser) {
             while (!decided() && Clock::now() < deadline) {
-                changed_.wait_until(lock, std::min(deadline, Clock::now() + std::chrono::milliseconds(100)), decided);
+                const auto next_poll = Clock::now() + std::chrono::milliseconds(100);
+                changed_.wait_until(lock, (std::min)(deadline, next_poll), decided);
                 if (!decided() && wire.Disconnected()) {
                     cancelled_ = true;
                     break;

@@ -171,6 +171,8 @@ ftxui::Element TextltApp::Render() {
     }
     if (workspace_mode_ == WorkspaceMode::Documents && editor_context_menu_.IsOpen()) {
         layers.push_back(editor_context_menu_.Render());
+    } else if (connect_selected) {
+        layers.push_back(connect_workspace_->RenderMessageMenu());
     }
 
     if (help_dialog_.IsOpen()) {
@@ -301,7 +303,10 @@ ftxui::Element TextltApp::RenderRenameProjectPanel() {
 }
 
 void TextltApp::SetActiveLayer(UiLayer layer) {
-    if (layer != UiLayer::Main) editor_context_menu_.Close();
+    if (layer != UiLayer::Main) {
+        editor_context_menu_.Close();
+        if (connect_workspace_) connect_workspace_->CloseMessageMenu();
+    }
     active_layer_ = layer;
     active_layer_index_ = static_cast<int>(layer);
 }

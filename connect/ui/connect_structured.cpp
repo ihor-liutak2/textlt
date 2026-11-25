@@ -143,7 +143,9 @@ void ConnectWorkspace::ConfirmStructuredChoice() {
             status_ = result.reason;
             return;
         }
-        chat.messages.push_back({id, *metadata.display_name, "Waiting for acceptance", true});
+        Message message{id, *metadata.display_name, "Waiting for acceptance", true};
+        message.sent_snapshot = true;
+        chat.messages.push_back(std::move(message));
         chat.scroll = 0;
         status_ = "Waiting for acceptance";
         CloseStructuredPicker();
