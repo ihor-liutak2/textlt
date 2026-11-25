@@ -1,4 +1,5 @@
 #include "https.hpp"
+#include "../../browser/page.hpp"
 
 #include <algorithm>
 #include <array>
@@ -870,9 +871,18 @@ private:
             const std::string_view url(target.data(), target.size());
             const auto marker = url.find('?');
             const auto path = url.substr(0, marker);
+            if (request.get().method() == http::verb::get &&
+                browser::ServePage(client, request, path, browser::Protocol::LocalSend,
+                                   options_.browser_theme, options_.connect_timeout)) return;
             if (request.get().method() != http::verb::post) {
                 client.Reply(Status::method_not_allowed, {}, options_.connect_timeout);
                 return;
+            }
+            if (request.get().count("Origin") || request.get().count("Sec-Fetch-Site")) {
+                if (!options_.browser_theme || !browser::SameOrigin(client, request) || path == kRegister) {
+                    client.Reply(Status::forbidden, {}, options_.connect_timeout);
+                    return;
+                }
             }
             if (path == kRegister || path == kPrepare) {
                 std::string body;

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en" data-protocol="%PROTOCOL%">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TextLT · %PROTOCOL_LABEL%</title>
+  <link rel="stylesheet" href="/browser.css">
+  <script defer src="/browser.js"></script>
+</head>
+<body>
+  <header><h1>TextLT</h1><p>%PROTOCOL_LABEL%</p></header>
+  <main id="content">
+    <noscript>Enable JavaScript to send text and files.</noscript>
+    <form id="text-form">
+      <label for="message">Text message</label>
+      <textarea id="message" rows="5" required placeholder="Type or paste text"></textarea>
+      <button id="send-text" type="submit">Send text</button>
+    </form>
+    <div id="files">
+      <button id="choose-files" type="button">Upload files</button>
+      <input id="file-input" type="file" multiple hidden>
+      <p>Or drop files here</p>
+    </div>
+    <p id="status" role="status"></p>
+  </main>
+</body>
+</html>

@@ -10,6 +10,7 @@
 
 #include "app_resources.hpp"
 #include "ai/ai_active_settings.hpp"
+#include "connect_workspace.hpp"
 #include "editor/document_session.hpp"
 #include "ftxui/component/event.hpp"
 #include "theme.hpp"
@@ -928,6 +929,7 @@ void TextltApp::PreviewTheme(const std::string& theme_name) {
     if (overrides != editor_config_.theme_color_overrides.end()) {
         ApplyThemeColorOverrides(current_theme_, overrides->second);
     }
+    connect_workspace_->UpdateBrowserTheme();
     editor_config_.SetActiveThemeName(current_theme_.name);
     active_action_ = "Previewing theme " + current_theme_.name;
     screen_.PostEvent(ftxui::Event::Custom);
@@ -940,6 +942,7 @@ void TextltApp::SelectTheme(const std::string& theme_name) {
     if (overrides != editor_config_.theme_color_overrides.end()) {
         ApplyThemeColorOverrides(current_theme_, overrides->second);
     }
+    connect_workspace_->UpdateBrowserTheme();
     editor_config_.SetActiveThemeName(current_theme_.name);
     active_action_ = "Theme changed to " + current_theme_.name;
     screen_.PostEvent(ftxui::Event::Custom);

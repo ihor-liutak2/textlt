@@ -46,6 +46,12 @@ std::string TransferLabel(TransferState state) {
     return {};
 }
 
+bool CanRemember(const PeerIdentity& peer) {
+    return peer.provider_id == kTextLTProviderId
+        ? peer.peer_id.compare(0, kTextLTBrowserPeerPrefix.size(), kTextLTBrowserPeerPrefix) != 0
+        : peer.peer_id.compare(0, 10, "anonymous-") != 0;
+}
+
 bool Pressed(Event event) {
     return event.is_mouse() && event.mouse().button == Mouse::Left &&
            event.mouse().motion == Mouse::Pressed;
@@ -99,7 +105,8 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
     auto refresh_local = ButtonOption::Simple();
     refresh_local.on_click = [this] { RefreshLocalSendPeers(); };
     refresh_local.transform = [this](const EntryState& state) {
-        auto spec = ButtonSpecFromLabel(Terminal::Size().dimx < 54 ? "Refresh" : "Refresh peers",
+        const auto terminal = Terminal::Size();
+        auto spec = ButtonSpecFromLabel(terminal.dimx < 54 || terminal.dimy <= 26 ? "Refresh" : "Refresh peers",
             ButtonRole::Utility, ButtonVariant::Minimal, ButtonSize::Compact);
         spec.enabled = localsend_runtime_.listening;
         return RenderModalFlatButton(theme_, spec, state.focused);
@@ -185,19 +192,26 @@ ConnectWorkspace::~ConnectWorkspace() {
     Stop();
 }
 
+void ConnectWorkspace::UpdateBrowserTheme() {
+    const auto& colors = theme_.browser;
+    std::lock_guard lock(browser_theme_mutex_);
+    browser_theme_ = {colors.background, colors.foreground, colors.input_background,
+                      colors.input_foreground, colors.accent, colors.accent_text};
+}
+
+connect::BrowserTheme ConnectWorkspace::BrowserTheme() const {
+    std::lock_guard lock(browser_theme_mutex_);
+    return browser_theme_;
+}
+
 void ConnectWorkspace::StartNative() {
     const auto listen_port = Port(settings_.listen_port.empty() ? kDefaultNativePort : settings_.listen_port);
     const auto peer_port = settings_.peer_ip.empty() ? std::optional<std::uint16_t>{0} :
         Port(settings_.peer_port.empty() ? kDefaultNativePort : settings_.peer_port);
     if (!listen_port || !peer_port || (!settings_.peer_ip.empty() && !*peer_port)) {
-        status_ = "Enter a port between 1 and 65535. Use 0 to disable the TextLT listener.";
+        status_ = "Enter a port between 1 and 65535. Use 0 to disable the native TCP listener.";
         return;
     }
-    if (!*listen_port && !*peer_port && !settings_.discovery) {
-        status_ = "Configure TextLT networking in TextLT Config → Network";
-        return;
-    }
-
     const auto is_loopback = [](const std::string& address) {
         return address.compare(0, 4, "127.") == 0;
     };
@@ -209,9 +223,10 @@ void ConnectWorkspace::StartNative() {
         return;
     }
 
+    const auto listen_ip = settings_.listen_ip.empty() ? local_ipv4_ : settings_.listen_ip;
     TextLTProviderOptions options;
-    options.listen_ip = settings_.listen_ip;
-    options.listen_port = *listen_port;
+    options.listen_ip = listen_ip;
+    options.listen_port = settings_.peer_fingerprint.empty() ? 0 : *listen_port;
     options.peer_ip = settings_.peer_ip;
     options.peer_port = *peer_port;
     options.probe_manual_peer = true;
@@ -224,14 +239,23 @@ void ConnectWorkspace::StartNative() {
     if (!settings_.peer_fingerprint.empty()) {
         options.tls = TextLTTlsOptions{settings_.certificate, settings_.private_key,
                                        settings_.peer_fingerprint};
-    } else if (options.listen_port || options.peer_port) {
+    } else if (options.peer_port) {
         status_ = "Choose a saved peer in TextLT Config → Connections before starting TextLT";
         return;
     }
     if (!settings_.peer_id.empty() && options.tls) options.trusted_discovery_peer_id = settings_.peer_id;
     if (settings_.discovery) {
-        const auto& ip = settings_.discovery_ip.empty() ? settings_.listen_ip : settings_.discovery_ip;
+        const auto& ip = settings_.discovery_ip.empty() ? listen_ip : settings_.discovery_ip;
         options.discovery = TextLTDiscoveryOptions{ip, settings_.local_id, settings_.display_name};
+    }
+    if (IsValidTextLTAddress(listen_ip)) {
+        UpdateBrowserTheme();
+        options.browser = TextLTBrowserOptions{listen_ip, settings_.certificate, settings_.private_key,
+            [this] { return BrowserTheme(); },
+            [this](std::uint16_t port) { native_browser_port_ = port; }};
+    } else if (!options.listen_port && !options.peer_port && !options.discovery) {
+        status_ = "Select a local IPv4 address in TextLT Config → Network";
+        return;
     }
     auto provider = MakeTextLTProvider(std::move(options));
     const auto native = provider->Start([this](ProviderEvent event) { QueueProviderEvent(std::move(event)); });
@@ -241,9 +265,14 @@ void ConnectWorkspace::StartNative() {
     }
     service_->RegisterProvider(std::move(provider));
     active_settings_ = settings_;
+    active_settings_.listen_port = std::to_string(*listen_port);
+    active_settings_.listen_ip = listen_ip;
+    native_browser_ip_ = listen_ip;
     active_settings_.peer_port = *peer_port ? std::to_string(*peer_port) : "";
     native_running_ = true;
-    status_ = "TextLT running";
+    status_ = settings_.peer_fingerprint.empty() && native_browser_port_
+        ? "TextLT browser receiver running. Pair an app for direct TextLT transfers."
+        : "TextLT running";
     if (*peer_port || (!settings_.peer_id.empty() && !settings_.peer_fingerprint.empty())) {
         const auto id = !settings_.peer_id.empty() ? settings_.peer_id : kTextLTManualPeerId;
         auto& chat = Get({kTextLTProviderId, id});
@@ -290,7 +319,9 @@ ProviderResult ConnectWorkspace::StartLocalSend(bool test_ports) {
     }
     if (!localsend_runtime_.error.empty()) return {false, localsend_runtime_.error};
 
+    UpdateBrowserTheme();
     LocalSendOptions options;
+    options.browser_theme = [this] { return BrowserTheme(); };
     options.identity_file = localsend_identity_;
     options.alias = settings_.localsend_alias;
     options.multicast_address = settings_.localsend_group;
@@ -362,7 +393,7 @@ connect::LocalSendDiscoveryStatus ConnectWorkspace::LocalSendDiscoveryStatus() c
 }
 
 std::string ConnectWorkspace::ActiveNativeListenPort() const {
-    if (!native_running_) return {};
+    if (!native_running_ || active_settings_.peer_fingerprint.empty()) return {};
     const auto port = Port(active_settings_.listen_port.empty() ? kDefaultNativePort : active_settings_.listen_port);
     return port && *port ? std::to_string(*port) : std::string{};
 }
@@ -374,6 +405,9 @@ std::string ConnectWorkspace::ActiveNativeListenAddress() const {
 ProviderResult ConnectWorkspace::StartNativeListener() {
     const auto port = Port(settings_.listen_port.empty() ? kDefaultNativePort : settings_.listen_port);
     if (!port || !*port) return {false, "Set a TCP listen port in TextLT Config → Network first."};
+    if (settings_.peer_fingerprint.empty()) {
+        return {false, "Choose a saved peer in TextLT Config → Connections before starting the native listener."};
+    }
     if (!native_running_) StartNative();
     if (!ActiveNativeListenPort().empty()) return {true, {}};
     return {false, native_running_ ? "Stop TextLT in the sidebar and start it with the new listen settings." : status_};
@@ -608,11 +642,11 @@ void ConnectWorkspace::Decide(bool accept) {
     auto* chat = Selected();
     if (!Running() || !chat || !chat->offer) return;
     const PeerKey peer{chat->offer->identity.peer.provider_id, chat->offer->identity.peer.peer_id};
-    const bool was_auto_accepted = auto_accept_peers_.count(peer) != 0;
-    const auto result = ResolveOffer(*chat, accept, accept && !was_auto_accepted);
+    const bool remember = CanRemember(chat->offer->identity.peer) && !auto_accept_peers_.count(peer);
+    const auto result = ResolveOffer(*chat, accept, accept && remember);
     if (!accept) {
         status_ = result.accepted ? "Offer declined" : result.reason;
-    } else if (result.accepted && !was_auto_accepted) {
+    } else if (result.accepted && remember) {
         status_ = auto_accept_peers_.count(peer)
             ? "Offer accepted. Future requests from this app will be accepted automatically."
             : "Offer accepted, but the automatic-accept preference could not be saved.";
@@ -679,9 +713,8 @@ void ConnectWorkspace::Handle(const IncomingOffer& offer) {
     chat.offer = offer;
     const bool local_send = offer.identity.peer.provider_id == kLocalSendProviderId;
     const auto* current = Selected();
-    // A LocalSend sender without a client certificate has its own conversation.
-    // Show the offer there even when the sender's discovery entry is selected.
-    if (!current || (local_send && !current->offer)) {
+    const bool browser = !local_send && !CanRemember(offer.identity.peer);
+    if (!current || ((local_send || browser) && !current->offer)) {
         Select({offer.identity.peer.provider_id, offer.identity.peer.peer_id});
     }
     const bool file = offer.metadata.type_id == kFileTypeId;
@@ -692,7 +725,7 @@ void ConnectWorkspace::Handle(const IncomingOffer& offer) {
         chat.active_transfer = std::make_pair(offer.identity, TransferDirection::Incoming);
         chat.scroll = 0;
     }
-    if (!file && local_send) {
+    if (!file && (local_send || browser)) {
         chat.active_transfer = std::make_pair(offer.identity, TransferDirection::Incoming);
     }
     status_ = file ? "Incoming file offer from " + chat.name
@@ -915,9 +948,24 @@ Element ConnectWorkspace::RenderNavigator(int width, bool show_workspace_tabs) {
     };
     const bool controls_focused = toggle_native_->Focused() || textlt_config_->Focused() || toggle_localsend_->Focused() ||
         refresh_localsend_->Focused() || connect_by_ip_->Focused();
+    const bool compact = Terminal::Size().dimy <= 26;
     Elements rows;
-    const auto append_online_apps = [this, &rows, width, controls_focused](const std::string& provider_id,
+    const auto append_online_apps = [this, &rows, width, controls_focused, compact](const std::string& provider_id,
                                                                           bool running) {
+        rows.push_back(text(" "));
+        rows.push_back(paragraph("Open the link in browser"));
+        const bool native = provider_id == kTextLTProviderId;
+        const auto port = native ? native_browser_port_ : localsend_runtime_.https_port.value_or(0);
+        if (running && port) {
+            const auto& ip = native ? native_browser_ip_ : localsend_runtime_.interface_ip;
+            const std::string link = "https://" + ip + ":" + std::to_string(port);
+            const auto line_width = static_cast<std::size_t>(std::max(1, width - 2));
+            for (std::size_t offset = 0; offset < link.size(); offset += line_width) {
+                rows.push_back(text(link.substr(offset, line_width)) | color(theme_.header) | hyperlink(link));
+            }
+        } else {
+            rows.push_back(paragraph(running ? "HTTPS link unavailable" : "Start to show HTTPS link") | dim);
+        }
         rows.push_back(text(" "));
         rows.push_back(text("Online apps") | bold);
         std::vector<std::pair<PeerKey, std::string>> online;
@@ -940,8 +988,7 @@ Element ConnectWorkspace::RenderNavigator(int width, bool show_workspace_tabs) {
             }
         }
         if (online.empty()) {
-            const auto app = provider_id == kTextLTProviderId ? "TextLT" : "LocalSend";
-            rows.push_back(text(running ? "No apps online" : std::string("Start ") + app + " to find nearby apps") | dim);
+            if (!compact) rows.push_back(text("No apps online") | dim);
             return;
         }
         for (const auto& [key, name] : online) {
@@ -961,25 +1008,33 @@ Element ConnectWorkspace::RenderNavigator(int width, bool show_workspace_tabs) {
         }
     };
     for (const auto& provider : providers_) {
-        if (provider == kLocalSendProviderId) {
-            rows.push_back(text(" "));
-            rows.push_back(separator() | color(theme_.gutter));
-        }
-        rows.push_back(text(provider == kTextLTProviderId ? "TextLT" : provider == kLocalSendProviderId ? "LocalSend" : provider) | bold);
+        if (provider == kLocalSendProviderId && !compact) rows.push_back(separator() | color(theme_.gutter));
+        const auto label = provider == kTextLTProviderId ? "TextLT" : provider == kLocalSendProviderId ? "LocalSend" : provider;
         if (provider == kTextLTProviderId) {
-            rows.push_back(hbox({button(toggle_native_), filler()}));
+            if (width >= 20) rows.push_back(hbox({text(label) | bold, filler(), button(toggle_native_)}));
+            else {
+                rows.push_back(text(label) | bold);
+                rows.push_back(hbox({button(toggle_native_), filler()}));
+            }
             rows.push_back(hbox({button(textlt_config_), filler()}));
             append_online_apps(kTextLTProviderId, native_running_);
         } else if (provider == kLocalSendProviderId) {
             auto toggle = button(toggle_localsend_);
             auto refresh = button(refresh_localsend_);
-            if (width >= 29) {
-                rows.push_back(hbox({std::move(toggle), text(" "), std::move(refresh), filler()}));
+            auto connect_by_ip = button(connect_by_ip_);
+            if (compact && width >= 31) {
+                rows.push_back(hbox({text(label) | bold, filler(), std::move(toggle)}));
+                rows.push_back(hbox({std::move(refresh), std::move(connect_by_ip), filler()}));
             } else {
-                rows.push_back(hbox({std::move(toggle), filler()}));
-                rows.push_back(hbox({std::move(refresh), filler()}));
+                rows.push_back(text(label) | bold);
+                if (width >= 29) {
+                    rows.push_back(hbox({std::move(toggle), text(" "), std::move(refresh), filler()}));
+                } else {
+                    rows.push_back(hbox({std::move(toggle), filler()}));
+                    rows.push_back(hbox({std::move(refresh), filler()}));
+                }
+                rows.push_back(hbox({std::move(connect_by_ip), filler()}));
             }
-            rows.push_back(hbox({button(connect_by_ip_), filler()}));
             append_online_apps(kLocalSendProviderId, localsend_runtime_.listening);
         }
         for (const auto& [key, chat] : conversations_) {
@@ -1006,9 +1061,9 @@ Element ConnectWorkspace::RenderNavigator(int width, bool show_workspace_tabs) {
     if (peer_rows_.empty()) rows.push_back(text("No connections") | dim);
     return vbox({
         show_workspace_tabs ? workspace_tabs_.Render(theme_, WorkspaceTab::Connect) : emptyElement(),
-        show_workspace_tabs ? separator() | color(theme_.gutter) : emptyElement(),
+        show_workspace_tabs && !compact ? separator() | color(theme_.gutter) : emptyElement(),
         text(" Connections") | bold | (navigator_->Focused() ? inverted : nothing),
-        separator() | color(theme_.gutter),
+        compact ? emptyElement() : separator() | color(theme_.gutter),
         vbox(std::move(rows)) | vscroll_indicator | yframe | flex,
     }) | size(WIDTH, EQUAL, width) | borderStyled(LIGHT, theme_.gutter) | reflect(navigator_box_);
 }
@@ -1050,7 +1105,9 @@ Element ConnectWorkspace::RenderChat(int width) {
                 ? "Incoming item: " + chat->offer->metadata.display_name.value_or(chat->offer->metadata.type_id)
                 : chat->offer->metadata.type_id == kFileTypeId ? "Incoming file offer" : "Incoming text offer") | flex, accept_->Render(), text(" "), decline_->Render()
         }));
-        body.push_back(text("Accepting once remembers this app and accepts its future requests automatically.") | dim);
+        if (CanRemember(chat->offer->identity.peer)) {
+            body.push_back(text("Accepting once remembers this app and accepts its future requests automatically.") | dim);
+        }
     }
     body.push_back(separator() | color(theme_.gutter));
     body.push_back(hbox({composer_->Render() | flex, text(" "), send_->Render()}));
@@ -1068,7 +1125,7 @@ Element ConnectWorkspace::RenderChat(int width) {
 
 Element ConnectWorkspace::OnRender() {
     const int columns = Terminal::Size().dimx;
-    const int navigator_width = std::clamp(columns / 3, 8, 32);
+    const int navigator_width = std::clamp(columns / 3, columns >= 72 ? 31 : 8, 32);
     const bool tabs_fit = navigator_width >= WorkspaceTabs::kConnectRowWidth;
     auto layout = hbox({RenderNavigator(navigator_width, tabs_fit),
                         RenderChat(std::max(1, columns - navigator_width - 5))}) | flex;

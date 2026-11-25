@@ -114,7 +114,7 @@ void Wire::Authenticate(const TlsContext* context, bool incoming) {
     }
 }
 
-void Wire::SendHello(std::uint8_t version) const {
+void ProtocolWire::SendHello(std::uint8_t version) const {
     auto hello = std::string(kMagic);
     hello.push_back(static_cast<char>(version));
     Write(hello);
@@ -127,13 +127,13 @@ void Wire::SendHello(std::uint8_t version) const {
     }
 }
 
-std::uint8_t Wire::ReceiveHello() const {
+std::uint8_t ProtocolWire::ReceiveHello() const {
     const auto hello = Read(kMagic.size() + 1);
     if (std::string_view(hello).substr(0, kMagic.size()) != kMagic) {
         throw ProtocolError::Invalid;
     }
     const auto version = static_cast<std::uint8_t>(hello.back());
-    if (version != kTextProtocolVersion && (!tls_ || (version != kFileProtocolVersion && version != kStructuredProtocolVersion))) {
+    if (!SupportsVersion(version)) {
         SendReply(Reply::UnsupportedVersion);
         throw ProtocolError::UnsupportedVersion;
     }
@@ -163,7 +163,7 @@ std::uint32_t ReadWord(std::string_view data) {
 
 } // namespace
 
-void Wire::SendStructuredOffer(const std::string& id, const TransferMetadata& metadata) const {
+void ProtocolWire::SendStructuredOffer(const std::string& id, const TransferMetadata& metadata) const {
     const auto& name = *metadata.display_name;
     std::string header{static_cast<char>(id.size()), static_cast<char>(metadata.type_id.size()),
                        static_cast<char>(name.size())};
@@ -175,7 +175,7 @@ void Wire::SendStructuredOffer(const std::string& id, const TransferMetadata& me
     Write(name);
 }
 
-std::pair<std::string, TransferMetadata> Wire::ReceiveStructuredOffer() const {
+std::pair<std::string, TransferMetadata> ProtocolWire::ReceiveStructuredOffer() const {
     const auto header = Read(11);
     const auto id_size = static_cast<unsigned char>(header[0]);
     const auto type_size = static_cast<unsigned char>(header[1]);
@@ -191,7 +191,7 @@ std::pair<std::string, TransferMetadata> Wire::ReceiveStructuredOffer() const {
     return {std::move(id), {std::move(type), version, std::move(name), length}};
 }
 
-void Wire::SendCapabilities(const std::vector<Capability>& capabilities) const {
+void ProtocolWire::SendCapabilities(const std::vector<Capability>& capabilities) const {
     std::string data(1, static_cast<char>(capabilities.size()));
     for (const auto& capability : capabilities) {
         data.push_back(static_cast<char>(capability.type_id.size()));
@@ -202,7 +202,7 @@ void Wire::SendCapabilities(const std::vector<Capability>& capabilities) const {
     Write(data);
 }
 
-std::vector<Capability> Wire::ReceiveCapabilities() const {
+std::vector<Capability> ProtocolWire::ReceiveCapabilities() const {
     const auto count = static_cast<unsigned char>(Read(1).front());
     if (count > kMaxCapabilities) throw ProtocolError::Invalid;
     std::vector<Capability> capabilities;
@@ -230,7 +230,7 @@ bool ValidFileName(std::string_view name) {
            });
 }
 
-void Wire::SendFileOffer(const FileOffer& offer) const {
+void ProtocolWire::SendFileOffer(const FileOffer& offer) const {
     char header[10] = {static_cast<char>(offer.transfer_id.size()),
                        static_cast<char>(offer.name.size())};
     for (int i = 0; i < 8; ++i) header[i + 2] = static_cast<char>(offer.length >> (56 - 8 * i));
@@ -239,7 +239,7 @@ void Wire::SendFileOffer(const FileOffer& offer) const {
     Write(offer.name);
 }
 
-FileOffer Wire::ReceiveFileOffer() const {
+FileOffer ProtocolWire::ReceiveFileOffer() const {
     const auto header = Read(10);
     const auto id_size = static_cast<unsigned char>(header[0]);
     const auto name_size = static_cast<unsigned char>(header[1]);
@@ -254,7 +254,7 @@ FileOffer Wire::ReceiveFileOffer() const {
     return {std::move(id), std::move(name), length};
 }
 
-void Wire::SendOffer(const TextOffer& offer) const {
+void ProtocolWire::SendOffer(const TextOffer& offer) const {
     const char header[] = {
         static_cast<char>(offer.transfer_id.size()), static_cast<char>(offer.length >> 24),
         static_cast<char>(offer.length >> 16), static_cast<char>(offer.length >> 8),
@@ -264,7 +264,7 @@ void Wire::SendOffer(const TextOffer& offer) const {
     Write(offer.transfer_id);
 }
 
-TextOffer Wire::ReceiveOffer() const {
+TextOffer ProtocolWire::ReceiveOffer() const {
     const auto header = Read(5);
     const auto id_size = static_cast<unsigned char>(header.front());
     std::uint32_t length = 0;
@@ -318,12 +318,12 @@ std::string Wire::Read(std::size_t size) const {
     return bytes;
 }
 
-void Wire::SendReply(Reply reply) const {
+void ProtocolWire::SendReply(Reply reply) const {
     const auto byte = static_cast<char>(reply);
     Write({&byte, 1});
 }
 
-Reply Wire::ReceiveReply() const {
+Reply ProtocolWire::ReceiveReply() const {
     return static_cast<Reply>(Read(1).front());
 }
 

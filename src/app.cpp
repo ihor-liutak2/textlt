@@ -372,6 +372,7 @@ TextltApp::TextltApp()
                   return false;
               }
               current_theme_ = std::move(updated);
+              connect_workspace_->UpdateBrowserTheme();
               theme_dialog_.SetTheme(&current_theme_);
               active_action_ = "Updated colors for " + current_theme_.name;
               screen_.PostEvent(ftxui::Event::Custom);
@@ -386,6 +387,7 @@ TextltApp::TextltApp()
                   return false;
               }
               current_theme_ = FindThemeByName(themes_, current_theme_.name);
+              connect_workspace_->UpdateBrowserTheme();
               theme_dialog_.SetTheme(&current_theme_);
               active_action_ = "Reset colors for " + current_theme_.name;
               screen_.PostEvent(ftxui::Event::Custom);

@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 
+#include "textlt/connect/browser_receive.hpp"
 #include "textlt/connect/provider.hpp"
 
 namespace textlt::connect {
@@ -66,6 +67,8 @@ struct LocalSendOptions {
     std::function<std::optional<LocalSendSubnet>()> unicast_discovery_subnet;
     // Runs on a worker thread when discovery diagnostics change.
     std::function<void()> report_discovery_change;
+    // Supplying a theme enables the browser receive page on the existing HTTPS port.
+    BrowserThemeSource browser_theme;
 };
 
 class ILocalSendProvider : public IConnectProvider {

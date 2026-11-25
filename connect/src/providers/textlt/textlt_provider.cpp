@@ -1,6 +1,8 @@
 #include "textlt/connect/textlt_provider.hpp"
 
 #include "discovery.hpp"
+#include "../../browser/server.hpp"
+#include "../localsend/errors.hpp"
 
 #include <algorithm>
 #include <array>
@@ -84,8 +86,10 @@ public:
     std::string Id() const override { return kTextLTProviderId; }
     std::vector<Capability> Capabilities() const override {
         std::vector<Capability> capabilities{{kTextTypeId, {}}};
-        if (options_.tls) {
+        if (options_.tls || options_.browser) {
             capabilities.push_back({kFileTypeId, {}});
+        }
+        if (options_.tls) {
             capabilities.insert(capabilities.end(), options_.structured_capabilities.begin(),
                                 options_.structured_capabilities.end());
         }
@@ -97,7 +101,7 @@ public:
         if (worker_.joinable()) {
             return {false, "provider is already started"};
         }
-        if (!sink || (!options_.listen_port && !options_.peer_port && !options_.discovery) ||
+        if (!sink || (!options_.listen_port && !options_.peer_port && !options_.discovery && !options_.browser) ||
             options_.timeout.count() <= 0 || options_.timeout > std::chrono::hours(1)) {
             return {false, "invalid provider options or event sink"};
         }
@@ -161,6 +165,19 @@ public:
             discovery_ = std::move(discovery);
             sink_ = std::move(sink);
             stopping_ = false;
+            if (const auto& browser = options_.browser) {
+                try {
+                    browser_ = std::make_unique<browser::Server>(*browser, options_.timeout, stopping_, cancelled_,
+                        [this](ProtocolWire& wire, const std::string& peer, const std::function<void()>& enable_cancel) {
+                            RunBrowser(wire, peer, enable_cancel);
+                        });
+                } catch (const std::exception& error) {
+                    stopping_ = true;
+                    lock.unlock();
+                    Stop();
+                    return {false, std::string("could not start TextLT HTTPS: ") + error.what()};
+                }
+            }
             worker_ = std::thread([this] { Run(); });
             if (discovery_) {
                 discovery_worker_ = std::thread([this] { discovery_->Run(stopping_, sink_); });
@@ -176,6 +193,7 @@ public:
             Stop();
             return {false, "could not start the TextLT workers"};
         }
+        if (browser_ && options_.browser->report_port) options_.browser->report_port(browser_->Port());
         return {true, {}};
     }
 
@@ -184,7 +202,7 @@ public:
             std::lock_guard lock(mutex_);
             stopping_ = true;
         }
-        changed_.notify_one();
+        changed_.notify_all();
         {
             std::lock_guard lock(probe_mutex_);
             probe_changed_.notify_one();
@@ -196,6 +214,10 @@ public:
             discovery_worker_.join();
         }
         if (probe_worker_.joinable()) probe_worker_.join();
+        if (browser_) {
+            browser_.reset();
+            if (options_.browser->report_port) options_.browser->report_port(0);
+        }
         listener_ = {};
         discovery_.reset();
         tls_.reset();
@@ -258,7 +280,7 @@ public:
             cancelled_ = false;
             outgoing_ = PendingSend{std::move(transfer), std::move(*endpoint)};
         }
-        changed_.notify_one();
+        changed_.notify_all();
         return {true, {}};
     }
 
@@ -288,7 +310,7 @@ public:
             }
             cancelled_ = true;
         }
-        changed_.notify_one();
+        changed_.notify_all();
         return {true, {}};
     }
 
@@ -317,13 +339,24 @@ private:
             }
             decision_ = Decision{reply, std::move(reason), std::move(destination)};
         }
-        changed_.notify_one();
+        changed_.notify_all();
         return {true, {}};
     }
 
-    Decision WaitForDecision(Deadline deadline) {
+    Decision WaitForDecision(Deadline deadline, const ProtocolWire& wire, bool browser) {
         std::unique_lock lock(mutex_);
-        changed_.wait_until(lock, deadline, [this] { return stopping_ || cancelled_ || decision_; });
+        const auto decided = [this] { return stopping_ || cancelled_ || decision_; };
+        if (browser) {
+            while (!decided() && Clock::now() < deadline) {
+                changed_.wait_until(lock, std::min(deadline, Clock::now() + std::chrono::milliseconds(100)), decided);
+                if (!decided() && wire.Disconnected()) {
+                    cancelled_ = true;
+                    break;
+                }
+            }
+        } else {
+            changed_.wait_until(lock, deadline, decided);
+        }
         awaiting_decision_ = false;
         if (stopping_ || cancelled_) {
             throw IoError::Cancelled;
@@ -363,7 +396,7 @@ private:
         wire.SendReply(Reply::EndOfFile);
     }
 
-    std::string ReceiveFile(Wire& wire, const IncomingOffer& offer, FileDestination& destination) {
+    std::string ReceiveFile(ProtocolWire& wire, const IncomingOffer& offer, FileDestination& destination) {
         const auto length = *offer.metadata.byte_length;
         auto next_report = Clock::now();
         auto& stream = destination.Stream();
@@ -443,10 +476,8 @@ private:
         return {TransferState::Completed};
     }
 
-    Outcome ReadTransfer(Socket& socket, std::optional<IncomingOffer>& offer) {
-        const auto deadline = Clock::now() + options_.timeout;
-        Wire wire(socket, deadline, stopping_, cancelled_);
-        wire.Authenticate(tls_.get(), true);
+    Outcome ReadTransfer(ProtocolWire& wire, Deadline deadline, const std::string& peer_id,
+                         bool browser, std::optional<IncomingOffer>& offer) {
         const auto protocol = wire.ReceiveHello();
         const bool file = protocol == kFileProtocolVersion;
         const bool structured = protocol == kStructuredProtocolVersion;
@@ -482,9 +513,6 @@ private:
             transfer_id = std::move(header.transfer_id);
             metadata = TextMetadata(header.length);
         }
-        const std::string peer_id = tls_
-            ? options_.trusted_discovery_peer_id.value_or(kTextLTManualPeerId)
-            : "incoming-" + std::to_string(++last_incoming_peer_);
         offer = IncomingOffer{
             {{kTextLTProviderId, peer_id}, std::move(transfer_id)}, std::move(metadata)
         };
@@ -495,8 +523,9 @@ private:
             pending_file_ = file;
             awaiting_decision_ = true;
         }
+        if (browser) sink_(Peer{offer->identity.peer, "Web Browser (unverified)", false, {}});
         sink_(*offer);
-        auto decision = WaitForDecision(deadline);
+        auto decision = WaitForDecision(deadline, wire, browser);
         if (decision.reply == Reply::Decline) {
             wire.SendReply(decision.reply);
             return {TransferState::Declined, std::move(decision.reason)};
@@ -516,15 +545,16 @@ private:
                 Progress(offer->identity, kIncoming, 0, *offer->metadata.byte_length);
                 saved = ReceiveFile(wire, *offer, *destination);
             } catch (const FileError&) {
-                try { wire.SendReply(Reply::FileFailure); } catch (IoError) {} catch (const TlsError&) {}
+                TryReply(wire, Reply::FileFailure);
                 throw;
             }
             // Publishing is the receiver's completion point. The sender still requires its receipt.
-            try { wire.SendReply(Reply::Receipt); } catch (IoError) {} catch (const TlsError&) {}
+            TryReply(wire, Reply::Receipt);
             return {TransferState::Completed, std::move(saved)};
         }
 
         wire.SendReply(Reply::Accept);
+        if (browser) wire.RenewDeadline(options_.timeout);
         auto text = wire.Read(static_cast<std::size_t>(*offer->metadata.byte_length));
         if (structured) {
             StructuredPayload payload{{text.begin(), text.end()}};
@@ -547,8 +577,17 @@ private:
             return FromProtocolError(ProtocolError::Invalid);
         }
         sink_(ReceivedContent{offer->identity, offer->metadata, TextPayload{std::move(text)}});
-        wire.SendReply(Reply::Receipt);
+        if (browser) TryReply(wire, Reply::Receipt);
+        else wire.SendReply(Reply::Receipt);
         return {TransferState::Completed};
+    }
+
+    static void TryReply(ProtocolWire& wire, Reply reply) {
+        try { wire.SendReply(reply); }
+        catch (IoError) {}
+        catch (const TlsError&) {}
+        catch (const localsend::Error&) {}
+        catch (const localsend::Cancelled&) {}
     }
 
     void Finish() {
@@ -557,6 +596,7 @@ private:
         decision_.reset();
         awaiting_decision_ = false;
         busy_ = false;
+        changed_.notify_all();
     }
 
     void Report(const TransferIdentity& identity, TransferDirection direction,
@@ -589,11 +629,12 @@ private:
         Report(transfer.identity, kOutgoing, *transfer.metadata.byte_length, std::move(outcome));
     }
 
-    void RunIncoming(Socket socket) {
+    template<class Read>
+    void RunIncoming(Read read, bool report_connection_failure) {
         std::optional<IncomingOffer> offer;
         Outcome outcome{TransferState::Cancelled};
         try {
-            outcome = ReadTransfer(socket, offer);
+            outcome = read(offer);
         } catch (IoError error) {
             outcome = FromIoError(error);
         } catch (ProtocolError error) {
@@ -604,15 +645,38 @@ private:
             outcome = {TransferState::Failed, error.reason, TransferFailure::FileFailure};
         } catch (const std::ios_base::failure& error) {
             outcome = {TransferState::Failed, error.what(), TransferFailure::FileFailure};
+        } catch (const localsend::Cancelled&) {
+            outcome = {TransferState::Cancelled};
+        } catch (const localsend::Error& error) {
+            outcome = {TransferState::Failed, error.reason, error.code};
+        } catch (const std::exception& error) {
+            outcome = {TransferState::Failed, error.what(), TransferFailure::ConnectionFailure};
         }
-        socket = {};
         Finish();
         if (offer) {
             Report(offer->identity, kIncoming, *offer->metadata.byte_length, std::move(outcome));
-        } else if (tls_ && outcome.failure && outcome.reason) {
+        } else if (report_connection_failure && outcome.failure && outcome.reason) {
             sink_(IncomingConnectionFailure{kTextLTProviderId, *outcome.failure,
                                             std::move(*outcome.reason)});
         }
+    }
+
+    void RunBrowser(ProtocolWire& wire, const std::string& peer, const std::function<void()>& enable_cancel) {
+        {
+            std::unique_lock lock(mutex_);
+            if (stopping_) return;
+            if (busy_) {
+                lock.unlock();
+                wire.SendReply(Reply::Decline);
+                return;
+            }
+            busy_ = true;
+            cancelled_ = false;
+            enable_cancel();
+        }
+        RunIncoming([&](auto& offer) {
+            return ReadTransfer(wire, Clock::now() + options_.timeout, peer, true, offer);
+        }, false);
     }
 
     void ReportManualPeer() {
@@ -680,9 +744,7 @@ private:
             std::optional<PendingSend> send;
             {
                 std::unique_lock lock(mutex_);
-                if (!listener_) {
-                    changed_.wait(lock, [this] { return stopping_ || outgoing_; });
-                }
+                changed_.wait(lock, [this] { return stopping_ || outgoing_ || (listener_ && !busy_); });
                 if (outgoing_) {
                     send = std::move(outgoing_);
                     outgoing_.reset();
@@ -711,7 +773,15 @@ private:
                 // The listener remains available after a failed individual accept.
             }
             if (client) {
-                RunIncoming(std::move(client));
+                RunIncoming([&, socket = std::move(client)](auto& offer) mutable {
+                    const auto deadline = Clock::now() + options_.timeout;
+                    Wire wire(socket, deadline, stopping_, cancelled_);
+                    wire.Authenticate(tls_.get(), true);
+                    const std::string peer = tls_
+                        ? options_.trusted_discovery_peer_id.value_or(kTextLTManualPeerId)
+                        : "incoming-" + std::to_string(++last_incoming_peer_);
+                    return ReadTransfer(wire, deadline, peer, false, offer);
+                }, static_cast<bool>(tls_));
             }
         }
     }
@@ -724,6 +794,7 @@ private:
     bool busy_ = false;
     Socket listener_;
     std::unique_ptr<TlsContext> tls_;
+    std::unique_ptr<browser::Server> browser_;
     ProviderEventSink sink_;
     std::thread worker_;
     std::unique_ptr<Discovery> discovery_;

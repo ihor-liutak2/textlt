@@ -96,6 +96,7 @@ public:
     bool Running() const { return native_running_ || localsend_runtime_.listening; }
     void Stop();
     void DrainEvents();
+    void UpdateBrowserTheme();
     bool Paste(ftxui::Event event);
     void RegisterContentHandler(std::unique_ptr<connect::ContentHandler> handler);
     void Share(connect::TransferMetadata metadata, connect::StructuredPayload payload);
@@ -134,6 +135,7 @@ private:
     Conversation& Get(const connect::PeerIdentity& peer);
     Conversation* Selected();
     void Select(const PeerKey& key);
+    connect::BrowserTheme BrowserTheme() const;
     void LoadSettings();
     void LoadNativeConnections();
     ftxui::Component FlatAction(std::string label, ButtonRole role, std::function<void()> action) const;
@@ -197,6 +199,10 @@ private:
     connect::ConnectService content_;
     std::vector<std::string> providers_;
     bool native_running_ = false;
+    std::string native_browser_ip_;
+    std::uint16_t native_browser_port_ = 0;
+    mutable std::mutex browser_theme_mutex_;
+    connect::BrowserTheme browser_theme_;
     std::string status_ = "Network stopped";
     std::mutex event_mutex_;
     std::deque<connect::ProviderEvent> events_;

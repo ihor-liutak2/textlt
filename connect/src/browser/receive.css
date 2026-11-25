@@ -1,0 +1,45 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font: 1rem/1.5 system-ui, sans-serif;
+}
+header { text-align: center; padding: clamp(1.5rem, 9vh, 5rem) 1rem 0; }
+h1 { margin: 0; font-size: clamp(2.25rem, 8vw, 3.5rem); }
+p { margin: .5rem 0 0; }
+main { width: min(100% - 2rem, 27rem); margin: 2rem auto; }
+main.drag-over #files { border-color: var(--accent); background: var(--input-background); }
+label { display: block; font-weight: 600; margin-bottom: .375rem; }
+textarea, button { font: inherit; width: 100%; border-radius: .5rem; }
+textarea {
+  display: block;
+  padding: .75rem;
+  margin-bottom: .75rem;
+  resize: vertical;
+  background: var(--input-background);
+  color: var(--input-foreground);
+  border: 1px solid var(--accent);
+}
+textarea::placeholder { color: var(--input-foreground); opacity: .75; }
+textarea, button { caret-color: currentColor; }
+::selection { color: var(--accent-text); background: var(--accent); }
+button {
+  cursor: pointer;
+  border: 1px solid var(--accent);
+  padding: .625rem 1rem;
+  font-weight: 650;
+  background: var(--accent);
+  color: var(--accent-text);
+}
+button:hover:not(:disabled) { text-decoration: underline; }
+button:disabled { cursor: wait; opacity: .65; }
+:focus-visible { outline: 2px solid var(--foreground); outline-offset: 3px; }
+#files {
+  padding: 1rem;
+  margin-top: 1.5rem;
+  text-align: center;
+  border: 2px dashed var(--foreground);
+  border-radius: .75rem;
+}
+#status { text-align: center; overflow-wrap: anywhere; }

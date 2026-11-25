@@ -97,35 +97,6 @@ void Https::Check() const {
     if (stop_ || (cancel_ && *cancel_)) throw Cancelled{};
 }
 
-template<class Initiate>
-boost::system::error_code Https::Wait(Milliseconds timeout, Initiate initiate, TransferFailure code,
-                                     std::string_view timeout_reason) {
-    Check();
-    bool done = false;
-    boost::system::error_code result;
-    const auto deadline = Clock::now() + timeout;
-    io_.restart();
-    initiate([&](boost::system::error_code error, auto...) {
-        result = error;
-        done = true;
-    });
-    while (!done && Clock::now() < deadline && !stop_ && (!cancel_ || !*cancel_)) {
-        io_.run_for(std::chrono::milliseconds(20));
-    }
-    if (!done) {
-        boost::system::error_code ignored;
-        Socket().cancel(ignored);
-        io_.restart();
-        io_.run();
-        Check();
-        throw Error{TransferFailure::Timeout, std::string(timeout_reason)};
-    }
-    if (result && result != http::error::need_buffer && result != http::error::need_more) {
-        throw Error{code, result.message()};
-    }
-    return result;
-}
-
 std::string Https::Connect(const tcp::endpoint& address, Milliseconds timeout) {
     const auto deadline = Clock::now() + timeout;
     const auto endpoint = address.address().to_string() + ":" + std::to_string(address.port());
@@ -200,6 +171,20 @@ void Https::Reply(http::status status, std::string body, Milliseconds timeout) {
         response.body() = std::move(body);
     }
     if (status != http::status::continue_) response.prepare_payload();
+    Wait(timeout, [&](auto done) { http::async_write(stream_, response, done); });
+}
+
+void Https::ReplyPage(std::string body, const char* content_type, const std::string& policy,
+                      Milliseconds timeout) {
+    http::response<http::string_body> response(http::status::ok, 11);
+    response.keep_alive(false);
+    response.set(http::field::content_type, content_type);
+    response.set(http::field::cache_control, "no-store");
+    response.set("Content-Security-Policy", policy);
+    response.set("X-Content-Type-Options", "nosniff");
+    response.set("Referrer-Policy", "no-referrer");
+    response.body() = std::move(body);
+    response.prepare_payload();
     Wait(timeout, [&](auto done) { http::async_write(stream_, response, done); });
 }
 

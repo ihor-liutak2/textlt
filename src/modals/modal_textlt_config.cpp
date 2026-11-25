@@ -386,7 +386,7 @@ private:
         return vbox({
             text("Local IPv4: " + (local_ip.empty() ? std::string("Unavailable") : local_ip)) |
                 bold | color(theme_.modal_accent),
-            text("TextLT listener") | bold | color(theme_.modal_accent),
+            text("TextLT TCP listener") | bold | color(theme_.modal_accent),
             text("Listen IPv4 address") | bold | color(theme_.modal_accent),
             listen_ip_->Render() | borderStyled(LIGHT, theme_.modal_border),
             text("Listen port (default 53327, 0 = off)") | bold | color(theme_.modal_accent),
@@ -396,7 +396,7 @@ private:
             text("Discovery interface IPv4 address (blank uses listen address)") |
                 bold | color(theme_.modal_accent),
             discovery_ip_->Render() | borderStyled(LIGHT, theme_.modal_border),
-            paragraph("Set the port to 0 to disable the listener. Restart TextLT from the Connect panel after changing network settings."),
+            paragraph("Set the port to 0 to disable the native TCP listener. Restart TextLT from the Connect panel after changing network settings."),
         }) | vscroll_indicator | yframe | flex;
     }
 

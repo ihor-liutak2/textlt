@@ -77,7 +77,17 @@ if(NOT TEXTLT_CONNECT_BOOST_TARGETS)
 endif()
 find_package(OpenSSL 3.0 REQUIRED COMPONENTS SSL Crypto)
 
+set(browser_assets src/browser/receive.html src/browser/receive.css src/browser/receive.js)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${browser_assets})
+file(READ src/browser/receive.html browser_html)
+file(READ src/browser/receive.css browser_css)
+file(READ src/browser/receive.js browser_js)
+configure_file(src/browser/assets.hpp.in generated/browser_assets.hpp @ONLY)
+
 add_library(textlt_connect STATIC
+  src/browser/page.cpp
+  src/browser/server.cpp
+  src/browser/websocket.cpp
   src/identity.cpp
   src/service.cpp
   src/providers/localsend/https.cpp
@@ -94,7 +104,10 @@ target_compile_features(textlt_connect PUBLIC cxx_std_17)
 target_include_directories(textlt_connect PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
 )
-target_include_directories(textlt_connect PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../third_party")
+target_include_directories(textlt_connect PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/../third_party"
+  "${CMAKE_CURRENT_BINARY_DIR}/generated"
+)
 set_target_properties(textlt_connect PROPERTIES CXX_EXTENSIONS OFF)
 
 target_link_libraries(textlt_connect PRIVATE Threads::Threads ${TEXTLT_CONNECT_BOOST_TARGETS} OpenSSL::SSL OpenSSL::Crypto)

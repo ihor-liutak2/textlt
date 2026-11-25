@@ -4,12 +4,14 @@
 #include <filesystem>
 #include <string_view>
 
+#include "textlt/connect/browser_receive.hpp"
 #include "textlt/connect/provider.hpp"
 
 namespace textlt::connect {
 
 inline constexpr char kTextLTProviderId[] = "textlt";
 inline constexpr char kTextLTManualPeerId[] = "manual-peer";
+inline constexpr std::string_view kTextLTBrowserPeerPrefix = "browser:";
 
 struct TextLTTlsOptions {
     // File paths to the local certificate and its unencrypted private key.
@@ -24,6 +26,15 @@ struct TextLTDiscoveryOptions {
     // Required for advertising a listener. Use a unique, persistent ID per device.
     std::string local_peer_id;
     std::string display_name;
+};
+
+struct TextLTBrowserOptions {
+    std::string listen_ip;
+    std::string certificate_pem;
+    std::string private_key_pem;
+    BrowserThemeSource theme;
+    // Reports the actual HTTPS port on Start, and zero on Stop.
+    std::function<void(std::uint16_t)> report_port;
 };
 
 struct TextLTProviderOptions {
@@ -42,6 +53,7 @@ struct TextLTProviderOptions {
     // Immutable for a running provider. Validation runs on the transfer worker.
     std::vector<Capability> structured_capabilities{};
     std::function<bool(const TransferMetadata&, const StructuredPayload&)> validate_structured{};
+    std::optional<TextLTBrowserOptions> browser;
 };
 
 bool IsValidTextLTPeerId(std::string_view peer_id);

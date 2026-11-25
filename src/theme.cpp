@@ -59,6 +59,16 @@ namespace textlt {
             return colors;
         }
 
+        std::string FormatRgb(const Rgb& rgb) {
+            std::ostringstream output;
+            output << '#'
+                   << std::uppercase << std::hex << std::setfill('0')
+                   << std::setw(2) << rgb.red
+                   << std::setw(2) << rgb.green
+                   << std::setw(2) << rgb.blue;
+            return output.str();
+        }
+
         bool TryParseRgb(const std::string& name, Rgb* rgb) {
             if (name.size() == 7 && name[0] == '#') {
                 unsigned int red = 0, green = 0, blue = 0;
@@ -79,6 +89,23 @@ namespace textlt {
             }
             *rgb = iter->second.rgb;
             return true;
+        }
+
+        std::string NormalizeThemeColor(const std::string& value) {
+            const auto first = value.find_first_not_of(" \t\r\n");
+            if (first == std::string::npos) return {};
+            const auto last = value.find_last_not_of(" \t\r\n");
+            auto color = value.substr(first, last - first + 1);
+            if (color.front() != '#') {
+                std::transform(color.begin(), color.end(), color.begin(),
+                    [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+            }
+            return color;
+        }
+
+        std::string ConfiguredHex(const std::string& value, std::string fallback) {
+            Rgb rgb;
+            return TryParseRgb(value, &rgb) ? FormatRgb(rgb) : std::move(fallback);
         }
 
         bool IsLightColor(const std::string& name) {
@@ -276,6 +303,17 @@ namespace textlt {
                 JsonString(content, "button_shadow"), theme.background);
             theme.button_bracket = ColorFromName(
                 JsonString(content, "button_bracket"), theme.modal_accent);
+            auto& browser = theme.browser;
+            const bool light_background = IsLightColor(background);
+            browser.background = ConfiguredHex(background, browser.background);
+            browser.foreground = ConfiguredHex(foreground, light_background ? "#1A1A1A" : browser.foreground);
+            browser.input_background = ConfiguredHex(JsonString(content, "modal_input_bg"), browser.input_background);
+            browser.input_foreground = ConfiguredHex(JsonString(content, "modal_input_fg"),
+                light_background || theme.IsLight() ? "#1C1C1C" : browser.input_foreground);
+            browser.accent = ConfiguredHex(JsonString(content, "button_selected_bg"),
+                ConfiguredHex(JsonString(content, "modal_selected_item_bg"), browser.accent));
+            browser.accent_text = ConfiguredHex(JsonString(content, "button_selected_fg"),
+                ConfiguredHex(JsonString(content, "modal_selected_item_fg"), browser.accent_text));
             return theme;
         }
 
@@ -418,16 +456,7 @@ namespace textlt {
     }
 
     bool ParseThemeColor(const std::string& value, ftxui::Color& color) {
-        const size_t first = value.find_first_not_of(" \t\r\n");
-        if (first == std::string::npos) {
-            return false;
-        }
-        const size_t last = value.find_last_not_of(" \t\r\n");
-        std::string normalized = value.substr(first, last - first + 1);
-        if (normalized.empty() || normalized.front() != '#') {
-            std::transform(normalized.begin(), normalized.end(), normalized.begin(),
-                [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
-        }
+        const auto normalized = NormalizeThemeColor(value);
 
         Rgb rgb;
         if (!TryParseRgb(normalized, &rgb)) {
@@ -468,13 +497,7 @@ namespace textlt {
             return "#FFFFFF";
         }
 
-        std::ostringstream output;
-        output << '#'
-               << std::uppercase << std::hex << std::setfill('0')
-               << std::setw(2) << red
-               << std::setw(2) << green
-               << std::setw(2) << blue;
-        return output.str();
+        return FormatRgb({red, green, blue});
     }
 
     bool ApplyThemeColorOverrides(
@@ -533,6 +556,15 @@ namespace textlt {
             {"button_bracket", &Theme::button_bracket},
         };
 
+        using BrowserColorMember = std::string Theme::BrowserColors::*;
+        static const std::map<std::string, BrowserColorMember> browser_members = {
+            {"background", &Theme::BrowserColors::background},
+            {"foreground", &Theme::BrowserColors::foreground},
+            {"modal_input_bg", &Theme::BrowserColors::input_background},
+            {"modal_input_fg", &Theme::BrowserColors::input_foreground},
+            {"button_selected_bg", &Theme::BrowserColors::accent},
+            {"button_selected_fg", &Theme::BrowserColors::accent_text},
+        };
         for (const auto& [key, value] : overrides) {
             const auto member = members.find(key);
             if (member == members.end()) {
@@ -546,6 +578,11 @@ namespace textlt {
                 return false;
             }
             theme.*(member->second) = parsed;
+            const auto browser_member = browser_members.find(key);
+            if (browser_member != browser_members.end()) {
+                auto& browser_color = theme.browser.*(browser_member->second);
+                browser_color = ConfiguredHex(NormalizeThemeColor(value), browser_color);
+            }
         }
         if (error) {
             error->clear();

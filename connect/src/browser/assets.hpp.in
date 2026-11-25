@@ -1,0 +1,7 @@
+#pragma once
+
+namespace textlt::connect::browser {
+inline constexpr char kHtml[] = R"browser(@browser_html@)browser";
+inline constexpr char kCss[] = R"browser(@browser_css@)browser";
+inline constexpr char kJavascript[] = R"browser(@browser_js@)browser";
+}

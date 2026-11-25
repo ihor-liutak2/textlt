@@ -66,6 +66,16 @@ struct Theme {
     ftxui::Color button_shadow = ftxui::Color::GrayDark;
     ftxui::Color button_bracket = ftxui::Color::Cyan;
 
+    // Retain configured RGB values for the browser even on reduced-color terminals.
+    struct BrowserColors {
+        std::string background = "#0000AA";
+        std::string foreground = "#FFFFFF";
+        std::string input_background = "#000000";
+        std::string input_foreground = "#FFFFFF";
+        std::string accent = "#00AAAA";
+        std::string accent_text = "#000000";
+    } browser;
+
     bool IsLight() const {
         return name.find("Light") != std::string::npos;
     }

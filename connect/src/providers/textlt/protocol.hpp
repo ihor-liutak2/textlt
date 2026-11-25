@@ -40,13 +40,11 @@ bool ValidFileName(std::string_view name);
 bool ValidTransferId(std::string_view id);
 bool ValidUtf8(std::string_view text);
 
-class Wire {
+class ProtocolWire {
 public:
-    Wire(Socket& socket, Deadline deadline, const std::atomic<bool>& stopping,
-         const std::atomic<bool>& cancelled);
+    ProtocolWire() = default;
+    virtual ~ProtocolWire() = default;
 
-    void Connect(const std::string& ip, std::uint16_t port) const;
-    void Authenticate(const TlsContext* context, bool incoming);
     void SendHello(std::uint8_t version = kTextProtocolVersion) const;
     std::uint8_t ReceiveHello() const;
     void SendStructuredOffer(const std::string& id, const TransferMetadata& metadata) const;
@@ -55,16 +53,37 @@ public:
     std::vector<Capability> ReceiveCapabilities() const;
     void SendFileOffer(const FileOffer& offer) const;
     FileOffer ReceiveFileOffer() const;
-    void RenewDeadline(std::chrono::milliseconds timeout) { deadline_ = Clock::now() + timeout; }
-    void CheckActive() const { PollTimeout(); }
     void SendOffer(const TextOffer& offer) const;
     TextOffer ReceiveOffer() const;
-    void Write(std::string_view bytes) const;
-    std::string Read(std::size_t size) const;
+    virtual void RenewDeadline(std::chrono::milliseconds timeout) = 0;
+    virtual void CheckActive() const = 0;
+    virtual bool Disconnected() const { return false; }
+    virtual void Write(std::string_view bytes) const = 0;
+    virtual std::string Read(std::size_t size) const = 0;
     void SendReply(Reply reply) const;
     Reply ReceiveReply() const;
 
+protected:
+    virtual bool SupportsVersion(std::uint8_t version) const = 0;
+};
+
+class Wire final : public ProtocolWire {
+public:
+    Wire(Socket& socket, Deadline deadline, const std::atomic<bool>& stopping,
+         const std::atomic<bool>& cancelled);
+
+    void Connect(const std::string& ip, std::uint16_t port) const;
+    void Authenticate(const TlsContext* context, bool incoming);
+    void RenewDeadline(std::chrono::milliseconds timeout) override { deadline_ = Clock::now() + timeout; }
+    void CheckActive() const override { PollTimeout(); }
+    void Write(std::string_view bytes) const override;
+    std::string Read(std::size_t size) const override;
+
 private:
+    bool SupportsVersion(std::uint8_t version) const override {
+        return version == kTextProtocolVersion ||
+            (tls_ && (version == kFileProtocolVersion || version == kStructuredProtocolVersion));
+    }
     int PollTimeout() const;
     void Wait(bool writing) const;
     template <typename Operation>
