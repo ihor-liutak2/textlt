@@ -447,10 +447,13 @@ TextltApp::TextltApp()
         [this](const std::string& message) { active_action_ = message; screen_.PostEvent(ftxui::Event::Custom); },
         [this](const std::string& text) { return clipboard_controller_.WriteText(text); },
         [this] { RefreshActionsSidebar(); });
-    std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_)
-        ->SetMissingProjectCheck([this](const std::string& id) {
-            return project_store_.IsUsable() && !project_store_.FindById(id);
-        });
+    auto actions_component = std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_);
+    actions_component->SetClipboardReader([this](ClipboardController::PasteCallback deliver) {
+        clipboard_controller_.ReadText(std::move(deliver));
+    });
+    actions_component->SetMissingProjectCheck([this](const std::string& id) {
+        return project_store_.IsUsable() && !project_store_.FindById(id);
+    });
     SyncActionsProjectContext();
     {
         std::string error;

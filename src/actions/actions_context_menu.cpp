@@ -41,20 +41,24 @@ int FitNear(int anchor, int extent, int low, int high) {
 
 ActionsContextMenu::ActionsContextMenu(const Theme* theme) : theme_(theme) {}
 
-void ActionsContextMenu::Open(int x, int y, Target target, const ActionItem& item,
-    bool can_move_up, bool can_move_down) {
+void ActionsContextMenu::Open(int x, int y, Target target, const ActionItem* item,
+    bool can_move_up, bool can_move_down, bool can_paste) {
     Close();
     anchor_x_ = x;
     anchor_y_ = y;
     target_ = std::move(target);
-    for (size_t block = 0; block < item.tabs.size(); ++block) {
-        rows_.push_back({item.tabs[block].caption, Command::CopyBlock, block});
+    if (item) {
+        for (size_t block = 0; block < item->tabs.size(); ++block) {
+            rows_.push_back({item->tabs[block].caption, Command::CopyBlock, block});
+        }
+        rows_.push_back({});
+        rows_.push_back({"Edit Action", Command::Edit});
+        rows_.push_back({"Rename Action", Command::Rename});
+        rows_.push_back({"Move Up", Command::MoveUp, 0, can_move_up});
+        rows_.push_back({"Move Down", Command::MoveDown, 0, can_move_down});
+        rows_.push_back({"Copy for Connect", Command::CopyForConnect});
     }
-    rows_.push_back({});
-    rows_.push_back({"Edit Action", Command::Edit});
-    rows_.push_back({"Rename Action", Command::Rename});
-    rows_.push_back({"Move Up", Command::MoveUp, 0, can_move_up});
-    rows_.push_back({"Move Down", Command::MoveDown, 0, can_move_down});
+    rows_.push_back({"Paste", Command::Paste, 0, can_paste});
     Navigate(1);
 }
 

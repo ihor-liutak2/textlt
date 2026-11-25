@@ -4,6 +4,7 @@
 #include <string>
 
 #include "actions/action_serializer.hpp"
+#include "actions/action_snapshot.hpp"
 #include "actions/actions_workspace_component.hpp"
 #include "ftxui/component/event.hpp"
 #include "ftxui/component/mouse.hpp"
@@ -245,6 +246,11 @@ public:
     static void SelectItem(ActionsWorkspaceComponent& workspace, const std::string& id) {
         workspace.selected_item_id_ = id;
     }
+    static ftxui::Box SelectPageAndRenderItems(ActionsWorkspaceComponent& workspace, const std::string& id) {
+        workspace.selected_page_id_ = id;
+        RenderText(workspace);
+        return workspace.items_view_box_;
+    }
     static ftxui::Box AddActionBox(const ActionsWorkspaceComponent& workspace) {
         return workspace.add_action_box_;
     }
@@ -305,7 +311,8 @@ void TestActionsContextMenu(const std::filesystem::path& path) {
         page.items.push_back(ActionItem::WithTabs("action-" + std::to_string(count),
             "Target " + std::to_string(count), std::move(blocks)));
     }
-    document.groups.push_back({"context-group", "Context group", std::nullopt, false, {page}});
+    document.groups.push_back({"context-group", "Context group", std::nullopt, false,
+        {page, {"empty-page", "Empty destination", {}}}});
     std::string error;
     Check(ActionSerializer::Save(path, document, error));
 
@@ -314,6 +321,10 @@ void TestActionsContextMenu(const std::filesystem::path& path) {
     bool clipboard_available = true;
     ActionsWorkspaceComponent workspace(nullptr, [&](const std::string& value) { status = value; },
         [&](const std::string& value) { copies.push_back(value); return clipboard_available; }, [] {}, path);
+    std::optional<std::string> clipboard_text;
+    workspace.SetClipboardReader([&](ClipboardController::PasteCallback deliver) {
+        deliver(clipboard_text);
+    });
     const auto draw = [&](int width = 105, int height = 40) {
         auto screen = ftxui::Screen::Create(
             ftxui::Dimension::Fixed(width), ftxui::Dimension::Fixed(height));
@@ -358,7 +369,7 @@ void TestActionsContextMenu(const std::filesystem::path& path) {
             open(action.id, true);
             const auto screen = draw();
             const auto menu = FindActionsMenu(screen);
-            Check(menu.y_max - menu.y_min + 1 == static_cast<int>(action.tabs.size()) + 7);
+            Check(menu.y_max - menu.y_min + 1 == static_cast<int>(action.tabs.size()) + 9);
             Check(menu.x_min >= 0 && menu.y_min >= 0 && menu.x_max < screen.dimx() && menu.y_max < screen.dimy());
             Check(screen.PixelAt(menu.x_min + 1, menu.y_min + 1 + static_cast<int>(action.tabs.size())).character == "─");
             for (size_t row = 0; row < action.tabs.size(); ++row) {
@@ -437,7 +448,7 @@ void TestActionsContextMenu(const std::filesystem::path& path) {
     Check(workspace.HasOpenContextMenu());
     const auto narrow_menu = FindActionsMenu(small);
     Check(narrow_menu.x_min < Access::ActionBox(workspace, "action-1").x_min);
-    Check(workspace.OnEvent(Event::ArrowUp));
+    for (int i = 0; i < 3; ++i) Check(workspace.OnEvent(Event::ArrowUp));
     small = draw(45, 10);
     Check(small.ToString().find("Move Down") != std::string::npos);
     Check(workspace.OnEvent(Event::Return) && !workspace.HasOpenContextMenu());
@@ -458,6 +469,39 @@ void TestActionsContextMenu(const std::filesystem::path& path) {
     Check(items[2].title == "Target 3 renamed");
     Check(items[3].tabs[3].content == page.items[3].tabs[3].content);
 
+    draw();
+    draw();
+    menu = open_menu("action-4");
+    click_row(menu, 9);  // Copy for Connect.
+    Check(status == "Copied action JSON for Connect");
+    const auto snapshot = copies.back();
+    const auto decoded = DecodeActionSnapshot(snapshot);
+    Check(decoded && decoded->id.empty() && decoded->title == page.items[3].title);
+    Check(decoded->tabs.size() == 4);
+    for (size_t i = 0; i < decoded->tabs.size(); ++i) {
+        Check(decoded->tabs[i].caption == page.items[3].tabs[i].caption);
+        Check(decoded->tabs[i].content == page.items[3].tabs[i].content);
+        Check(decoded->tabs[i].hide_text == page.items[3].tabs[i].hide_text);
+    }
+    for (const auto& invalid : {std::string("not JSON"),
+            std::string(R"({"title":"Missing tabs","tabs":[]})"),
+            std::string(R"({"title":"Wrong flag","tabs":[{"caption":"Run","content":"text","hide_text":"true"}]})"),
+            snapshot + '\0' + "ignored"}) {
+        clipboard_text = invalid;
+        menu = open_menu("action-1");
+        click_row(menu, 7);  // Paste.
+        Check(status == "Clipboard does not contain a valid action item");
+        Check(workspace.Groups()[0].pages[0].items.size() == 4);
+    }
+
+    clipboard_text = snapshot;
+    menu = open_menu("action-1");
+    click_row(menu, 7);  // Paste.
+    const auto with_copy = workspace.Groups()[0].pages[0].items;
+    Check(with_copy.size() == 5 && with_copy.back().title == decoded->title);
+    Check(with_copy.back().id != "action-4" && !with_copy.back().id.empty());
+    Check(EncodeActionSnapshot(with_copy.back()) == snapshot);
+
     ActionRepository failing_write(path, [](const auto&, const auto&, std::string& message) {
         message = "Write failed";
         return false;
@@ -467,6 +511,14 @@ void TestActionsContextMenu(const std::filesystem::path& path) {
     Check(failing_write.Data().groups[0].pages[0].items[2].title == "Target 3 renamed");
     Check(ActionSerializer::Load(path, saved, error));
     Check(saved.groups[0].pages[0].items[2].title == "Target 3 renamed");
+
+    const auto empty_items = Access::SelectPageAndRenderItems(workspace, "empty-page");
+    Check(mouse(Mouse::Right, Mouse::Pressed, empty_items.x_min + 1, empty_items.y_min));
+    Check(workspace.HasOpenContextMenu());
+    Check(draw().ToString().find("Paste") != std::string::npos);
+    Check(workspace.OnEvent(Event::Return));
+    const auto pasted_into_empty = workspace.Groups()[0].pages[1].items;
+    Check(pasted_into_empty.size() == 1 && EncodeActionSnapshot(pasted_into_empty[0]) == snapshot);
 }
 
 } // namespace

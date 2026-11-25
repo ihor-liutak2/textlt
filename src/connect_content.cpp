@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 
+#include "actions/action_snapshot.hpp"
 #include "actions/actions_workspace_component.hpp"
 #include "notes/notes_workspace_component.hpp"
 #include "nlohmann/json.hpp"
@@ -36,7 +37,7 @@ std::optional<std::string> ValidateSnapshot(SchemaVersion version, const Structu
 }
 
 std::pair<TransferMetadata, StructuredPayload> Snapshot(
-    const char* type, std::string name, const Json& json) {
+    const char* type, std::string name, std::string encoded) {
     for (char& byte : name) {
         if (static_cast<unsigned char>(byte) < 32 || byte == 127) byte = ' ';
     }
@@ -45,7 +46,6 @@ std::pair<TransferMetadata, StructuredPayload> Snapshot(
         while ((static_cast<unsigned char>(name[length]) & 0xc0) == 0x80) --length;
         name.resize(length);
     }
-    const auto encoded = json.dump();
     return {{type, kSchema, std::move(name), encoded.size()}, {{encoded.begin(), encoded.end()}}};
 }
 
@@ -78,23 +78,10 @@ notes::NoteDocument DecodeNote(const StructuredPayload& payload) {
     return note;
 }
 
-actions::ActionItem DecodeAction(const StructuredPayload& payload) {
-    const auto json = Decode(payload);
-    actions::ActionItem action;
-    action.title = json.at("title").get<std::string>();
-    const auto& tabs = json.at("tabs");
-    if (action.title.empty() || !tabs.is_array() || tabs.empty() || tabs.size() > 4) {
-        throw std::runtime_error("invalid action title or tabs");
-    }
-    for (const auto& item : tabs) {
-        actions::ActionTab tab{
-            item.at("caption").get<std::string>(), item.at("content").get<std::string>(),
-            item.at("hide_text").get<bool>()
-        };
-        if (actions::LimitActionCaption(tab.caption) != tab.caption) throw std::runtime_error("invalid caption");
-        action.tabs.push_back(std::move(tab));
-    }
-    return action;
+std::optional<actions::ActionItem> DecodeAction(const StructuredPayload& payload) {
+    if (payload.bytes.empty()) return std::nullopt;
+    return actions::DecodeActionSnapshot(
+        {reinterpret_cast<const char*>(payload.bytes.data()), payload.bytes.size()});
 }
 
 class NoteHandler final : public ContentHandler {
@@ -151,13 +138,16 @@ public:
     std::vector<SchemaVersion> SupportedVersions() const override { return {kSchema}; }
 
     std::optional<std::string> Validate(SchemaVersion version, const StructuredPayload& payload) const override {
-        return ValidateSnapshot(version, payload, DecodeAction, "action");
+        if (version != kSchema) return "Unsupported schema version";
+        if (!DecodeAction(payload)) return "Invalid action snapshot";
+        return std::nullopt;
     }
 
     std::string Preview(SchemaVersion, const StructuredPayload& payload) const override {
         const auto action = DecodeAction(payload);
-        std::string preview = "Action: " + action.title;
-        for (const auto& tab : action.tabs) {
+        if (!action) return "Invalid action snapshot";
+        std::string preview = "Action: " + action->title;
+        for (const auto& tab : action->tabs) {
             preview += '\n' + tab.caption + (tab.hide_text ? " (hidden text)" : "\n" + tab.content);
         }
         return preview;
@@ -175,12 +165,13 @@ public:
     std::optional<std::string> ImportTo(SchemaVersion, const StructuredPayload& payload,
                                       const std::string& destination) override {
         auto action = DecodeAction(payload);
+        if (!action) return "Invalid action snapshot";
         for (const auto& group : workspace_.Groups()) {
             if (group.trash) continue;
             for (const auto& page : group.pages) {
                 if (page.id != destination) continue;
                 std::string error;
-                if (!workspace_.ImportActionsTo({std::move(action)}, group.id, page.id, error)) return error;
+                if (!workspace_.ImportActionsTo({std::move(*action)}, group.id, page.id, error)) return error;
                 return std::nullopt;
             }
         }
@@ -210,15 +201,11 @@ std::pair<TransferMetadata, StructuredPayload> ConnectSnapshot(const notes::Note
             {"heading", block.heading}, {"checked", block.checked}, {"runs", std::move(runs)}});
     }
     return Snapshot(kNoteType, note.title.empty() ? "Untitled note" : note.title,
-                    {{"title", note.title}, {"blocks", std::move(blocks)}});
+                    Json({{"title", note.title}, {"blocks", std::move(blocks)}}).dump());
 }
 
 std::pair<TransferMetadata, StructuredPayload> ConnectSnapshot(const actions::ActionItem& action) {
-    auto tabs = Json::array();
-    for (const auto& tab : action.tabs) {
-        tabs.push_back({{"caption", tab.caption}, {"content", tab.content}, {"hide_text", tab.hide_text}});
-    }
-    return Snapshot(kActionType, action.title, {{"title", action.title}, {"tabs", std::move(tabs)}});
+    return Snapshot(kActionType, action.title, actions::EncodeActionSnapshot(action));
 }
 
 } // namespace textlt

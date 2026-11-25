@@ -13,6 +13,7 @@
 
 #include "actions/action_repository.hpp"
 #include "actions/actions_context_menu.hpp"
+#include "editor/clipboard_controller.hpp"
 #include "ftxui/component/component_base.hpp"
 #include "ftxui/dom/elements.hpp"
 #include "theme.hpp"
@@ -36,6 +37,7 @@ public:
         std::filesystem::path storage_path = {});
     ftxui::Element OnRender() override;
     bool OnEvent(ftxui::Event event) override;
+    void SetClipboardReader(ClipboardController::ReadCallback reader) { read_clipboard_ = std::move(reader); }
     bool HasOpenContextMenu() const { return context_menu_.IsOpen(); }
     bool HandleContextMenuEvent(ftxui::Event event);
     bool Focusable() const override { return true; }
@@ -131,6 +133,7 @@ private:
     const Theme* theme_;
     StatusCallback status_;
     ClipboardCallback clipboard_;
+    ClipboardController::ReadCallback read_clipboard_;
     GroupsChangedCallback groups_changed_;
     MissingProjectCheck is_missing_project_;
     ActionRepository repository_;

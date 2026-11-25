@@ -111,6 +111,10 @@ target_include_directories(textlt_connect PRIVATE
 set_target_properties(textlt_connect PROPERTIES CXX_EXTENSIONS OFF)
 
 target_link_libraries(textlt_connect PRIVATE Threads::Threads ${TEXTLT_CONNECT_BOOST_TARGETS} OpenSSL::SSL OpenSSL::Crypto)
+if(MSVC)
+  # Boost.Beast's HTTPS and WebSocket templates can exceed the default COFF section limit.
+  target_compile_options(textlt_connect PRIVATE /bigobj)
+endif()
 if(WIN32)
   target_compile_definitions(textlt_connect PRIVATE _WIN32_WINNT=0x0601)
   target_link_libraries(textlt_connect PRIVATE ws2_32)

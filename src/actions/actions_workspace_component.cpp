@@ -1,8 +1,10 @@
 #include "actions/actions_workspace_component.hpp"
 
+#include "actions/action_snapshot.hpp"
 #include "editor/clipboard_controller.hpp"
 #include <algorithm>
 #include <cctype>
+#include <exception>
 
 #include "ftxui/component/animation.hpp"
 #include "ftxui/component/component.hpp"
@@ -1211,6 +1213,23 @@ ActionsContextMenu::Result ActionsWorkspaceComponent::ExecuteContextCommand(
     const auto& pages = groups[group].pages;
     const int page = IndexById(pages, target.page_id);
     if (page < 0) { Notify("Action is no longer available"); return Result::Close; }
+    if (command == Command::Paste) {
+        if (!read_clipboard_ || groups[group].trash) return Result::Close;
+        read_clipboard_([this, group_id = target.group_id, page_id = target.page_id](std::optional<std::string> text) {
+            if (!text || text->empty()) {
+                Notify("Clipboard has no text");
+                return;
+            }
+            auto action = DecodeActionSnapshot(*text);
+            if (!action) {
+                Notify("Clipboard does not contain a valid action item");
+                return;
+            }
+            std::string error;
+            if (!ImportActionsTo({std::move(*action)}, group_id, page_id, error)) Notify(error);
+        });
+        return Result::Close;
+    }
     const auto& items = pages[page].items;
     const int index = IndexById(items, target.item_id);
     if (index < 0) { Notify("Action is no longer available"); return Result::Close; }
@@ -1218,6 +1237,22 @@ ActionsContextMenu::Result ActionsWorkspaceComponent::ExecuteContextCommand(
     if (command == Command::CopyBlock) {
         if (!CopyActionBlock(item, block)) return Result::ClipboardFailure;
         FlashCopyCaption(target.item_id, block);
+        return Result::Close;
+    }
+
+    if (command == Command::CopyForConnect) {
+        std::string snapshot;
+        try {
+            snapshot = EncodeActionSnapshot(item);
+        } catch (const std::exception& error) {
+            Notify(error.what());
+            return Result::Close;
+        }
+        if (!clipboard_ || !clipboard_(snapshot)) {
+            Notify("Could not copy action to the system clipboard");
+            return Result::ClipboardFailure;
+        }
+        Notify("Copied action JSON for Connect");
         return Result::Close;
     }
 
@@ -1256,6 +1291,16 @@ bool ActionsWorkspaceComponent::HandleContextMenuEvent(ftxui::Event event) {
     const auto* page = SelectedPage();
     if (!page || page->id != items_layout_page_id_) return false;
 
+    const auto* group = SelectedGroup();
+    const bool can_paste = read_clipboard_ && group && !group->trash;
+    if (page->items.empty() && can_paste) {
+        focus_ = FocusArea::Items;
+        TakeFocus();
+        context_menu_.Open(mouse.x, mouse.y, {selected_group_id_, page->id, {}},
+            nullptr, false, false, true);
+        return true;
+    }
+
     for (size_t row = 0; row < item_boxes_.size(); ++row) {
         if (!item_boxes_[row].Contain(mouse.x, mouse.y)) continue;
         const int index = IndexById(page->items, item_box_ids_[row]);
@@ -1266,7 +1311,7 @@ bool ActionsWorkspaceComponent::HandleContextMenuEvent(ftxui::Event event) {
         items_scrollbar_dragging_ = false;
         TakeFocus();
         context_menu_.Open(mouse.x, mouse.y, {selected_group_id_, page->id, item.id},
-            item, index > 0, static_cast<size_t>(index) + 1 < page->items.size());
+            &item, index > 0, static_cast<size_t>(index) + 1 < page->items.size(), can_paste);
         return true;
     }
     return false;

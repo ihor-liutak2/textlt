@@ -21,13 +21,13 @@ public:
         std::string item_id;
     };
 
-    enum class Command { CopyBlock, Edit, Rename, MoveUp, MoveDown };
+    enum class Command { CopyBlock, Edit, Rename, MoveUp, MoveDown, CopyForConnect, Paste };
     enum class Result { Close, ClipboardFailure };
     using Execute = std::function<Result(const Target&, Command, size_t)>;
 
     explicit ActionsContextMenu(const Theme* theme);
-    void Open(int x, int y, Target target, const ActionItem& item,
-        bool can_move_up, bool can_move_down);
+    void Open(int x, int y, Target target, const ActionItem* item,
+        bool can_move_up, bool can_move_down, bool can_paste);
     void Close();
     bool IsOpen() const { return target_.has_value(); }
     bool OnEvent(ftxui::Event event, const Execute& execute);
