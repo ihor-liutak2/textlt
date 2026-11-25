@@ -44,6 +44,10 @@ struct TextLTProviderOptions {
     std::function<bool(const TransferMetadata&, const StructuredPayload&)> validate_structured{};
 };
 
+bool IsValidTextLTPeerId(std::string_view peer_id);
+bool IsValidTextLTDeviceName(std::string_view name);
+bool IsValidTextLTAddress(std::string_view address);
+
 // Reads a PEM leaf certificate and returns its SHA-256 fingerprint as colon-separated hex.
 std::optional<std::string> TextLTCertificateFingerprint(const std::string& certificate_pem);
 // Returns the fingerprint only when the certificate and private key load and match.

@@ -1,6 +1,3 @@
-#include "../src/providers/textlt/socket.hpp"
-#include "../src/providers/textlt/discovery.hpp"
-
 #include "connect_workspace.hpp"
 
 #include <algorithm>
@@ -25,12 +22,12 @@ std::uint16_t ParseConnectionPort(std::string_view text) {
 }
 
 bool ValidDeviceName(std::string_view name) {
-    return name.find_first_not_of(' ') != std::string_view::npos && connect::detail::ValidDiscoveryName(name);
+    return name.find_first_not_of(' ') != std::string_view::npos && connect::IsValidTextLTDeviceName(name);
 }
 
 connect::ProviderResult ValidateProfile(NativeConnectionProfile& profile) {
     if (!ValidDeviceName(profile.name)) return {false, "Enter a device name up to 96 bytes."};
-    if (!connect::detail::IsLanIPv4(profile.address) || !profile.port) {
+    if (!connect::IsValidTextLTAddress(profile.address) || !profile.port) {
         return {false, "Enter a network IPv4 address and a TCP port between 1 and 65535."};
     }
     const auto code = connect::MakeTextLTPairingCode(profile.peer_id, profile.fingerprint);
@@ -98,7 +95,7 @@ connect::ProviderResult ConnectWorkspace::SaveNativeDeviceName(std::string_view 
 }
 
 connect::ProviderResult ConnectWorkspace::SaveNativePeerId(std::string_view peer_id) {
-    if (!connect::detail::ValidDiscoveryId(peer_id)) return {false, "Enter a valid TextLT peer ID."};
+    if (!connect::IsValidTextLTPeerId(peer_id)) return {false, "Enter a valid TextLT peer ID."};
     if (peer_id == settings_.peer_id) return {false, "Choose an ID different from your peer's ID."};
     if (settings_.local_id == peer_id) return {true, {}};
     const auto previous = settings_.local_id;

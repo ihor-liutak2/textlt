@@ -742,6 +742,18 @@ private:
 
 } // namespace
 
+bool IsValidTextLTPeerId(std::string_view peer_id) {
+    return detail::ValidDiscoveryId(peer_id);
+}
+
+bool IsValidTextLTDeviceName(std::string_view name) {
+    return detail::ValidDiscoveryName(name);
+}
+
+bool IsValidTextLTAddress(std::string_view address) {
+    return detail::IsLanIPv4(std::string(address));
+}
+
 std::unique_ptr<IConnectProvider> MakeTextLTProvider(TextLTProviderOptions options) {
     return std::make_unique<TextLTProvider>(std::move(options));
 }

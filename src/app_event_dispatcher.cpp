@@ -137,6 +137,8 @@ bool AppEventDispatcher::HandleEditorPaneEvent(size_t pane_index, ftxui::Event e
         pane_index < app_.VisibleEditorPaneCount() &&
         app_.MainViewCanActivateEditorPane() &&
         !app_.sidebar_has_focus_) {
+        const EditorViewport* viewport = app_.document_workspace_.PaneViewport(pane_index);
+        if (!viewport || !viewport->box.Contain(event.mouse().x, event.mouse().y)) return false;
         app_.SetActiveEditorPane(pane_index);
         auto editor = std::static_pointer_cast<EditorComponent>(app_.editor_pane_components_[pane_index]);
         if (editor) {

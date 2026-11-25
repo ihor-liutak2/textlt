@@ -611,6 +611,12 @@ bool EditorViewport::HandleMouseEvent(
         return true;
     }
 
+    if (!inside_editor && mouse.button == ftxui::Mouse::Left &&
+        mouse.motion == ftxui::Mouse::Pressed) {
+        mouse_selecting = false;
+        return false;
+    }
+
     if (!inside_editor && !mouse_selecting) {
         return false;
     }
@@ -720,6 +726,7 @@ bool EditorViewport::HandleMouseEvent(
 
     if (mouse_selecting &&
         inside_editor &&
+        mouse.button == ftxui::Mouse::Left &&
         mouse.motion == ftxui::Mouse::Moved) {
         const auto [clicked_row, clicked_col] = PositionAtMouse(session, config, mouse);
         if (session.CursorRow() != clicked_row || session.CursorCol() != clicked_col) {
