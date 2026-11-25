@@ -17,6 +17,7 @@
 
 #include "app_resources.hpp"
 #include "ftxui/component/component_options.hpp"
+#include "ftxui/component/mouse.hpp"
 #include "theme.hpp"
 #include "ui_button.hpp"
 #include "ui_selectable_input.hpp"
@@ -505,6 +506,37 @@ TextltApp::TextltApp()
     editor_pane_components_.push_back(text_editor_);
     editor_pane_components_.push_back(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_));
     editor_pane_components_.push_back(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_));
+
+    for (size_t pane_index = 0; pane_index < editor_pane_components_.size(); ++pane_index) {
+        auto editor = std::static_pointer_cast<EditorComponent>(editor_pane_components_[pane_index]);
+        if (!editor) continue;
+        editor->SetExternalMouseHandler([this](ftxui::Event event) {
+            if (event.mouse().button != ftxui::Mouse::Left ||
+                event.mouse().motion != ftxui::Mouse::Pressed) {
+                return false;
+            }
+            const int x = event.mouse().x;
+            const int y = event.mouse().y;
+            for (size_t target_pane = 0; target_pane < VisibleEditorPaneCount() &&
+                 target_pane < editor_pane_components_.size(); ++target_pane) {
+                auto target_editor = std::static_pointer_cast<EditorComponent>(editor_pane_components_[target_pane]);
+                const auto doc = target_editor ? target_editor->GetSession() : nullptr;
+                if (!doc || !doc->git_compare) continue;
+                const auto& previous = git_compare_prev_boxes_[target_pane];
+                const auto& next = git_compare_next_boxes_[target_pane];
+                if (previous.x_max > previous.x_min && previous.y_max >= previous.y_min &&
+                    previous.Contain(x, y)) {
+                    NavigateGitCompare(target_pane, false);
+                    return true;
+                }
+                if (next.x_max > next.x_min && next.y_max >= next.y_min && next.Contain(x, y)) {
+                    NavigateGitCompare(target_pane, true);
+                    return true;
+                }
+            }
+            return false;
+        });
+    }
 
     editor_pane_renderers_.clear();
     for (size_t pane_index = 0; pane_index < editor_pane_components_.size(); ++pane_index) {

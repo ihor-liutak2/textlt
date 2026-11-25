@@ -33,7 +33,8 @@ private:
 };
 
 std::string DocumentTitle(const std::shared_ptr<DocumentSession>& doc) {
-    return doc ? doc->DisplayTitle() : "Untitled";
+    if (!doc) return "Untitled";
+    return doc->DisplayTitle() + doc->git_compare_label;
 }
 
 std::string ShortDocumentTitle(const std::shared_ptr<DocumentSession>& doc) {
@@ -257,6 +258,17 @@ ftxui::Element TextltApp::RenderEditorPane(size_t pane_index) {
     Element header = hbox({
         text(header_text) | bold | color(active ? theme.modal_selected_item_fg : theme.menu_foreground),
         filler(),
+        doc && doc->git_compare
+            ? hbox({
+                  text(doc->git_compare_has_navigation
+                      ? "Line " + std::to_string(doc->git_compare_navigation_line + 1) + "  "
+                      : ""),
+                  text("↑ Prev") | color(theme.modal_accent) | reflect(git_compare_prev_boxes_[pane_index]),
+                  text("  "),
+                  text("↓ Next") | color(theme.modal_accent) | reflect(git_compare_next_boxes_[pane_index]),
+                  text(" "),
+              })
+            : text(""),
     }) |
         bgcolor(active ? theme.modal_selected_item_bg : theme.menu_background) |
         size(WIDTH, GREATER_THAN, 12);
@@ -286,6 +298,42 @@ ftxui::Element TextltApp::RenderEditorPane(size_t pane_index) {
     }
 
     return pane;
+}
+
+bool TextltApp::NavigateGitCompare(size_t pane_index, bool next) {
+    if (pane_index >= editor_pane_components_.size()) return false;
+    auto editor = std::static_pointer_cast<EditorComponent>(editor_pane_components_[pane_index]);
+    auto doc = editor ? editor->GetSession() : nullptr;
+    if (!doc || !doc->git_compare) return false;
+    SetActiveEditorPane(pane_index);
+    std::vector<size_t> changed_lines;
+    for (size_t i = 0; i < doc->diff_line_kinds.size(); ++i) {
+        if (doc->diff_line_kinds[i] != DiffLineKind::None) changed_lines.push_back(i);
+    }
+    // If there is only one changed line, still let the controls move through
+    // the file so a click always produces a visible line change.
+    if (changed_lines.size() < 2) {
+        changed_lines.clear();
+        for (size_t i = 0; i < doc->lines.size(); ++i) changed_lines.push_back(i);
+    }
+    if (changed_lines.empty()) return true;
+    size_t position = 0;
+    if (!doc->git_compare_has_navigation) {
+        position = next ? 0 : changed_lines.size() - 1;
+    } else if (next) {
+        position = (doc->git_compare_navigation_index + 1) % changed_lines.size();
+    } else {
+        position = doc->git_compare_navigation_index == 0
+            ? changed_lines.size() - 1 : doc->git_compare_navigation_index - 1;
+    }
+    doc->git_compare_navigation_index = position;
+    doc->git_compare_has_navigation = true;
+    doc->git_compare_navigation_line = changed_lines[position];
+    doc->git_compare_navigation_total = changed_lines.size();
+    editor = std::static_pointer_cast<EditorComponent>(editor_pane_components_[pane_index]);
+    if (editor) editor->JumpToLine(changed_lines[position] + 1);
+    screen_.PostEvent(ftxui::Event::Custom);
+    return true;
 }
 
 ViewLayoutSnapshot TextltApp::CurrentViewLayoutSnapshot() const {

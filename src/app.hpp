@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <array>
 #include <memory>
 #include <optional>
 #include <string>
@@ -152,6 +153,7 @@ private:
         const std::string& right_title,
         const std::string& right_content,
         std::string& error);
+    bool NavigateGitCompare(size_t pane_index, bool next);
 
     std::vector<FileSearchRoot> CurrentSearchFileRoots() const;
     bool OpenSearchFileMatch(const FileSearchMatch& match, std::string& error);
@@ -439,6 +441,8 @@ private:
     ProjectStore project_store_;
     ftxui::Component text_editor_;
     std::vector<ftxui::Component> editor_pane_components_;
+    std::array<ftxui::Box, 3> git_compare_prev_boxes_{};
+    std::array<ftxui::Box, 3> git_compare_next_boxes_{};
     std::vector<ftxui::Component> editor_pane_renderers_;
     ftxui::Component editor_workspace_single_;
     ftxui::Component editor_workspace_two_;

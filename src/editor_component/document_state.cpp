@@ -52,6 +52,10 @@
         UpdateScroll();
     }
 
+    void EditorComponent::SetExternalMouseHandler(std::function<bool(ftxui::Event)> handler) {
+        external_mouse_handler_ = std::move(handler);
+    }
+
     EditorComponent::EditorComponent(EditorConfig* config, const Theme* theme)
     : config_(config),
     theme_(theme),

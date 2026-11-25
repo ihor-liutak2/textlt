@@ -67,6 +67,28 @@ bool AppEventDispatcher::Handle(ftxui::Event event) {
 }
 
 bool AppEventDispatcher::HandleBodyEvent(ftxui::Event event) {
+    if (IsPrimaryMousePress(event) && app_.ActiveLayer() == TextltApp::UiLayer::Main) {
+        for (size_t pane_index = 0; pane_index < app_.VisibleEditorPaneCount() &&
+             pane_index < app_.editor_pane_components_.size(); ++pane_index) {
+            auto editor = std::static_pointer_cast<EditorComponent>(app_.editor_pane_components_[pane_index]);
+            const auto doc = editor ? editor->GetSession() : nullptr;
+            if (!doc || !doc->git_compare) continue;
+            const int x = event.mouse().x;
+            const int y = event.mouse().y;
+            const auto& previous = app_.git_compare_prev_boxes_[pane_index];
+            const auto& next = app_.git_compare_next_boxes_[pane_index];
+            if (previous.x_max > previous.x_min && previous.y_max >= previous.y_min &&
+                previous.Contain(x, y)) {
+                app_.NavigateGitCompare(pane_index, false);
+                return true;
+            }
+            if (next.x_max > next.x_min && next.y_max >= next.y_min && next.Contain(x, y)) {
+                app_.NavigateGitCompare(pane_index, true);
+                return true;
+            }
+        }
+    }
+
     if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Notes ||
         app_.workspace_mode_ == TextltApp::WorkspaceMode::Connect) {
         return false;
@@ -119,6 +141,25 @@ bool AppEventDispatcher::HandleBodyEvent(ftxui::Event event) {
 }
 
 bool AppEventDispatcher::HandleEditorPaneEvent(size_t pane_index, ftxui::Event event) {
+    if (IsPrimaryMousePress(event) && pane_index < app_.VisibleEditorPaneCount()) {
+        auto editor = pane_index < app_.editor_pane_components_.size()
+            ? std::static_pointer_cast<EditorComponent>(app_.editor_pane_components_[pane_index])
+            : nullptr;
+        const auto doc = editor ? editor->GetSession() : nullptr;
+        if (doc && doc->git_compare && pane_index < app_.git_compare_prev_boxes_.size()) {
+            const int x = event.mouse().x;
+            const int y = event.mouse().y;
+            if (app_.git_compare_prev_boxes_[pane_index].Contain(x, y)) {
+                app_.NavigateGitCompare(pane_index, false);
+                return true;
+            }
+            if (app_.git_compare_next_boxes_[pane_index].Contain(x, y)) {
+                app_.NavigateGitCompare(pane_index, true);
+                return true;
+            }
+        }
+    }
+
     if (app_.layout_controller_.IsDistractionModeActive() &&
         pane_index < app_.VisibleEditorPaneCount() &&
         (IsMouseWheelUp(event) || IsMouseWheelDown(event))) {

@@ -31,7 +31,12 @@ ftxui::Element EditorComponent::RenderViewport() {
     const auto horizontal = session_ ? viewport_->HorizontalScrollMetrics(*session_, config_)
                                      : HorizontalScrollbar{};
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-    const std::string file_path = CurrentFilePath();
+    const std::string file_path = session_ && !session_->lexer_path.empty()
+        ? session_->lexer_path : CurrentFilePath();
+    size_t active_diff_row = session_ ? session_->diff_line_kinds.size() : 0;
+    if (session_ && session_->git_compare && session_->git_compare_has_navigation) {
+        active_diff_row = session_->git_compare_navigation_line;
+    }
 
     const size_t total_lines = session_ ? session_->lines.size() : 0;
     const size_t effective_total = (smart_word_wrap && session_ && viewport_)
@@ -115,6 +120,34 @@ ftxui::Element EditorComponent::RenderViewport() {
             ? ftxui::text(LineNumberText(line_index, line_number_width)) | ftxui::color(theme.gutter)
             : ftxui::text("");
 
+        ftxui::Color diff_background = theme.background;
+        if (session_ && session_->git_compare && line_index < session_->diff_line_kinds.size()) {
+            switch (session_->diff_line_kinds[line_index]) {
+                case DiffLineKind::Added:
+                    diff_background = theme.IsLight()
+                        ? (ftxui::Color::RGB)(210, 246, 218)
+                        : (ftxui::Color::RGB)(35, 76, 48);
+                    break;
+                case DiffLineKind::Deleted:
+                    diff_background = theme.IsLight()
+                        ? (ftxui::Color::RGB)(255, 220, 220)
+                        : (ftxui::Color::RGB)(91, 42, 46);
+                    break;
+                case DiffLineKind::Changed:
+                    diff_background = theme.IsLight()
+                        ? (ftxui::Color::RGB)(255, 243, 190)
+                        : (ftxui::Color::RGB)(91, 75, 35);
+                    break;
+                case DiffLineKind::None: break;
+            }
+        }
+        if (line_index == active_diff_row) {
+            diff_background = theme.IsLight()
+                ? (ftxui::Color::RGB)(174, 218, 255)
+                : (ftxui::Color::RGB)(40, 92, 135);
+        }
+        line_number = line_number | ftxui::bgcolor(diff_background);
+
         ftxui::Elements line_parts{line_number};
         if (text_left_padding > 0) {
             line_parts.push_back(ftxui::text(std::string(text_left_padding, ' ')));
@@ -175,7 +208,7 @@ ftxui::Element EditorComponent::RenderViewport() {
                 const ftxui::Color match_bg = IsActiveSearchMatch(*search_match) ? theme.active_match_bg : theme.match_bg;
                 character = character | ftxui::bgcolor(match_bg) | ftxui::color(theme.selection_fg);
             } else {
-                character = character | ftxui::color(text_color);
+                character = character | ftxui::color(text_color) | ftxui::bgcolor(diff_background);
             }
 
             if (is_bracket_highlight(x, line_index)) {
@@ -201,7 +234,7 @@ ftxui::Element EditorComponent::RenderViewport() {
 
         line_parts.push_back(ftxui::filler());
         line_parts.push_back(render_scrollbar_cell(viewport_y));
-        return ftxui::hbox(std::move(line_parts));
+        return ftxui::hbox(std::move(line_parts)) | ftxui::bgcolor(diff_background);
     };
 
     size_t rendered_content_rows = 0;

@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 #include <memory>
+#include <functional>
 
 #include "ftxui/component/component_base.hpp"
 #include "ftxui/dom/elements.hpp"
@@ -32,6 +33,7 @@ namespace textlt {
 
         void SetSession(std::shared_ptr<DocumentSession> doc);
         void SetViewport(EditorViewport* viewport);
+        void SetExternalMouseHandler(std::function<bool(ftxui::Event)> handler);
         std::shared_ptr<DocumentSession> GetSession() const;
 
         void SaveToFile(const std::string& path);
@@ -170,6 +172,7 @@ namespace textlt {
         const Theme* theme_ = nullptr;
         EditorViewport owned_viewport_;
         EditorViewport* viewport_ = &owned_viewport_;
+        std::function<bool(ftxui::Event)> external_mouse_handler_;
         bool search_match_case_ = false;
         bool search_whole_word_ = false;
         size_t current_search_match_ = 0;

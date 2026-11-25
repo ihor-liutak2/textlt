@@ -50,7 +50,15 @@ DocumentSession::DocumentSession(const DocumentSession& other)
       type(other.type),
       line_ending(other.line_ending),
       read_only(other.read_only),
-      temporary(other.temporary) {}
+      temporary(other.temporary),
+      lexer_path(other.lexer_path),
+      git_compare_label(other.git_compare_label),
+      diff_line_kinds(other.diff_line_kinds),
+      git_compare(other.git_compare),
+      git_compare_has_navigation(other.git_compare_has_navigation),
+      git_compare_navigation_index(other.git_compare_navigation_index),
+      git_compare_navigation_line(other.git_compare_navigation_line),
+      git_compare_navigation_total(other.git_compare_navigation_total) {}
 
 DocumentSession& DocumentSession::operator=(const DocumentSession& other) {
     if (this != &other) {
@@ -70,7 +78,15 @@ DocumentSession::DocumentSession(DocumentSession&& other) noexcept
       type(other.type),
       line_ending(other.line_ending),
       read_only(other.read_only),
-      temporary(other.temporary) {}
+      temporary(other.temporary),
+      lexer_path(std::move(other.lexer_path)),
+      git_compare_label(std::move(other.git_compare_label)),
+      diff_line_kinds(std::move(other.diff_line_kinds)),
+      git_compare(other.git_compare),
+      git_compare_has_navigation(other.git_compare_has_navigation),
+      git_compare_navigation_index(other.git_compare_navigation_index),
+      git_compare_navigation_line(other.git_compare_navigation_line),
+      git_compare_navigation_total(other.git_compare_navigation_total) {}
 
 DocumentSession& DocumentSession::operator=(DocumentSession&& other) noexcept {
     if (this != &other) {
@@ -83,6 +99,14 @@ DocumentSession& DocumentSession::operator=(DocumentSession&& other) noexcept {
         line_ending = other.line_ending;
         read_only = other.read_only;
         temporary = other.temporary;
+        lexer_path = std::move(other.lexer_path);
+        git_compare_label = std::move(other.git_compare_label);
+        diff_line_kinds = std::move(other.diff_line_kinds);
+        git_compare = other.git_compare;
+        git_compare_has_navigation = other.git_compare_has_navigation;
+        git_compare_navigation_index = other.git_compare_navigation_index;
+        git_compare_navigation_line = other.git_compare_navigation_line;
+        git_compare_navigation_total = other.git_compare_navigation_total;
     }
     return *this;
 }
@@ -97,6 +121,14 @@ void DocumentSession::BindFrom(const DocumentSession& other) {
     line_ending = other.line_ending;
     read_only = other.read_only;
     temporary = other.temporary;
+    lexer_path = other.lexer_path;
+    git_compare_label = other.git_compare_label;
+    diff_line_kinds = other.diff_line_kinds;
+    git_compare = other.git_compare;
+    git_compare_has_navigation = other.git_compare_has_navigation;
+    git_compare_navigation_index = other.git_compare_navigation_index;
+    git_compare_navigation_line = other.git_compare_navigation_line;
+    git_compare_navigation_total = other.git_compare_navigation_total;
 }
 
 

@@ -40,6 +40,8 @@ enum class LineEnding {
     CRLF,
 };
 
+enum class DiffLineKind { None, Added, Deleted, Changed };
+
 class DocumentSession {
 public:
     DocumentSession();
@@ -60,6 +62,15 @@ public:
     LineEnding line_ending = LineEnding::LF;
     bool read_only = false;
     bool temporary = false;
+    // Set only on the temporary documents created by Git side-by-side compare.
+    std::string lexer_path;
+    std::string git_compare_label;
+    std::vector<DiffLineKind> diff_line_kinds;
+    bool git_compare = false;
+    bool git_compare_has_navigation = false;
+    size_t git_compare_navigation_index = 0;
+    size_t git_compare_navigation_line = 0;
+    size_t git_compare_navigation_total = 0;
 
     void SetActiveCursorState(EditorCursorState* cursor_state);
     void ClearActiveCursorState();

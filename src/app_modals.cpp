@@ -567,20 +567,103 @@ bool TextltApp::OpenGitCompareDocuments(
     }
 
     auto make_git_doc = [](const std::string& title, const std::string& content) {
+        const size_t revision_separator = title.find(" @ ");
+        const std::string source_path = revision_separator == std::string::npos
+            ? title : title.substr(0, revision_separator);
         auto doc = std::make_shared<DocumentSession>();
-        doc->LoadContent(content, title.empty() ? "Git compare" : title);
+        doc->LoadContent(content, source_path.empty() ? "Git compare.txt" : source_path);
         doc->read_only = true;
         doc->temporary = true;
         doc->is_dirty = false;
+        doc->git_compare = true;
+        doc->lexer_path = source_path;
+        doc->git_compare_label = revision_separator == std::string::npos
+            ? std::string{} : title.substr(revision_separator);
         return doc;
     };
 
     auto left_doc = make_git_doc(left_title, left_content);
-    const size_t left_index = document_workspace_.AddSession(left_doc);
+    auto right_doc = make_git_doc(right_title, right_content);
+    const std::vector<std::string> source_left = left_doc->lines;
+    const std::vector<std::string> source_right = right_doc->lines;
+    const size_t left_count = left_doc->lines.size();
+    const size_t right_count = right_doc->lines.size();
+    std::vector<std::string> aligned_left;
+    std::vector<std::string> aligned_right;
+    std::vector<DiffLineKind> left_kinds;
+    std::vector<DiffLineKind> right_kinds;
+    auto append_row = [&](const std::string& left_line, const std::string& right_line,
+                          DiffLineKind left_kind, DiffLineKind right_kind) {
+        aligned_left.push_back(left_line);
+        aligned_right.push_back(right_line);
+        left_kinds.push_back(left_kind);
+        right_kinds.push_back(right_kind);
+    };
+    if (left_count <= 2500 && right_count <= 2500 &&
+        (left_count + 1) * (right_count + 1) <= 2500000) {
+        const size_t width = right_count + 1;
+        std::vector<uint32_t> lcs((left_count + 1) * width, 0);
+        for (size_t i = left_count; i-- > 0;) {
+            for (size_t j = right_count; j-- > 0;) {
+                lcs[i * width + j] = left_doc->lines[i] == right_doc->lines[j]
+                    ? lcs[(i + 1) * width + j + 1] + 1
+                    : std::max(lcs[(i + 1) * width + j], lcs[i * width + j + 1]);
+            }
+        }
+        size_t i = 0, j = 0;
+        while (i < left_count || j < right_count) {
+            if (i < left_count && j < right_count && source_left[i] == source_right[j]) {
+                append_row(source_left[i], source_right[j], DiffLineKind::None, DiffLineKind::None);
+                ++i; ++j;
+                continue;
+            }
+            std::vector<std::string> deleted_lines;
+            std::vector<std::string> added_lines;
+            while (i < left_count || j < right_count) {
+                if (i < left_count && j < right_count && source_left[i] == source_right[j]) break;
+                if (j == right_count || (i < left_count && lcs[(i + 1) * width + j] >= lcs[i * width + j + 1])) {
+                    deleted_lines.push_back(source_left[i++]);
+                } else {
+                    added_lines.push_back(source_right[j++]);
+                }
+            }
+            const size_t paired = std::min(deleted_lines.size(), added_lines.size());
+            for (size_t k = 0; k < paired; ++k) {
+                append_row(deleted_lines[k], added_lines[k], DiffLineKind::Changed, DiffLineKind::Changed);
+            }
+            for (size_t k = paired; k < deleted_lines.size(); ++k)
+                append_row(deleted_lines[k], "", DiffLineKind::Deleted, DiffLineKind::Deleted);
+            for (size_t k = paired; k < added_lines.size(); ++k)
+                append_row("", added_lines[k], DiffLineKind::Added, DiffLineKind::Added);
+        }
+    } else {
+        const size_t rows = std::max(left_count, right_count);
+        for (size_t i = 0; i < rows; ++i) {
+            const bool has_left = i < left_count;
+            const bool has_right = i < right_count;
+            if (has_left && has_right) {
+                const auto kind = source_left[i] == source_right[i]
+                    ? DiffLineKind::None : DiffLineKind::Changed;
+                append_row(source_left[i], source_right[i], kind, kind);
+            } else if (has_left) {
+                append_row(source_left[i], "", DiffLineKind::Deleted, DiffLineKind::Deleted);
+            } else {
+                append_row("", source_right[i], DiffLineKind::Added, DiffLineKind::Added);
+            }
+        }
+    }
+    left_doc->lines = std::move(aligned_left);
+    right_doc->lines = std::move(aligned_right);
+    left_doc->diff_line_kinds = std::move(left_kinds);
+    right_doc->diff_line_kinds = std::move(right_kinds);
+    left_doc->EnsureValidBuffer();
+    right_doc->EnsureValidBuffer();
+    left_doc->is_dirty = false;
+    right_doc->is_dirty = false;
 
+    const size_t left_index = document_workspace_.AddSession(left_doc);
     size_t right_index = left_index;
     if (!right_title.empty()) {
-        auto right_doc = make_git_doc(right_title, right_content);
         right_index = document_workspace_.AddSession(right_doc);
     }
 
