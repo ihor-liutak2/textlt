@@ -54,43 +54,52 @@ Use **Start** or **Stop** under **TextLT** or **LocalSend** in the left
 column to control each provider independently. **Refresh peers** sends a
 LocalSend discovery announcement while transfers continue.
 
-The **Connect** menu is displayed while this workspace is selected. Its
-entries open tabs of the same settings modal.
+The **Connect** menu is displayed while this workspace is selected. It opens
+TextLT configuration, LocalSend settings, or diagnostics.
 
 | Menu path | Settings |
 | --- | --- |
-| **Connect → Connections…** | Choose a discovered peer ID or enter a manual peer IPv4 address and port. Enter the expected SHA-256 fingerprint after verifying it independently. |
-| **Connect → Network…** | Configure the TextLT listener address and port and optionally enable LAN discovery. Set the listener port to `0` for sender-only or discovery-only use. |
-| **Connect → Identity…** | Set the advertised peer ID and display name, choose local certificate and private key PEM paths, and read or copy the certificate fingerprint. |
+| **Connect → TextLT Config…** | Copy this device's identity JSON, save JSON from other TextLT devices, and switch between saved connections. |
+| **Connect → LocalSend…** | Configure LocalSend discovery, peer address, alias, and interface. |
+| **TextLT Config → Network** | Configure the TextLT listener address and port and optionally enable LAN discovery. Set the listener port to `0` for sender-only or discovery-only use. Restart TextLT after changing these settings. |
 | **Connect → Diagnostics…** | Inspect assigned IPv4 and IPv6 addresses, default gateways, and LocalSend listener state. Select an address to copy it or configure LocalSend. |
+
+TextLT apps found on the LAN appear under **Online apps** in the left column.
+Selecting one opens its conversation.
 
 The native provider uses one configured peer fingerprint at a time. TextLT
 creates a persistent local identity on first use with a combined certificate
 and private key PEM. Existing manually configured identities are used as saved.
 
-To pair two devices, open **Identity** on each and choose **Copy pairing code**.
-Exchange the codes directly with the device owners. Paste the other device's
-code under **Connections** and click **Pair peer** on both devices. Then
-choose **Start** under **TextLT** on both devices. Pairing enables LAN
-discovery and saves the verified fingerprint. For a manual route, enter the
-other device's IPv4 address and port after pairing.
+To use the saved list, open **TextLT Config → Identity** on both devices and
+choose **Copy identity**. Each object includes version `1`, `name`, `peer_id`,
+`address`, `port`, `fingerprint`, and a matching `pairing_code`. The address and port fields can share
+a forwarded endpoint when the other device needs to reach a different address.
+Exchange the JSON directly and paste the other device's object into
+**TextLT Config → Connections**. Choose **Save connection**, select it in the
+left column and choose **Connect**. Switching restarts only the native TextLT
+provider. Saved connections are stored in `textlt-connections.json`.
+The **Identity** tab lets you save a new device name. TextLT keeps its certificate
+and peer ID across restarts. **Regenerate identity** creates a fresh certificate,
+fingerprint, and peer ID after confirmation. Copy the new JSON for your peers
+before reconnecting.
+The **Files** tab lets you edit the certificate and private-key PEM paths.
+**Save paths** checks that the files match. A running listener uses the saved
+paths the next time it starts.
 
-To browse first, set the listen port to `0`, enable LAN discovery, and choose
-**Start** under **TextLT**.
-Select a peer under Connections, enter the verified fingerprint and local
-certificate and key, then restart TextLT from the left column.
-To advertise a listener, use the same LAN address for the listener and the
-discovery interface and set a local peer ID and display name. Manual
-certificate setup and the two-device commands below use the same trust model
-as the editor.
+Choose **Start** under **TextLT** to look for nearby apps. To connect, first
+save the other app's identity JSON under **TextLT Config → Connections**, then
+choose **Connect** for that saved app.
 
-Connect Settings automatically saves edits to `connect-settings.json` beside
-the editor configuration. The Network tab shows the detected non-loopback
-IPv4 address and uses it as the initial listen address. Native Connect uses
-TCP port `53327` by default. Set the listen port to `0` to disable the native
-listener. Enter the target device's IPv4 address in Connections when connecting
-manually. Saving settings leaves both providers in their current state. Conversations
-and drafts stay in the current editor session.
+TextLT network settings save in `connect-settings.json` beside the editor
+configuration. The Network tab shows the detected non-loopback IPv4 address
+and uses it as the initial listen address. Native Connect uses TCP port
+`53327` by default. Set the listen port to `0` to disable the native listener.
+LocalSend settings are under **Connect → LocalSend…**. Conversations and drafts
+stay in the current editor session.
+
+Accepting an incoming request remembers that app in `connect-settings.json`.
+Future requests from the same app are accepted automatically.
 Networking stays active when switching workspaces and stops on application
 exit. The workspace uses its own Connections column. Its FTXUI UI lives in
 `connect/ui/`, and the settings modal is in `src/modals/`. The editor build
@@ -106,8 +115,9 @@ dependency listed above.
    **Send File…** appears in the conversation. Choose a regular file in the
    editor's picker.
 3. The receiving conversation shows the filename and size. Choose **Accept**
-   to save it in Downloads or **Decline** to skip the transfer. Either side
-   can use **Cancel transfer** while the file transfer is pending or active.
+   to save it in Downloads or **Decline** to skip the transfer. Accepting once
+   remembers that app and accepts its future requests automatically. Either
+   side can use **Cancel transfer** while a file transfer is pending or active.
 4. Both conversations show byte progress and the final outcome. The sender
    shows **Delivered** when the receiver acknowledges the saved file.
 
@@ -192,8 +202,7 @@ checks the WSL listener first and keeps rules that point to a different service.
 
 ## Exchange text and files with LocalSend
 
-1. Open **Options → Connect**, then **Connect → Network…**, and select the
-   **LocalSend** tab. Set an alias. The default multicast
+1. Open **Options → Connect → LocalSend…** and set an alias. The default multicast
    group is `224.0.0.167`, the default discovery UDP port is `53317`, and the default HTTPS receive port is
    `53317`. Leave the interface blank for Auto, or select an eligible IPv4
    address in Diagnostics. Close the settings and choose **Start** under

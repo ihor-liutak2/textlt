@@ -74,6 +74,7 @@ public:
     virtual ProviderResult ConnectByIp(std::string_view endpoint) = 0;
     virtual ProviderResult RefreshPeers() = 0;
     virtual LocalSendDiscoveryStatus DiscoveryStatus() const = 0;
+    virtual std::vector<Peer> OnlinePeers() const = 0;
 };
 
 std::unique_ptr<ILocalSendProvider> MakeLocalSendProvider(LocalSendOptions options);

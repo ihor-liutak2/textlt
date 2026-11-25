@@ -7,7 +7,6 @@
 #include "ftxui/component/mouse.hpp"
 #include "ftxui/screen/terminal.hpp"
 #include "modals/modal_window.hpp"
-#include "textlt/connect/textlt_provider.hpp"
 #include "ui_button.hpp"
 #include "ui_selectable_input.hpp"
 
@@ -30,7 +29,7 @@ public:
                            std::function<void()> close)
         : theme_(theme), workspace_(workspace), copy_(std::move(copy)) {
         auto& config = workspace_.Configuration();
-        for (const auto* label : {"Connections", "Network", "Identity", "LocalSend", "Diagnostics"}) {
+        for (const auto* label : {"LocalSend", "Diagnostics"}) {
             const int tab = static_cast<int>(tabs_.size());
             auto option = ButtonOption::Simple();
             option.label = label;
@@ -41,71 +40,6 @@ public:
             tabs_.push_back(Button(std::move(option)));
         }
 
-        auto peer_option = MenuOption::Vertical();
-        peer_option.on_enter = [this] { UsePeer(); };
-        peer_menu_ = Menu(&peer_labels_, &selected_peer_, std::move(peer_option));
-        peer_box_ = Renderer(peer_menu_, [this] {
-            peers_ = workspace_.DiscoveredPeers();
-            peer_labels_.clear();
-            for (const auto& [id, name] : peers_) peer_labels_.push_back(name + " [" + id + "]");
-            selected_peer_ = std::clamp(selected_peer_, 0,
-                                       std::max(0, static_cast<int>(peer_labels_.size()) - 1));
-            return vbox({
-                text("Discovered peers") | bold,
-                peer_labels_.empty() ? text("No discovered peers") | dim :
-                    peer_menu_->Render() | vscroll_indicator | yframe | size(HEIGHT, LESS_THAN, 5),
-            });
-        });
-        use_peer_ = Action("Use selected peer ID", [this] { UsePeer(); });
-        body_.push_back(Container::Vertical({
-            Field("Peer pairing code from the other device", pairing_code_, false),
-            Action("Pair peer", [this] {
-                const auto result = workspace_.PairNativePeer(pairing_code_);
-                notice_ = result.reason;
-                if (result.accepted) pairing_code_.clear();
-            }, ButtonRole::Primary),
-            peer_box_, use_peer_,
-            Field("Trusted discovery peer ID", config.peer_id),
-            Field("Manual peer IPv4 address", config.peer_ip),
-            Field("Manual peer port (default 53327)", config.peer_port),
-            Field("Expected peer SHA-256 fingerprint", config.peer_fingerprint),
-        }));
-        auto discovery = SettingsCheckbox("Enable LAN discovery", config.discovery);
-        body_.push_back(Container::Vertical({
-            Renderer([this] {
-                const auto& address = workspace_.LocalIPv4();
-                return text("Local IPv4: " + (address.empty() ? std::string("Unavailable") : address)) |
-                    color(theme_.modal_accent) | bold;
-            }),
-            Field("Listen IPv4 address", config.listen_ip),
-            Field("Listen port (default 53327, 0 = off)", config.listen_port),
-            discovery,
-            Field("Discovery interface IPv4 address (blank uses listen address)", config.discovery_ip),
-        }));
-        copy_fingerprint_ = Action("Copy fingerprint", [this] {
-            RefreshFingerprint();
-            if (!fingerprint_.empty()) notice_ = copy_(fingerprint_)
-                ? "Fingerprint copied" : ClipboardController::kWriteFailed;
-        });
-        refresh_fingerprint_ = Action("Read fingerprint", [this] {
-            RefreshFingerprint();
-            notice_ = fingerprint_.empty() ? "Could not read a certificate at that path" : "Fingerprint read";
-        });
-        body_.push_back(Container::Vertical({
-            Action("Copy pairing code", [this] {
-                RefreshFingerprint();
-                const auto code = connect::MakeTextLTPairingCode(workspace_.Configuration().local_id, fingerprint_);
-                notice_ = !code ? "A valid local peer ID and certificate are required"
-                    : copy_(*code) ? "Pairing code copied" : ClipboardController::kWriteFailed;
-            }, ButtonRole::Primary),
-            Field("Local peer ID", config.local_id),
-            Field("Display name", config.display_name),
-            Field("Local certificate PEM path", config.certificate),
-            Field("Local private key PEM path", config.private_key),
-            Renderer([this] {
-                return paragraph(fingerprint_.empty() ? "SHA-256 fingerprint unavailable" : fingerprint_);
-            }),
-        }));
         body_.push_back(Container::Vertical({
             Field("Peer IPv4 address or IPv4:port (default 53317)", config.localsend_peer_endpoint),
             Field("Discovery UDP port (default 53317)", config.localsend_udp_port),
@@ -217,9 +151,6 @@ public:
         tabs_row_ = Container::Horizontal(tabs_);
         body_tab_ = Container::Tab(body_, &selected_tab_);
         footer_tab_ = Container::Tab({
-            Renderer([] { return emptyElement(); }),
-            Renderer([] { return emptyElement(); }),
-            Container::Horizontal({refresh_fingerprint_, copy_fingerprint_}),
             Renderer([] { return emptyElement(); }),
             Container::Horizontal({refresh_diagnostics_, copy_ip_, use_ip_, test_discovery_, copy_diagnostics_, troubleshoot_}),
         }, &selected_tab_);
@@ -591,29 +522,6 @@ private:
             std::vector<std::pair<const char*, const char*>> fields;
         };
         static const Help help[] = {
-            {"Connections", {
-                {"Pair peer", "Paste the code copied directly from the other device's Identity tab. Both devices must save each other's code before starting TextLT."},
-                {"Discovered peers", "Lists TextLT devices seen on your LAN. Use selected peer ID copies the highlighted ID into the field below."},
-                {"Trusted discovery peer ID", "The peer's Local peer ID. Use it to connect by discovery instead of entering a manual address and port."},
-                {"Manual peer IPv4 address", "The target device's non-loopback IPv4 address. Leave it blank when using discovery."},
-                {"Manual peer port", "The target's TextLT listen port. Defaults to 53327. Clear the peer IPv4 address to use discovery."},
-                {"Expected peer SHA-256 fingerprint", "Enter the fingerprint you verified directly with the peer. Start networking again to apply connection changes."},
-            }},
-            {"Network", {
-                {"Listen IPv4 address", "The local IPv4 address accepting TextLT connections. The detected address appears above this input."},
-                {"Listen port", "The local TextLT TCP port defaults to 53327. Set it to 0 to run without a native listener."},
-                {"Enable LAN discovery", "Find TextLT peers on the LAN. A TLS listener with a local ID and display name also advertises itself."},
-                {"Discovery interface IPv4 address", "The local LAN adapter address used for multicast. Leave it blank to use the listen address."},
-                {"Apply settings", "Start TextLT in the left column. Restart TextLT there after editing settings for a running provider."},
-            }},
-            {"Identity", {
-                {"Copy pairing code", "Share this code directly with the device you want to pair. It contains your local peer ID and public certificate fingerprint."},
-                {"Local peer ID", "Choose a unique ID for native TextLT discovery. TextLT advertises it when LAN discovery is enabled and a TLS listener and display name are configured. LocalSend uses its own certificate fingerprint."},
-                {"Display name", "The name peers see in their Connections list."},
-                {"Local certificate PEM path", "The certificate your TextLT peers verify."},
-                {"Local private key PEM path", "The private key matching that certificate. Keep it on this device."},
-                {"Read / Copy fingerprint", "Read the certificate's SHA-256 fingerprint and copy it for independent verification with a peer."},
-            }},
             {"LocalSend", {
                 {"Peer address", "Enter the peer's IPv4 address or IPv4:port. Start LocalSend and choose Connect by IP in the left column. The peer must have HTTPS enabled."},
                 {"LocalSend alias", "The name shown to other LocalSend devices."},
@@ -684,7 +592,6 @@ private:
     void SelectTab(int tab) {
         selected_tab_ = tab;
         notice_.clear();
-        if (tab == static_cast<int>(ConnectSettingsTab::Identity)) RefreshFingerprint();
         if (ShowingDiagnostics()) {
             selected_address_ = 0;
             selected_ip_.clear();
@@ -696,18 +603,6 @@ private:
 
     void SaveSettings() {
         notice_ = workspace_.SaveSettings() ? std::string{} : "Could not save Connect settings";
-    }
-
-    void UsePeer() {
-        if (selected_peer_ < 0 || static_cast<std::size_t>(selected_peer_) >= peers_.size()) return;
-        auto& config = workspace_.Configuration();
-        const auto& id = peers_[selected_peer_].first;
-        if (config.peer_id != id) config.peer_fingerprint.clear();
-        config.peer_id = id;
-        config.peer_ip.clear();
-        notice_ = workspace_.SaveSettings()
-            ? "Enter the independently verified peer fingerprint. Start TextLT in the left column to apply it."
-            : "Could not save Connect settings";
     }
 
     void CycleFocus(int delta) {
@@ -932,11 +827,6 @@ private:
         return summary;
     }
 
-    void RefreshFingerprint() {
-        fingerprint_ = connect::TextLTCertificateFingerprint(
-            workspace_.Configuration().certificate).value_or("");
-    }
-
     const Theme& theme_;
     connect_ui::ConnectWorkspace& workspace_;
     std::function<bool(const std::string&)> copy_;
@@ -947,20 +837,17 @@ private:
     bool wizard_native_ = false;
     std::optional<ForwardEndpoint> wizard_endpoint_;
     std::string wizard_notice_;
-    int selected_peer_ = 0;
     int selected_address_ = 0;
     std::string selected_ip_;
     std::vector<connect_ui::DiagnosticAddress> diagnostic_rows_;
     std::vector<std::string> diagnostic_labels_;
     Component diagnostic_menu_;
-    std::vector<std::pair<std::string, std::string>> peers_;
-    std::vector<std::string> peer_labels_;
-    std::string notice_, fingerprint_, pairing_code_;
+    std::string notice_;
     Components tabs_, body_;
-    Component tree_, tabs_row_, body_tab_, footer_tab_, peer_menu_, peer_box_, use_peer_;
+    Component tree_, tabs_row_, body_tab_, footer_tab_;
     Component refresh_diagnostics_, copy_ip_, use_ip_, test_discovery_, copy_diagnostics_;
     Component troubleshoot_, wizard_actions_, copy_wizard_command_, close_wizard_;
-    Component close_, refresh_fingerprint_, copy_fingerprint_, info_, close_info_;
+    Component close_, info_, close_info_;
 };
 
 void ConnectSettingsModal::Configure(const Theme& theme, connect_ui::ConnectWorkspace& workspace,

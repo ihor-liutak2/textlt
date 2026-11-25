@@ -29,7 +29,7 @@ std::string RandomSuffix() {
     return suffix;
 }
 
-void GenerateIdentity(const fs::path& path, const char* common_name) {
+bool GenerateIdentity(const fs::path& path, const char* common_name) {
     std::error_code error;
     if (!path.parent_path().empty()) fs::create_directories(path.parent_path(), error);
     if (error) IdentityError();
@@ -82,6 +82,7 @@ void GenerateIdentity(const fs::path& path, const char* common_name) {
 #endif
     fs::create_hard_link(temporary, path, error);
     if (error && error != std::errc::file_exists) IdentityError();
+    return !error;
 }
 
 } // namespace
@@ -94,6 +95,15 @@ bool EnsureIdentityFile(const fs::path& path, const char* common_name) {
     } catch (const std::exception&) {
         return false;
     }
+}
+
+std::optional<fs::path> CreateIdentityFile(const fs::path& directory, const char* common_name) {
+    try {
+        auto path = directory / ("textlt-identity-" + RandomSuffix() + ".pem");
+        if (GenerateIdentity(path, common_name)) return path;
+    } catch (const std::exception&) {
+    }
+    return {};
 }
 
 } // namespace textlt::connect::detail

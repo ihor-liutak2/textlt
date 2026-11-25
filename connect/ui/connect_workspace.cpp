@@ -84,14 +84,17 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
                                    WorkspaceTabs::Callbacks workspaces,
                                    std::function<void()> pick_file,
                                    std::function<std::filesystem::path()> downloads,
-                                   std::filesystem::path localsend_identity)
+                                   std::filesystem::path localsend_identity,
+                                   std::function<void()> open_textlt_config)
     : theme_(theme), workspace_tabs_(std::move(workspaces)), redraw_(std::move(redraw)),
       pick_file_(std::move(pick_file)), downloads_(std::move(downloads)),
       localsend_identity_(std::move(localsend_identity)) {
     LoadSettings();
+    LoadNativeConnections();
     navigator_ = CatchEvent(Renderer([](bool) { return emptyElement(); }),
                             [this](Event event) { return NavigatorEvent(event); });
     toggle_native_ = ProviderToggle(native_running_, [this] { ToggleNative(); });
+    textlt_config_ = FlatAction("TextLT Config", ButtonRole::Utility, std::move(open_textlt_config));
     toggle_localsend_ = ProviderToggle(localsend_runtime_.listening, [this] { ToggleLocalSend(); });
     auto refresh_local = ButtonOption::Simple();
     refresh_local.on_click = [this] { RefreshLocalSendPeers(); };
@@ -140,6 +143,7 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
     Add(cancel_transfer_);
     Add(navigator_);
     Add(toggle_native_);
+    Add(textlt_config_);
     Add(toggle_localsend_);
     Add(refresh_localsend_);
     Add(connect_by_ip_);
@@ -181,14 +185,6 @@ ConnectWorkspace::~ConnectWorkspace() {
     Stop();
 }
 
-std::vector<std::pair<std::string, std::string>> ConnectWorkspace::DiscoveredPeers() const {
-    std::vector<std::pair<std::string, std::string>> peers;
-    for (const auto& [key, chat] : conversations_) {
-        if (key.first == kTextLTProviderId && chat.online && chat.protocol) peers.emplace_back(key.second, chat.name);
-    }
-    return peers;
-}
-
 void ConnectWorkspace::StartNative() {
     const auto listen_port = Port(settings_.listen_port.empty() ? kDefaultNativePort : settings_.listen_port);
     const auto peer_port = settings_.peer_ip.empty() ? std::optional<std::uint16_t>{0} :
@@ -198,7 +194,7 @@ void ConnectWorkspace::StartNative() {
         return;
     }
     if (!*listen_port && !*peer_port && !settings_.discovery) {
-        status_ = "Configure a TextLT listener, peer, or LAN discovery in Connect Settings";
+        status_ = "Configure TextLT networking in TextLT Config → Network";
         return;
     }
 
@@ -229,7 +225,7 @@ void ConnectWorkspace::StartNative() {
         options.tls = TextLTTlsOptions{settings_.certificate, settings_.private_key,
                                        settings_.peer_fingerprint};
     } else if (options.listen_port || options.peer_port) {
-        status_ = "Pair a peer in Connect Settings → Connections before starting TextLT";
+        status_ = "Choose a saved peer in TextLT Config → Connections before starting TextLT";
         return;
     }
     if (!settings_.peer_id.empty() && options.tls) options.trusted_discovery_peer_id = settings_.peer_id;
@@ -377,7 +373,7 @@ std::string ConnectWorkspace::ActiveNativeListenAddress() const {
 
 ProviderResult ConnectWorkspace::StartNativeListener() {
     const auto port = Port(settings_.listen_port.empty() ? kDefaultNativePort : settings_.listen_port);
-    if (!port || !*port) return {false, "Set a TCP listen port in Connect Settings → Network first."};
+    if (!port || !*port) return {false, "Set a TCP listen port in TextLT Config → Network first."};
     if (!native_running_) StartNative();
     if (!ActiveNativeListenPort().empty()) return {true, {}};
     return {false, native_running_ ? "Stop TextLT in the sidebar and start it with the new listen settings." : status_};
@@ -465,9 +461,10 @@ void ConnectWorkspace::Select(const PeerKey& key) {
     }
     const bool first = !selected_;
     selected_ = key;
-    if (!first) draft_ = Selected()->draft;
+    auto& selected_chat = Get({key.first, key.second});
+    if (!first) draft_ = selected_chat.draft;
     cursor_ = static_cast<int>(draft_.size());
-    pin_ = Selected()->pin;
+    pin_ = selected_chat.pin;
 }
 
 void ConnectWorkspace::Send() {
@@ -610,24 +607,45 @@ void ConnectWorkspace::RetryPin() {
 void ConnectWorkspace::Decide(bool accept) {
     auto* chat = Selected();
     if (!Running() || !chat || !chat->offer) return;
-    const auto& id = chat->offer->identity;
+    const PeerKey peer{chat->offer->identity.peer.provider_id, chat->offer->identity.peer.peer_id};
+    const bool was_auto_accepted = auto_accept_peers_.count(peer) != 0;
+    const auto result = ResolveOffer(*chat, accept, accept && !was_auto_accepted);
+    if (!accept) {
+        status_ = result.accepted ? "Offer declined" : result.reason;
+    } else if (result.accepted && !was_auto_accepted) {
+        status_ = auto_accept_peers_.count(peer)
+            ? "Offer accepted. Future requests from this app will be accepted automatically."
+            : "Offer accepted, but the automatic-accept preference could not be saved.";
+    } else {
+        status_ = result.accepted ? "Offer accepted" : result.reason;
+    }
+}
+
+ProviderResult ConnectWorkspace::ResolveOffer(Conversation& chat, bool accept, bool remember_app) {
+    if (!chat.offer) return {false, "This offer is no longer available."};
+    const auto& id = chat.offer->identity;
     auto* provider = service_->FindProvider(id.peer.provider_id);
-    if (!provider) return;
+    if (!provider) return {false, "The connection is no longer available."};
     ProviderResult result;
     if (!accept) {
         result = provider->Decline(id, "Declined by recipient");
-    } else if (chat->offer->metadata.type_id == kFileTypeId) {
-        result = provider->AcceptFile(id, [downloads = downloads_, name = *chat->offer->metadata.display_name] {
+    } else if (chat.offer->metadata.type_id == kFileTypeId) {
+        result = provider->AcceptFile(id, [downloads = downloads_, name = *chat.offer->metadata.display_name] {
             return MakeDownloadDestination(downloads(), name);
         });
     } else {
         result = provider->Accept(id, nullptr);
     }
-    status_ = result.accepted ? (accept ? "Offer accepted" : "Offer declined") : result.reason;
-    if (result.accepted) {
-        chat->offer.reset();
-        composer_->TakeFocus();
+    if (result.accepted && accept && remember_app) {
+        const PeerKey peer{id.peer.provider_id, id.peer.peer_id};
+        auto_accept_peers_.insert(peer);
+        if (!SaveSettings()) auto_accept_peers_.erase(peer);
     }
+    if (result.accepted) {
+        chat.offer.reset();
+        if (Selected() == &chat) composer_->TakeFocus();
+    }
+    return result;
 }
 
 void ConnectWorkspace::Handle(const Peer& peer) {
@@ -680,6 +698,11 @@ void ConnectWorkspace::Handle(const IncomingOffer& offer) {
     status_ = file ? "Incoming file offer from " + chat.name
         : offer.metadata.schema_version ? "Incoming item: " + offer.metadata.display_name.value_or(offer.metadata.type_id)
                                         : "Incoming text offer from " + chat.name;
+    const PeerKey peer{offer.identity.peer.provider_id, offer.identity.peer.peer_id};
+    if (auto_accept_peers_.count(peer)) {
+        const auto result = ResolveOffer(chat, true, false);
+        status_ = result.accepted ? "Accepted automatically from " + chat.name : result.reason;
+    }
 }
 
 void ConnectWorkspace::Handle(const ReceivedContent& content) {
@@ -814,7 +837,7 @@ bool ConnectWorkspace::OnEvent(Event event) {
     }
     if (!Focused()) return false;
     if (event == Event::Tab || event == Event::TabReverse) {
-        Components choices{navigator_, toggle_native_, toggle_localsend_};
+        Components choices{navigator_, toggle_native_, textlt_config_, toggle_localsend_};
         if (localsend_runtime_.listening) choices.push_back(refresh_localsend_);
         choices.push_back(connect_by_ip_);
         choices.push_back(composer_);
@@ -848,7 +871,7 @@ bool ConnectWorkspace::OnEvent(Event event) {
 
 bool ConnectWorkspace::NavigatorEvent(Event event) {
     if (event.is_mouse()) {
-        if (toggle_native_->OnEvent(event) || toggle_localsend_->OnEvent(event) ||
+        if (toggle_native_->OnEvent(event) || textlt_config_->OnEvent(event) || toggle_localsend_->OnEvent(event) ||
             (localsend_runtime_.listening && refresh_localsend_->OnEvent(event)) ||
             connect_by_ip_->OnEvent(event)) return true;
         if (Pressed(event)) {
@@ -890,13 +913,63 @@ Element ConnectWorkspace::RenderNavigator(int width, bool show_workspace_tabs) {
         auto rendered = component->Render();
         return component->Focused() ? rendered | focus : rendered;
     };
-    const bool controls_focused = toggle_native_->Focused() || toggle_localsend_->Focused() ||
+    const bool controls_focused = toggle_native_->Focused() || textlt_config_->Focused() || toggle_localsend_->Focused() ||
         refresh_localsend_->Focused() || connect_by_ip_->Focused();
     Elements rows;
+    const auto append_online_apps = [this, &rows, width, controls_focused](const std::string& provider_id,
+                                                                          bool running) {
+        rows.push_back(text(" "));
+        rows.push_back(text("Online apps") | bold);
+        std::vector<std::pair<PeerKey, std::string>> online;
+        if (provider_id == kLocalSendProviderId) {
+            if (auto* provider = FindLocalSendProvider()) {
+                for (const auto& peer : provider->OnlinePeers()) {
+                    const PeerKey key{peer.identity.provider_id, peer.identity.peer_id};
+                    auto& chat = Get({key.first, key.second});
+                    chat.name = peer.display_name;
+                    chat.online = peer.online;
+                    chat.protocol = peer.protocol_version;
+                    chat.supports_files = std::any_of(peer.capabilities.begin(), peer.capabilities.end(),
+                        [](const Capability& capability) { return capability.type_id == kFileTypeId; });
+                    online.emplace_back(key, peer.display_name);
+                }
+            }
+        } else {
+            for (const auto& [key, chat] : conversations_) {
+                if (key.first == provider_id && chat.online && chat.protocol) online.emplace_back(key, chat.name);
+            }
+        }
+        if (online.empty()) {
+            const auto app = provider_id == kTextLTProviderId ? "TextLT" : "LocalSend";
+            rows.push_back(text(running ? "No apps online" : std::string("Start ") + app + " to find nearby apps") | dim);
+            return;
+        }
+        for (const auto& [key, name] : online) {
+            peer_rows_.emplace_back(key, Box{});
+            const int row_width = std::max(1, width - 1);
+            const int status_width = std::min(7, row_width);
+            const int name_width = std::max(1, row_width - status_width);
+            Element row = hbox({
+                text(VisibleLabel(" " + name, 0, name_width)) | size(WIDTH, EQUAL, name_width),
+                text(" Online") | size(WIDTH, EQUAL, status_width),
+            });
+            if (selected_ == key) {
+                row = row | inverted;
+                if (!controls_focused) row = row | focus;
+            }
+            rows.push_back(row | reflect(peer_rows_.back().second));
+        }
+    };
     for (const auto& provider : providers_) {
+        if (provider == kLocalSendProviderId) {
+            rows.push_back(text(" "));
+            rows.push_back(separator() | color(theme_.gutter));
+        }
         rows.push_back(text(provider == kTextLTProviderId ? "TextLT" : provider == kLocalSendProviderId ? "LocalSend" : provider) | bold);
         if (provider == kTextLTProviderId) {
             rows.push_back(hbox({button(toggle_native_), filler()}));
+            rows.push_back(hbox({button(textlt_config_), filler()}));
+            append_online_apps(kTextLTProviderId, native_running_);
         } else if (provider == kLocalSendProviderId) {
             auto toggle = button(toggle_localsend_);
             auto refresh = button(refresh_localsend_);
@@ -907,9 +980,12 @@ Element ConnectWorkspace::RenderNavigator(int width, bool show_workspace_tabs) {
                 rows.push_back(hbox({std::move(refresh), filler()}));
             }
             rows.push_back(hbox({button(connect_by_ip_), filler()}));
+            append_online_apps(kLocalSendProviderId, localsend_runtime_.listening);
         }
         for (const auto& [key, chat] : conversations_) {
             if (key.first != provider) continue;
+            if ((provider == kTextLTProviderId || provider == kLocalSendProviderId) &&
+                chat.online && chat.protocol) continue;
             peer_rows_.emplace_back(key, Box{});
             std::string detail = chat.offer ? "Offer" : chat.online
                 ? (chat.configured ? "Online" : "Discovered") : chat.configured ? "Configured" : "Offline";
@@ -974,6 +1050,7 @@ Element ConnectWorkspace::RenderChat(int width) {
                 ? "Incoming item: " + chat->offer->metadata.display_name.value_or(chat->offer->metadata.type_id)
                 : chat->offer->metadata.type_id == kFileTypeId ? "Incoming file offer" : "Incoming text offer") | flex, accept_->Render(), text(" "), decline_->Render()
         }));
+        body.push_back(text("Accepting once remembers this app and accepts its future requests automatically.") | dim);
     }
     body.push_back(separator() | color(theme_.gutter));
     body.push_back(hbox({composer_->Render() | flex, text(" "), send_->Render()}));

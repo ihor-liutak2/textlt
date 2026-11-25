@@ -5,6 +5,7 @@
 #include <functional>
 #include <map>
 #include <mutex>
+#include <set>
 #include <thread>
 
 #include "ftxui/component/component_base.hpp"
@@ -45,11 +46,19 @@ struct Settings {
     std::string localsend_https_port = kDefaultLocalSendPort;
 };
 
+struct NativeConnectionProfile {
+    std::string name;
+    std::string peer_id;
+    std::string address;
+    std::uint16_t port = 0;
+    std::string fingerprint;
+};
+
 class ConnectWorkspace : public ftxui::ComponentBase {
 public:
     ConnectWorkspace(const Theme& theme, std::function<void()> redraw, WorkspaceTabs::Callbacks workspaces,
                      std::function<void()> pick_file, std::function<std::filesystem::path()> downloads,
-                     std::filesystem::path localsend_identity);
+                     std::filesystem::path localsend_identity, std::function<void()> open_textlt_config);
     ~ConnectWorkspace() override;
 
     ftxui::Element OnRender() override;
@@ -60,7 +69,16 @@ public:
 
     Settings& Configuration() { return settings_; }
     bool SaveSettings();
-    connect::ProviderResult PairNativePeer(std::string_view code);
+    NativeConnectionProfile NativeIdentity() const;
+    connect::ProviderResult SaveNativeDeviceName(std::string_view name);
+    connect::ProviderResult SaveNativePeerId(std::string_view peer_id);
+    connect::ProviderResult SaveNativeIdentityPaths(std::string certificate, std::string private_key);
+    connect::ProviderResult RegenerateNativeIdentity(std::string_view name);
+    connect::ProviderResult ExportNativeIdentity(std::string_view address, std::string_view port,
+                                                  std::string& json) const;
+    const std::vector<NativeConnectionProfile>& NativeConnections() const { return native_connections_; }
+    connect::ProviderResult ImportNativeConnection(std::string_view json, std::size_t& index);
+    connect::ProviderResult ActivateNativeConnection(std::size_t index);
     void RefreshLocalIPv4();
     void RefreshDiagnostics(bool test_localsend_ports = false);
     connect::ProviderResult TestLocalSendDiscovery();
@@ -76,7 +94,6 @@ public:
     const std::string& LocalIPv4() const { return local_ipv4_; }
     const std::string& Status() const { return status_; }
     bool Running() const { return native_running_ || localsend_runtime_.listening; }
-    std::vector<std::pair<std::string, std::string>> DiscoveredPeers() const;
     void Stop();
     void DrainEvents();
     bool Paste(ftxui::Event event);
@@ -118,6 +135,7 @@ private:
     Conversation* Selected();
     void Select(const PeerKey& key);
     void LoadSettings();
+    void LoadNativeConnections();
     ftxui::Component FlatAction(std::string label, ButtonRole role, std::function<void()> action) const;
     void StartNative();
     void ToggleNative();
@@ -138,6 +156,7 @@ private:
     bool QueueFile(std::string name, std::uint64_t size, std::unique_ptr<std::istream> input, std::string& error);
     void QueueProviderEvent(connect::ProviderEvent event);
     void Decide(bool accept);
+    connect::ProviderResult ResolveOffer(Conversation& chat, bool accept, bool remember_app);
     void Handle(const connect::Peer& peer);
     void Handle(const connect::PeerCapabilities& peer);
     void InitializeStructuredControls();
@@ -166,6 +185,7 @@ private:
     std::string local_ipv4_;
     Settings settings_;
     Settings active_settings_;
+    std::vector<NativeConnectionProfile> native_connections_;
     mutable std::mutex diagnostics_mutex_;
     NetworkDiagnostics diagnostics_;
     std::atomic<bool> diagnostics_cancelled_{false};
@@ -181,6 +201,7 @@ private:
     std::mutex event_mutex_;
     std::deque<connect::ProviderEvent> events_;
     std::map<PeerKey, Conversation> conversations_;
+    std::set<PeerKey> auto_accept_peers_;
     std::optional<PeerKey> selected_;
     std::string draft_;
     int cursor_ = 0;
@@ -192,7 +213,7 @@ private:
     ftxui::Box history_box_;
     int history_rows_ = 0;
     ftxui::Component navigator_, composer_, send_, accept_, decline_, send_file_, cancel_transfer_, draft_file_, pin_input_, retry_pin_;
-    ftxui::Component toggle_native_, toggle_localsend_, refresh_localsend_, connect_by_ip_;
+    ftxui::Component toggle_native_, textlt_config_, toggle_localsend_, refresh_localsend_, connect_by_ip_;
     ftxui::Component active_;
 
     std::optional<std::pair<connect::TransferMetadata, connect::StructuredPayload>> pending_share_;

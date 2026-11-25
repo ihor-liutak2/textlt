@@ -199,17 +199,27 @@ std::optional<std::string> TextLTCertificateFingerprint(const std::string& certi
     return detail::FormatFingerprint(digest);
 }
 
-std::optional<std::string> EnsureTextLTIdentity(const std::filesystem::path& pem) {
-    if (!detail::EnsureIdentityFile(pem, "TextLT")) return {};
-    const auto path = pem.u8string();
-    auto fingerprint = TextLTCertificateFingerprint(path);
+std::optional<std::string> TextLTIdentityFingerprint(const std::string& certificate_pem,
+                                                     const std::string& private_key_pem) {
+    if (certificate_pem.find('\0') != std::string::npos || private_key_pem.find('\0') != std::string::npos) return {};
+    auto fingerprint = TextLTCertificateFingerprint(certificate_pem);
     if (!fingerprint) return {};
     try {
-        const detail::TlsContext identity({path, path, *fingerprint});
+        const detail::TlsContext identity({certificate_pem, private_key_pem, *fingerprint});
     } catch (const detail::TlsError&) {
         return {};
     }
     return fingerprint;
+}
+
+std::optional<std::string> EnsureTextLTIdentity(const std::filesystem::path& pem) {
+    if (!detail::EnsureIdentityFile(pem, "TextLT")) return {};
+    const auto path = pem.u8string();
+    return TextLTIdentityFingerprint(path, path);
+}
+
+std::optional<std::filesystem::path> CreateTextLTIdentity(const std::filesystem::path& directory) {
+    return detail::CreateIdentityFile(directory, "TextLT");
 }
 
 std::optional<std::string> MakeTextLTPairingCode(std::string_view peer_id, std::string_view fingerprint) {

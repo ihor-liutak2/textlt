@@ -14,7 +14,7 @@ class ModalWindow;
 class ConnectSettingsContent;
 struct Theme;
 
-enum class ConnectSettingsTab { Connections, Network, Identity, LocalSend, Diagnostics };
+enum class ConnectSettingsTab { LocalSend, Diagnostics };
 
 class ConnectSettingsModal {
 public:

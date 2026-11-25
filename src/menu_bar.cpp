@@ -172,9 +172,8 @@ MenuBarComponent::MenuBarComponent(
               {" Send via Connect… ", "actions.share_connect"},
           },
           {
-              {" Connections... ", "connect.connections"},
-              {" Network... ", "connect.network"},
-              {" Identity... ", "connect.identity"},
+              {" TextLT Config... ", "connect.textlt_config"},
+              {" LocalSend... ", "connect.localsend"},
               {" Diagnostics... ", "connect.diagnostics"},
           },
           {

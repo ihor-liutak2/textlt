@@ -212,6 +212,9 @@ ftxui::Element TextltApp::Render() {
     if (connect_settings_modal_.IsOpen()) {
         layers.push_back(connect_settings_modal_.View()->Render() | clear_under | center);
     }
+    if (textlt_config_modal_.IsOpen()) {
+        layers.push_back(textlt_config_modal_.View()->Render() | clear_under | center);
+    }
     if (theme_dialog_.IsOpen()) {
         layers.push_back(theme_dialog_.View()->Render() | clear_under | center);
     }
@@ -327,6 +330,7 @@ bool TextltApp::ActiveModalIsOpen() const {
         case UiLayer::Git: return git_modal_.IsOpen();
         case UiLayer::GitSettings: return git_settings_modal_.IsOpen();
         case UiLayer::ConnectSettings: return connect_settings_modal_.IsOpen();
+        case UiLayer::TextLTConfig: return textlt_config_modal_.IsOpen();
         case UiLayer::Tts: return tts_modal_.IsOpen();
         case UiLayer::ViewLayout: return view_layout_modal_.IsOpen();
         case UiLayer::DistractionOptions: return distraction_options_modal_.IsOpen();

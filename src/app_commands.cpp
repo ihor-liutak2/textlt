@@ -176,12 +176,10 @@ void TextltApp::InitializeCommands() {
     add("notes.numbered_list", "Numbered List", "Notes", "", [this] { CommandNotesNumberedList(); });
     add("notes.checklist", "Checklist", "Notes", "", [this] { CommandNotesChecklist(); });
     add("connect.open", "Connect", "Options", "", [this] { ShowConnectWorkspace(); });
-    add("connect.connections", "Connections", "Connect", "",
-        [this] { OpenConnectSettingsModal(ConnectSettingsTab::Connections); });
-    add("connect.network", "Network", "Connect", "",
-        [this] { OpenConnectSettingsModal(ConnectSettingsTab::Network); });
-    add("connect.identity", "Identity", "Connect", "",
-        [this] { OpenConnectSettingsModal(ConnectSettingsTab::Identity); });
+    add("connect.textlt_config", "TextLT Config", "Connect", "",
+        [this] { OpenTextLTConfigModal(); });
+    add("connect.localsend", "LocalSend", "Connect", "",
+        [this] { OpenConnectSettingsModal(ConnectSettingsTab::LocalSend); });
     add("connect.diagnostics", "Diagnostics", "Connect", "",
         [this] { OpenConnectSettingsModal(ConnectSettingsTab::Diagnostics); });
     add("actions.open", "Actions", "Options", "", [this] { ShowActionsWorkspace(); });

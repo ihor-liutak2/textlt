@@ -207,12 +207,14 @@ add_subdirectory(connect)
 add_executable(textlt
   connect/ui/connect_workspace.cpp
   connect/ui/connect_settings.cpp
+  connect/ui/connect_profiles.cpp
   connect/ui/network_diagnostics.cpp
   connect/ui/connect_structured.cpp
   connect/ui/download_destination.cpp
   src/app_connect.cpp
   src/connect_content.cpp
   src/modals/modal_connect_settings.cpp
+  src/modals/modal_textlt_config.cpp
   src/app.cpp
   src/app_command_registry.cpp
   src/app_event_dispatcher.cpp

@@ -46,6 +46,9 @@ struct TextLTProviderOptions {
 
 // Reads a PEM leaf certificate and returns its SHA-256 fingerprint as colon-separated hex.
 std::optional<std::string> TextLTCertificateFingerprint(const std::string& certificate_pem);
+// Returns the fingerprint only when the certificate and private key load and match.
+std::optional<std::string> TextLTIdentityFingerprint(const std::string& certificate_pem,
+                                                     const std::string& private_key_pem);
 
 struct TextLTPairingIdentity {
     std::string peer_id;
@@ -53,6 +56,7 @@ struct TextLTPairingIdentity {
 };
 
 std::optional<std::string> EnsureTextLTIdentity(const std::filesystem::path& pem);
+std::optional<std::filesystem::path> CreateTextLTIdentity(const std::filesystem::path& directory);
 std::optional<std::string> MakeTextLTPairingCode(std::string_view peer_id, std::string_view fingerprint);
 std::optional<TextLTPairingIdentity> ParseTextLTPairingCode(std::string_view code);
 

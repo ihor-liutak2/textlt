@@ -545,7 +545,8 @@ TextltApp::TextltApp()
         },
         [this] { OpenFilesModal(FilesModalMode::SendConnectFile); },
         [] { return FileManager::UserDownloadsDirectory(false); },
-        EditorConfig::DefaultConfigPath().parent_path() / "localsend.pem");
+        EditorConfig::DefaultConfigPath().parent_path() / "localsend.pem",
+        [this] { OpenTextLTConfigModal(); });
     connect_workspace_->RegisterContentHandler(MakeNoteConnectHandler(*notes_component));
     connect_workspace_->RegisterContentHandler(MakeActionConnectHandler(
         *std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_)));
@@ -623,6 +624,9 @@ TextltApp::TextltApp()
     connect_settings_modal_.Configure(current_theme_, *connect_workspace_,
         [this](const std::string& text) { return clipboard_controller_.WriteText(text); },
         [this] { CloseConnectSettingsModal(); });
+    textlt_config_modal_.Configure(current_theme_, *connect_workspace_,
+        [this](const std::string& text) { return clipboard_controller_.WriteText(text); },
+        [this] { CloseTextLTConfigModal(); });
 
     root_container_ = ftxui::Container::Tab({
         main_container_,
@@ -651,6 +655,7 @@ TextltApp::TextltApp()
         rename_project_popup_,
         remove_project_popup_,
         connect_settings_modal_.View(),
+        textlt_config_modal_.View(),
     }, &active_layer_index_);
 
     renderer_ = ftxui::Renderer(root_container_, [this] { return Render(); });

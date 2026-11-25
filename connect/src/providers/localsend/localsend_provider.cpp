@@ -348,6 +348,15 @@ public:
         return discovery_status_;
     }
 
+    std::vector<Peer> OnlinePeers() const override {
+        std::lock_guard lock(mutex_);
+        std::vector<Peer> online;
+        for (const auto& [_, peer] : peers_) {
+            if (peer.peer.online) online.push_back(peer.peer);
+        }
+        return online;
+    }
+
     ProviderResult Send(OutgoingTransfer transfer) override {
         auto& metadata = transfer.metadata;
         if (transfer.identity.peer.provider_id != kLocalSendProviderId || metadata.schema_version) {

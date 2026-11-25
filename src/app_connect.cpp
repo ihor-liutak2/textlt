@@ -88,4 +88,18 @@ void TextltApp::CloseConnectSettingsModal() {
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
+void TextltApp::OpenTextLTConfigModal() {
+    if (workspace_mode_ != WorkspaceMode::Connect) return;
+    CloseDropdown();
+    SetActiveLayer(UiLayer::TextLTConfig);
+    textlt_config_modal_.Open();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::CloseTextLTConfigModal() {
+    textlt_config_modal_.Close();
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
 } // namespace textlt

@@ -135,31 +135,14 @@ void ConnectWorkspace::LoadSettings() {
     }
 }
 
-connect::ProviderResult ConnectWorkspace::PairNativePeer(std::string_view code) {
-    const auto peer = connect::ParseTextLTPairingCode(code);
-    if (!peer) return {false, "Paste a valid pairing code copied from the other TextLT device"};
-    const auto local_fingerprint = connect::TextLTCertificateFingerprint(settings_.certificate);
-    if (!local_fingerprint || settings_.private_key.empty()) return {false, "Configure the local TextLT identity first"};
-    if (peer->peer_id == settings_.local_id || peer->fingerprint == *local_fingerprint) {
-        return {false, "Use the other device's pairing code"};
-    }
-    auto previous = settings_;
-    settings_.peer_id = peer->peer_id;
-    settings_.peer_fingerprint = peer->fingerprint;
-    settings_.peer_ip.clear();
-    settings_.discovery = true;
-    if (!SaveSettings()) {
-        settings_ = std::move(previous);
-        return {false, "Could not save the paired peer"};
-    }
-    return {true, native_running_ ? "Peer saved. Stop and start TextLT in the left column."
-                                  : "Peer saved. Start TextLT in the left column when both devices have paired."};
-}
-
 bool ConnectWorkspace::SaveSettings() {
     auto stored = Json::object();
     for (const auto& [key, field] : kTextSettings) stored[key] = settings_.*field;
     stored["discovery"] = settings_.discovery;
+    stored["auto_accept_peers"] = Json::array();
+    for (const auto& peer : auto_accept_peers_) {
+        stored["auto_accept_peers"].push_back({{"provider", peer.first}, {"peer_id", peer.second}});
+    }
     return WriteJsonAtomically(localsend_identity_.parent_path() / "connect-settings.json", stored, true);
 }
 
