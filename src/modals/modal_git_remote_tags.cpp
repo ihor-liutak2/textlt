@@ -4,9 +4,28 @@
 #include <sstream>
 
 #include "ftxui/dom/elements.hpp"
+#include "ftxui/dom/node.hpp"
 
 namespace textlt {
 namespace {
+
+class TagColumn final : public ftxui::Node {
+public:
+    explicit TagColumn(ftxui::Element content)
+        : Node(ftxui::unpack(std::move(content))) {}
+
+private:
+    void ComputeRequirement() override {
+        Node::ComputeRequirement();
+        // Give every column the same base width before hbox distributes space.
+        requirement_.min_x = 0;
+    }
+
+    void SetBox(ftxui::Box box) override {
+        Node::SetBox(box);
+        children_.front()->SetBox(box);
+    }
+};
 
 std::string TrimCopy(std::string value) {
     while (!value.empty() &&
@@ -92,6 +111,7 @@ void GitModalContent::RefreshTags() {
         return;
     }
     tags_ = git_manager_->GetTags();
+    selected_tag_ = 0;
     RebuildTagLabels();
 }
 
@@ -247,6 +267,30 @@ void GitModalContent::RebuildTagLabels() {
     if (selected_tag_ < 0) {
         selected_tag_ = 0;
     }
+    const size_t rows = tag_labels_.size() / tag_column_labels_.size();
+    const size_t extra_rows = tag_labels_.size() % tag_column_labels_.size();
+    size_t offset = 0;
+    for (size_t column = 0; column < tag_column_labels_.size(); ++column) {
+        const size_t count = rows + (column < extra_rows ? 1 : 0);
+        tag_column_offsets_[column] = static_cast<int>(offset);
+        tag_column_labels_[column].assign(
+            tag_labels_.begin() + offset, tag_labels_.begin() + offset + count);
+        offset += count;
+    }
+    tag_column_selection_.fill(0);
+    SelectTag(selected_tag_);
+}
+
+void GitModalContent::SelectTag(int index) {
+    selected_tag_ = index;
+    for (size_t column = 0; column < tag_column_labels_.size(); ++column) {
+        const int row = index - tag_column_offsets_[column];
+        if (row >= 0 && row < static_cast<int>(tag_column_labels_[column].size())) {
+            tag_column_selection_[column] = row;
+            tag_column_menus_container_->SetActiveChild(tag_column_menus_[column]);
+            break;
+        }
+    }
 }
 
 ftxui::Element GitModalContent::RenderRemoteTab() {
@@ -269,11 +313,17 @@ ftxui::Element GitModalContent::RenderRemoteTab() {
 
 ftxui::Element GitModalContent::RenderTagsTab() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    ftxui::Elements columns;
+    if (!tag_labels_.empty()) {
+        for (const auto& menu : tag_column_menus_) {
+            auto viewport = menu->Render() | ftxui::vscroll_indicator | ftxui::yframe;
+            columns.push_back(std::make_shared<TagColumn>(std::move(viewport)) | ftxui::xflex);
+        }
+    }
     ftxui::Element tag_list = tag_labels_.empty()
         ? (ftxui::text("No tags.") | ftxui::color(theme.modal_text_color) |
            ftxui::frame | ftxui::yflex)
-        : (tag_menu_->Render() | ftxui::vscroll_indicator |
-           ftxui::frame | ftxui::yflex);
+        : (ftxui::hbox(std::move(columns)) | ftxui::flex);
     ftxui::Element padded_tag_list = ftxui::vbox({
         ftxui::text(""),
         ftxui::hbox({

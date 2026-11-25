@@ -307,19 +307,46 @@ GitModalContent::GitModalContent(
             return handled;
         });
 
-    ftxui::MenuOption tag_menu_option = ftxui::MenuOption::Vertical();
-    tag_menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
-        const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        ftxui::Element row = ftxui::text(state.label);
-        if (state.focused || state.active) {
-            return row |
-                ftxui::bgcolor(theme.modal_selected_item_bg) |
-                ftxui::color(theme.modal_selected_item_fg) |
-                ftxui::bold;
+    std::vector<ftxui::Component> tag_columns;
+    for (size_t column = 0; column < tag_column_menus_.size(); ++column) {
+        ftxui::MenuOption tag_menu_option = ftxui::MenuOption::Vertical();
+        tag_menu_option.entries_option.transform = [this, column](const ftxui::EntryState& state) {
+            const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+            const int global_index = tag_column_offsets_[column] + state.index;
+            ftxui::Element row = ftxui::text(state.label);
+            if (global_index == selected_tag_) {
+                return row |
+                    ftxui::bgcolor(theme.modal_selected_item_bg) |
+                    ftxui::color(theme.modal_selected_item_fg) |
+                    ftxui::bold;
+            }
+            return row | ftxui::color(theme.modal_text_color);
+        };
+        tag_menu_option.on_change = [this, column] {
+            selected_tag_ = tag_column_offsets_[column] + tag_column_selection_[column];
+        };
+        tag_column_menus_[column] = ftxui::Menu(
+            &tag_column_labels_[column], &tag_column_selection_[column], tag_menu_option);
+        tag_columns.push_back(tag_column_menus_[column]);
+    }
+    tag_column_menus_container_ = ftxui::Container::Horizontal(std::move(tag_columns));
+    auto tag_list_component = ftxui::CatchEvent(tag_column_menus_container_, [this](ftxui::Event event) {
+        if (!tag_column_menus_container_->OnEvent(event)) {
+            return false;
         }
-        return row | ftxui::color(theme.modal_text_color);
-    };
-    tag_menu_ = ftxui::Menu(&tag_labels_, &selected_tag_, tag_menu_option);
+        // A column change or a click on its current row can leave the menu's
+        // local selection unchanged, so the menu may not send on_change.
+        if (!event.is_mouse() || event.mouse().button == ftxui::Mouse::Left) {
+            const auto active_menu = tag_column_menus_container_->ActiveChild();
+            for (size_t column = 0; column < tag_column_menus_.size(); ++column) {
+                if (active_menu == tag_column_menus_[column] && !tag_column_labels_[column].empty()) {
+                    selected_tag_ = tag_column_offsets_[column] + tag_column_selection_[column];
+                    break;
+                }
+            }
+        }
+        return true;
+    });
 
     ftxui::InputOption tag_name_option;
     tag_name_option.multiline = false;
@@ -483,7 +510,7 @@ GitModalContent::GitModalContent(
 
     tags_tab_container_ = ftxui::Container::Vertical({
         tag_filter_input_component_,
-        tag_menu_,
+        tag_list_component,
         tag_name_input_component_,
         tag_message_input_component_,
         ftxui::Container::Horizontal({
@@ -788,7 +815,8 @@ void GitModalContent::FocusTabBody(int tab_index) {
         remote_filter_input_component_->TakeFocus();
     } else if (tab_index == static_cast<int>(Tab::Tags) && tag_filter_input_component_) {
         if (!tag_labels_.empty()) {
-            selected_tag_ = static_cast<int>(tag_labels_.size()) - 1;
+            // Tags are listed newest first, including when a filter is active.
+            SelectTag(0);
         }
         tag_filter_input_component_->TakeFocus();
     } else if (tab_index == static_cast<int>(Tab::Compare) && compare_file_menu_) {

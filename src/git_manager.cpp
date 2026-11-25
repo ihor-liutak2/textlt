@@ -235,7 +235,10 @@ GitManager::CommandResult GitManager::DeleteRemoteBranch(const std::string& remo
 
 std::vector<std::string> GitManager::GetTags() {
     std::vector<std::string> tags;
-    CommandResult result = RunGitCommand({"tag", "--list"});
+    CommandResult result = RunGitCommand({"tag", "--sort=-creatordate", "--list"});
+    if (!result.success()) {
+        result = RunGitCommand({"tag", "--list"});
+    }
     if (!result.success()) {
         return tags;
     }

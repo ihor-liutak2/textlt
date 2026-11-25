@@ -3,6 +3,7 @@
 #include "editor/clipboard_controller.hpp"
 
 #include <atomic>
+#include <array>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -200,6 +201,7 @@ private:
     void RebuildBranchLabels();
     void RebuildRemoteBranchLabels();
     void RebuildTagLabels();
+    void SelectTag(int index);
     void RebuildCommitLabels();
     void RebuildCompareLabels();
     void SplitOutputLines(const std::string& output, std::vector<std::string>* lines) const;
@@ -392,7 +394,11 @@ private:
     ftxui::Component delete_remote_button_;
 
     ftxui::Component tag_filter_input_component_;
-    ftxui::Component tag_menu_;
+    std::array<std::vector<std::string>, 3> tag_column_labels_;
+    std::array<int, 3> tag_column_offsets_{};
+    std::array<int, 3> tag_column_selection_{};
+    std::array<ftxui::Component, 3> tag_column_menus_;
+    ftxui::Component tag_column_menus_container_;
     ftxui::Component tag_name_input_component_;
     ftxui::Component tag_message_input_component_;
     ftxui::Component create_tag_button_;
