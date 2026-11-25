@@ -81,6 +81,15 @@ class Terminal:
     def click(self, text):
         return self.click_at(self.position(text))
 
+    def wait_for(self, text, timeout=5):
+        deadline = time.monotonic() + timeout
+        while not any(text in row for row in self.rows):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            self.read(timeout=remaining)
+        return self.position(text)
+
     def click_at(self, point, button=0):
         return self.send(mouse(button, point) + mouse(button, point, "m"))
 
@@ -159,10 +168,11 @@ def test_editing(term, path, clipboard):
 
 def test_read_only(term, clipboard):
     term.click(" Tools ")
-    term.click(" Git... ")
-    term.click("Compare")
-    term.click("Open side by side")
-    term.position("[RO]")
+    term.click_at(term.wait_for("Git..."))
+    # Opening the Git modal refreshes repository status before its first frame.
+    term.click_at(term.wait_for("Compare"))
+    term.click_at(term.wait_for("Open side by side"))
+    term.wait_for("[RO]")
     # The new pane needs a repaint after its first layout pass.
     term.send(mouse(35, (1, 1)))
     x, y = term.position("left aBc right")
