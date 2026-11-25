@@ -359,7 +359,9 @@ IPv4 address. Announcements trigger an HTTPS registration request with a UDP
 `announce: false` fallback. The provider deduplicates by fingerprint and
 filters its own identity. **Connect by IP** uses HTTPS registration at the
 specified IPv4 address and verifies the returned fingerprint against the
-peer's TLS certificate. TCP receive binding is exclusive and reports bind
+peer's TLS certificate. Transfer requests can arrive through a TCP forward,
+so their source addresses have lower priority than multicast and verified
+HTTPS routes. TCP receive binding is exclusive and reports bind
 errors in the Connect workspace and Diagnostics.
 
 The adapter persists a self-signed certificate and its key in a LocalSend-only
@@ -367,6 +369,8 @@ PEM. Fingerprints are uppercase hex SHA-256 of the DER certificate.
 Outgoing connections verify the selected fingerprint before sending HTTP
 content and provide a client certificate when requested. Incoming HTTPS
 requests with a client certificate must claim that certificate's fingerprint.
+For a discovery registration without a client certificate, the adapter verifies
+the advertised HTTPS listener at the request's source IP before listing the peer.
 An incoming sender without a certificate uses a per-session unverified peer
 identity. Every incoming offer requires approval. Uploads and cancellation
 are bound to the preparing IP address, certificate identity when present,
@@ -376,8 +380,9 @@ and session. Uploads must also present the accepted file ID and its token.
 allows one incoming session and returns tokens only for accepted files.
 `upload` streams into the shared Downloads destination, verifies the declared
 length and any supplied SHA-256, and replies after publication. A checksum
-mismatch returns HTTP 422. Inline text uses one complete UTF-8 preview with
-type `text/plain` or `text` and a limit of 16,384 bytes. Accepted inline
+mismatch returns HTTP 422. Inline text uses a single UTF-8 preview with a
+`text/*` media type or legacy `text` type. Both the declared size and the
+preview must fit within 16,384 bytes. Accepted inline
 text returns 204 directly. A text attachment without preview uses
 `upload`. The inline and certificate rules follow the official
 [preview implementation](https://github.com/localsend/localsend/blob/44f48f1/app/lib/util/message_preview.dart),

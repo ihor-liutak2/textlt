@@ -16,6 +16,14 @@ namespace textlt {
 using namespace ftxui;
 
 class ConnectSettingsContent : public IModalContent {
+    enum TroubleshootStep { ChoosePort, Prepare, CheckWindows, Repair, CheckAgain, TestPeer, WindowsBlocked, PeerBlocked, Done };
+
+    struct ForwardEndpoint {
+        std::string windows_ip;
+        std::string wsl_ip;
+        std::string port;
+    };
+
 public:
     ConnectSettingsContent(const Theme& theme, connect_ui::ConnectWorkspace& workspace,
                            std::function<bool(const std::string&)> copy,
@@ -122,7 +130,7 @@ public:
         }));
         refresh_diagnostics_ = Action("Refresh", [this] {
             notice_.clear();
-            workspace_.RefreshDiagnostics();
+            workspace_.RefreshDiagnostics(true);
         });
         copy_ip_ = Action("Copy IP", [this] {
             if (const auto* row = SelectedAddress()) {
@@ -142,12 +150,69 @@ public:
             const auto* row = SelectedAddress();
             return row && row->can_bind;
         });
-        close_ = Action("Close", close, ButtonRole::Cancel);
-        info_ = Action("Info", [this] {
-            info_open_ = 1;
-            info_scroll_ = 0;
-            close_info_->TakeFocus();
+        test_discovery_ = Action("Test discovery", [this] {
+            const bool was_listening = workspace_.LocalSendRuntime().listening;
+            const auto result = workspace_.TestLocalSendDiscovery();
+            if (!result.accepted) {
+                notice_ = result.reason;
+            } else {
+                notice_ = was_listening ? "LocalSend discovery requested."
+                                        : "LocalSend started. You can stop it from the Connect sidebar.";
+            }
+            OpenInfo();
         });
+        copy_diagnostics_ = Action("Copy diagnostics", [this] {
+            std::string report;
+            for (const auto& line : DiagnosticReport()) report += line + "\n";
+            notice_ = copy_(report) ? "Diagnostics copied" : ClipboardController::kWriteFailed;
+        }, ButtonRole::Utility, [this] {
+            const auto network = workspace_.Diagnostics();
+            return !network.checking_localsend_ports && !network.localsend_port_findings.empty();
+        });
+        troubleshoot_ = Action("Troubleshoot", [this] {
+            wizard_endpoint_.reset();
+            info_open_ = 2;
+            SetTroubleshootStep(ChoosePort);
+        });
+        wizard_actions_ = Container::Tab({
+            Container::Vertical({
+                WizardPortChoice(false),
+                WizardPortChoice(true),
+            }),
+            Container::Vertical({
+                Action("Start listener", [this] {
+                    const auto result = wizard_native_ ? workspace_.StartNativeListener()
+                                                       : workspace_.TestLocalSendDiscovery();
+                    wizard_notice_ = result.accepted ? "The listener is running." : result.reason;
+                }, ButtonRole::Utility, [this] { return WizardListenPort().empty(); }),
+                Action("Continue", [this] {
+                    const auto network = workspace_.Diagnostics();
+                    wizard_endpoint_ = ForwardEndpointFor(network);
+                    SetTroubleshootStep(wizard_endpoint_ ? CheckWindows : TestPeer);
+                }, ButtonRole::Primary, [this] { return CanContinueTroubleshooting(); }),
+            }),
+            Container::Vertical({
+                Action("TCP test passed", [this] { SetTroubleshootStep(TestPeer); }),
+                Action("TCP test failed", [this] { SetTroubleshootStep(Repair); }),
+            }),
+            Action("I ran the command", [this] { SetTroubleshootStep(CheckAgain); }, ButtonRole::Primary),
+            Container::Vertical({
+                Action("TCP test passed", [this] { SetTroubleshootStep(TestPeer); }),
+                Action("TCP test failed", [this] { SetTroubleshootStep(WindowsBlocked); }),
+            }),
+            Container::Vertical({
+                Action("Message received", [this] { SetTroubleshootStep(Done); }, ButtonRole::Primary),
+                Action("Still waiting", [this] { SetTroubleshootStep(PeerBlocked); }),
+            }),
+            Action("Try the TCP test again", [this] { SetTroubleshootStep(CheckAgain); }),
+            Action("Retry from the other device", [this] { SetTroubleshootStep(TestPeer); }),
+            Renderer([] { return emptyElement(); }),
+        }, &wizard_step_);
+        copy_wizard_command_ = Action("Copy command", [this] { CopyTroubleshootCommand(); },
+            ButtonRole::Utility, [this] { return !TroubleshootCommand().empty(); });
+        close_wizard_ = Action("Close", [this] { CloseTroubleshoot(); }, ButtonRole::Cancel);
+        close_ = Action("Close", close, ButtonRole::Cancel);
+        info_ = Action("Info", [this] { OpenInfo(); });
         close_info_ = Action("Close", [this] { CloseInfo(); }, ButtonRole::Cancel);
         tabs_row_ = Container::Horizontal(tabs_);
         body_tab_ = Container::Tab(body_, &selected_tab_);
@@ -156,13 +221,38 @@ public:
             Renderer([] { return emptyElement(); }),
             Container::Horizontal({refresh_fingerprint_, copy_fingerprint_}),
             Renderer([] { return emptyElement(); }),
-            Container::Horizontal({refresh_diagnostics_, copy_ip_, use_ip_}),
+            Container::Horizontal({refresh_diagnostics_, copy_ip_, use_ip_, test_discovery_, copy_diagnostics_, troubleshoot_}),
         }, &selected_tab_);
         auto main = Container::Vertical({
             tabs_row_, body_tab_, Container::Horizontal({footer_tab_, info_, close_}),
         });
-        tree_ = CatchEvent(Container::Tab({main, close_info_}, &info_open_),
+        auto wizard = Container::Vertical({wizard_actions_, Container::Horizontal({copy_wizard_command_, close_wizard_})});
+        tree_ = CatchEvent(Container::Tab({main, close_info_, wizard}, &info_open_),
                           [this, close = std::move(close)](Event event) {
+            if (info_open_ == 2) {
+                if (event == Event::Escape) {
+                    CloseTroubleshoot();
+                    return true;
+                }
+                if (event == Event::Tab || event == Event::TabReverse) {
+                    const auto step = wizard_actions_->ActiveChild();
+                    Components controls;
+                    for (std::size_t index = 0; index < step->ChildCount(); ++index) {
+                        if (auto control = step->ChildAt(index); control->Focusable()) controls.push_back(control);
+                    }
+                    if (controls.empty() && step->Focusable()) controls.push_back(step);
+                    if (!TroubleshootCommand().empty()) controls.push_back(copy_wizard_command_);
+                    controls.push_back(close_wizard_);
+                    const auto current = std::find_if(controls.begin(), controls.end(),
+                        [](const auto& control) { return control->Focused(); });
+                    const int count = static_cast<int>(controls.size());
+                    const int index = current == controls.end() ? -1 : static_cast<int>(current - controls.begin());
+                    const int delta = event == Event::Tab ? 1 : -1;
+                    controls[(index + delta + count) % count]->TakeFocus();
+                    return true;
+                }
+                return false;
+            }
             if (info_open_) {
                 if (event == Event::Escape) {
                     CloseInfo();
@@ -207,8 +297,9 @@ public:
     std::string GetFooterText() const override { return {}; }
     bool HasCustomFooter() const override { return true; }
     int GetCustomFooterHeight() const override {
+        if (info_open_ == 2) return 1;
         const int width = Terminal::Size().dimx;
-        if (ShowingDiagnostics()) return width < 40 ? 3 : width < 64 ? 2 : 1;
+        if (ShowingDiagnostics()) return width < 36 ? 6 : width < 40 ? 5 : width < 60 ? 4 : width < 100 ? 2 : 1;
         return 3;
     }
 
@@ -231,6 +322,7 @@ public:
                 ? body_[selected_tab_]->Render() | flex
                 : body_[selected_tab_]->Render() | vscroll_indicator | yframe | flex,
         }) | bgcolor(theme_.modal_background) | color(theme_.modal_foreground);
+        if (info_open_ == 2) return dbox({settings, RenderTroubleshoot() | clear_under | center});
         return info_open_ ? dbox({settings, RenderInfo() | clear_under | center}) : settings;
     }
 
@@ -240,14 +332,26 @@ public:
             if (info_open_) return emptyElement();
             Elements rows;
             auto close = hbox({info_->Render(), text(" "), close_->Render()});
-            if (width < 64) {
+            if (width < 40) {
                 rows.push_back(hbox({refresh_diagnostics_->Render(), copy_ip_->Render()}));
-                if (width < 40) {
-                    rows.push_back(use_ip_->Render());
-                    rows.push_back(std::move(close));
+                if (width < 36) {
+                    rows.push_back(test_discovery_->Render());
+                    rows.push_back(troubleshoot_->Render());
                 } else {
-                    rows.push_back(hbox({use_ip_->Render(), filler(), std::move(close)}));
+                    rows.push_back(hbox({test_discovery_->Render(), troubleshoot_->Render()}));
                 }
+                rows.push_back(copy_diagnostics_->Render());
+                rows.push_back(use_ip_->Render());
+                rows.push_back(std::move(close));
+            } else if (width < 60) {
+                rows.push_back(hbox({refresh_diagnostics_->Render(), copy_ip_->Render()}));
+                rows.push_back(hbox({test_discovery_->Render(), copy_diagnostics_->Render()}));
+                rows.push_back(troubleshoot_->Render());
+                rows.push_back(hbox({use_ip_->Render(), filler(), std::move(close)}));
+            } else if (width < 100) {
+                rows.push_back(hbox({refresh_diagnostics_->Render(), copy_ip_->Render(),
+                                     test_discovery_->Render(), troubleshoot_->Render()}));
+                rows.push_back(hbox({use_ip_->Render(), copy_diagnostics_->Render(), filler(), std::move(close)}));
             } else {
                 rows.push_back(hbox({footer_tab_->Render(), filler(), std::move(close)}));
             }
@@ -278,9 +382,207 @@ private:
         return Checkbox(label, &value, std::move(option));
     }
 
+    void OpenInfo() {
+        info_open_ = 1;
+        info_scroll_ = 0;
+        close_info_->TakeFocus();
+    }
+
     void CloseInfo() {
         info_open_ = 0;
         info_->TakeFocus();
+    }
+
+    std::string ConfiguredWizardPort(bool native) const {
+        const auto& config = workspace_.Configuration();
+        const auto& configured = native ? config.listen_port : config.localsend_https_port;
+        if (!configured.empty()) return configured;
+        return native ? connect_ui::kDefaultNativePort : connect_ui::kDefaultLocalSendPort;
+    }
+
+    std::string ListenerPort(bool native) const {
+        if (native) return workspace_.ActiveNativeListenPort();
+        const auto port = workspace_.LocalSendRuntime().https_port;
+        return port ? std::to_string(*port) : std::string{};
+    }
+
+    std::string WizardListenPort() const { return ListenerPort(wizard_native_); }
+
+    Component WizardPortChoice(bool native) {
+        ButtonOption option = ButtonOption::Simple();
+        option.on_click = [this, native] {
+            wizard_native_ = native;
+            SetTroubleshootStep(Prepare);
+        };
+        option.transform = [this, native](const EntryState& state) {
+            auto port = ListenerPort(native);
+            if (port.empty()) port = ConfiguredWizardPort(native);
+            if (port == "0") port = native ? "off" : "auto port";
+            const auto label = std::string(native ? "TextLT " : "LocalSend ") + port;
+            return RenderModalFlatButton(theme_, ButtonSpecFromLabel(label, ButtonRole::Utility), state.focused);
+        };
+        return Button(std::move(option));
+    }
+
+    std::optional<ForwardEndpoint> ForwardEndpointFor(const connect_ui::NetworkDiagnostics& network) const {
+        const auto host = connect_ui::SelectWslNatLanIPv4(network);
+        const auto port = WizardListenPort();
+        if (!host || port.empty()) return {};
+        auto guest = wizard_native_ ? workspace_.ActiveNativeListenAddress() : workspace_.LocalSendRuntime().interface_ip;
+        if (guest == "0.0.0.0") guest = connect_ui::SelectLanIPv4(network.local);
+        const auto ipv4 = [](const std::string& address) {
+            return !address.empty() && address.find_first_not_of("0123456789.") == std::string::npos;
+        };
+        const auto local = std::find_if(network.local.addresses.begin(), network.local.addresses.end(),
+            [&](const auto& address) { return address.ipv4 && address.usable && address.address == guest; });
+        if (!ipv4(host->address) || !ipv4(guest) || local == network.local.addresses.end()) return {};
+        return ForwardEndpoint{host->address, std::move(guest), port};
+    }
+
+    bool CanContinueTroubleshooting() const {
+        if (WizardListenPort().empty()) return false;
+        const auto network = workspace_.Diagnostics();
+        if (!network.wsl) return true;
+        if (network.wsl_mode == "nat") return ForwardEndpointFor(network).has_value();
+        return network.wsl_mode == "mirrored" || network.wsl_mode == "bridged";
+    }
+
+    std::string TroubleshootCommand() const {
+        if (!wizard_endpoint_) return {};
+        const auto& [windows_ip, wsl_ip, port] = *wizard_endpoint_;
+        if (wizard_step_ == CheckWindows || wizard_step_ == CheckAgain) {
+            return "Test-NetConnection " + windows_ip + " -Port " + port;
+        }
+        if (wizard_step_ == Repair) {
+            const auto listen = " listenaddress=" + windows_ip + " listenport=" + port;
+            const auto target = " connectaddress=" + wsl_ip + " connectport=" + port;
+            return "if (-not (Test-NetConnection " + wsl_ip + " -Port " + port + " -InformationLevel Quiet)) "
+                "{ throw 'Windows cannot reach the listener in WSL. Leave TextLT running and check its listen address.' }; "
+                "$rows = netsh.exe interface portproxy show v4tov4; "
+                "if ($LASTEXITCODE -ne 0) { throw 'Could not read the Windows forwarding rules.' }; "
+                "$prefix = '^\\s*' + [regex]::Escape('" + windows_ip + "') + '\\s+" + port + "\\s+'; "
+                "$expected = $prefix + [regex]::Escape('" + wsl_ip + "') + '\\s+" + port + "\\s*$'; "
+                "$existing = @($rows | Where-Object { $_ -match $prefix }); "
+                "if ($existing.Count) { if ($existing.Count -ne 1 -or $existing[0] -notmatch $expected) "
+                "{ throw 'This Windows port already forwards somewhere else. Review the existing rule before changing it.' }; "
+                "netsh.exe interface portproxy delete v4tov4" + listen + "; "
+                "if ($LASTEXITCODE -ne 0) { throw 'Could not remove the matching rule. Check that PowerShell is running as Administrator.' } }; "
+                "netsh.exe interface portproxy add v4tov4" + listen + target + "; "
+                "if ($LASTEXITCODE -ne 0) { throw 'Could not add the rule. Check that PowerShell is running as Administrator.' }";
+        }
+        if (wizard_step_ == WindowsBlocked) {
+            return "Get-Service iphlpsvc | Format-List Status,StartType; netsh.exe interface portproxy show all; "
+                "Test-NetConnection " + wsl_ip + " -Port " + port;
+        }
+        if (wizard_step_ == PeerBlocked) {
+            return "Get-NetFirewallPortFilter -PolicyStore ActiveStore | Where-Object { "
+                "$_.Protocol -eq 'TCP' -and $_.LocalPort -contains '" + port + "' } | Get-NetFirewallRule | "
+                "Where-Object { $_.Enabled -eq 'True' -and $_.Direction -eq 'Inbound' } | "
+                "Get-NetFirewallAddressFilter | Format-List LocalAddress,RemoteAddress";
+        }
+        return {};
+    }
+
+    void CopyTroubleshootCommand() {
+        const auto command = TroubleshootCommand();
+        if (!command.empty()) {
+            wizard_notice_ = copy_(command) ? "PowerShell command copied." : ClipboardController::kWriteFailed;
+        }
+    }
+
+    void SetTroubleshootStep(TroubleshootStep step) {
+        wizard_step_ = step;
+        wizard_notice_.clear();
+        CopyTroubleshootCommand();
+        if (step == Done) close_wizard_->TakeFocus();
+        else wizard_actions_->TakeFocus();
+    }
+
+    void CloseTroubleshoot() {
+        info_open_ = 0;
+        troubleshoot_->TakeFocus();
+    }
+
+    Element RenderTroubleshoot() {
+        const auto port = WizardListenPort();
+        const auto endpoint = wizard_endpoint_ ? wizard_endpoint_->windows_ip + ":" + wizard_endpoint_->port
+                                               : std::string{};
+        std::string title, instructions;
+        switch (wizard_step_) {
+        case ChoosePort:
+            title = "Choose a port to troubleshoot";
+            instructions = "Choose LocalSend for phone transfers or TextLT for a paired TextLT device. Each button shows the TCP port for that service.";
+            break;
+        case Prepare: {
+            title = "Check the listener";
+            const auto network = workspace_.Diagnostics();
+            if (port.empty()) {
+                instructions = wizard_native_
+                    ? "Start the TextLT listener. Direct connections require a paired TextLT device."
+                    : "Start LocalSend in TextLT and leave it running during the checks.";
+            } else {
+                instructions = "TextLT is listening on TCP port " + port + ".";
+                if (network.wsl && !CanContinueTroubleshooting()) {
+                    instructions += network.checking_localsend_ports
+                        ? " Waiting for Windows network details."
+                        : " The Windows forwarding address could not be determined. Close this guide and refresh Diagnostics.";
+                }
+            }
+            break;
+        }
+        case CheckWindows:
+        case CheckAgain:
+            title = wizard_step_ == CheckWindows ? "Test the Windows port" : "Test the Windows port again";
+            instructions = "Open PowerShell in Windows. Paste the copied command and press Enter. "
+                "It checks " + endpoint + ". Choose the result shown next to TcpTestSucceeded.";
+            break;
+        case Repair:
+            title = "Set up Windows forwarding";
+            instructions = "Open PowerShell as Administrator in Windows. Paste the single copied command and press Enter. "
+                "It checks that Windows can reach TextLT in WSL, then creates or recreates the matching forward from " +
+                endpoint + " to " + wizard_endpoint_->wsl_ip + ":" + wizard_endpoint_->port + ".";
+            break;
+        case TestPeer:
+            title = "Send a test message";
+            instructions = wizard_native_
+                ? "From your paired TextLT device, send a short message to this computer."
+                : "On the phone, open LocalSend, refresh the device list, and send a short message to TextLT.";
+            if (!endpoint.empty()) instructions += " If you connect by IP, use " + endpoint + ".";
+            break;
+        case WindowsBlocked:
+            title = "Windows still cannot accept connections";
+            instructions = "Run the copied command in Windows PowerShell. Check that IP Helper is running "
+                "and the test to WSL succeeds. Review any error from the forwarding command before testing again.";
+            break;
+        case PeerBlocked:
+            title = "The message did not arrive";
+            instructions = "Check that both devices are on the same Wi-Fi. ";
+            if (wizard_native_) instructions += "Use the paired TextLT identity and check the peer address. ";
+            if (wizard_endpoint_) {
+                instructions += "In Administrator PowerShell, run the copied command and check that an incoming firewall rule allows the sending device's Wi-Fi address.";
+            } else {
+                instructions += "Review the incoming firewall rules for TCP port " + port + ".";
+            }
+            break;
+        case Done:
+            title = "Message received";
+            instructions = "You confirmed that a message reached TextLT on port " + port + ".";
+            break;
+        }
+        const auto terminal = Terminal::Size();
+        Elements buttons;
+        if (!TroubleshootCommand().empty()) buttons.push_back(copy_wizard_command_->Render());
+        buttons.push_back(close_wizard_->Render());
+        return vbox({
+            paragraph(std::move(title)) | bold | color(theme_.modal_accent),
+            separator() | color(theme_.modal_border),
+            paragraph(std::move(instructions)),
+            wizard_notice_.empty() ? emptyElement() : paragraph(wizard_notice_) | dim,
+            wizard_actions_->Render(),
+            hbox(std::move(buttons)),
+        }) | size(WIDTH, EQUAL, std::clamp(terminal.dimx - 6, 20, 68)) |
+             borderStyled(LIGHT, theme_.modal_border) | bgcolor(theme_.modal_background) |
+             color(theme_.modal_foreground);
     }
 
     Element RenderInfo() {
@@ -322,7 +624,12 @@ private:
             {"Diagnostics", {}},
         };
         const auto& tab = help[selected_tab_];
-        Elements rows = ShowingDiagnostics() ? RenderDiagnosticDetails() : Elements{};
+        Elements rows;
+        if (ShowingDiagnostics()) {
+            for (const auto& line : DiagnosticReport()) {
+                rows.push_back(line.empty() ? separator() | color(theme_.modal_border) : paragraph(line));
+            }
+        }
         for (const auto& [label, details] : tab.fields) {
             rows.push_back(text(label) | bold | color(theme_.modal_accent));
             rows.push_back(paragraph(details));
@@ -382,7 +689,7 @@ private:
             selected_address_ = 0;
             selected_ip_.clear();
             diagnostic_rows_.clear();
-            workspace_.RefreshDiagnostics();
+            workspace_.RefreshDiagnostics(true);
         }
         body_[tab]->TakeFocus();
     }
@@ -470,21 +777,64 @@ private:
         }
 
         const auto* row = SelectedAddress();
-        Elements body{
-            text("IPv4 addresses") | bold | color(theme_.modal_accent),
-            row ? diagnostic_menu_->Render() | vscroll_indicator | yframe | size(HEIGHT, LESS_THAN, 7) :
-                  text("No usable IPv4 addresses found") | dim,
-            separator() | color(theme_.modal_border),
-        };
+        Elements body{text("Can TextLT use these ports?") | bold | color(theme_.modal_accent)};
+        if (network.checking_localsend_ports) {
+            body.push_back(paragraph("Checking ports 53317 and 53327 and firewall settings…") | dim);
+        } else {
+            for (const auto& line : PortStatusLines(network)) body.push_back(paragraph(line));
+        }
+        if (!network.checking_localsend_ports && !network.localsend_port_findings.empty()) {
+            const auto& findings = network.localsend_port_findings;
+            const std::string_view priorities[]{
+                "Windows shows no TCP listener at",
+                "no standard TCP forwarding rule",
+                "Windows firewall on ",
+            };
+            std::vector<std::string_view> highlights;
+            for (const auto priority : priorities) {
+                const auto match = std::find_if(findings.begin(), findings.end(), [priority](const auto& line) {
+                    return line.find(priority) != std::string::npos;
+                });
+                if (match != findings.end()) highlights.push_back(*match);
+            }
+            for (const auto line : highlights) body.push_back(paragraph(std::string(line)));
+            body.push_back(paragraph("Free means the port could be opened on this device. Open Info for firewall and forwarding details.") | dim);
+        }
+        if (!state.error.empty() && state.error != notice_) {
+            body.push_back(paragraph(state.error));
+        }
+        if (!notice_.empty()) body.push_back(paragraph(notice_));
+        body.push_back(separator() | color(theme_.modal_border));
+        body.push_back(text("IPv4 addresses") | bold | color(theme_.modal_accent));
+        body.push_back(row ? diagnostic_menu_->Render() | vscroll_indicator | yframe | size(HEIGHT, LESS_THAN, 7)
+                           : text("No usable IPv4 addresses found") | dim);
         if (row) body.push_back(paragraph(ExplainAddress(*row, network)));
         body.push_back(paragraph(automatic ? "LocalSend chooses its address automatically at Start."
                                            : "LocalSend override: " + configured + ". Clear it in LocalSend to use Auto.") | dim);
-        if (!notice_.empty()) body.push_back(paragraph(notice_));
         body.push_back(filler());
         return vbox(std::move(body));
     }
 
-    Elements RenderDiagnosticDetails() {
+    std::vector<std::string> PortStatusLines(const connect_ui::NetworkDiagnostics& network) const {
+        using connect_ui::PortAvailability;
+        const auto status = [](PortAvailability availability) {
+            switch (availability) {
+            case PortAvailability::Available: return "Free";
+            case PortAvailability::InUse: return "In use";
+            case PortAvailability::Reserved: return "Reserved";
+            case PortAvailability::Unknown: return "Could not check";
+            }
+            return "Could not check";
+        };
+        std::vector<std::string> lines;
+        for (const auto& row : network.localsend_ports) {
+            lines.push_back(row.system + " · " + std::to_string(row.port) +
+                            " · TCP " + status(row.tcp) + " · UDP " + status(row.udp));
+        }
+        return lines;
+    }
+
+    std::vector<std::string> DiagnosticReport() {
         using connect::LocalSendCheck;
         const auto check = [](LocalSendCheck result) {
             switch (result) {
@@ -503,36 +853,80 @@ private:
         const auto network = workspace_.Diagnostics();
         const auto configured_https = config.localsend_https_port == "0" ? std::string("0 (Auto)") :
             config.localsend_https_port.empty() ? std::string(connect_ui::kDefaultLocalSendPort) : config.localsend_https_port;
-        Elements summary{
-            text("LocalSend") | bold | color(theme_.modal_accent),
-            paragraph("LocalSend UDP discovery  Configured " +
-                      (config.localsend_udp_port.empty() ? connect_ui::kDefaultLocalSendPort : config.localsend_udp_port) +
-                      "  Actual " + port(state.udp_port) + "  Bind " + check(state.udp_bind)),
-            paragraph("LocalSend TCP/HTTPS  Configured " + configured_https +
-                      "  Actual " + port(state.https_port) + "  Bind " + check(state.https_bind)),
-            paragraph(std::string("Multicast join ") + check(state.multicast_join) +
-                      "  |  Listening " + (state.listening ? "Yes" : "No") +
-                      "  |  Peer reachability " +
-                      (workspace_.LocalSendPeerVerified() ? "Verified this session" : "Unverified")),
-            paragraph("Interface mode " + (automatic ? std::string("Auto") : "Manual " + config.localsend_interface) +
-                      (state.interface_ip.empty() ? "" : "  |  Selected at Start " + state.interface_ip)),
+        std::vector<std::string> summary{
+            "TextLT discovery and port report",
+            "UDP lets devices find each other. TCP lets them connect and transfer files.",
         };
-        if (!state.error.empty()) summary.push_back(paragraph(state.error) | bold);
-
-        if (network.wsl) summary.push_back(paragraph("WSL networking mode: " + network.wsl_mode));
+        if (network.checking_localsend_ports) {
+            summary.push_back(network.localsend_port_findings.empty()
+                ? "Checking ports 53317 and 53327, forwarding, and firewall rules…"
+                : "Refreshing the port, forwarding, and firewall checks. Previous results are shown below.");
+        } else if (network.localsend_port_findings.empty()) {
+            summary.push_back("Port and firewall results are unavailable. Choose Refresh to try again.");
+        }
+        const auto ports = PortStatusLines(network);
+        summary.insert(summary.end(), ports.begin(), ports.end());
+        if (!ports.empty()) summary.push_back("");
+        summary.insert(summary.end(), network.localsend_port_findings.begin(),
+                       network.localsend_port_findings.end());
+        if (!state.error.empty()) summary.push_back("LocalSend could not start. " + state.error);
+        summary.push_back("");
+        const auto native_port = workspace_.ActiveNativeListenPort();
+        const auto configured_native = config.listen_port.empty() ? connect_ui::kDefaultNativePort : config.listen_port;
+        summary.push_back("TextLT direct connections. Configured TCP port " + configured_native +
+                          (native_port.empty() ? ". No active listener." : ". Listening on port " + native_port + "."));
+        summary.push_back("LocalSend UDP discovery. Configured port " +
+                      (config.localsend_udp_port.empty() ? connect_ui::kDefaultLocalSendPort : config.localsend_udp_port) +
+                      ", active port " + port(state.udp_port) + ". Opening the port " + check(state.udp_bind) + ".");
+        summary.push_back("LocalSend TCP transfers. Configured port " + configured_https +
+                      ", active port " + port(state.https_port) + ". Opening the port " + check(state.https_bind) + ".");
+        summary.push_back(std::string("Joining the discovery group ") + config.localsend_group +
+                          ". " + check(state.multicast_join) + ".");
+        summary.push_back("Network address selection " +
+            (automatic ? std::string("Automatic") : "Manual " + config.localsend_interface) +
+            (state.interface_ip.empty() ? "" : ". LocalSend chose " + state.interface_ip) + ".");
+        if (state.listening) {
+            const auto discovery = workspace_.LocalSendDiscoveryStatus();
+            if (discovery.multicast_send == LocalSendCheck::Failed) {
+                summary.push_back("Could not send the discovery announcement. " + discovery.multicast_error);
+            } else if (discovery.multicast_send == LocalSendCheck::Succeeded) {
+                summary.push_back("Discovery announcement sent. Messages from nearby devices this session " +
+                                  std::to_string(discovery.multicast_packets) + ".");
+            } else {
+                summary.push_back("Waiting to send the discovery announcement.");
+            }
+            if (discovery.unicast_running) {
+                summary.push_back("Looking for LocalSend devices on the Windows network " + discovery.unicast_subnet + "…");
+            } else if (!discovery.unicast_subnet.empty()) {
+                summary.push_back("Windows network " + discovery.unicast_subnet + ". Checked " +
+                    std::to_string(discovery.unicast_attempts) + " addresses and found " +
+                    std::to_string(discovery.unicast_registered) + " LocalSend devices over HTTPS.");
+            } else if (network.wsl_mode == "nat") {
+                summary.push_back(connect_ui::SelectWslNatLanIPv4(network)
+                    ? "The Windows network discovery check is pending."
+                    : "TextLT needs a usable Windows network address to run the HTTPS discovery check.");
+            }
+            summary.push_back(workspace_.LocalSendPeerVerified() ? "TextLT reached a LocalSend device this session."
+                                                               : "Reachability from another device is still unconfirmed.");
+            if (workspace_.LocalSendPhoneReachedListener()) summary.push_back("A phone reached TextLT this session.");
+        } else {
+            summary.push_back("LocalSend is stopped.");
+        }
+        if (network.wsl) summary.push_back("WSL networking mode " + network.wsl_mode + ".");
+        if (network.wsl_mode == "nat") summary.push_back("In NAT mode, Windows must forward the TCP port for a phone to reach TextLT in WSL.");
         for (const auto* environment : {&network.local, &network.host}) {
             if (environment->name.empty()) continue;
-            summary.push_back(separator() | color(theme_.modal_border));
-            summary.push_back(text(environment->name) | bold | color(theme_.modal_accent));
-            if (!environment->notice.empty()) summary.push_back(paragraph(environment->notice) | dim);
+            summary.push_back("");
+            summary.push_back(environment->name);
+            if (!environment->notice.empty()) summary.push_back(environment->notice);
             for (const auto& address : environment->addresses) {
                 const auto prefix = address.prefix < 0 ? "" : "/" + std::to_string(address.prefix);
-                summary.push_back(paragraph(address.address + prefix + "  " + address.interface_name +
+                summary.push_back(address.address + prefix + "  " + address.interface_name +
                     "  |  " + address.status + "  |  " + address.type + "  |  Origin " + address.origin +
-                    (address.host_only ? "  |  Host only" : "")));
+                    (address.host_only ? "  |  Host only" : ""));
             }
             for (const auto& gateway : environment->gateways) {
-                summary.push_back(paragraph("Default gateway " + gateway.address + "  " + gateway.interface_name));
+                summary.push_back("Default gateway " + gateway.address + "  " + gateway.interface_name);
             }
         }
         return summary;
@@ -549,6 +943,10 @@ private:
     int selected_tab_ = 0;
     int info_open_ = 0;
     int info_scroll_ = 0;
+    int wizard_step_ = ChoosePort;
+    bool wizard_native_ = false;
+    std::optional<ForwardEndpoint> wizard_endpoint_;
+    std::string wizard_notice_;
     int selected_peer_ = 0;
     int selected_address_ = 0;
     std::string selected_ip_;
@@ -560,7 +958,8 @@ private:
     std::string notice_, fingerprint_, pairing_code_;
     Components tabs_, body_;
     Component tree_, tabs_row_, body_tab_, footer_tab_, peer_menu_, peer_box_, use_peer_;
-    Component refresh_diagnostics_, copy_ip_, use_ip_;
+    Component refresh_diagnostics_, copy_ip_, use_ip_, test_discovery_, copy_diagnostics_;
+    Component troubleshoot_, wizard_actions_, copy_wizard_command_, close_wizard_;
     Component close_, refresh_fingerprint_, copy_fingerprint_, info_, close_info_;
 };
 

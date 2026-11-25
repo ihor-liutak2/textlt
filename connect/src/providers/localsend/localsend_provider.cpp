@@ -4,6 +4,7 @@
 #include <array>
 #include <charconv>
 #include <condition_variable>
+#include <future>
 #include <map>
 #include <mutex>
 #include <thread>
@@ -34,6 +35,9 @@ constexpr std::size_t kMaxPeers = 256;
 constexpr std::size_t kMaxClients = 16;
 constexpr auto kPeerLifetime = std::chrono::seconds(70);
 constexpr auto kAnnounceInterval = std::chrono::seconds(20);
+constexpr auto kUnicastInterval = std::chrono::seconds(40);
+constexpr auto kUnicastTimeout = std::chrono::milliseconds(350);
+constexpr std::size_t kUnicastWorkers = 8;
 constexpr auto kPoll = std::chrono::milliseconds(20);
 
 std::optional<tcp::endpoint> ParseEndpoint(std::string_view value) {
@@ -57,12 +61,14 @@ std::optional<tcp::endpoint> ParseEndpoint(std::string_view value) {
 
 std::vector<Capability> TextAndFiles() { return {{kTextTypeId, {}}, {kFileTypeId, {}}}; }
 
+enum class PeerRoute { Incoming, Multicast, Verified, Manual };
+
 struct PeerRecord {
     Peer peer;
     tcp::endpoint address;
     Clock::time_point expires;
     Clock::time_point next_reply{};
-    bool manual = false;
+    PeerRoute route = PeerRoute::Incoming;
 };
 
 bool CompatibleVersion(const Json& json) {
@@ -276,6 +282,9 @@ public:
             stopping_ = false;
             server_ = std::thread([this] { Listen(); });
             browser_ = std::thread([this] { Discover(); });
+            if (options_.unicast_discovery_subnet) {
+                unicast_browser_ = std::thread([this] { DiscoverUnicast(); });
+            }
             sender_ = std::thread([this] { SendLoop(); });
             runtime.listening = true;
             ReportRuntime(runtime);
@@ -295,6 +304,7 @@ public:
         }
         changed_.notify_all();
         if (browser_.joinable()) browser_.join();
+        if (unicast_browser_.joinable()) unicast_browser_.join();
         if (server_.joinable()) server_.join();
         if (sender_.joinable()) sender_.join();
         boost::system::error_code ignored;
@@ -304,7 +314,9 @@ public:
         outgoing_.reset();
         manual_endpoint_.reset();
         refresh_requested_ = false;
+        unicast_refresh_requested_ = false;
         peers_.clear();
+        discovery_status_ = {};
         context_.reset();
         sink_ = {};
         if (was_running) ReportRuntime({});
@@ -323,8 +335,17 @@ public:
     ProviderResult RefreshPeers() override {
         std::lock_guard lock(mutex_);
         if (stopping_) return {false, "Start LocalSend to refresh peers"};
+        discovery_status_.multicast_send = LocalSendCheck::NotAttempted;
+        discovery_status_.multicast_error.clear();
         refresh_requested_ = true;
+        unicast_refresh_requested_ = true;
+        changed_.notify_all();
         return {true, {}};
+    }
+
+    LocalSendDiscoveryStatus DiscoveryStatus() const override {
+        std::lock_guard lock(mutex_);
+        return discovery_status_;
     }
 
     ProviderResult Send(OutgoingTransfer transfer) override {
@@ -350,7 +371,8 @@ public:
         std::lock_guard lock(mutex_);
         if (stopping_ || outgoing_) return {false, "LocalSend is stopped or sending another item"};
         const auto found = peers_.find(transfer.identity.peer.peer_id);
-        if (found == peers_.end() || found->second.expires <= Clock::now()) {
+        if (found == peers_.end() ||
+            (found->second.route != PeerRoute::Manual && found->second.expires <= Clock::now())) {
             return {false, "LocalSend peer is offline or unverified"};
         }
         outgoing_ = std::make_shared<Outgoing>();
@@ -427,10 +449,24 @@ private:
             std::lock_guard lock(mutex_);
             auto found = peers_.find(peer.peer.identity.peer_id);
             if (found == peers_.end() && peers_.size() >= kMaxPeers) return {};
-            if (found != peers_.end() && found->second.manual && !peer.manual) return false;
+            if (found != peers_.end()) {
+                auto& known = found->second;
+                if (known.route == PeerRoute::Manual && peer.route != PeerRoute::Manual) return false;
+                peer.next_reply = known.next_reply;
+                if (known.route > peer.route && known.expires > now) {
+                    if (known.address == peer.address) {
+                        peer.route = known.route;
+                    } else {
+                        // A port forward can replace the peer's source address.
+                        // Keep the better route while checking new multicast announcements.
+                        reply = announce && known.next_reply <= now;
+                        if (reply) known.next_reply = now + std::chrono::seconds(5);
+                        return reply;
+                    }
+                }
+            }
             changed = found == peers_.end() || found->second.peer.display_name != peer.peer.display_name ||
                 found->second.address != peer.address;
-            if (found != peers_.end()) peer.next_reply = found->second.next_reply;
             reply = announce && peer.next_reply <= now;
             if (reply) peer.next_reply = now + std::chrono::seconds(5);
             peers_.insert_or_assign(peer.peer.identity.peer_id, peer);
@@ -443,8 +479,20 @@ private:
         auto message = Info();
         message["announce"] = initial;
         const auto bytes = message.dump();
-        boost::system::error_code ignored;
-        discovery_.send_to(net::buffer(bytes), group_, 0, ignored);
+        boost::system::error_code error;
+        discovery_.send_to(net::buffer(bytes), group_, 0, error);
+        if (!initial) return;
+        {
+            std::lock_guard lock(mutex_);
+            discovery_status_.multicast_send = error ? LocalSendCheck::Failed : LocalSendCheck::Succeeded;
+            discovery_status_.multicast_error = error ? error.message() : std::string{};
+        }
+        ReportDiscoveryChange();
+    }
+
+    void ReportDiscoveryChange() const noexcept {
+        if (!options_.report_discovery_change) return;
+        try { options_.report_discovery_change(); } catch (...) {}
     }
 
     void ReportRuntime(const LocalSendRuntime& runtime) const noexcept {
@@ -479,7 +527,7 @@ private:
         }
     }
 
-    void Register(const PeerRecord& peer) {
+    void Register(PeerRecord peer) {
         try {
             Https request(*context_, stopping_);
             request.Connect(peer.address, peer.peer.identity.peer_id, options_.connect_timeout);
@@ -487,6 +535,8 @@ private:
             const auto response = request.ReadResponse(options_.connect_timeout);
             if (response.result() == Status::ok) {
                 ReportVerifiedPeer(peer.address.address());
+                peer.route = PeerRoute::Verified;
+                Remember(std::move(peer), false);
                 return;
             }
         } catch (const Error&) {
@@ -497,13 +547,26 @@ private:
         if (!stopping_) Announce(false);
     }
 
-    LocalSendConnectResult ConnectDirect(const tcp::endpoint& endpoint) {
+    void VerifyRegistration(PeerRecord peer) {
+        if (peer.peer.identity.peer_id == fingerprint_) return;
         try {
             Https request(*context_, stopping_);
-            const auto fingerprint = request.Connect(endpoint, options_.connect_timeout);
+            request.Connect(peer.address, peer.peer.identity.peer_id, options_.connect_timeout);
+            ReportVerifiedPeer(peer.address.address());
+            peer.route = PeerRoute::Verified;
+            Remember(std::move(peer), false);
+        } catch (const Error&) {
+            // The advertised listener did not prove its identity.
+        }
+    }
+
+    LocalSendConnectResult RegisterAt(const tcp::endpoint& endpoint, PeerRoute route, Milliseconds timeout) {
+        try {
+            Https request(*context_, stopping_);
+            const auto fingerprint = request.Connect(endpoint, timeout);
             if (fingerprint == fingerprint_) return {{}, "Enter another device's LocalSend address"};
-            request.Post(kRegister, Info().dump(), options_.connect_timeout);
-            const auto response = request.ReadResponse(options_.connect_timeout);
+            request.Post(kRegister, Info().dump(), timeout);
+            const auto response = request.ReadResponse(timeout);
             if (response.result() != Status::ok) {
                 return {{}, "LocalSend registration returned HTTP " + std::to_string(response.result_int())};
             }
@@ -517,7 +580,7 @@ private:
             if (peer->peer.identity.peer_id != fingerprint) {
                 return {{}, "LocalSend peer certificate fingerprint mismatch"};
             }
-            peer->manual = true;
+            peer->route = route;
             const auto identity = peer->peer.identity;
             const auto name = peer->peer.display_name;
             if (!Remember(std::move(*peer), false).has_value()) return {{}, "LocalSend peer list is full"};
@@ -527,6 +590,89 @@ private:
             return {{}, "LocalSend connection failed: " + error.reason};
         } catch (const std::exception&) {
             return {{}, "Invalid LocalSend registration response"};
+        }
+    }
+
+    void ProbeSubnet(const LocalSendSubnet& subnet) {
+        boost::system::error_code error;
+        const auto address = net::ip::make_address_v4(subnet.address, error);
+        if (error || address.is_unspecified() || address.is_multicast() ||
+            address == net::ip::address_v4::broadcast() ||
+            subnet.prefix_length < 1 || subnet.prefix_length > 31) return;
+
+        // Bound each pass to the part of the subnet sharing the host's first 24 bits.
+        const auto host = static_cast<std::uint32_t>(address.to_uint());
+        const auto mask = std::uint32_t{0xffffffff} << (32 - subnet.prefix_length);
+        const auto network = host & mask;
+        const auto broadcast = network | ~mask;
+        const auto block = host & std::uint32_t{0xffffff00};
+        const bool has_broadcast = subnet.prefix_length < 31;
+        const auto first = std::max(block, network + has_broadcast);
+        const auto last = std::min(block | std::uint32_t{0xff}, broadcast - has_broadcast);
+        const auto timeout = std::min(kUnicastTimeout, options_.connect_timeout);
+
+        {
+            std::lock_guard lock(mutex_);
+            discovery_status_.unicast_subnet = subnet.address + "/" + std::to_string(subnet.prefix_length);
+            discovery_status_.unicast_running = true;
+        }
+        ReportDiscoveryChange();
+        std::atomic<std::uint64_t> next{first};
+        std::atomic<unsigned> attempts{0}, registered{0};
+        const auto probe = [&] {
+            try {
+                while (!stopping_) {
+                    const auto candidate = next.fetch_add(1);
+                    if (candidate > last) return;
+                    if (candidate == host) continue;
+                    const auto ip = net::ip::address_v4(static_cast<std::uint32_t>(candidate));
+                    ++attempts;
+                    const auto result = RegisterAt(tcp::endpoint(ip, options_.discovery_port),
+                                                   PeerRoute::Verified, timeout);
+                    if (result.peer) ++registered;
+                }
+            } catch (const Cancelled&) {
+            }
+        };
+        std::vector<std::future<void>> workers;
+        for (std::size_t i = 1; i < kUnicastWorkers && i <= last - first; ++i) {
+            try {
+                workers.push_back(std::async(std::launch::async, probe));
+            } catch (const std::system_error&) {
+                break;
+            }
+        }
+        probe();
+        for (auto& worker : workers) worker.wait();
+        {
+            std::lock_guard lock(mutex_);
+            discovery_status_.unicast_running = false;
+            discovery_status_.unicast_attempts = attempts;
+            discovery_status_.unicast_registered = registered;
+        }
+        ReportDiscoveryChange();
+    }
+
+    void DiscoverUnicast() {
+        while (!stopping_) {
+            const auto subnet = options_.unicast_discovery_subnet();
+            if (subnet) {
+                ProbeSubnet(*subnet);
+            } else {
+                bool changed;
+                {
+                    std::lock_guard lock(mutex_);
+                    changed = !discovery_status_.unicast_subnet.empty();
+                    discovery_status_.unicast_subnet.clear();
+                    discovery_status_.unicast_attempts = 0;
+                    discovery_status_.unicast_registered = 0;
+                }
+                if (changed) ReportDiscoveryChange();
+            }
+            const auto interval = subnet ? kUnicastInterval : std::chrono::seconds(1);
+            std::unique_lock lock(mutex_);
+            changed_.wait_for(lock, interval, [this] { return stopping_ || unicast_refresh_requested_; });
+            unicast_refresh_requested_ = false;
         }
     }
 
@@ -541,7 +687,7 @@ private:
             }
             if (endpoint) {
                 try {
-                    auto result = ConnectDirect(*endpoint);
+                    auto result = RegisterAt(*endpoint, PeerRoute::Manual, options_.connect_timeout);
                     {
                         std::lock_guard lock(mutex_);
                         manual_endpoint_.reset();
@@ -562,8 +708,16 @@ private:
             if (!error && size) {
                 try {
                     const auto json = Parse({bytes.data(), size});
-                    const auto peer = ParsePeer(json, source.address());
-                    if (peer && Remember(*peer, json.value("announce", false)).value_or(false)) Register(*peer);
+                    auto peer = ParsePeer(json, source.address());
+                    if (peer && peer->peer.identity.peer_id != fingerprint_) {
+                        {
+                            std::lock_guard lock(mutex_);
+                            ++discovery_status_.multicast_packets;
+                        }
+                        ReportDiscoveryChange();
+                        peer->route = PeerRoute::Multicast;
+                        if (Remember(*peer, json.value("announce", false)).value_or(false)) Register(std::move(*peer));
+                    }
                 } catch (const Error&) {
                 } catch (const std::exception&) {
                 }
@@ -572,7 +726,7 @@ private:
             {
                 std::lock_guard lock(mutex_);
                 for (auto it = peers_.begin(); it != peers_.end();) {
-                    if (it->second.manual || it->second.expires > now) {
+                    if (it->second.route == PeerRoute::Manual || it->second.expires > now) {
                         ++it;
                         continue;
                     }
@@ -730,6 +884,9 @@ private:
                             ReportIncomingPeer(address, json);
                         }
                         client.Reply(Status::ok, Info().dump(), options_.connect_timeout);
+                        // Some LocalSend clients register without presenting a client certificate.
+                        // Check the certificate on their receive port before adding them.
+                        if (!fingerprint && peer) VerifyRegistration(std::move(*peer));
                     }
                 } else Prepare(client, json, address, fingerprint);
                 return;
@@ -788,12 +945,14 @@ private:
             Item item;
             item.wire_id = id;
             item.token = RandomToken();
-            const auto size = length.get<std::uint64_t>();
-            if (files.size() == 1 && (type == "text/plain" || type == "text") &&
+            auto size = length.get<std::uint64_t>();
+            if (files.size() == 1 && (type.compare(0, 5, "text/") == 0 || type == "text") &&
                 dto.contains("preview") && dto["preview"].is_string()) {
-                const auto preview = dto["preview"].get<std::string>();
-                if (size == preview.size() && size <= kLocalSendInlineTextLimit && detail::ValidUtf8(preview)) {
-                    item.preview = preview;
+                auto preview = dto["preview"].get<std::string>();
+                if (size <= kLocalSendInlineTextLimit && preview.size() <= kLocalSendInlineTextLimit &&
+                    detail::ValidUtf8(preview)) {
+                    size = preview.size();
+                    item.preview = std::move(preview);
                 }
             }
             if (dto.contains("sha256") && !dto["sha256"].is_null()) {
@@ -1078,7 +1237,7 @@ private:
                 Https http(*context_, stopping_, &outgoing.cancelled);
                 http.Connect(outgoing.address, transfer.identity.peer.peer_id, options_.connect_timeout);
                 http.Post(target, body, options_.connect_timeout);
-                response = http.ReadResponse(options_.decision_timeout);
+                response = http.ReadResponse(options_.decision_timeout, "No reply to the LocalSend offer before it expired");
             }
             ReportVerifiedPeer(outgoing.address.address());
             if (response.result() != Status::unauthorized) break;
@@ -1165,12 +1324,14 @@ private:
     std::uint16_t receive_port_ = 0;
     std::atomic<bool> stopping_{true};
     std::atomic<bool> refresh_requested_{false};
-    std::thread browser_, server_, sender_;
+    bool unicast_refresh_requested_ = false;
+    std::thread browser_, unicast_browser_, server_, sender_;
     ProviderEventSink sink_;
-    std::mutex mutex_;
+    mutable std::mutex mutex_;
     std::condition_variable changed_;
     std::optional<tcp::endpoint> manual_endpoint_;
     std::map<std::string, PeerRecord> peers_;
+    LocalSendDiscoveryStatus discovery_status_;
     std::shared_ptr<Session> session_;
     std::shared_ptr<Outgoing> outgoing_;
 };

@@ -200,6 +200,12 @@ sudo apt update
 sudo apt install -y build-essential cmake git libarchive-dev libboost-dev libssl-dev
 ```
 
+CMake uses installed Boost headers when available. If Boost is missing, it
+downloads the verified Boost release into the build directory on the first
+configure. Subsequent builds reuse that copy. For an offline build, install
+`libboost-dev` or point `FETCHCONTENT_SOURCE_DIR_TEXTLT_BOOST` at an extracted
+Boost release. Use `-DTEXTLT_FETCH_BOOST=OFF` to require an installed copy.
+
 Clone and build:
 
 ```bash

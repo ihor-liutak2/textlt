@@ -38,22 +38,36 @@ void ConnectWorkspace::RefreshLocalIPv4() {
     local_ipv4_ = SelectLanIPv4(InspectLocalNetwork().local);
 }
 
-void ConnectWorkspace::RefreshDiagnostics() {
+void ConnectWorkspace::RefreshDiagnostics(bool test_localsend_ports) {
+    if (Diagnostics().checking_localsend_ports) return;
     diagnostics_cancelled_ = true;
     if (diagnostics_worker_.joinable()) diagnostics_worker_.join();
     diagnostics_cancelled_ = false;
     auto snapshot = InspectLocalNetwork();
+    snapshot.checking_localsend_ports = test_localsend_ports;
     local_ipv4_ = SelectLanIPv4(snapshot.local);
     {
         std::lock_guard lock(diagnostics_mutex_);
+        snapshot.localsend_ports = diagnostics_.localsend_ports;
+        snapshot.localsend_port_findings = diagnostics_.localsend_port_findings;
         diagnostics_ = snapshot;
     }
-    if (!snapshot.wsl && snapshot.local.name != "macOS") return;
+    if (!test_localsend_ports && !snapshot.wsl && snapshot.local.name != "macOS") return;
     diagnostics_worker_ = std::thread([this, snapshot = std::move(snapshot)]() mutable {
         try {
             InspectSupplementalNetwork(snapshot, diagnostics_cancelled_);
         } catch (const Json::exception&) {
             snapshot.host.notice = "Could not read Windows host interface data";
+        }
+        if (diagnostics_cancelled_) return;
+        if (snapshot.checking_localsend_ports) {
+            {
+                std::lock_guard lock(diagnostics_mutex_);
+                diagnostics_ = snapshot;
+            }
+            redraw_();
+            InspectLocalSendPorts(snapshot, diagnostics_cancelled_);
+            snapshot.checking_localsend_ports = false;
         }
         if (diagnostics_cancelled_) return;
         {

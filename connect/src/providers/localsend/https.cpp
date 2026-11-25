@@ -98,7 +98,8 @@ void Https::Check() const {
 }
 
 template<class Initiate>
-boost::system::error_code Https::Wait(Milliseconds timeout, Initiate initiate, TransferFailure code) {
+boost::system::error_code Https::Wait(Milliseconds timeout, Initiate initiate, TransferFailure code,
+                                     std::string_view timeout_reason) {
     Check();
     bool done = false;
     boost::system::error_code result;
@@ -117,7 +118,7 @@ boost::system::error_code Https::Wait(Milliseconds timeout, Initiate initiate, T
         io_.restart();
         io_.run();
         Check();
-        throw Error{TransferFailure::Timeout, "LocalSend request timed out"};
+        throw Error{TransferFailure::Timeout, std::string(timeout_reason)};
     }
     if (result && result != http::error::need_buffer && result != http::error::need_more) {
         throw Error{code, result.message()};
@@ -127,10 +128,12 @@ boost::system::error_code Https::Wait(Milliseconds timeout, Initiate initiate, T
 
 std::string Https::Connect(const tcp::endpoint& address, Milliseconds timeout) {
     const auto deadline = Clock::now() + timeout;
-    Wait(timeout, [&](auto done) { Socket().async_connect(address, done); });
+    const auto endpoint = address.address().to_string() + ":" + std::to_string(address.port());
+    Wait(timeout, [&](auto done) { Socket().async_connect(address, done); },
+         TransferFailure::ConnectionFailure, "LocalSend connection to " + endpoint + " timed out");
     Wait(std::chrono::duration_cast<Milliseconds>(deadline - Clock::now()),
          [&](auto done) { stream_.async_handshake(ssl::stream_base::client, done); },
-         TransferFailure::TlsFailure);
+         TransferFailure::TlsFailure, "LocalSend TLS handshake with " + endpoint + " timed out");
     auto fingerprint = Fingerprint();
     if (!fingerprint) {
         throw Error{TransferFailure::PeerAuthenticationFailed, "LocalSend peer did not present a certificate"};
@@ -181,10 +184,11 @@ void Https::ReadBody(Headers& request, Milliseconds timeout,
     }
 }
 
-http::response<http::string_body> Https::ReadResponse(Milliseconds timeout) {
+http::response<http::string_body> Https::ReadResponse(Milliseconds timeout, std::string_view timeout_reason) {
     http::response_parser<http::string_body> response;
     response.body_limit(kMaxControl);
-    Wait(timeout, [&](auto done) { http::async_read(stream_, buffer_, response, done); });
+    Wait(timeout, [&](auto done) { http::async_read(stream_, buffer_, response, done); },
+         TransferFailure::ConnectionFailure, timeout_reason);
     return response.release();
 }
 

@@ -3,6 +3,7 @@
 #include <atomic>
 #include <chrono>
 #include <optional>
+#include <string_view>
 
 #include <boost/asio/ssl.hpp>
 #include <boost/beast.hpp>
@@ -45,7 +46,8 @@ public:
     void ReadHeaders(Headers& request, Milliseconds timeout);
     void ReadBody(Headers& request, Milliseconds timeout,
                   const std::function<void(const char*, std::size_t)>& consume);
-    http::response<http::string_body> ReadResponse(Milliseconds timeout);
+    http::response<http::string_body> ReadResponse(Milliseconds timeout,
+        std::string_view timeout_reason = "LocalSend request timed out");
     void Reply(http::status status, std::string body, Milliseconds timeout);
     void Post(std::string_view target, std::string body, Milliseconds timeout);
     void Upload(std::string_view target, std::istream& input, std::uint64_t length,
@@ -55,7 +57,8 @@ public:
 
 private:
     template<class Initiate> boost::system::error_code Wait(
-        Milliseconds timeout, Initiate initiate, TransferFailure code = TransferFailure::ConnectionFailure);
+        Milliseconds timeout, Initiate initiate, TransferFailure code = TransferFailure::ConnectionFailure,
+        std::string_view timeout_reason = "LocalSend request timed out");
 
     net::io_context io_;
     ssl::stream<beast::tcp_stream> stream_;

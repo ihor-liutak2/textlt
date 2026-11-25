@@ -163,13 +163,32 @@ column. Clear the interface field in the LocalSend settings tab to restore Auto.
 
 In WSL, the list labels the Windows and Linux addresses. A Windows address
 available only to the host can be used by TextLT running in Windows. When WSL
-uses NAT, a phone needs a Windows port forward to reach the WSL listener.
+uses NAT, LocalSend also checks the Windows LAN over HTTPS at startup and
+when you choose **Refresh peers**. It checks the configured discovery port
+on the active Windows LAN subnet, within the host address's /24 block.
+A phone needs a Windows TCP port forward to reach the WSL receive listener.
 Diagnostics confirms phone access after an authenticated mobile LocalSend
 client reaches that listener during the current session.
 
 Open **Info** for adapter details, gateways, the WSL networking mode, and
 LocalSend port and bind diagnostics. Setting the HTTPS port to `0` lets the
 system assign a free port, which appears in Info after Start.
+
+The **Diagnostics** tab automatically checks TCP and UDP ports 53317 and
+53327 without starting LocalSend. **Refresh** reruns those checks.
+The tab shows whether each TCP and UDP port is free or in use. On WSL,
+it shows separate results for WSL and the Windows host.
+**Test discovery** starts LocalSend if stopped and sends a discovery announcement.
+In WSL the report checks the Linux guest and Windows host. It includes firewall rules
+and Windows forwarding rules that use either port. In WSL NAT mode it
+also shows how many devices answered the HTTPS discovery check.
+**Copy diagnostics** copies the full report as plain text once the checks finish.
+
+**Troubleshoot** asks which TCP port to check. Select the LocalSend port for
+phone transfers or the TextLT port for direct connections with a paired
+TextLT device. On WSL NAT, the guide copies one Windows PowerShell command at
+a time and asks for the result before continuing. The forwarding command
+checks the WSL listener first and keeps rules that point to a different service.
 
 ## Exchange text and files with LocalSend
 

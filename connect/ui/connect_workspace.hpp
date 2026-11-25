@@ -62,11 +62,16 @@ public:
     bool SaveSettings();
     connect::ProviderResult PairNativePeer(std::string_view code);
     void RefreshLocalIPv4();
-    void RefreshDiagnostics();
+    void RefreshDiagnostics(bool test_localsend_ports = false);
+    connect::ProviderResult TestLocalSendDiscovery();
     NetworkDiagnostics Diagnostics() const;
     const connect::LocalSendRuntime& LocalSendRuntime() const { return localsend_runtime_; }
+    connect::LocalSendDiscoveryStatus LocalSendDiscoveryStatus() const;
     bool LocalSendPeerVerified() const { return localsend_peer_verified_; }
     bool LocalSendPhoneReachedListener() const { return localsend_phone_reached_listener_; }
+    std::string ActiveNativeListenPort() const;
+    std::string ActiveNativeListenAddress() const;
+    connect::ProviderResult StartNativeListener();
     bool UseLocalSendAddress(const std::string& address);
     const std::string& LocalIPv4() const { return local_ipv4_; }
     const std::string& Status() const { return status_; }
@@ -116,7 +121,7 @@ private:
     ftxui::Component FlatAction(std::string label, ButtonRole role, std::function<void()> action) const;
     void StartNative();
     void ToggleNative();
-    connect::ProviderResult StartLocalSend();
+    connect::ProviderResult StartLocalSend(bool test_ports = false);
     void ToggleLocalSend();
     void RefreshLocalSendPeers();
     void ConnectLocalSendByIp();

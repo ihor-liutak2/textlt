@@ -267,12 +267,12 @@ void ConnectWorkspace::ToggleNative() {
     }
 }
 
-ProviderResult ConnectWorkspace::StartLocalSend() {
+ProviderResult ConnectWorkspace::StartLocalSend(bool test_ports) {
     localsend_runtime_ = {};
     localsend_peer_verified_ = false;
     localsend_phone_reached_listener_ = false;
     auto previous = Diagnostics();
-    RefreshDiagnostics();
+    RefreshDiagnostics(test_ports);
     auto network = Diagnostics();
     if (network.local.name == "macOS" && network.local.gateways.empty()) {
         network.local.gateways = previous.local.gateways;
@@ -316,6 +316,14 @@ ProviderResult ConnectWorkspace::StartLocalSend() {
     options.report_incoming_mobile_peer = [this] {
         if (!localsend_phone_reached_listener_.exchange(true)) redraw_();
     };
+    options.report_discovery_change = [this] { redraw_(); };
+    if (network.wsl) {
+        options.unicast_discovery_subnet = [this]() -> std::optional<LocalSendSubnet> {
+            const auto address = SelectWslNatLanIPv4(Diagnostics());
+            if (!address) return {};
+            return LocalSendSubnet{address->address, address->prefix};
+        };
+    }
     auto provider = MakeLocalSendProvider(std::move(options));
     auto result = provider->Start([this](ProviderEvent event) { QueueProviderEvent(std::move(event)); });
     if (result.accepted) service_->RegisterProvider(std::move(provider));
@@ -340,6 +348,39 @@ void ConnectWorkspace::RefreshLocalSendPeers() {
     auto* provider = FindLocalSendProvider();
     const auto result = provider->RefreshPeers();
     status_ = result.accepted ? "LocalSend discovery requested" : result.reason;
+}
+
+ProviderResult ConnectWorkspace::TestLocalSendDiscovery() {
+    if (auto* provider = FindLocalSendProvider()) {
+        RefreshDiagnostics(true);
+        return provider->RefreshPeers();
+    }
+    auto result = StartLocalSend(true);
+    status_ = result.accepted ? "LocalSend running" : result.reason;
+    return result;
+}
+
+connect::LocalSendDiscoveryStatus ConnectWorkspace::LocalSendDiscoveryStatus() const {
+    if (const auto* provider = FindLocalSendProvider()) return provider->DiscoveryStatus();
+    return {};
+}
+
+std::string ConnectWorkspace::ActiveNativeListenPort() const {
+    if (!native_running_) return {};
+    const auto port = Port(active_settings_.listen_port.empty() ? kDefaultNativePort : active_settings_.listen_port);
+    return port && *port ? std::to_string(*port) : std::string{};
+}
+
+std::string ConnectWorkspace::ActiveNativeListenAddress() const {
+    return native_running_ ? active_settings_.listen_ip : std::string{};
+}
+
+ProviderResult ConnectWorkspace::StartNativeListener() {
+    const auto port = Port(settings_.listen_port.empty() ? kDefaultNativePort : settings_.listen_port);
+    if (!port || !*port) return {false, "Set a TCP listen port in Connect Settings → Network first."};
+    if (!native_running_) StartNative();
+    if (!ActiveNativeListenPort().empty()) return {true, {}};
+    return {false, native_running_ ? "Stop TextLT in the sidebar and start it with the new listen settings." : status_};
 }
 
 void ConnectWorkspace::StopProvider(std::string_view provider) {
@@ -618,7 +659,13 @@ void ConnectWorkspace::Handle(const PeerCapabilities& peer) {
 void ConnectWorkspace::Handle(const IncomingOffer& offer) {
     auto& chat = Get(offer.identity.peer);
     chat.offer = offer;
-    if (!selected_) Select({offer.identity.peer.provider_id, offer.identity.peer.peer_id});
+    const bool local_send = offer.identity.peer.provider_id == kLocalSendProviderId;
+    const auto* current = Selected();
+    // A LocalSend sender without a client certificate has its own conversation.
+    // Show the offer there even when the sender's discovery entry is selected.
+    if (!current || (local_send && !current->offer)) {
+        Select({offer.identity.peer.provider_id, offer.identity.peer.peer_id});
+    }
     const bool file = offer.metadata.type_id == kFileTypeId;
     if (file) {
         chat.messages.push_back({offer.identity.transfer_id,
@@ -627,7 +674,7 @@ void ConnectWorkspace::Handle(const IncomingOffer& offer) {
         chat.active_transfer = std::make_pair(offer.identity, TransferDirection::Incoming);
         chat.scroll = 0;
     }
-    if (!file && offer.identity.peer.provider_id == kLocalSendProviderId) {
+    if (!file && local_send) {
         chat.active_transfer = std::make_pair(offer.identity, TransferDirection::Incoming);
     }
     status_ = file ? "Incoming file offer from " + chat.name

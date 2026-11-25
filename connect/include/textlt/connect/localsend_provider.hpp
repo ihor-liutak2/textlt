@@ -27,6 +27,21 @@ struct LocalSendRuntime {
     std::string error;
 };
 
+struct LocalSendSubnet {
+    std::string address;
+    int prefix_length;
+};
+
+struct LocalSendDiscoveryStatus {
+    LocalSendCheck multicast_send = LocalSendCheck::NotAttempted;
+    std::string multicast_error;
+    unsigned multicast_packets = 0;
+    std::string unicast_subnet;
+    bool unicast_running = false;
+    unsigned unicast_attempts = 0;
+    unsigned unicast_registered = 0;
+};
+
 struct LocalSendOptions {
     std::filesystem::path identity_file;
     std::string alias = "TextLT";
@@ -47,6 +62,10 @@ struct LocalSendOptions {
     std::function<void()> report_verified_peer;
     // Runs on a worker thread after an authenticated mobile peer reaches the listener.
     std::function<void()> report_incoming_mobile_peer;
+    // Runs on the discovery worker. Supply a LAN subnet when multicast cannot reach it.
+    std::function<std::optional<LocalSendSubnet>()> unicast_discovery_subnet;
+    // Runs on a worker thread when discovery diagnostics change.
+    std::function<void()> report_discovery_change;
 };
 
 class ILocalSendProvider : public IConnectProvider {
@@ -54,6 +73,7 @@ public:
     // Resolves an IPv4 address with an optional port. Completion arrives as a LocalSendConnectResult.
     virtual ProviderResult ConnectByIp(std::string_view endpoint) = 0;
     virtual ProviderResult RefreshPeers() = 0;
+    virtual LocalSendDiscoveryStatus DiscoveryStatus() const = 0;
 };
 
 std::unique_ptr<ILocalSendProvider> MakeLocalSendProvider(LocalSendOptions options);

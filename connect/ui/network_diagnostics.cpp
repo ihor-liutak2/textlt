@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cerrno>
+#include <charconv>
 #include <cstddef>
 #include <cstdlib>
 #include <cstdint>
@@ -23,13 +25,14 @@
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <net/if.h>
+#include <sys/socket.h>
 #include <sys/utsname.h>
+#include <unistd.h>
 #ifdef __APPLE__
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_types.h>
 #include <sys/ioctl.h>
-#include <unistd.h>
 #endif
 #endif
 
@@ -295,7 +298,146 @@ void InspectInterfaces(NetworkEnvironment& environment) {
 }
 #endif
 
+#ifndef _WIN32
+PortAvailability BindPortAvailability(bool tcp, unsigned port) {
+    const int socket_fd = socket(AF_INET, tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
+    if (socket_fd < 0) return PortAvailability::Unknown;
+    sockaddr_in address{};
+#ifdef __APPLE__
+    address.sin_len = sizeof(address);
+#endif
+    address.sin_family = AF_INET;
+    address.sin_port = htons(static_cast<std::uint16_t>(port));
+    const int result = bind(socket_fd, reinterpret_cast<const sockaddr*>(&address), sizeof(address));
+    const int error = errno;
+    close(socket_fd);
+    if (result == 0) return PortAvailability::Available;
+    return error == EADDRINUSE ? PortAvailability::InUse : PortAvailability::Unknown;
+}
+#endif
+
 #if defined(__linux__)
+PortAvailability LinuxPortAvailability(bool tcp, unsigned port) {
+    std::ostringstream hex;
+    hex << std::uppercase << std::hex << port;
+    const auto suffix_to_match = ":" + hex.str();
+    for (const auto* suffix : {"", "6"}) {
+        std::ifstream endpoints(std::string("/proc/net/") + (tcp ? "tcp" : "udp") + suffix);
+        std::string line;
+        if (!std::getline(endpoints, line)) continue;
+        while (std::getline(endpoints, line)) {
+            std::istringstream entry(line);
+            std::string index, local, remote, state;
+            if (entry >> index >> local >> remote >> state;
+                local.size() >= suffix_to_match.size() &&
+                local.compare(local.size() - suffix_to_match.size(), suffix_to_match.size(), suffix_to_match) == 0 &&
+                (!tcp || state == "0A")) {
+                return PortAvailability::InUse;
+            }
+        }
+    }
+    return BindPortAvailability(tcp, port);
+}
+
+bool HasDiagnosticPort(std::string_view value) {
+    const auto parse = [](std::string_view number) -> std::optional<unsigned> {
+        unsigned port = 0;
+        const auto end = number.data() + number.size();
+        const auto result = std::from_chars(number.data(), end, port);
+        if (result.ec != std::errc{} || result.ptr != end) return {};
+        return port;
+    };
+    while (!value.empty()) {
+        const auto comma = value.find(',');
+        const auto ports = value.substr(0, comma);
+        const auto separator = ports.find_first_of(":-");
+        const auto first = parse(ports.substr(0, separator));
+        const auto last = separator == std::string_view::npos ? first : parse(ports.substr(separator + 1));
+        if (first && last && ((*first <= 53317 && *last >= 53317) ||
+                              (*first <= 53327 && *last >= 53327))) return true;
+        if (comma == std::string_view::npos) break;
+        value.remove_prefix(comma + 1);
+    }
+    return false;
+}
+
+bool NftPortsMatch(const Json& ports) {
+    if (ports.is_number_integer()) return ports == 53317 || ports == 53327;
+    if (!ports.is_object()) return false;
+    const auto range = ports.find("range");
+    if (range != ports.end() && range->is_array() && range->size() == 2) {
+        return HasDiagnosticPort((*range)[0].dump() + "-" + (*range)[1].dump());
+    }
+    const auto set = ports.find("set");
+    return set != ports.end() && set->is_array() && std::any_of(set->begin(), set->end(), NftPortsMatch);
+}
+
+void InspectLinuxFirewall(std::vector<std::string>& findings, const std::string& platform,
+                          const std::atomic<bool>& cancelled) {
+    const RemoteCommandRunner runner;
+    const auto nft = runner.RunStreaming({"nft", "-j", "list", "ruleset"}, {}, &cancelled, {}, {3});
+    const auto ruleset = Json::parse(nft.output, nullptr, false);
+    const auto iptables = runner.RunStreaming({"iptables", "-S"}, {}, &cancelled, {}, {3});
+    const bool nft_readable = nft.exit_code == 0 && ruleset.is_object() && ruleset.contains("nftables") &&
+                              ruleset["nftables"].is_array();
+    bool nft_inbound = false;
+    if (nft_readable) {
+        nft_inbound = std::any_of(ruleset["nftables"].begin(), ruleset["nftables"].end(), [](const auto& item) {
+            return item.is_object() && item.contains("chain") && item["chain"].is_object() &&
+                   item["chain"].contains("hook") && item["chain"]["hook"] == "input";
+        });
+    }
+    const bool iptables_inbound = iptables.exit_code == 0 &&
+        (iptables.output.find("-P INPUT ACCEPT\n") == std::string::npos ||
+         iptables.output.find("-A INPUT ") != std::string::npos);
+    const auto prefix = platform + " · ";
+    if (nft_inbound || iptables_inbound) {
+        findings.push_back(prefix + "The Linux firewall checks incoming traffic. General rules may affect both ports.");
+    } else if (nft_readable && iptables.exit_code == 0) {
+        findings.push_back(prefix + "The Linux firewall has no incoming rules that block either port.");
+    } else if (nft.exit_code == 127 && iptables.exit_code == 127) {
+        findings.push_back(prefix + "Linux firewall could not be checked. The tools for reading its rules are missing.");
+    } else {
+        findings.push_back(prefix + "Linux firewall could not be fully checked. Reading its rules may require administrator access.");
+    }
+    if (iptables.exit_code == 0) {
+        std::istringstream lines(iptables.output);
+        for (std::string line; std::getline(lines, line);) {
+            std::istringstream tokens(line);
+            for (std::string token; tokens >> token;) {
+                if (token != "--dport" && token != "--dports" && token != "--sport" && token != "--sports") continue;
+                std::string ports;
+                if (tokens >> ports; HasDiagnosticPort(ports)) {
+                    findings.push_back(prefix + "Linux firewall rule (iptables) " + line);
+                    break;
+                }
+            }
+        }
+    }
+    if (!nft_readable) return;
+    for (const auto& entry : ruleset["nftables"]) {
+        if (!entry.is_object() || !entry.contains("rule")) continue;
+        const auto& rule = entry["rule"];
+        if (!rule.is_object() || !rule.contains("expr") || !rule["expr"].is_array()) continue;
+        const auto& expressions = rule["expr"];
+        const bool matches = std::any_of(expressions.begin(), expressions.end(), [](const auto& expression) {
+            if (!expression.is_object() || !expression.contains("match")) return false;
+            const auto& match = expression["match"];
+            if (!match.is_object() || !match.contains("left") || !match.contains("right")) return false;
+            const auto& left = match["left"];
+            if (!left.is_object() || !left.contains("payload") || !left["payload"].is_object()) return false;
+            const auto field = left["payload"].find("field");
+            return field != left["payload"].end() && (*field == "dport" || *field == "sport") &&
+                   NftPortsMatch(match["right"]);
+        });
+        if (matches) {
+            findings.push_back(prefix + "Linux firewall rule (nftables) in " +
+                rule.value("table", std::string("unknown table")) + "/" +
+                rule.value("chain", std::string("unknown chain")) + ". " + expressions.dump());
+        }
+    }
+}
+
 void InspectLinuxGateways(NetworkEnvironment& environment) {
     std::ifstream route("/proc/net/route");
     std::string line;
@@ -481,6 +623,231 @@ foreach ($config in @(Get-NetIPConfiguration -All)) {
 #endif
 }
 
+void InspectLocalSendPorts(NetworkDiagnostics& diagnostics, const std::atomic<bool>& cancelled) {
+    auto& findings = diagnostics.localsend_port_findings;
+    findings.clear();
+    auto& ports = diagnostics.localsend_ports;
+    ports.clear();
+#if defined(__linux__)
+    const std::string platform = diagnostics.wsl ? "WSL" : "Linux";
+    for (const auto port : {53317u, 53327u}) {
+        ports.push_back({platform, port, LinuxPortAvailability(true, port), LinuxPortAvailability(false, port)});
+    }
+    InspectLinuxFirewall(findings, platform, cancelled);
+    if (!diagnostics.wsl || cancelled) return;
+#elif !defined(_WIN32)
+    const auto system = diagnostics.local.name.empty() ? std::string("This device") : diagnostics.local.name;
+    for (const auto port : {53317u, 53327u}) {
+        ports.push_back({system, port, BindPortAvailability(true, port), BindPortAvailability(false, port)});
+    }
+    findings.push_back("Firewall rule details are unavailable on this system.");
+    return;
+#endif
+    for (const auto port : {53317u, 53327u}) ports.push_back({"Windows host", port});
+    constexpr char script[] = R"PS(
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$ports = @(53317, 53327)
+$tcpListening = @{}
+function Test-Bind($protocol, $port) {
+    $probe = $null
+    try {
+        $type = if ($protocol -eq 'TCP') { [Net.Sockets.SocketType]::Stream } else { [Net.Sockets.SocketType]::Dgram }
+        $transport = if ($protocol -eq 'TCP') { [Net.Sockets.ProtocolType]::Tcp } else { [Net.Sockets.ProtocolType]::Udp }
+        $probe = [Net.Sockets.Socket]::new([Net.Sockets.AddressFamily]::InterNetwork, $type, $transport)
+        $probe.ExclusiveAddressUse = $true
+        $probe.Bind([Net.IPEndPoint]::new([Net.IPAddress]::Any, $port))
+        return 'free'
+    } catch {
+        if ($_.Exception.GetBaseException().SocketErrorCode -eq 'AddressAlreadyInUse') { return 'in-use' }
+        return 'unknown'
+    } finally {
+        if ($probe) { $probe.Dispose() }
+    }
+}
+foreach ($protocol in @('TCP', 'UDP')) {
+    try {
+        $endpoints = if ($protocol -eq 'TCP') { Get-NetTCPConnection -State Listen }
+            else { Get-NetUDPEndpoint }
+        $ranges = & netsh.exe interface ipv4 show excludedportrange "protocol=$($protocol.ToLowerInvariant())"
+        $rangesReadable = $LASTEXITCODE -eq 0
+        foreach ($port in $ports) {
+            $bound = @($endpoints | Where-Object LocalPort -eq $port)
+            if ($protocol -eq 'TCP') { $tcpListening[$port] = $bound }
+            if ($bound.Count) {
+                "@port $protocol $port in-use"
+                $owners = foreach ($endpoint in $bound) {
+                    $process = Get-Process -Id $endpoint.OwningProcess -ErrorAction SilentlyContinue
+                    $name = if ($process) { $process.ProcessName } else { "process $($endpoint.OwningProcess)" }
+                    "$name on $($endpoint.LocalAddress)"
+                }
+                "Windows $protocol port $port is in use by $(($owners | Select-Object -Unique) -join ', ')."
+            } else {
+                $reserved = $false
+                foreach ($range in $ranges) {
+                    if ($range -match '^\s*(\d+)\s+(\d+)\s*\*?\s*$' -and
+                        [int]$Matches[1] -le $port -and [int]$Matches[2] -ge $port) { $reserved = $true }
+                }
+                $state = if ($reserved) { 'reserved' } else { Test-Bind $protocol $port }
+                "@port $protocol $port $state"
+                switch ($state) {
+                    'reserved' { "Windows $protocol port $port is reserved by the system." }
+                    'free' { "Windows $protocol port $port could be opened." }
+                    'in-use' { "Windows $protocol port $port is in use." }
+                    default { "Windows could not confirm whether $protocol port $port is free." }
+                }
+                if (!$rangesReadable) { "Windows could not read system reservations for $protocol port $port." }
+            }
+        }
+    } catch { "Windows $protocol ports 53317 and 53327 could not be checked." }
+}
+function Has-Port($values, $port) {
+    foreach ($item in (@($values) -split ',\s*')) {
+        if ($item -eq "$port") { return $true }
+        if ($item -match '^(\d+)-(\d+)$' -and
+            [int]$Matches[1] -le $port -and [int]$Matches[2] -ge $port) { return $true }
+    }
+    return $false
+}
+try {
+    $active = @(Get-NetConnectionProfile | ForEach-Object {
+        if ($_.NetworkCategory -eq 'DomainAuthenticated') { 'Domain' }
+        else { [string]$_.NetworkCategory }
+    } | Select-Object -Unique)
+    $profiles = @(Get-NetFirewallProfile -PolicyStore ActiveStore | Where-Object { $_.Name -in $active })
+    if (!$profiles.Count) { 'Windows firewall profile could not be identified.' }
+    foreach ($profile in $profiles) {
+        $policy = if ($profile.Enabled -eq 'False') { 'off' }
+            elseif ($profile.AllowInboundRules -eq 'False') { 'on and set to block incoming connections' }
+            elseif ($profile.DefaultInboundAction -eq 'Allow') { 'on and allows incoming connections by default' }
+            else { 'on and blocks incoming connections by default' }
+        "Windows firewall on $($profile.Name) networks is $policy."
+    }
+    $firewall = New-Object -ComObject HNetCfg.FwPolicy2
+    $activeMask = $firewall.CurrentProfileTypes
+    $rules = @($firewall.Rules | Where-Object { $_.Protocol -in @(6, 17) })
+    foreach ($port in $ports) {
+        $matching = @($rules | Where-Object {
+            (Has-Port $_.LocalPorts $port) -or (Has-Port $_.RemotePorts $port)
+        })
+        if (!$matching.Count) { "Windows firewall has no TCP or UDP rules that name port $port. General rules may still apply." }
+        foreach ($rule in $matching) {
+            $protocol = if ($rule.Protocol -eq 6) { 'TCP' } else { 'UDP' }
+            $direction = if ($rule.Direction -eq 1) { 'incoming' } else { 'outgoing' }
+            $action = if ($rule.Action -eq 1) { 'allows' } else { 'blocks' }
+            $state = if (!$rule.Enabled) { 'off' } elseif (!($rule.Profiles -band $activeMask)) { 'only on other network profiles' } else { 'on' }
+            "Windows firewall rule '$($rule.Name)'. The rule is $state. It $action $direction $protocol. Local ports $($rule.LocalPorts). Remote ports $($rule.RemotePorts)."
+            if ($rule.ApplicationName) { "  Applies to app $($rule.ApplicationName)." }
+            if ($rule.LocalAddresses -ne '*' -or $rule.RemoteAddresses -ne '*') {
+                "  Applies to local addresses $($rule.LocalAddresses) and remote addresses $($rule.RemoteAddresses)."
+            }
+        }
+    }
+} catch { 'Windows firewall rules could not be checked. Windows may require administrator access.' }
+try {
+    $entries = & netsh.exe interface portproxy show all
+    if ($LASTEXITCODE -ne 0) { throw 'Port forwarding settings unavailable' }
+    $matchedPorts = @{}
+    foreach ($entry in $entries) {
+        if ($entry -notmatch '^\s*(\S+)\s+(\d+)\s+(\S+)\s+(\d+)\s*$') { continue }
+        $listenAddress, $listenPort = $Matches[1], [int]$Matches[2]
+        $targetAddress, $targetPort = $Matches[3], [int]$Matches[4]
+        if ($listenPort -notin $ports -and $targetPort -notin $ports) { continue }
+        $matchedPorts[$listenPort] = $true
+        $matchedPorts[$targetPort] = $true
+        "Windows TCP forwarding rule sends connections from $listenAddress port $listenPort to $targetAddress port $targetPort."
+        if ($tcpListening.ContainsKey($listenPort)) {
+            $wildcard = if ($listenAddress -match ':') { '::' } else { '0.0.0.0' }
+            $listener = $tcpListening[$listenPort] | Where-Object { $_.LocalAddress -in @($listenAddress, $wildcard) }
+            if (!$listener) {
+                "The forwarding rule exists, but Windows shows no TCP listener at $listenAddress port $listenPort."
+            }
+        }
+    }
+    foreach ($port in $ports) {
+        if (!$matchedPorts.ContainsKey($port)) { "Windows has no standard TCP forwarding rule using port $port." }
+    }
+} catch { 'Windows TCP forwarding for ports 53317 and 53327 could not be checked.' }
+if (Get-Command Get-NetNatStaticMapping -ErrorAction SilentlyContinue) {
+    try {
+        $mappings = @(Get-NetNatStaticMapping | Where-Object {
+            $_.ExternalPort -in $ports -or $_.InternalPort -in $ports
+        })
+        if (!$mappings.Count) { 'Windows NAT has no static mappings for ports 53317 or 53327.' }
+        foreach ($mapping in $mappings) {
+            "Windows NAT $($mapping.Protocol) mapping forwards $($mapping.ExternalIPAddress) port $($mapping.ExternalPort) to $($mapping.InternalIPAddress) port $($mapping.InternalPort)."
+        }
+    } catch { 'Windows NAT static mappings could not be checked. Windows may require administrator access.' }
+}
+if ($checkWsl -and !(Get-Command Get-NetFirewallHyperVVMSetting -ErrorAction SilentlyContinue)) {
+    'Windows does not provide the command needed to check its WSL firewall (Hyper-V).'
+} elseif ($checkWsl) {
+    try {
+        $wslId = '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}'
+        $settings = Get-NetFirewallHyperVVMSetting -PolicyStore ActiveStore -Name $wslId
+        if (!$settings) { throw 'WSL firewall settings unavailable' }
+        if ($settings.Enabled -eq 'False') {
+            'Windows firewall for WSL (Hyper-V) is off.'
+        } else {
+            $policy = switch ([string]$settings.DefaultInboundAction) {
+                'Allow' { 'allows incoming connections by default' }
+                'Block' { 'blocks incoming connections by default' }
+                default { 'did not report a default for incoming connections' }
+            }
+            "Windows firewall for WSL (Hyper-V) $policy."
+            $rules = @(Get-NetFirewallHyperVRule -PolicyStore ActiveStore -VMCreatorId $wslId)
+            foreach ($port in $ports) {
+                $matching = @($rules | Where-Object {
+                    (Has-Port $_.LocalPorts $port) -or (Has-Port $_.RemotePorts $port)
+                })
+                if (!$matching.Count) { "The Windows firewall for WSL has no rules that name port $port. General rules may still apply." }
+                foreach ($rule in $matching) {
+                    $name = if ($rule.DisplayName) { $rule.DisplayName } else { $rule.Name }
+                    "WSL firewall rule '$name'. $($rule.Direction) $($rule.Protocol). Action $($rule.Action). Enabled $($rule.Enabled). Local ports $($rule.LocalPorts -join ', '). Remote ports $($rule.RemotePorts -join ', ')."
+                }
+            }
+        }
+    } catch { 'Windows firewall for WSL (Hyper-V) could not be fully checked.' }
+}
+)PS";
+    std::string command = script;
+    if (diagnostics.wsl) command.insert(0, "$checkWsl = $true\n");
+    std::vector<std::string> args{"powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command};
+    const RemoteCommandRunner runner;
+    auto windows = runner.RunStreaming(args, {}, &cancelled, {}, {15});
+#if defined(__linux__)
+    if (windows.exit_code == 127 && !cancelled) {
+        args.front() = "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe";
+        windows = runner.RunStreaming(args, {}, &cancelled, {}, {15});
+    }
+#endif
+    if (windows.exit_code != 0 || windows.output.empty()) {
+        findings.push_back("Windows ports and firewall could not be checked. Windows PowerShell may be unavailable.");
+        return;
+    }
+    std::istringstream lines(windows.output);
+    for (std::string line; std::getline(lines, line);) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.rfind("@port ", 0) == 0) {
+            std::istringstream entry(line);
+            std::string tag, protocol, state;
+            unsigned port = 0;
+            if (!(entry >> tag >> protocol >> port >> state)) continue;
+            const auto row = std::find_if(ports.begin(), ports.end(), [port](const auto& row) {
+                return row.system == "Windows host" && row.port == port;
+            });
+            if (row == ports.end()) continue;
+            const auto availability = state == "free" ? PortAvailability::Available
+                : state == "in-use" ? PortAvailability::InUse
+                : state == "reserved" ? PortAvailability::Reserved : PortAvailability::Unknown;
+            if (protocol == "TCP") row->tcp = availability;
+            if (protocol == "UDP") row->udp = availability;
+            continue;
+        }
+        if (!line.empty()) findings.push_back(std::move(line));
+    }
+}
+
 bool IsAutomaticLocalSendAddress(const std::string& address) {
     return address.empty() || address == "0.0.0.0" || Lower(address) == "auto";
 }
@@ -500,6 +867,19 @@ std::string SelectLanIPv4(const NetworkEnvironment& environment) {
         }
     }
     return best ? best->address : "";
+}
+
+std::optional<InterfaceAddress> SelectWslNatLanIPv4(const NetworkDiagnostics& network) {
+    if (!network.wsl || network.wsl_mode != "nat") return {};
+    const auto& host = network.host;
+    const InterfaceAddress* best = nullptr;
+    for (const auto& address : host.addresses) {
+        if (!IsUsefulIPv4(host, address) || !IsLanAdapter(address) ||
+            address.prefix < 1 || address.prefix > 31) continue;
+        if (HasIPv4DefaultRoute(host, address)) return address;
+        if (!best) best = &address;
+    }
+    return best ? std::optional<InterfaceAddress>{*best} : std::nullopt;
 }
 
 std::vector<DiagnosticAddress> DiagnosticAddresses(const NetworkDiagnostics& network,
