@@ -35,11 +35,11 @@ class Terminal:
     def close(self):
         if self.fd is None:
             return
+        fd, self.fd = self.fd, None
         try:
-            terminate_process(self.process)
+            os.close(fd)
         finally:
-            os.close(self.fd)
-            self.fd = None
+            terminate_process(self.process)
 
     def __enter__(self):
         return self

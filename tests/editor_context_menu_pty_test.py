@@ -48,11 +48,11 @@ class Terminal:
     def close(self):
         if self.fd is None:
             return
+        fd, self.fd = self.fd, None
         try:
-            terminate_process(self.process)
+            os.close(fd)
         finally:
-            os.close(self.fd)
-            self.fd = None
+            terminate_process(self.process)
 
     def read(self, timeout=2, settle=0.12):
         chunks = []
@@ -363,14 +363,14 @@ def test_failed_osc52_falls_back(binary, path, environment, clipboard):
         assert clipboard.read_text() == "left aBc right", \
             "Native fallback received incorrect current-line content"
     finally:
-        if process is not None:
-            terminate_process(process)
         for fd in (input_master, input_slave, output_master, output_slave):
             if fd is not None:
                 try:
                     os.close(fd)
                 except OSError:
                     pass
+        if process is not None:
+            terminate_process(process)
 
 
 SCENARIOS = (
