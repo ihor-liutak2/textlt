@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail() {
+    printf 'textlt-convert: %s\n' "$*" >&2
+    exit 1
+}
+
+if [[ $# -lt 2 ]]; then
+    fail 'Usage: textlt-convert {markdown-to-word|word-to-markdown|pdf-to-text|format-json} SOURCE [REFERENCE.docx]'
+fi
+
+operation=$1
+source=$(realpath -ms -- "$2")
+[[ -f "$source" ]] || fail "Source file not found: $source"
+folder=$(dirname -- "$source")
+name=${source##*/}
+stem=${name%.*}
+[[ -n "$stem" && "$stem" != "$name" ]] || fail 'The source needs a filename extension.'
+
+case "$operation" in
+    markdown-to-word)
+        [[ $# -le 3 ]] || fail 'Expected SOURCE and an optional reference .docx.'
+        [[ "${name,,}" == *.md || "${name,,}" == *.markdown ]] || fail 'Expected a Markdown source.'
+        output="$folder/$stem.docx"
+        reference=()
+        if [[ $# -eq 3 ]]; then
+            reference_file=$(realpath -e -- "$3") || fail 'The reference document could not be found.'
+            [[ "$reference_file" == /work/* && -f "$reference_file" && "${reference_file,,}" == *.docx ]] ||
+                fail 'Use a reference .docx inside /work.'
+            reference=(--reference-doc="$reference_file")
+        fi
+        ;;
+    word-to-markdown)
+        [[ $# -eq 2 && "${name,,}" == *.docx ]] || fail 'Expected one .docx source.'
+        output="$folder/$stem.md"
+        ;;
+    pdf-to-text)
+        [[ $# -eq 2 && "${name,,}" == *.pdf ]] || fail 'Expected one .pdf source.'
+        output="$folder/$stem.txt"
+        ;;
+    format-json)
+        [[ $# -eq 2 && "${name,,}" == *.json ]] || fail 'Expected one .json source.'
+        output="$folder/$stem.formatted.json"
+        ;;
+    *) fail "Unknown operation: $operation" ;;
+esac
+
+[[ ! -e "$output" && ! -L "$output" ]] || fail "Output already exists: $output"
+scratch=$(mktemp -d -- "$folder/.textlt-convert.XXXXXXXX")
+media=
+cleanup() {
+    rm -rf -- "$scratch"
+    if [[ -n "$media" ]]; then rm -rf -- "$media"; fi
+}
+trap cleanup EXIT
+cd -- "$folder"
+temporary="$scratch/${output##*/}"
+
+case "$operation" in
+    markdown-to-word)
+        pandoc --from=gfm --to=docx --resource-path="$folder" --fail-if-warnings \
+            "${reference[@]}" --output="$temporary" "$source"
+        ;;
+    word-to-markdown)
+        media=$(mktemp -d -- "$folder/$stem-media.XXXXXXXX")
+        pandoc --from=docx --to=gfm --extract-media="${media##*/}" --output="$temporary" "$source"
+        ;;
+    pdf-to-text)
+        pdftotext -enc UTF-8 "$source" "$temporary"
+        ;;
+    format-json)
+        jq --indent 2 --slurp 'if length == 1 then .[0] else error("expected one JSON value") end' \
+            "$source" >"$temporary"
+        ;;
+esac
+
+# Same-directory hard linking publishes completed output without replacing even a racing writer.
+ln -T -- "$temporary" "$output" || fail "Could not publish output: $output"
+if [[ -n "$media" ]]; then
+    rmdir -- "$media" 2>/dev/null || :
+    media=
+fi
+printf '%s\n' "$output"

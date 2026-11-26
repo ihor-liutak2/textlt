@@ -41,6 +41,394 @@ Optimized to run perfectly in native Linux environments (**MX Linux**, **Ubuntu*
 
 ---
 
+## Docker
+
+The image builds TextLT from source with CMake. Both stages use Ubuntu 26.04.
+It includes the editor, themes, text processors, both Connect providers, the
+existing AI integrations, and the Piper runtime and local TTS server. Download
+a voice model when you first need one.
+
+### Build locally or from GitHub
+
+From a local checkout, build with your Bash or WSL user and group IDs. The image
+runs as that non-root user and creates Linux workspace files under your UID/GID.
+
+```bash
+docker build --build-arg TEXTLT_UID="$(id -u)" --build-arg TEXTLT_GID="$(id -g)" -t textlt:demo .
+```
+
+BuildKit can also fetch a committed branch or tag directly from GitHub. The
+selected branch or tag must contain the Dockerfile.
+
+```bash
+repo=https://github.com/ihor-liutak2/textlt.git
+docker buildx build --load --build-arg TEXTLT_UID="$(id -u)" --build-arg TEXTLT_GID="$(id -g)" -t textlt:demo "$repo#main"
+
+read -r -p 'Release tag (vX.Y.Z): ' tag
+docker buildx build --load --build-arg TEXTLT_UID="$(id -u)" --build-arg TEXTLT_GID="$(id -g)" -t textlt:demo "$repo#$tag"
+```
+
+The Docker integration is based on the latest stable GitHub release
+[`v1.1.0`](https://github.com/ihor-liutak2/textlt/releases/tag/v1.1.0). To
+build the exact published `v1.1.0` editor source with this checkout’s Docker
+recipe and conversion Actions, pass the recipe and Actions as build inputs.
+The exact tag predates the Docker-specific editor changes for Diagnostics and
+workspace selection, and explicit terminal clipboard mode.
+
+```bash
+docker buildx build --load -f - \
+  --build-context conversion-assets=./docs/docker \
+  --build-arg TEXTLT_UID="$(id -u)" --build-arg TEXTLT_GID="$(id -g)" \
+  -t textlt:demo 'https://github.com/ihor-liutak2/textlt.git#v1.1.0' < Dockerfile
+```
+
+### Launch the editor
+
+From the checkout, run the Compose service from Bash. For a WSL home directory,
+enable Docker Desktop's WSL integration for that distribution and run the
+command in that distro.
+
+```bash
+docker compose run --rm textlt
+```
+
+TextLT opens your Bash home directory at `/work` and keeps the terminal
+interactive. Settings, credentials you save in the app, voice downloads and
+Connect identity live in the separate `textlt-state` volume at `/state`.
+Use `TEXTLT_STATE_VOLUME` to choose another volume. Use a new volume when
+switching to an image built for a different UID/GID.
+
+Override the workspace with an existing directory. In WSL, the Windows profile
+can be selected through its `/mnt/c/Users/…` path.
+
+```bash
+TEXTLT_WORKSPACE="/path/to/project" docker compose run --rm textlt
+TEXTLT_WORKSPACE="/mnt/c/Users/Your Name" docker compose run --rm textlt
+```
+
+If you use the Windows Docker CLI from WSL, give it the Windows path and pass
+the override through `WSLENV`.
+
+```bash
+TEXTLT_WORKSPACE="C:/Users/Your Name" \
+  WSLENV="${WSLENV:+$WSLENV:}TEXTLT_WORKSPACE" docker.exe compose run --rm textlt
+```
+
+For an image built from a remote context or pulled from Docker Hub, launch
+without a checkout. To open a file directly, append its path under `/work` to
+the command. Images published by the workflow use UID/GID `1000:1000`. Build
+locally with the IDs above if your Linux user has different IDs.
+
+```bash
+docker run --rm -it \
+  --mount "type=bind,src=${TEXTLT_WORKSPACE:-$HOME},dst=/work" \
+  --mount "type=volume,src=${TEXTLT_STATE_VOLUME:-textlt-state},dst=/state" \
+  textlt:demo
+```
+
+### Terminal and clipboard
+
+The image uses `LANG=C.UTF-8`. The launcher starts TextLT in `/work` with
+an interactive TTY, forwards the terminal type and color hint, and uses the
+same workspace and state settings as Compose.
+
+```bash
+./docs/docker/run
+./docs/docker/run "/work/Український документ.md"
+```
+
+On a local Linux desktop, the launcher can give TextLT’s ClipboardController
+access to the host clipboard. Set `TEXTLT_CLIPBOARD` explicitly to choose the
+display protocol. Wayland uses `wl-copy` and `wl-paste` through the host’s
+Wayland socket. X11 uses `xclip` through its local display socket with the
+host’s Xauthority file when available. Run as a matching UID and use a local
+Docker daemon that can mount those sockets. Set `TEXTLT_CLIPBOARD=none` to
+launch without a desktop clipboard mount.
+
+```bash
+TEXTLT_CLIPBOARD=wayland ./docs/docker/run
+TEXTLT_CLIPBOARD=x11 ./docs/docker/run
+```
+
+On Windows Terminal, use terminal clipboard mode. Copy selected text with
+TextLT’s Copy command. Windows Terminal receives it through OSC 52 when its
+**Allow apps to write to the clipboard** setting is enabled. For host-to-editor
+paste, use the Windows Terminal paste action, typically **Ctrl+Shift+V**, and
+confirm the multiline paste prompt if shown. Windows Terminal handles the
+clipboard read and sends the text to TextLT. The terminal path does not require
+a WSLg display socket in the container.
+
+```bash
+TEXTLT_CLIPBOARD=terminal ./docs/docker/run
+```
+
+With the Windows Docker CLI and a Windows profile workspace, use the following
+from Bash in WSL. Set the Docker executable path to match your installation.
+
+```bash
+TEXTLT_DOCKER='/mnt/c/Program Files/Docker/Docker/resources/bin/docker.exe' \
+  TEXTLT_WORKSPACE='/mnt/c/Users/Your Name' TEXTLT_CLIPBOARD=terminal ./docs/docker/run
+```
+
+To open TextLT directly from Windows Terminal, add an entry like the following
+to the `profiles.list` array in Windows Terminal’s `settings.json`. Replace
+the distro name and checkout path with yours. The font is selected by the
+terminal. [Windows Terminal profile appearance](https://learn.microsoft.com/en-us/windows/terminal/customize-settings/profile-appearance#font)
+
+```json
+{
+  "name": "TextLT Docker",
+  "commandline": "wsl.exe -d Ubuntu-26.04 --cd /home/your-user/textlt -- env TEXTLT_CLIPBOARD=terminal bash ./docs/docker/run",
+  "font": { "face": "Cascadia Mono" }
+}
+```
+
+### Git and the host SSH agent
+
+Git, OpenSSH, curl, and the system CA certificates are available in the image.
+From a container shell, check a repository mounted under `/work`.
+
+```bash
+docker compose run --rm --entrypoint bash textlt
+id
+git -C /work/my-repo status
+```
+
+If Git reports dubious ownership on a Docker Desktop mount, verify that you
+trust the checkout and add its exact path to Git’s safe directories. The
+setting persists in the state volume.
+
+```bash
+git config --global --add safe.directory /work/my-repo
+git -C /work/my-repo status
+```
+
+On native Linux Docker Engine, start an SSH agent on the host and load your
+key there. Launch from a shell with `SSH_AUTH_SOCK` set. Use a workspace scoped
+to the project if you want only its files visible to the container.
+
+```bash
+test -S "${SSH_AUTH_SOCK:?Start a host SSH agent first}" &&
+docker run --rm -it \
+  --mount "type=bind,src=${TEXTLT_WORKSPACE:-$HOME},dst=/work" \
+  --mount "type=volume,src=${TEXTLT_STATE_VOLUME:-textlt-state},dst=/state" \
+  --mount "type=bind,src=$SSH_AUTH_SOCK,dst=/tmp/textlt-ssh-agent,readonly" \
+  -e SSH_AUTH_SOCK=/tmp/textlt-ssh-agent textlt:demo
+```
+
+Docker Desktop on macOS and Linux offers a host-agent socket. Use the same
+workspace and state mounts and substitute these two options before the image
+name. [Docker Desktop SSH agent forwarding](https://docs.docker.com/desktop/features/networking/networking-how-tos/#ssh-agent-forwarding)
+
+```bash
+--mount type=bind,src=/run/host-services/ssh-auth.sock,dst=/run/host-services/ssh-auth.sock,readonly \
+-e SSH_AUTH_SOCK=/run/host-services/ssh-auth.sock
+```
+
+To verify forwarding in a shell, run the launch with `--entrypoint bash`
+before the image name and run `ssh-add -l`. The container user needs access
+to the socket. On Windows/WSL this depends on whether the Docker backend can
+mount a Unix agent socket. Keep private keys on the host and use the socket
+for signing. SSH host-key trust is established separately and can be stored
+under `/state/.ssh`.
+
+### Connect networking
+
+On **native Linux Docker Engine**, share the host network to let TextLT and
+LocalSend participate in LAN discovery. In **Options → Connect**, start the
+provider you want to use. Use your LAN interface and allow the provider's TCP
+and UDP traffic through your host firewall. LocalSend defaults to port 53317.
+TextLT Connect uses port 53327 by default and requires pairing for direct
+peer connections.
+
+```bash
+docker run --rm -it --network host -e TEXTLT_CONTAINER_NETWORK=host \
+  --mount "type=bind,src=${TEXTLT_WORKSPACE:-$HOME},dst=/work" \
+  --mount "type=volume,src=${TEXTLT_STATE_VOLUME:-textlt-state},dst=/state" \
+  textlt:demo
+```
+
+On **Docker Desktop**, publish TCP 53317 for LocalSend by IP and start
+LocalSend in TextLT with the HTTPS port set to 53317 and interface set to Auto.
+In the peer app, enable HTTPS and use the Docker host's LAN IPv4 address and
+port 53317. Allow inbound TCP 53317 in the host firewall for the trusted LAN.
+Accepted files are saved in `/work/Downloads` with the default image settings.
+
+```bash
+docker compose run --rm -p 53317:53317/tcp textlt
+```
+
+The TCP mapping supports direct LocalSend transfers. LAN multicast discovery
+is a separate path and may be unavailable in Docker Desktop's virtual network.
+**Connect → Diagnostics** labels container interfaces and any independently
+resolved `host.docker.internal` address. That DNS address is the container's
+route to host services. Use the actual LAN address of the Docker host on an
+external peer.
+
+For troubleshooting, start a named container from one terminal and run the
+following checks from another while the LocalSend listener is running.
+
+```bash
+docker compose run --rm --name textlt-net -p 53317:53317/tcp textlt
+```
+
+```bash
+docker exec textlt-net ip -br addr
+docker exec textlt-net ss -lntu
+docker port textlt-net 53317/tcp
+```
+
+`ip` and `ss` report the addresses and listening sockets in that container’s
+network namespace. With native Linux host networking they see the shared host
+network. A published TCP port and a listening UDP socket each describe local
+configuration. Verify multicast discovery with a peer on the LAN.
+
+### Connect to a host AI service
+
+In **Tools → AI Settings**, set the provider URL. For Ollama on Docker Desktop,
+use `http://host.docker.internal:11434/v1`. With native Linux host networking
+use `http://127.0.0.1:11434/v1` for a host service listening on loopback.
+On Linux bridge networking, add a host-gateway alias and configure the service
+to listen on an interface reachable from the Docker bridge.
+
+```bash
+docker run --rm -it --add-host=host.docker.internal:host-gateway \
+  --mount "type=bind,src=${TEXTLT_WORKSPACE:-$HOME},dst=/work" \
+  --mount "type=volume,src=${TEXTLT_STATE_VOLUME:-textlt-state},dst=/state" \
+  textlt:demo
+```
+
+In that last setup use `http://host.docker.internal:11434/v1` in AI Settings.
+Configure cloud provider keys after launch. The image contains no keys. For
+a provider that uses a separate CLI, such as the ChatGPT provider's Codex CLI,
+install and authenticate the CLI in your container environment and point
+TextLT to its executable.
+
+### Generate local speech
+
+In the editor, use **Tools → TTS Settings** and select a local Piper voice.
+The bundled runtime and server use voice models kept in the state volume. To
+generate a WAV without audio-device access or a cloud API, run the following
+from the checkout. It downloads the Lessac English voice on first use, invokes
+the bundled TextLT Piper server, and writes `textlt-demo.wav` into the mounted
+workspace. Choose an unused output filename if you want to keep an existing WAV.
+
+```bash
+docker compose run --rm -T --entrypoint bash textlt -euc '
+  model_dir="$HOME/.local/share/textlt/piper/models/en_US-lessac-medium"
+  mkdir -p "$model_dir"
+  voice=https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium
+  model="$model_dir/en_US-lessac-medium.onnx"
+  for suffix in .onnx .onnx.json; do
+    file="$model_dir/en_US-lessac-medium$suffix"
+    if [ ! -s "$file" ]; then
+      curl -fSL --retry 3 "$voice/en_US-lessac-medium$suffix" -o "$file.part"
+      mv "$file.part" "$file"
+    fi
+  done
+
+  bin=/usr/local/share/textlt/piper/bin
+  "$bin/textlt-piper-server" --host 127.0.0.1 --port 17868 \
+    --piper "$bin/piper-runtime/piper" --model "$model" --config "$model.json" \
+    --log-dir /tmp &
+  server=$!
+  trap "kill $server 2>/dev/null || true" EXIT
+  curl -fsS --retry 15 --retry-delay 1 --retry-max-time 20 --retry-connrefused \
+    http://127.0.0.1:17868/health >/dev/null
+  curl -fsS -H "Content-Type: application/json" \
+    --data "{\"text\":\"Hello from TextLT.\",\"output_wav_path\":\"/work/textlt-demo.wav\"}" \
+    http://127.0.0.1:17868/synthesize
+  test -s /work/textlt-demo.wav
+'
+```
+
+Open the WAV from the host to play it, including on Windows or macOS with Docker
+Desktop. For direct playback on native Linux, pass through the host user's
+PulseAudio socket (also used by PipeWire's PulseAudio compatibility service).
+In TextLT's playback settings select `paplay`. The host audio service must
+permit the container user's UID to connect. If the service requires a cookie,
+mount that user's PulseAudio cookie read-only and set `PULSE_COOKIE`.
+
+```bash
+docker run --rm -it \
+  --mount "type=bind,src=${TEXTLT_WORKSPACE:-$HOME},dst=/work" \
+  --mount "type=volume,src=${TEXTLT_STATE_VOLUME:-textlt-state},dst=/state" \
+  --mount "type=bind,src=${XDG_RUNTIME_DIR}/pulse/native,dst=/tmp/textlt-pulse,readonly" \
+  -e PULSE_SERVER=unix:/tmp/textlt-pulse \
+  textlt:demo
+```
+
+### Convert Word, Markdown, PDF, and JSON
+
+The image includes Pandoc, Poppler’s `pdftotext`, and jq. A fresh state volume
+includes **Document conversions → Conversions** in the Actions workspace.
+TextLT v1.1.0 Actions store copyable commands. Copy the command, adjust its
+quoted paths, and run it in the container’s Bash shell. The same commands
+work directly with an existing Actions library or an older state volume.
+
+```bash
+docker compose run --rm --entrypoint bash textlt
+
+textlt-convert markdown-to-word "/work/Report.md"
+textlt-convert markdown-to-word "/work/Styled report.md" "/work/Reference.docx"
+textlt-convert word-to-markdown "/work/Incoming.docx"
+textlt-convert pdf-to-text "/work/Brief.pdf"
+textlt-convert format-json "/work/settings.json"
+```
+
+The command writes the result beside the source and refuses to replace an
+existing file. For Word export, Pandoc looks for relative images beside the
+Markdown source. An optional reference `.docx` inside `/work` supplies Word
+styles. Word import extracts embedded images to a new sibling directory.
+PDF extraction uses the document’s text layer. Scanned pages need OCR before
+text extraction. LibreOffice is optional for opening or editing the resulting
+Word files on the host.
+
+### Publish to Docker Hub
+
+The [Docker workflow](.github/workflows/docker.yml) builds and checks the
+triggering commit on Linux amd64. Pushes and pull requests run the checks.
+To publish, create the `textlt` repository on Docker Hub and set the GitHub
+repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` with a
+Docker Hub token that can write to that repository. In **Actions → Docker →
+Run workflow**, choose the branch or tag and enable **publish**. You can also
+dispatch it with the GitHub CLI.
+
+```bash
+gh workflow run docker.yml --ref main -f publish=true
+```
+
+The workflow pushes a `sha-<commit>` tag and also pushes the `vX.Y.Z` tag
+when dispatched on that release. To publish the image already built locally
+with your Docker Hub account instead, use the following commands.
+
+```bash
+read -r -p 'Docker Hub username: ' dockerhub_user
+docker login --username "$dockerhub_user"
+docker tag textlt:demo "$dockerhub_user/textlt:demo"
+docker push "$dockerhub_user/textlt:demo"
+```
+
+### Verification
+
+The Docker Desktop amd64 run on Windows from Ubuntu 26.04 WSL2 verified
+opening and saving a file in the mounted Windows profile, Git reads and
+commits as UID 1000, all four bundled Actions, and the four conversions.
+The Word output preserved Ukrainian text, a heading, a table, an embedded
+image, and a reference style. A repeat export preserved the existing file.
+
+The same host verified a LocalSend text and file transfer through a published
+TCP port, the TextLT HTTPS receive page inside the container, and Diagnostics
+address labels. An Ollama-compatible Windows fixture verified model listing and
+**Test Model** through `host.docker.internal`. Piper generated a playable WAV
+in the mounted workspace. Native Linux LAN multicast and direct audio playback
+were outside this run.
+
+The native WSL build in Windows Terminal verified Ukrainian typing, multiline
+clipboard transfers in both directions, a Unicode filename, box-drawing and
+color output, and redraw on resize. The Docker terminal clipboard path and
+native Linux Wayland and X11 mounts were configured after those checks.
+
 ## Getting Started
 
 ### Check an installation

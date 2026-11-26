@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail() {
+    printf 'textlt Docker launcher: %s\n' "$*" >&2
+    exit 1
+}
+
+docker=${TEXTLT_DOCKER:-docker}
+workspace=${TEXTLT_WORKSPACE:-${HOME:?Set HOME or TEXTLT_WORKSPACE}}
+if [[ "$workspace" =~ ^[a-zA-Z]: ]]; then
+    workspace=$(wslpath -u "$workspace") || fail 'Could not translate the Windows workspace path.'
+fi
+workspace=$(realpath -e -- "$workspace") || fail 'The workspace does not exist.'
+[[ -d "$workspace" ]] || fail 'The workspace must be a directory.'
+
+clipboard=${TEXTLT_CLIPBOARD:-auto}
+if [[ "${docker##*/}" == docker.exe ]]; then
+    workspace=$(wslpath -w "$workspace") || fail 'Could not translate the workspace path for docker.exe.'
+    if [[ "$clipboard" == auto ]]; then
+        clipboard=terminal
+    elif [[ "$clipboard" == wayland || "$clipboard" == x11 ]]; then
+        fail 'Use the Linux Docker CLI to mount Wayland or X11 sockets.'
+    fi
+fi
+
+wayland=${WAYLAND_DISPLAY:-}
+if [[ -n "$wayland" && "$wayland" != /* ]]; then
+    wayland="${XDG_RUNTIME_DIR:-}/$wayland"
+fi
+display=${DISPLAY:-}
+x11=
+if [[ "$display" =~ ^(unix)?:([0-9]+)(\.[0-9]+)?$ ]]; then
+    x11="/tmp/.X11-unix/X${BASH_REMATCH[2]}"
+fi
+
+if [[ "$clipboard" == auto ]]; then
+    if [[ -n "${WT_SESSION:-}" ]]; then
+        clipboard=terminal
+    elif [[ -S "$wayland" ]]; then
+        clipboard=wayland
+    elif [[ -S "$x11" ]]; then
+        clipboard=x11
+    else
+        clipboard=none
+    fi
+fi
+
+args=(run --rm -it
+    --mount "type=bind,src=$workspace,dst=/work"
+    --mount "type=volume,src=${TEXTLT_STATE_VOLUME:-textlt-state},dst=/state"
+    --env "TERM=${TERM:-xterm-256color}"
+    --env "COLORTERM=${COLORTERM:-}")
+
+case "$clipboard" in
+    wayland)
+        [[ -S "$wayland" ]] || fail 'The Wayland display socket is unavailable.'
+        args+=(--mount "type=bind,src=$(realpath -e -- "$wayland"),dst=/tmp/textlt-wayland,readonly"
+               --env WAYLAND_DISPLAY=/tmp/textlt-wayland)
+        ;;
+    x11)
+        [[ -S "$x11" ]] || fail 'A local X11 display socket is required.'
+        args+=(--mount "type=bind,src=$(realpath -e -- "$x11"),dst=$x11,readonly"
+               --env "DISPLAY=$display")
+        authority=${XAUTHORITY:-${HOME:-}/.Xauthority}
+        if [[ -f "$authority" ]]; then
+            args+=(--hostname "$(hostname)"
+                   --mount "type=bind,src=$(realpath -e -- "$authority"),dst=/tmp/textlt-xauthority,readonly"
+                   --env XAUTHORITY=/tmp/textlt-xauthority)
+        fi
+        ;;
+    terminal)
+        args+=(--env TEXTLT_TERMINAL_CLIPBOARD=1)
+        ;;
+    none) ;;
+    *) fail 'Set TEXTLT_CLIPBOARD to auto, wayland, x11, terminal, or none.' ;;
+esac
+
+exec "$docker" "${args[@]}" "${TEXTLT_IMAGE:-textlt:demo}" "$@"

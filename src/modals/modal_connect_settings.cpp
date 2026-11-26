@@ -634,6 +634,9 @@ private:
     std::string ExplainAddress(const connect_ui::DiagnosticAddress& row,
                                const connect_ui::NetworkDiagnostics& network) const {
         const auto& state = workspace_.LocalSendRuntime();
+        if (row.docker_host) {
+            return "Docker resolves this address for reaching the host from the container. Use the host's LAN IP for incoming connections through a published port.";
+        }
         if (!row.can_bind) {
             if (row.windows_host) {
                 return "Use this LAN address with TextLT running in Windows. TextLT in WSL cannot bind to it.";
@@ -704,6 +707,9 @@ private:
         body.push_back(row ? diagnostic_menu_->Render() | vscroll_indicator | yframe | size(HEIGHT, LESS_THAN, 7)
                            : text("No usable IPv4 addresses found") | dim);
         if (row) body.push_back(paragraph(ExplainAddress(*row, network)));
+        if (network.container) {
+            body.push_back(paragraph("Published TCP ports and LAN discovery are checked separately.") | dim);
+        }
         body.push_back(paragraph(automatic ? "LocalSend chooses its address automatically at Start."
                                            : "LocalSend override: " + configured + ". Clear it in LocalSend to use Auto.") | dim);
         body.push_back(filler());

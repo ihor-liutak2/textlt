@@ -239,7 +239,84 @@ def test_terminal_clipboard(term):
     assert b"\x1b]52;c;?\x1b\\" in output, "Paste did not query the terminal clipboard"
     encoded = base64.b64encode(b"terminal-").decode("ascii")
     term.send(f"{ESC}]52;c;{encoded}{ESC}\\")
-    term.position("left terminal-aBc right")
+    line = "left terminal-aBc right"
+    x, y = term.position(line)
+    term.click_at((x, y))
+    output = term.send("\x03")  # Ctrl+C
+    encoded = base64.b64encode(line.encode()).decode()
+    assert f"{ESC}]52;c;{encoded}{ESC}\\".encode() in output, \
+        "Copy without a selection did not send the current line"
+
+    term.drag((x + 14, y), (x + 17, y))
+    output = term.send("\x03")
+    encoded = base64.b64encode(b"aBc").decode()
+    assert f"{ESC}]52;c;{encoded}{ESC}\\".encode() in output, \
+        "Copy with a selection did not send the selected text"
+
+    term.drag((x + 14, y), (x + 17, y))
+    output = term.send("\x18")  # Ctrl+X
+    assert f"{ESC}]52;c;{encoded}{ESC}\\".encode() in output, \
+        "Cut with a selection did not send the selected text"
+    term.position("left terminal- right")
+    term.send("\x1a")
+    term.position(line)
+
+    term.click_at((x, y))
+    output = term.send("\x18")
+    encoded = base64.b64encode(line.encode()).decode()
+    assert f"{ESC}]52;c;{encoded}{ESC}\\".encode() in output, \
+        "Cut without a selection did not send the current line"
+    term.send("\x1a")
+    term.position(line)
+
+
+def test_osc52_multiline_utf8(term):
+    x, y = term.position("éΣ")
+    term.drag((x, y), (x + 6, y + 1))
+    output = term.send("\x03")  # Ctrl+C
+    encoded = base64.b64encode("éΣ\nsecond".encode()).decode()
+    assert f"{ESC}]52;c;{encoded}{ESC}\\".encode() in output, \
+        "OSC 52 did not preserve UTF-8 multiline selection"
+
+    term.drag((x, y), (x + 6, y + 1))
+    output = term.send("\x18")  # Ctrl+X
+    assert f"{ESC}]52;c;{encoded}{ESC}\\".encode() in output, \
+        "Cut did not transmit UTF-8 multiline selection"
+    term.position("third")
+    term.send("\x1a")
+    term.position("second")
+
+
+def test_failed_native_write(term):
+    x, y = term.position("left aBc right")
+    term.drag((x + 5, y), (x + 8, y))
+    term.send("\x18")  # Ctrl+X
+    term.position("left aBc right")
+
+
+def test_failed_osc52_falls_back(binary, path, environment, clipboard):
+    input_master, input_slave = pty.openpty()
+    output_master, output_slave = pty.openpty()
+    process = subprocess.Popen(
+        [binary, str(path)], stdin=input_slave, stdout=output_slave,
+        stderr=subprocess.DEVNULL, env=environment)
+    os.close(input_slave)
+    os.close(output_slave)
+    os.close(output_master)
+    clipboard.unlink(missing_ok=True)
+    try:
+        time.sleep(1)
+        os.write(input_master, b"\x18")  # Cut the current line.
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and not clipboard.exists():
+            time.sleep(0.05)
+        assert clipboard.exists(), "Failed OSC 52 transmission did not fall back to native clipboard"
+        assert clipboard.read_text() == "left aBc right", \
+            "Native fallback received incorrect current-line content"
+    finally:
+        process.terminate()
+        process.wait(timeout=5)
+        os.close(input_master)
 
 
 def run(binary):
@@ -282,6 +359,24 @@ def run(binary):
                 test_compare_exit(term)
         with Terminal(binary, root, path, dict(environment, SSH_CONNECTION="fixture")) as term:
             test_terminal_clipboard(term)
+
+        unicode_path = root / "unicode.txt"
+        unicode_path.write_text("éΣ\nsecond\nthird\n")
+        with Terminal(binary, root, unicode_path, dict(environment, SSH_CONNECTION="fixture")) as term:
+            test_osc52_multiline_utf8(term)
+
+        no_clipboard_environment = dict(environment)
+        for key in ("DISPLAY", "SSH_CONNECTION", "SSH_TTY", "SSH_CLIENT", "WSL_INTEROP",
+                    "WSL_DISTRO_NAME", "WAYLAND_DISPLAY", "WAYLAND_SOCKET", "XDG_SESSION_TYPE"):
+            no_clipboard_environment.pop(key, None)
+        with Terminal(binary, root, path, no_clipboard_environment) as term:
+            test_failed_native_write(term)
+
+        fallback_environment = dict(environment, SSH_CONNECTION="fixture")
+        with path.open("w") as source:
+            source.write("left aBc right\n")
+        test_failed_osc52_falls_back(
+            str(Path(binary).resolve()), path, fallback_environment, clipboard)
 
 
 if __name__ == "__main__":

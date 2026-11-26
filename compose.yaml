@@ -1,0 +1,23 @@
+services:
+  textlt:
+    image: textlt:demo
+    build:
+      context: .
+      args:
+        TEXTLT_UID: "${TEXTLT_UID:-1000}"
+        TEXTLT_GID: "${TEXTLT_GID:-1000}"
+    stdin_open: true
+    tty: true
+    volumes:
+      - type: bind
+        source: "${TEXTLT_WORKSPACE:-${HOME:?Set HOME or TEXTLT_WORKSPACE to an existing directory}}"
+        target: /work
+        bind:
+          create_host_path: false
+      - type: volume
+        source: textlt-state
+        target: /state
+
+volumes:
+  textlt-state:
+    name: "${TEXTLT_STATE_VOLUME:-textlt-state}"

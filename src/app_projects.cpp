@@ -5,6 +5,7 @@
 #include "path_utils.hpp"
 #include "ui_selectable_input.hpp"
 
+#include <cstdlib>
 #include <filesystem>
 #include <optional>
 #include <system_error>
@@ -19,20 +20,28 @@ void TextltApp::InitializeProjects() {
         return;
     }
     std::error_code filesystem_error;
-    if (project_store_.Projects().empty()) {
+    const char* initial_workspace = std::getenv("TEXTLT_INITIAL_WORKSPACE");
+    const ProjectRecord* active = project_store_.ActiveProject();
+    if (initial_workspace && *initial_workspace) {
+        active = project_store_.Add(PathFromUtf8(initial_workspace), {}, error);
+        if (!active) {
+            active_action_ = error;
+            return;
+        }
+    } else if (project_store_.Projects().empty()) {
         // An existing empty registry means the last project was removed.
         if (std::filesystem::exists(project_store_.Path(), filesystem_error)) return;
         if (filesystem_error) {
             active_action_ = filesystem_error.message();
             return;
         }
-        if (!project_store_.Add(std::filesystem::current_path(), {}, error)) {
+        active = project_store_.Add(std::filesystem::current_path(), {}, error);
+        if (!active) {
             active_action_ = error;
             return;
         }
     }
 
-    const ProjectRecord* active = project_store_.ActiveProject();
     if (!active || !std::filesystem::is_directory(active->local_root, filesystem_error)) {
         project_store_.Add(std::filesystem::current_path(), {}, error);
         active = project_store_.ActiveProject();

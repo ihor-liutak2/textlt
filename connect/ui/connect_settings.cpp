@@ -52,7 +52,7 @@ void ConnectWorkspace::RefreshDiagnostics(bool test_localsend_ports) {
         snapshot.localsend_port_findings = diagnostics_.localsend_port_findings;
         diagnostics_ = snapshot;
     }
-    if (!test_localsend_ports && !snapshot.wsl && snapshot.local.name != "macOS") return;
+    if (!test_localsend_ports && !snapshot.wsl && !snapshot.container && snapshot.local.name != "macOS") return;
     diagnostics_worker_ = std::thread([this, snapshot = std::move(snapshot)]() mutable {
         try {
             InspectSupplementalNetwork(snapshot, diagnostics_cancelled_);

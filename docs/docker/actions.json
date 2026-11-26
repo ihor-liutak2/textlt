@@ -1,0 +1,62 @@
+{
+  "format": "textlt-actions",
+  "schema_version": 2,
+  "groups": [
+    {
+      "id": "docker-document-conversions",
+      "name": "Document conversions",
+      "pages": [
+        {
+          "id": "docker-document-page",
+          "name": "Conversions",
+          "items": [
+            {
+              "id": "export-markdown-to-word",
+              "title": "Export Markdown to Word",
+              "tabs": [
+                {
+                  "caption": "Command",
+                  "content": "# Convert Markdown to Word. Use the quoted optional /work/reference.docx as a third argument for Word styles.\ntextlt-convert markdown-to-word \"/work/Document.md\"",
+                  "hide_text": false
+                }
+              ]
+            },
+            {
+              "id": "import-word-as-markdown",
+              "title": "Import Word as Markdown",
+              "tabs": [
+                {
+                  "caption": "Command",
+                  "content": "# Convert Word to Markdown and extract embedded images beside the Markdown file.\ntextlt-convert word-to-markdown \"/work/Document.docx\"",
+                  "hide_text": false
+                }
+              ]
+            },
+            {
+              "id": "extract-text-from-pdf",
+              "title": "Extract Text from PDF",
+              "tabs": [
+                {
+                  "caption": "Command",
+                  "content": "# Extract the text layer of a PDF as UTF-8 text beside the PDF.\ntextlt-convert pdf-to-text \"/work/Document.pdf\"",
+                  "hide_text": false
+                }
+              ]
+            },
+            {
+              "id": "format-json",
+              "title": "Format JSON",
+              "tabs": [
+                {
+                  "caption": "Command",
+                  "content": "# Format a single JSON value in a separate .formatted.json file.\ntextlt-convert format-json \"/work/Document.json\"",
+                  "hide_text": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

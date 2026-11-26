@@ -156,7 +156,10 @@ bool IsWslEnvironment() {
 
 bool CanUseOsc52() {
     const char* term = std::getenv("TERM");
-    return (HasEnvironment("SSH_CONNECTION") || HasEnvironment("SSH_TTY") || HasEnvironment("SSH_CLIENT")) &&
+    const char* terminal_clipboard = std::getenv("TEXTLT_TERMINAL_CLIPBOARD");
+    const bool requested = terminal_clipboard && std::string_view(terminal_clipboard) == "1";
+    return (requested || HasEnvironment("SSH_CONNECTION") ||
+            HasEnvironment("SSH_TTY") || HasEnvironment("SSH_CLIENT")) &&
         isatty(STDIN_FILENO) && isatty(STDOUT_FILENO) && term && *term &&
         std::string_view(term) != "dumb";
 }
@@ -424,9 +427,11 @@ bool ClipboardController::WriteText(const std::string& text) const {
     }
 #ifndef _WIN32
     if (CanUseOsc52()) {
-        // OSC 52 has no write acknowledgement.
-        WriteTerminal("\x1B]52;c;" + Base64Encode(text) + "\x1B\\");
-        return false;
+        // OSC 52 has no write acknowledgement; this only confirms transmission
+        // to the terminal, not that the terminal accepted the clipboard content.
+        if (WriteTerminal("\x1B]52;c;" + Base64Encode(text) + "\x1B\\")) {
+            return true;
+        }
     }
 #endif
     return WriteNativeClipboard(text);

@@ -1,0 +1,24 @@
+# Only inputs used by the CMake build and install.
+**
+!CMakeLists.txt
+!LICENSE
+!cmake/
+!connect/
+!docs/
+docs/*
+!docs/registries/
+!docs/docker/
+!patches/
+!resources/
+!scripts/
+!src/
+!tests/
+!text_processors/
+!themes/
+!third_party/
+!tools/
+
+**/.git
+**/.env
+**/.env.*
+**/__pycache__

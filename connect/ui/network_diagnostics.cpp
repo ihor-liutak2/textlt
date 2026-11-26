@@ -25,6 +25,7 @@
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <net/if.h>
+#include <netdb.h>
 #include <sys/socket.h>
 #include <sys/utsname.h>
 #include <unistd.h>
@@ -503,9 +504,15 @@ NetworkDiagnostics InspectLocalNetwork() {
     const bool microsoft = uname(&version) == 0 &&
         (Lower(version.release).find("microsoft") != std::string::npos ||
          Lower(version.version).find("microsoft") != std::string::npos);
-    result.wsl = microsoft || std::getenv("WSL_INTEROP") ||
-        std::getenv("WSL_DISTRO_NAME");
-    result.local.name = result.wsl ? "Linux guest (WSL)" : "Native Linux";
+    result.container = std::getenv("TEXTLT_CONTAINER") != nullptr ||
+        std::ifstream("/.dockerenv").good();
+    result.wsl = !result.container &&
+        (microsoft || std::getenv("WSL_INTEROP") || std::getenv("WSL_DISTRO_NAME"));
+    const char* network_mode = std::getenv("TEXTLT_CONTAINER_NETWORK");
+    const bool host_network = network_mode && std::string_view(network_mode) == "host";
+    result.local.name = result.container
+        ? (host_network ? "Docker (host network)" : "Docker container")
+        : (result.wsl ? "Linux guest (WSL)" : "Native Linux");
     if (result.wsl) {
         result.host.name = "Windows host";
         result.host.notice = "Reading host interfaces…";
@@ -531,7 +538,26 @@ NetworkDiagnostics InspectLocalNetwork() {
 
 void InspectSupplementalNetwork(NetworkDiagnostics& diagnostics, const std::atomic<bool>& cancelled) {
 #if defined(__linux__)
-    if (!diagnostics.wsl || cancelled) return;
+    if (cancelled) return;
+    if (diagnostics.container) {
+        constexpr char host_name[] = "host.docker.internal";
+        addrinfo hints{};
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+        addrinfo* addresses = nullptr;
+        if (getaddrinfo(host_name, nullptr, &hints, &addresses) != 0) return;
+        const std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> resolved(addresses, freeaddrinfo);
+        diagnostics.host.name = "Docker host endpoint";
+        for (const addrinfo* address = resolved.get(); address; address = address->ai_next) {
+            const auto* ipv4 = reinterpret_cast<const sockaddr_in*>(address->ai_addr);
+            const auto ip = FormatAddress(AF_INET, &ipv4->sin_addr);
+            if (!IPv4Eligible(ip)) continue;
+            diagnostics.host.addresses.push_back(
+                {host_name, ip, -1, "Up", "DNS", "Network", true, true, true});
+        }
+        return;
+    }
+    if (!diagnostics.wsl) return;
     auto mode = RemoteCommandRunner().RunStreaming(
         {"wslinfo", "--networking-mode"}, {}, &cancelled, {}, {2});
     if (mode.exit_code == 0) {
@@ -629,9 +655,14 @@ void InspectLocalSendPorts(NetworkDiagnostics& diagnostics, const std::atomic<bo
     auto& ports = diagnostics.localsend_ports;
     ports.clear();
 #if defined(__linux__)
-    const std::string platform = diagnostics.wsl ? "WSL" : "Linux";
+    const std::string platform = diagnostics.container ? diagnostics.local.name :
+        diagnostics.wsl ? "WSL" : "Linux";
     for (const auto port : {53317u, 53327u}) {
         ports.push_back({platform, port, LinuxPortAvailability(true, port), LinuxPortAvailability(false, port)});
+    }
+    if (diagnostics.container) {
+        findings.push_back("Docker port checks cover the container network. TCP availability does not verify LAN discovery.");
+        return;
     }
     InspectLinuxFirewall(findings, platform, cancelled);
     if (!diagnostics.wsl || cancelled) return;
@@ -899,22 +930,26 @@ std::vector<DiagnosticAddress> DiagnosticAddresses(const NetworkDiagnostics& net
     for (const auto* environment : {&network.host, &network.local}) {
         const bool host = environment == &network.host;
         const bool guest = network.wsl && !host;
-        const std::string platform = host || environment->name == "Native Windows" ? "Windows" :
+        const bool docker_host = network.container && host;
+        const std::string platform = network.container ? environment->name :
+            host || environment->name == "Native Windows" ? "Windows" :
             guest && !network.wsl_distribution.empty() ? network.wsl_distribution :
             environment->name == "macOS" ? "macOS" : "Linux";
         for (const auto& address : environment->addresses) {
-            if (!IsUsefulIPv4(*environment, address) || is_gateway(address.address)) continue;
+            if (!IsUsefulIPv4(*environment, address) ||
+                (!docker_host && is_gateway(address.address))) continue;
             const bool routed = HasIPv4DefaultRoute(*environment, address);
             const bool lan = IsLanAdapter(address);
             const bool current = address.address == textlt_ip;
             const int priority = host && lan && routed ? 4 : current ? 3 :
                 lan && routed ? 2 : lan || routed ? 1 : 0;
-            const auto kind = guest ? "WSL" : lan ? address.type : "Network";
-            const bool can_bind = std::any_of(network.local.addresses.begin(), network.local.addresses.end(),
+            const auto kind = docker_host ? address.interface_name :
+                guest ? "WSL" : lan ? address.type : "Network";
+            const bool can_bind = !docker_host && std::any_of(network.local.addresses.begin(), network.local.addresses.end(),
                 [&](const auto& local) {
                     return local.ipv4 && local.usable && local.address == address.address;
                 });
-            ranked.push_back({{address.address, platform + " · " + kind, can_bind, host}, priority});
+            ranked.push_back({{address.address, platform + " · " + kind, can_bind, host && !docker_host, docker_host}, priority});
         }
     }
     std::stable_sort(ranked.begin(), ranked.end(), [](const auto& left, const auto& right) {

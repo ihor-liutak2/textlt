@@ -373,33 +373,37 @@ std::string PiperManager::RuntimeDownloadUrl() {
     return RuntimeDownloadUrlFromRegistry();
 }
 
-std::filesystem::path PiperManager::RuntimeExecutablePath() {
-    const std::filesystem::path runtime_directory = RuntimeDirectory();
-    if (runtime_directory.empty()) {
-        return {};
-    }
-    std::error_code error;
-    if (!std::filesystem::exists(runtime_directory, error)) {
-        return {};
-    }
+namespace {
 
-#ifdef _WIN32
-    constexpr const char* binary_name = "piper.exe";
-#else
-    constexpr const char* binary_name = "piper";
-#endif
-
-    std::filesystem::recursive_directory_iterator iterator(runtime_directory, error);
-    std::filesystem::recursive_directory_iterator end;
-    while (!error && iterator != end) {
-        const std::filesystem::directory_entry& entry = *iterator;
-        if (entry.is_regular_file(error) && entry.path().filename() == binary_name) {
-            return entry.path();
+std::filesystem::path FindPiperExecutable(const char* binary_name) {
+    const auto installed_data = GetEnvValue("TEXTLT_DATA_DIR");
+    const auto installed_bin = installed_data
+        ? std::filesystem::path(*installed_data) / "piper" / "bin"
+        : std::filesystem::path{};
+    for (const auto& directory : {PiperManager::RuntimeDirectory(), installed_bin}) {
+        if (directory.empty()) continue;
+        std::error_code error;
+        std::filesystem::recursive_directory_iterator iterator(directory, error), end;
+        while (!error && iterator != end) {
+            const auto& entry = *iterator;
+            if (entry.path().filename() == binary_name && entry.is_regular_file(error)) {
+                return entry.path();
+            }
+            error.clear();
+            iterator.increment(error);
         }
-        error.clear();
-        iterator.increment(error);
     }
     return {};
+}
+
+} // namespace
+
+std::filesystem::path PiperManager::RuntimeExecutablePath() {
+#ifdef _WIN32
+    return FindPiperExecutable("piper.exe");
+#else
+    return FindPiperExecutable("piper");
+#endif
 }
 
 bool PiperManager::RuntimeInstalled() {
@@ -407,32 +411,11 @@ bool PiperManager::RuntimeInstalled() {
 }
 
 std::filesystem::path PiperManager::ServerExecutablePath() {
-    const std::filesystem::path runtime_directory = RuntimeDirectory();
-    if (runtime_directory.empty()) {
-        return {};
-    }
-    std::error_code error;
-    if (!std::filesystem::exists(runtime_directory, error)) {
-        return {};
-    }
-
 #ifdef _WIN32
-    constexpr const char* binary_name = "textlt-piper-server.exe";
+    return FindPiperExecutable("textlt-piper-server.exe");
 #else
-    constexpr const char* binary_name = "textlt-piper-server";
+    return FindPiperExecutable("textlt-piper-server");
 #endif
-
-    std::filesystem::recursive_directory_iterator iterator(runtime_directory, error);
-    std::filesystem::recursive_directory_iterator end;
-    while (!error && iterator != end) {
-        const std::filesystem::directory_entry& entry = *iterator;
-        if (entry.is_regular_file(error) && entry.path().filename() == binary_name) {
-            return entry.path();
-        }
-        error.clear();
-        iterator.increment(error);
-    }
-    return {};
 }
 
 bool PiperManager::ServerInstalled() {

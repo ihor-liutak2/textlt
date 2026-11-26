@@ -45,6 +45,7 @@ struct NetworkDiagnostics {
     NetworkEnvironment host;
     std::string wsl_mode;
     bool wsl = false;
+    bool container = false;
     std::string wsl_distribution;
     bool checking_localsend_ports = false;
     std::vector<PortAvailabilityRow> localsend_ports;
@@ -56,6 +57,7 @@ struct DiagnosticAddress {
     std::string label;
     bool can_bind;
     bool windows_host;
+    bool docker_host = false;
 };
 
 NetworkDiagnostics InspectLocalNetwork();
