@@ -9,6 +9,7 @@
 #include <thread>
 
 #include "context_menu_component.hpp"
+#include "connect_workspace_layout.hpp"
 #include "ftxui/component/component_base.hpp"
 #include "ftxui/dom/elements.hpp"
 #include "network_diagnostics.hpp"
@@ -20,6 +21,9 @@ namespace textlt {
 
 struct Theme;
 enum class ButtonRole;
+namespace telegram {
+class TelegramProvider;
+}
 
 namespace connect_ui {
 
@@ -60,6 +64,7 @@ public:
     ConnectWorkspace(const Theme& theme, std::function<void()> redraw, WorkspaceTabs::Callbacks workspaces,
                      std::function<void()> pick_file, std::function<std::filesystem::path()> downloads,
                      std::filesystem::path localsend_identity, std::function<void()> open_textlt_config,
+                     std::function<void()> open_telegram_settings,
                      std::function<bool(const std::string&)> write_clipboard);
     ~ConnectWorkspace() override;
 
@@ -95,7 +100,8 @@ public:
     bool UseLocalSendAddress(const std::string& address);
     const std::string& LocalIPv4() const { return local_ipv4_; }
     const std::string& Status() const { return status_; }
-    bool Running() const { return native_running_ || localsend_runtime_.listening; }
+    bool Running() const;
+    telegram::TelegramProvider& Telegram();
     void Stop();
     void DrainEvents();
     void UpdateBrowserTheme();
@@ -127,6 +133,7 @@ private:
         std::string draft;
         std::vector<Message> messages;
         std::optional<connect::IncomingOffer> offer;
+        std::deque<connect::IncomingOffer> telegram_offers;
         std::optional<std::uint32_t> protocol;
         bool online = false;
         bool configured = false;
@@ -136,6 +143,12 @@ private:
         bool waiting_for_pin = false;
         std::string pin;
         int scroll = 0;
+    };
+
+    struct PeerRow {
+        PeerKey key;
+        ftxui::Box box;
+        int content_row = 0;
     };
 
     Conversation& Get(const connect::PeerIdentity& peer);
@@ -149,6 +162,7 @@ private:
     void ToggleNative();
     connect::ProviderResult StartLocalSend(bool test_ports = false);
     void ToggleLocalSend();
+    void ToggleTelegram();
     void RefreshLocalSendPeers();
     void ConnectLocalSendByIp();
     void StopProvider(std::string_view provider);
@@ -182,7 +196,14 @@ private:
     void Handle(const connect::LocalSendConnectResult& result);
     void ExecuteMessageCommand(const std::string& command);
     bool NavigatorEvent(ftxui::Event event);
-    ftxui::Element RenderNavigator(int width, bool show_workspace_tabs);
+    bool MessengerNavigatorEvent(ftxui::Event event);
+    void FocusColumn(ftxui::Component component, ConnectColumn column);
+    void UpdateNavigatorScrollLimits();
+    void UpdateMessengerScrollLimits();
+    void EnsureSelectedPeerVisible();
+    void EnsureSelectedMessengerPeerVisible();
+    ftxui::Element RenderNavigator(int width);
+    ftxui::Element RenderMessengerNavigator(int width);
     ftxui::Element RenderChat(int width);
 
     const Theme& theme_;
@@ -191,6 +212,7 @@ private:
     std::function<void()> pick_file_;
     std::function<std::filesystem::path()> downloads_;
     std::function<bool(const std::string&)> write_clipboard_;
+    std::function<void()> open_telegram_settings_;
     ContextMenuComponent message_menu_;
     std::optional<std::size_t> message_menu_index_;
     const std::filesystem::path localsend_identity_;
@@ -207,6 +229,7 @@ private:
     std::atomic<bool> localsend_phone_reached_listener_{false};
     std::unique_ptr<connect::ConnectService> service_;
     connect::ConnectService content_;
+    telegram::TelegramProvider* telegram_provider_ = nullptr;
     std::vector<std::string> providers_;
     bool native_running_ = false;
     std::string native_browser_ip_;
@@ -223,15 +246,26 @@ private:
     int cursor_ = 0;
     std::string pin_;
     std::uint64_t next_message_ = 0;
-    std::vector<std::pair<PeerKey, ftxui::Box>> peer_rows_;
+    std::vector<PeerRow> peer_rows_;
+    std::vector<PeerRow> messenger_peer_rows_;
     ftxui::Box workspace_box_;
     ftxui::Box navigator_box_;
+    ftxui::Box messenger_box_;
+    ftxui::Box conversation_box_;
     ftxui::Box history_box_;
     std::vector<std::pair<std::size_t, ftxui::Box>> message_rows_;
     int history_rows_ = 0;
-    ftxui::Component navigator_, composer_, send_, accept_, decline_, send_file_, cancel_transfer_, draft_file_, pin_input_, retry_pin_;
+    int navigator_content_rows_ = 0;
+    int navigator_visible_rows_ = 1;
+    int navigator_scroll_max_ = 0;
+    int messenger_content_rows_ = 0;
+    int messenger_visible_rows_ = 1;
+    int messenger_scroll_max_ = 0;
+    ftxui::Component navigator_, messenger_navigator_, composer_, send_, accept_, decline_, send_file_, cancel_transfer_, draft_file_, pin_input_, retry_pin_;
     ftxui::Component toggle_native_, textlt_config_, toggle_localsend_, refresh_localsend_, connect_by_ip_;
+    ftxui::Component toggle_telegram_, telegram_settings_;
     ftxui::Component active_;
+    ConnectNavigationState navigation_state_;
 
     std::optional<std::pair<connect::TransferMetadata, connect::StructuredPayload>> pending_share_;
     std::optional<std::pair<PeerKey, std::size_t>> preview_;

@@ -214,6 +214,7 @@ add_executable(textlt
   src/app_connect.cpp
   src/connect_content.cpp
   src/modals/modal_connect_settings.cpp
+  src/modals/modal_telegram_settings.cpp
   src/modals/modal_textlt_config.cpp
   src/app.cpp
   src/app_command_registry.cpp
@@ -342,6 +343,9 @@ add_executable(textlt
   src/remote/modal_remote_files.cpp
   src/sidebar_component.cpp
   src/syntax_highlighter.cpp
+  src/telegram/telegram_http_api.cpp
+  src/telegram/telegram_provider.cpp
+  src/telegram/telegram_settings_store.cpp
   src/top_bar_row.cpp
   src/bottom_bar_row.cpp
   src/terminal_flow_control_guard.cpp
@@ -418,6 +422,31 @@ add_executable(textlt_document_navigation_test
   src/editor/text_buffer.cpp
   src/editor_utils.cpp
   src/history_manager.cpp
+)
+
+add_executable(textlt_connect_workspace_layout_test
+  tests/connect_workspace_layout_test.cpp
+)
+target_include_directories(textlt_connect_workspace_layout_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/connect/ui
+)
+
+add_executable(textlt_telegram_provider_test
+  tests/telegram_provider_test.cpp
+  connect/ui/download_destination.cpp
+  src/editor_config.cpp
+  src/telegram/telegram_provider.cpp
+  src/telegram/telegram_settings_store.cpp
+)
+target_include_directories(textlt_telegram_provider_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/connect/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/connect/ui
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+)
+target_link_libraries(textlt_telegram_provider_test PRIVATE
+  Threads::Threads
+  ftxui::component
 )
 
 add_executable(textlt_editor_context_menu_test
@@ -866,6 +895,8 @@ target_link_libraries(textlt_remote_command_runner_streaming_test PRIVATE Thread
 target_link_libraries(textlt_document_paragraph_processor_test PRIVATE ftxui::screen)
 
 add_test(NAME textlt_document_navigation_test COMMAND textlt_document_navigation_test)
+add_test(NAME textlt_connect_workspace_layout_test COMMAND textlt_connect_workspace_layout_test)
+add_test(NAME textlt_telegram_provider_test COMMAND textlt_telegram_provider_test)
 add_test(NAME textlt_editor_context_menu_test COMMAND textlt_editor_context_menu_test)
 if(UNIX)
   find_package(Python3 QUIET COMPONENTS Interpreter)
@@ -896,6 +927,11 @@ if(UNIX)
       textlt_editor_context_menu_pty_terminal_clipboard_test
       textlt_editor_context_menu_pty_osc52_multiline_utf8_test
       PROPERTIES TIMEOUT 20)
+    add_test(NAME textlt_connect_workspace_pty_test
+      COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/connect_workspace_pty_test.py
+        $<TARGET_FILE:textlt>)
+    set_tests_properties(textlt_connect_workspace_pty_test PROPERTIES TIMEOUT 60)
     set_tests_properties(textlt_editor_context_menu_pty_failed_native_write_test
       PROPERTIES TIMEOUT 15)
     set_tests_properties(textlt_editor_context_menu_pty_failed_osc52_fallback_test

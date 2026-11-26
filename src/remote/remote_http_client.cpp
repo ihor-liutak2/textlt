@@ -312,10 +312,26 @@ RemoteHttpResponse RemoteHttpClient::RunCurl(
     }
 
     std::filesystem::path body_path;
+    std::filesystem::path body_directory;
     const std::filesystem::path* body_path_ptr = nullptr;
     if (request_body) {
-        body_path = MakeTempPath("textlt-remote-http-body");
+        body_directory = MakeTempPath("textlt-remote-http-body");
+        if (!std::filesystem::create_directory(body_directory, fs_error)) {
+            response.error = "Cannot create temporary HTTP body directory.";
+            return response;
+        }
+#ifndef _WIN32
+        std::filesystem::permissions(body_directory, std::filesystem::perms::owner_all, fs_error);
+        if (fs_error) {
+            std::filesystem::remove(body_directory, fs_error);
+            response.error = "Cannot protect temporary HTTP body directory.";
+            return response;
+        }
+#endif
+        body_path = body_directory / "body";
         if (!WriteBinaryFile(body_path, *request_body, response.error)) {
+            std::filesystem::remove(body_path, fs_error);
+            std::filesystem::remove(body_directory, fs_error);
             return response;
         }
         body_path_ptr = &body_path;
@@ -337,6 +353,7 @@ RemoteHttpResponse RemoteHttpClient::RunCurl(
         response.error = config_error;
         if (!body_path.empty()) {
             std::filesystem::remove(body_path, fs_error);
+            std::filesystem::remove(body_directory, fs_error);
         }
         return response;
     }
@@ -356,6 +373,7 @@ RemoteHttpResponse RemoteHttpClient::RunCurl(
 
     if (!body_path.empty()) {
         std::filesystem::remove(body_path, fs_error);
+        std::filesystem::remove(body_directory, fs_error);
     }
 
     response.ok = command_result.exit_code == 0 && response.status_code >= 200 && response.status_code < 300;

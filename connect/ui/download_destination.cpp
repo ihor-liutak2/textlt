@@ -5,15 +5,12 @@
 #include <random>
 
 namespace textlt::connect_ui {
-namespace {
 
-namespace fs = std::filesystem;
-
-std::string SafeBasename(std::string name) {
+std::string SafeDownloadBasename(std::string name) {
     const auto separator = name.find_last_of("/\\");
     if (separator != std::string::npos) name.erase(0, separator + 1);
     for (char& byte : name) {
-        if (static_cast<unsigned char>(byte) < 32 || std::string_view("<>:\"|?*").find(byte) !=
+        if (static_cast<unsigned char>(byte) < 32 || byte == 127 || std::string_view("<>:\"|?*").find(byte) !=
             std::string_view::npos) byte = '_';
     }
     while (!name.empty() && (name.back() == '.' || name.back() == ' ')) name.pop_back();
@@ -30,6 +27,10 @@ std::string SafeBasename(std::string name) {
         device_port) name.insert(0, "_");
     return name;
 }
+
+namespace {
+
+namespace fs = std::filesystem;
 
 std::string FitName(std::string name, std::size_t capacity) {
     if (name.size() <= capacity) return name;
@@ -88,7 +89,7 @@ std::unique_ptr<connect::FileDestination> MakeDownloadDestination(
     std::error_code error;
     fs::create_directories(downloads, error);
     if (error) return {};
-    name = SafeBasename(std::move(name));
+    name = SafeDownloadBasename(std::move(name));
     std::random_device random;
     for (int attempt = 0; attempt < 16; ++attempt) {
         const auto staging = downloads / (".textlt-connect-" + std::to_string(random()) +

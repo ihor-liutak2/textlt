@@ -1,8 +1,8 @@
 # TextLT Connect Architecture
 
-The standalone library, TextLT provider, and Connect editor workspace
-are implemented. The provider supports opt-in LAN discovery and certificate-pinned peers. The
-first-release behavior below describes planned integration. Baseline: TextLT `main` at
+The standalone library, TextLT and LocalSend providers, and Connect editor
+workspace are implemented. Telegram is an application-level provider adapter
+using the same provider contract. Baseline: TextLT `main` at
 [`d2b7763`](https://github.com/ihor-liutak2/textlt/commit/d2b77630b65920487709458bac27fd4ee402bb76).
 
 ## Component boundary
@@ -11,16 +11,19 @@ Connect lives in [`connect/`](../connect/README.md) at the repository root.
 Its C++17 core builds as a separate CMake library. The editor-only FTXUI
 workspace in `connect/ui/` consumes the public core interface. The root
 editor target compiles the UI and links `textlt::connect`. The standalone
-target links OpenSSL and uses the Boost.Beast and Asio headers. It builds without FTXUI.
+target links OpenSSL and uses the Boost.Beast and Asio headers. It builds
+without FTXUI. The Telegram adapter in `src/telegram/` implements
+`IConnectProvider` in the editor target and uses the existing `RemoteHttpClient`;
+it does not add dependencies to the standalone library.
 
 The editor wires the command registry, workspace selection, focus, modal
-layer, and screen wake-up callback. `connect/ui/` owns provider registration,
-persistent Connect settings, the event queue, peer selection, offers, conversation
-history, and drafts. The settings modal lives in `src/modals/` and edits the
-workspace configuration. File picking and Downloads resolution enter through host callbacks. Notes and
-Actions snapshot serialization and imports stay in the editor adapter. Connect sources depend on their
-own public interfaces and their declared dependencies. Provider source and
-threading details stay inside `connect/`.
+layers, and screen wake-up callback. `connect/ui/` owns provider registration,
+the event queue, peer selection, offers, conversation history, and drafts.
+Connect Settings stays in its existing modal; Telegram has a separate settings
+modal and settings file. File picking and Downloads resolution enter through
+host callbacks. Notes and Actions snapshot serialization and imports stay in
+the editor adapter. The standalone provider sources remain within `connect/`;
+Telegram uses the application HTTP adapter without adding FTXUI to the core.
 
 ```mermaid
 flowchart TB
@@ -29,6 +32,8 @@ flowchart TB
     Panel["Connect workspace (FTXUI)"] --> Service
     Service --> Native["TextLT provider"]
     Service --> LocalSend["LocalSend provider"]
+    Service --> Telegram["Telegram app adapter"]
+    Telegram --> Http["RemoteHttpClient / HTTPS"]
     Service --> Handlers["Registered content handlers"]
     Adapter --> Handlers
 ```
@@ -37,24 +42,85 @@ flowchart TB
 
 **Options → Connect** selects the fourth workspace. Its contextual
 **Connect** menu opens one **Connect Settings** modal on the selected
-Connections, Network, Identity, or Diagnostics tab. LocalSend has its own tab in the same modal. Closing the modal returns focus to
-Connect. The Connections navigator is modeled on the Actions navigator and
-has a nominal width of 32 cells before the border. It shrinks on narrow
-terminals. The adjacent pane contains scrollable conversation history,
-offer decisions, and the composer. The shared Sidebar and document
-Find/Replace panel are outside the active Connect component branch.
+Connections, Network, Identity, or Diagnostics tab. LocalSend has its own tab
+in the same modal. Closing the modal returns focus to Connect.
 
-The left column has independent **Start** and **Stop** controls for TextLT
-and LocalSend. Connect Settings saves configuration. The native TextLT
+The workspace has three panels:
+
+1. **Local Connections** contains the existing TextLT and LocalSend controls,
+   provider status, online peers, and configured/discovered conversations.
+2. **Messengers** contains Telegram Start/Stop and Settings controls and
+   authorized Telegram chats. Additional messenger providers are not
+   implemented here.
+3. **Conversation** renders one selected peer's history, incoming-offer
+   controls, and composer. It uses the same conversation map and transfer
+   capabilities as before; file actions remain available only when the
+   selected provider advertises file support.
+
+At terminal widths of 96 cells or more, the panels use approximately
+20% / 20% / 60% of the available width, with minimum panel widths. Below that,
+the two navigation panels share a row above the full-width conversation; at
+very narrow widths the navigation panels stack above it. Layout is recomputed
+on render after terminal resize. Each navigation panel has its own focus target
+and scroll state; the Messenger panel scrolls its authorized-chat list.
+Tab/Shift+Tab crosses from local connections to Messengers and then to
+conversation controls. Navigation titles remain outside their scrolling
+content. The conversation heading, composer, and active transfer controls
+likewise remain outside the scrollable message history.
+
+Conversation messages, current drafts, and scroll positions remain
+peer-specific and session-only. Selecting a different peer saves the current
+draft to that peer and restores the selected peer's draft. Switching the
+application workspace keeps the Connect component alive, so these values are
+not discarded by workspace navigation. This layout change does not add durable
+conversation storage.
+
+The left panel retains independent **Start** and **Stop** controls for TextLT
+and LocalSend. Connect Settings saves configuration. The Messengers panel
+owns Telegram's independent controls and settings modal. The native TextLT
 listener defaults to TCP `53327`; LocalSend defaults to TCP and UDP `53317`.
 TextLT generates a local identity on first use unless one is configured.
 Pairing saves the peer ID and certificate fingerprint exchanged in the
-pairing code. Notes and Actions use the same connection for snapshots. Workers enqueue provider events and request an
-FTXUI wake-up. The editor drains the queue on the UI thread, including
-while a different workspace is selected. Switching workspaces retains the
-provider, selected conversation, and draft. Stop joins the provider workers,
-and the editor also stops networking on exit. Connect Settings persists edits separately from session-only UI state.
-The editor detects and displays an active non-loopback IPv4 address for its initial listener setting.
+pairing code. Notes and Actions use the same connection for snapshots. Workers
+enqueue provider events and request an FTXUI wake-up. The editor drains the
+queue on the UI thread, including while a different workspace is selected.
+Stop joins the provider workers, and the editor also stops networking on exit.
+Connect Settings persists edits separately from session-only UI state. The
+editor detects and displays an active non-loopback IPv4 address for its
+initial listener setting.
+
+### Telegram Bot API
+
+`TelegramProvider` in `src/telegram/` implements the existing
+`IConnectProvider` contract with the stable provider ID `telegram`. The
+standalone `textlt::connect` library and its TextLT/LocalSend transports are
+unchanged. `TelegramHttpApi` uses the existing HTTPS `RemoteHttpClient` and
+the official `getMe`, `getUpdates`, `sendMessage`, `sendDocument`, and
+`getFile` Bot API methods.
+
+One provider worker long-polls `getUpdates` for both chat discovery and
+incoming messages. It advances and saves the Telegram `update_id` offset,
+deduplicates replayed updates, and records discovered chats. Discovered chats
+are not exposed as Connect peers until authorized. The provider checks the
+authorized-chat list before transfers and discards incoming content from
+other chats. Telegram advertises unversioned text and file capabilities.
+`sendMessage` preserves UTF-8 and newline characters. For documents the
+worker uploads with `sendDocument` and calls `getFile` after the user accepts
+an incoming offer.
+
+The worker handles Telegram `retry_after` responses and transient polling
+errors with bounded exponential backoff when automatic reconnect is enabled.
+Stopping the provider cancels its outstanding HTTP poll and joins the worker.
+Outgoing sends are queued on that same worker; a confirmed rate-limit response
+may be retried, while ambiguous send failures are not retried to avoid
+duplicating messages.
+
+Telegram settings are stored separately in `telegram-settings.json` beside the
+main editor configuration (`$HOME/.config/textlt/telegram-settings.json` on
+Linux, and `/state/.config/textlt/telegram-settings.json` in the current
+Docker image). The token is protected by private POSIX file permissions but
+is plaintext at rest; it is not written to application status or error
+messages. See the [Telegram bot setup guide](telegram-bot-setup.md).
 
 ### Network diagnostics
 
@@ -89,12 +155,12 @@ the editor diagnostics code.
 
 ## First release
 
-| Content | TextLT provider | LocalSend provider | On receipt by TextLT |
-| --- | --- | --- | --- |
-| Text | One-to-one chat between TextLT peers | One-off text transfer | Show in the selected peer's conversation. For LocalSend, label it as a LocalSend transfer. |
-| File | Direct transfer between TextLT peers | LocalSend file transfer | Save to the receiving machine's Downloads folder after acceptance. |
-| Note | Structured payload | Unsupported | Preview, then import a copy into Notes on request. |
-| Action | Structured payload | Unsupported | Preview, then import a copy into the selected Actions page on request. |
+| Content | TextLT provider | LocalSend provider | Telegram provider | On receipt by TextLT |
+| --- | --- | --- | --- | --- |
+| Text | One-to-one chat between TextLT peers | One-off text transfer | Bot API message for an authorized chat | Show in the selected peer's conversation. For LocalSend, label it as a LocalSend transfer. |
+| File | Direct transfer between TextLT peers | LocalSend file transfer | Bot API document for an authorized chat | Save a supported incoming file to Downloads after acceptance. |
+| Note | Structured payload | Unsupported | Unsupported | Preview, then import a copy into Notes on request. |
+| Action | Structured payload | Unsupported | Unsupported | Preview, then import a copy into the selected Actions page on request. |
 
 Connect shows peers with their provider and enables the actions a selected peer
 supports. It shows transfer progress and outcomes separately from import
@@ -116,16 +182,17 @@ Connect exposes the following contracts in `textlt::connect`.
 | `IConnectProvider` | Start and stop discovery and receiving, send payloads, accept or decline offers, cancel transfers, and report peers, offers, transfer outcomes, and received content via a callback. |
 | `MakeTextLTProvider` | Create a text, file, and structured content provider with a local listen endpoint, a manually configured remote endpoint, or both. `TextLTProviderOptions` adds `listen_ip`, `peer_ip`, and optional `TextLTTlsOptions` for the certificate, key, and expected peer fingerprint. `TextLTDiscoveryOptions` enables discovery, and `trusted_discovery_peer_id` binds the configured pin to one discovery ID. |
 | `MakeLocalSendProvider` | Create the LocalSend v2.2 HTTPS provider from the identity path, alias, IPv4 bind and multicast settings, ports, and deadlines. |
+| Telegram application adapter | Implements `IConnectProvider` in `src/telegram/` and uses the existing `RemoteHttpClient` for the Bot API. It is outside the standalone Connect library and has no FTXUI dependency. |
 | `TextLTCertificateFingerprint` | Read a PEM certificate and return its SHA-256 fingerprint for display or out-of-band verification. |
 | `ContentHandler` | Declare a structured type and its supported schema versions. Validate a payload, supply a preview, and import it through a host callback. |
 | Editor adapter | Supply domain payloads on send and turn incoming import requests into calls to the relevant TextLT workspace. Open the corresponding destination picker where needed. |
 
 Providers and handlers register under stable string IDs. The editor adapter
-registers exactly two providers for the first release: `textlt` and
-`localsend`. The workspace builds its actions from both the local provider and the
-selected peer's capabilities. For typed data, both ends must support a common
-payload version. The LocalSend adapter supplies its text and file capabilities
-from its own protocol rules.
+registers `textlt`, `localsend`, and the application-layer `telegram` adapter.
+The Telegram adapter advertises unversioned text and files. The workspace builds
+operations from the selected peer's capabilities. For typed data, both ends
+must support a common payload version. The LocalSend adapter supplies its text
+and file capabilities from its own protocol rules.
 
 Registration consumes the supplied provider or handler. IDs are nonempty
 and case-sensitive, with separate namespaces for providers and handlers. Each

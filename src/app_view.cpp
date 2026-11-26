@@ -214,6 +214,9 @@ ftxui::Element TextltApp::Render() {
     if (connect_settings_modal_.IsOpen()) {
         layers.push_back(connect_settings_modal_.View()->Render() | clear_under | center);
     }
+    if (telegram_settings_modal_.IsOpen()) {
+        layers.push_back(telegram_settings_modal_.View()->Render() | clear_under | center);
+    }
     if (textlt_config_modal_.IsOpen()) {
         layers.push_back(textlt_config_modal_.View()->Render() | clear_under | center);
     }
@@ -336,6 +339,7 @@ bool TextltApp::ActiveModalIsOpen() const {
         case UiLayer::GitSettings: return git_settings_modal_.IsOpen();
         case UiLayer::ConnectSettings: return connect_settings_modal_.IsOpen();
         case UiLayer::TextLTConfig: return textlt_config_modal_.IsOpen();
+        case UiLayer::TelegramSettings: return telegram_settings_modal_.IsOpen();
         case UiLayer::Tts: return tts_modal_.IsOpen();
         case UiLayer::ViewLayout: return view_layout_modal_.IsOpen();
         case UiLayer::DistractionOptions: return distraction_options_modal_.IsOpen();

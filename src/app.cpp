@@ -583,8 +583,9 @@ TextltApp::TextltApp()
         [this] { OpenFilesModal(FilesModalMode::SendConnectFile); },
         [] { return FileManager::UserDownloadsDirectory(false); },
         EditorConfig::DefaultConfigPath().parent_path() / "localsend.pem",
-        [this] { OpenTextLTConfigModal(); },
-        [this](const std::string& text) { return clipboard_controller_.WriteText(text); });
+         [this] { OpenTextLTConfigModal(); },
+         [this] { OpenTelegramSettingsModal(); },
+         [this](const std::string& text) { return clipboard_controller_.WriteText(text); });
     connect_workspace_->RegisterContentHandler(MakeNoteConnectHandler(*notes_component));
     connect_workspace_->RegisterContentHandler(MakeActionConnectHandler(
         *std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_)));
@@ -662,6 +663,13 @@ TextltApp::TextltApp()
     connect_settings_modal_.Configure(current_theme_, *connect_workspace_,
         [this](const std::string& text) { return clipboard_controller_.WriteText(text); },
         [this] { CloseConnectSettingsModal(); });
+    telegram_settings_modal_.Configure(
+        current_theme_, connect_workspace_->Telegram(),
+        [this] { CloseTelegramSettingsModal(); },
+        [this] { screen_.PostEvent(ftxui::Event::Custom); },
+        [this](TelegramSettingsModal::ClipboardPaste deliver) {
+            clipboard_controller_.ReadText(std::move(deliver));
+        });
     textlt_config_modal_.Configure(current_theme_, *connect_workspace_,
         [this](const std::string& text) { return clipboard_controller_.WriteText(text); },
         [this] { CloseTextLTConfigModal(); });
@@ -694,6 +702,7 @@ TextltApp::TextltApp()
         remove_project_popup_,
         connect_settings_modal_.View(),
         textlt_config_modal_.View(),
+        telegram_settings_modal_.View(),
     }, &active_layer_index_);
 
     renderer_ = ftxui::Renderer(root_container_, [this] { return Render(); });

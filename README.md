@@ -44,9 +44,10 @@ Optimized to run perfectly in native Linux environments (**MX Linux**, **Ubuntu*
 ## Docker
 
 The image builds TextLT from source with CMake. Both stages use Ubuntu 26.04.
-It includes the editor, themes, text processors, both Connect providers, the
-existing AI integrations, and the Piper runtime and local TTS server. Download
-a voice model when you first need one.
+It includes the editor, themes, text processors, TextLT and LocalSend Connect
+providers, Telegram Bot API support, the existing AI integrations, and the
+Piper runtime and local TTS server. Download a voice model when you first need
+one.
 
 ### Build locally or from GitHub
 
@@ -280,6 +281,15 @@ docker port textlt-net 53317/tcp
 network namespace. With native Linux host networking they see the shared host
 network. A published TCP port and a listening UDP socket each describe local
 configuration. Verify multicast discovery with a peer on the LAN.
+
+### Telegram bot messaging
+
+Telegram uses a bot you create with BotFather. In **Options → Connect →
+Messengers → Settings**, test the token, then start Telegram and send `/start`
+to the bot so TextLT can discover the chat. Select authorized chats in the
+settings modal; no chat IDs need to be entered. Telegram settings and the bot
+token are kept in the existing `/state` volume. See the
+[Telegram bot setup guide](docs/telegram-bot-setup.md).
 
 ### Connect to a host AI service
 

@@ -16,6 +16,8 @@
 #include "ftxui/screen/string.hpp"
 #include "textlt/connect/textlt_provider.hpp"
 #include "textlt/connect/localsend_provider.hpp"
+#include "telegram/telegram_api.hpp"
+#include "telegram/telegram_provider.hpp"
 #include "theme.hpp"
 #include "ui_button.hpp"
 #include "ui_horizontal_scroll.hpp"
@@ -48,6 +50,7 @@ std::string TransferLabel(TransferState state) {
 }
 
 bool CanRemember(const PeerIdentity& peer) {
+    if (peer.provider_id == telegram::kTelegramProviderId) return false;
     return peer.provider_id == kTextLTProviderId
         ? peer.peer_id.compare(0, kTextLTBrowserPeerPrefix.size(), kTextLTBrowserPeerPrefix) != 0
         : peer.peer_id.compare(0, 10, "anonymous-") != 0;
@@ -93,16 +96,20 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
                                    std::function<std::filesystem::path()> downloads,
                                    std::filesystem::path localsend_identity,
                                    std::function<void()> open_textlt_config,
+                                   std::function<void()> open_telegram_settings,
                                    std::function<bool(const std::string&)> write_clipboard)
     : theme_(theme), workspace_tabs_(std::move(workspaces)), redraw_(std::move(redraw)),
       pick_file_(std::move(pick_file)), downloads_(std::move(downloads)),
       write_clipboard_(std::move(write_clipboard)),
+      open_telegram_settings_(std::move(open_telegram_settings)),
       message_menu_(theme, [this](const std::string& command) { ExecuteMessageCommand(command); }),
       localsend_identity_(std::move(localsend_identity)) {
     LoadSettings();
     LoadNativeConnections();
     navigator_ = CatchEvent(Renderer([](bool) { return emptyElement(); }),
                             [this](Event event) { return NavigatorEvent(event); });
+    messenger_navigator_ = CatchEvent(Renderer([](bool) { return emptyElement(); }),
+                                      [this](Event event) { return MessengerNavigatorEvent(event); });
     toggle_native_ = ProviderToggle(native_running_, [this] { ToggleNative(); });
     textlt_config_ = FlatAction("TextLT Config", ButtonRole::Utility, std::move(open_textlt_config));
     toggle_localsend_ = ProviderToggle(localsend_runtime_.listening, [this] { ToggleLocalSend(); });
@@ -124,6 +131,18 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
         return RenderModalFlatButton(theme_, spec, state.focused);
     };
     connect_by_ip_ = Button(std::move(connect_by_ip));
+    auto telegram_toggle = ButtonOption::Simple();
+    telegram_toggle.on_click = [this] { ToggleTelegram(); };
+    telegram_toggle.transform = [this](const EntryState& state) {
+        const bool running = telegram_provider_ && telegram_provider_->Running();
+        const auto spec = ButtonSpecFromLabel(running ? "Stop" : "Start",
+            running ? ButtonRole::Cancel : ButtonRole::Primary,
+            ButtonVariant::Minimal, ButtonSize::Compact);
+        return RenderModalFlatButton(theme_, spec, state.focused);
+    };
+    toggle_telegram_ = Button(std::move(telegram_toggle));
+    telegram_settings_ = FlatAction(
+        "Settings", ButtonRole::Utility, open_telegram_settings_);
     InputOption input;
     input.multiline = false;
     input.cursor_position = &cursor_;
@@ -153,11 +172,14 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
     Add(send_file_);
     Add(cancel_transfer_);
     Add(navigator_);
+    Add(messenger_navigator_);
     Add(toggle_native_);
     Add(textlt_config_);
     Add(toggle_localsend_);
     Add(refresh_localsend_);
     Add(connect_by_ip_);
+    Add(toggle_telegram_);
+    Add(telegram_settings_);
     Add(composer_);
     Add(send_);
     Add(accept_);
@@ -165,7 +187,18 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
     active_ = composer_;
     InitializeStructuredControls();
     service_ = std::make_unique<ConnectService>();
-    providers_ = {kTextLTProviderId, kLocalSendProviderId};
+    auto telegram = std::make_unique<telegram::TelegramProvider>(
+        telegram::MakeTelegramHttpApi(), std::filesystem::path{}, [this] { redraw_(); });
+    telegram_provider_ = telegram.get();
+    service_->RegisterProvider(std::move(telegram));
+    providers_ = {kTextLTProviderId, kLocalSendProviderId, telegram::kTelegramProviderId};
+
+    const auto telegram_settings = telegram_provider_->Settings();
+    if (telegram_settings.start_on_launch && !telegram_settings.bot_token.empty()) {
+        const auto result = telegram_provider_->Start(
+            [this](connect::ProviderEvent event) { QueueProviderEvent(std::move(event)); });
+        if (!result.accepted) status_ = result.reason;
+    }
 }
 
 Component ConnectWorkspace::FlatAction(std::string label, ButtonRole role, std::function<void()> action) const {
@@ -366,12 +399,36 @@ void ConnectWorkspace::ToggleLocalSend() {
         StopProvider(kLocalSendProviderId);
         localsend_peer_verified_ = false;
         localsend_phone_reached_listener_ = false;
-        if (active_ == refresh_localsend_) toggle_localsend_->TakeFocus();
+        if (active_ == refresh_localsend_) {
+            FocusColumn(toggle_localsend_, ConnectColumn::LocalConnections);
+        }
         status_ = "LocalSend stopped";
         return;
     }
     const auto result = StartLocalSend();
     status_ = result.accepted ? "LocalSend running" : result.reason;
+}
+
+void ConnectWorkspace::ToggleTelegram() {
+    if (!telegram_provider_) return;
+    if (telegram_provider_->Running()) {
+        StopProvider(telegram::kTelegramProviderId);
+        status_ = "Telegram stopped";
+    } else {
+        const auto result = telegram_provider_->Start(
+            [this](connect::ProviderEvent event) { QueueProviderEvent(std::move(event)); });
+        status_ = result.accepted ? "Telegram starting" : result.reason;
+    }
+    redraw_();
+}
+
+bool ConnectWorkspace::Running() const {
+    return native_running_ || localsend_runtime_.listening ||
+        (telegram_provider_ && telegram_provider_->Running());
+}
+
+telegram::TelegramProvider& ConnectWorkspace::Telegram() {
+    return *telegram_provider_;
 }
 
 void ConnectWorkspace::RefreshLocalSendPeers() {
@@ -419,7 +476,9 @@ ProviderResult ConnectWorkspace::StartNativeListener() {
 
 void ConnectWorkspace::StopProvider(std::string_view provider) {
     if (auto* transport = service_->FindProvider(provider)) transport->Stop();
-    service_->UnregisterProvider(provider);
+    if (provider != telegram::kTelegramProviderId) {
+        service_->UnregisterProvider(provider);
+    }
     DrainEvents();
     if (selected_ && selected_->first == provider) pin_.clear();
     for (auto& [key, chat] : conversations_) {
@@ -432,6 +491,7 @@ void ConnectWorkspace::StopProvider(std::string_view provider) {
         chat.waiting_for_pin = false;
         chat.pin.clear();
         chat.offer.reset();
+        chat.telegram_offers.clear();
     }
 }
 
@@ -504,12 +564,16 @@ void ConnectWorkspace::Select(const PeerKey& key) {
     if (!first) draft_ = selected_chat.draft;
     cursor_ = static_cast<int>(draft_.size());
     pin_ = selected_chat.pin;
+    if (key.first == telegram::kTelegramProviderId) EnsureSelectedMessengerPeerVisible();
+    else EnsureSelectedPeerVisible();
 }
 
 void ConnectWorkspace::Send() {
     if (draft_.empty()) return;
     if (!Running() || !selected_) {
-        status_ = Running() ? "Select a connection to send" : "Start networking before sending";
+        status_ = Running() ? "Select a connection to send"
+            : selected_ && selected_->first == telegram::kTelegramProviderId
+                ? "Start Telegram before sending" : "Start networking before sending";
         return;
     }
     auto* provider = service_->FindProvider(selected_->first);
@@ -532,7 +596,9 @@ void ConnectWorkspace::Send() {
         return;
     }
     auto& chat = *Selected();
-    chat.messages.push_back({id, std::move(draft_), "Waiting for acceptance", true});
+    const bool telegram_message = selected_->first == telegram::kTelegramProviderId;
+    chat.messages.push_back({id, std::move(draft_),
+        telegram_message ? "Sending" : "Waiting for acceptance", true});
     if (selected_->first == kLocalSendProviderId) {
         chat.active_transfer = std::make_pair(TransferIdentity{{selected_->first, PeerRoute()}, id},
                                                TransferDirection::Outgoing);
@@ -540,13 +606,17 @@ void ConnectWorkspace::Send() {
     chat.scroll = 0;
     draft_.clear();
     cursor_ = 0;
-    status_ = "Waiting for acceptance";
+    status_ = telegram_message ? "Sending via Telegram" : "Waiting for acceptance";
 }
 
 bool ConnectWorkspace::CanSendFile() {
     const auto* chat = Selected();
     if (!Running() || !chat || !chat->online || !chat->supports_files) return false;
     if (selected_->first == kLocalSendProviderId) return true;
+    if (selected_->first == telegram::kTelegramProviderId) {
+        return telegram_provider_->Running() && !chat->active_transfer &&
+            telegram_provider_->IsAuthorized(selected_->second);
+    }
     return !active_settings_.peer_fingerprint.empty() &&
            (selected_->second == active_settings_.peer_id ||
             (selected_->second == kTextLTManualPeerId && !active_settings_.peer_port.empty()));
@@ -610,11 +680,13 @@ bool ConnectWorkspace::QueueFile(std::string name, std::uint64_t size,
         return false;
     }
     auto& chat = *Selected();
+    const auto pending = selected_->first == telegram::kTelegramProviderId
+        ? "Queued for upload" : "Waiting for acceptance";
     chat.messages.push_back({id, name + " (" + std::to_string(size) + " bytes)",
-                             "Waiting for acceptance", true, true});
+                             pending, true, true});
     chat.active_transfer = std::make_pair(std::move(identity), TransferDirection::Outgoing);
     chat.scroll = 0;
-    status_ = "Waiting for acceptance";
+    status_ = pending;
     return true;
 }
 
@@ -636,7 +708,7 @@ void ConnectWorkspace::RetryPin() {
         pin_.clear();
         chat->pin.clear();
         chat->waiting_for_pin = false;
-        composer_->TakeFocus();
+        FocusColumn(composer_, ConnectColumn::Conversation);
         status_ = "Retrying LocalSend offer";
     } else {
         status_ = result.reason;
@@ -682,7 +754,7 @@ ProviderResult ConnectWorkspace::ResolveOffer(Conversation& chat, bool accept, b
     }
     if (result.accepted) {
         chat.offer.reset();
-        if (Selected() == &chat) composer_->TakeFocus();
+        if (Selected() == &chat) FocusColumn(composer_, ConnectColumn::Conversation);
     }
     return result;
 }
@@ -715,17 +787,24 @@ void ConnectWorkspace::Handle(const PeerCapabilities& peer) {
 
 void ConnectWorkspace::Handle(const IncomingOffer& offer) {
     auto& chat = Get(offer.identity.peer);
+    const bool telegram_offer = offer.identity.peer.provider_id == telegram::kTelegramProviderId;
+    if (telegram_offer && (chat.offer || chat.active_transfer)) {
+        chat.telegram_offers.push_back(offer);
+        return;
+    }
     chat.offer = offer;
     const bool local_send = offer.identity.peer.provider_id == kLocalSendProviderId;
     const auto* current = Selected();
-    const bool browser = !local_send && !CanRemember(offer.identity.peer);
+    const bool browser = !local_send && !telegram_offer && !CanRemember(offer.identity.peer);
     if (!current || ((local_send || browser) && !current->offer)) {
         Select({offer.identity.peer.provider_id, offer.identity.peer.peer_id});
     }
     const bool file = offer.metadata.type_id == kFileTypeId;
     if (file) {
+        const auto size = offer.metadata.byte_length
+            ? std::to_string(*offer.metadata.byte_length) + " bytes" : "size unknown";
         chat.messages.push_back({offer.identity.transfer_id,
-            *offer.metadata.display_name + " (" + std::to_string(*offer.metadata.byte_length) + " bytes)",
+            offer.metadata.display_name.value_or("download") + " (" + size + ")",
             "Waiting for acceptance", false, true});
         chat.active_transfer = std::make_pair(offer.identity, TransferDirection::Incoming);
         chat.scroll = 0;
@@ -737,7 +816,7 @@ void ConnectWorkspace::Handle(const IncomingOffer& offer) {
         : offer.metadata.schema_version ? "Incoming item: " + offer.metadata.display_name.value_or(offer.metadata.type_id)
                                         : "Incoming text offer from " + chat.name;
     const PeerKey peer{offer.identity.peer.provider_id, offer.identity.peer.peer_id};
-    if (auto_accept_peers_.count(peer)) {
+    if (!telegram_offer && auto_accept_peers_.count(peer)) {
         const auto result = ResolveOffer(chat, true, false);
         status_ = result.accepted ? "Accepted automatically from " + chat.name : result.reason;
     }
@@ -767,15 +846,28 @@ void ConnectWorkspace::Handle(const TransferEvent& transfer) {
         peer.peer_id = active_settings_.peer_id;
     }
     auto& chat = Get(peer);
+    const bool telegram_file = peer.provider_id == telegram::kTelegramProviderId;
+    if (telegram_file && !outgoing) {
+        const auto queued = std::find_if(chat.telegram_offers.begin(), chat.telegram_offers.end(),
+            [&](const IncomingOffer& offer) { return offer.identity.transfer_id == transfer.identity.transfer_id; });
+        if (queued != chat.telegram_offers.end()) {
+            chat.telegram_offers.erase(queued);
+            return;
+        }
+    }
     if (transfer.state == TransferState::Pending && transfer.failure == TransferFailure::PinRequired) {
         chat.waiting_for_pin = true;
     }
     const auto summary = !outgoing && transfer.state == TransferState::Completed
-        ? "Received" : TransferLabel(transfer.state);
+        ? "Received" : telegram_file && !outgoing && transfer.state == TransferState::InProgress
+            ? "Downloading" : TransferLabel(transfer.state);
     status_ = transfer.reason ? summary + ": " + *transfer.reason : summary;
     if (transfer.state == TransferState::InProgress && transfer.bytes_transferred && transfer.total_bytes) {
         status_ = std::to_string(*transfer.bytes_transferred) + " / " +
                   std::to_string(*transfer.total_bytes) + " bytes";
+    } else if (telegram_file && !outgoing && transfer.state == TransferState::InProgress &&
+               transfer.bytes_transferred) {
+        status_ = "Downloaded " + std::to_string(*transfer.bytes_transferred) + " bytes";
     }
     for (auto message = chat.messages.rbegin(); message != chat.messages.rend(); ++message) {
         if ((outgoing || message->file) && message->outgoing == outgoing &&
@@ -801,6 +893,11 @@ void ConnectWorkspace::Handle(const TransferEvent& transfer) {
         (active_ == accept_ || active_ == decline_)) {
         active_ = composer_;
     }
+    if (!chat.offer && !chat.active_transfer && !chat.telegram_offers.empty()) {
+        auto next = std::move(chat.telegram_offers.front());
+        chat.telegram_offers.pop_front();
+        Handle(next);
+    }
 }
 
 void ConnectWorkspace::Handle(const IncomingConnectionFailure& failure) {
@@ -818,8 +915,79 @@ Component ConnectWorkspace::ActiveChild() {
 
 void ConnectWorkspace::SetActiveChild(ComponentBase* child) {
     for (const auto& component : children()) {
-        if (component.get() == child) active_ = component;
+        if (component.get() != child) continue;
+        active_ = component;
+        if (component == navigator_ || component == toggle_native_ || component == textlt_config_ ||
+            component == toggle_localsend_ || component == refresh_localsend_ ||
+            component == connect_by_ip_) {
+            navigation_state_.Focus(ConnectColumn::LocalConnections);
+        }
+        else if (component == messenger_navigator_ || component == toggle_telegram_ ||
+                 component == telegram_settings_) {
+            navigation_state_.Focus(ConnectColumn::Messengers);
+        }
+        else navigation_state_.Focus(ConnectColumn::Conversation);
+        return;
     }
+}
+
+void ConnectWorkspace::FocusColumn(Component component, ConnectColumn column) {
+    if (!component) return;
+    active_ = component;
+    navigation_state_.Focus(column);
+    component->TakeFocus();
+}
+
+void ConnectWorkspace::UpdateNavigatorScrollLimits() {
+    if (!navigator_box_.IsEmpty()) {
+        const int height = navigator_box_.y_max - navigator_box_.y_min + 1;
+        navigator_visible_rows_ = std::max(1, height - 4);
+    }
+    navigator_scroll_max_ = std::max(0, navigator_content_rows_ - navigator_visible_rows_);
+    navigation_state_.Scroll(ConnectColumn::LocalConnections, 0, navigator_scroll_max_);
+}
+
+void ConnectWorkspace::EnsureSelectedPeerVisible() {
+    UpdateNavigatorScrollLimits();
+    if (!selected_) return;
+    const auto row = std::find_if(peer_rows_.begin(), peer_rows_.end(),
+        [this](const PeerRow& entry) { return entry.key == *selected_; });
+    if (row == peer_rows_.end()) return;
+
+    const int offset = navigation_state_.ScrollOffset(ConnectColumn::LocalConnections);
+    int delta = 0;
+    if (row->content_row < offset) {
+        delta = row->content_row - offset;
+    } else if (row->content_row >= offset + navigator_visible_rows_) {
+        delta = row->content_row - (offset + navigator_visible_rows_ - 1);
+    }
+    navigation_state_.Scroll(ConnectColumn::LocalConnections, delta, navigator_scroll_max_);
+}
+
+void ConnectWorkspace::UpdateMessengerScrollLimits() {
+    if (!messenger_box_.IsEmpty()) {
+        const int height = messenger_box_.y_max - messenger_box_.y_min + 1;
+        messenger_visible_rows_ = std::max(1, height - 6);
+    }
+    messenger_scroll_max_ = std::max(0, messenger_content_rows_ - messenger_visible_rows_);
+    navigation_state_.Scroll(ConnectColumn::Messengers, 0, messenger_scroll_max_);
+}
+
+void ConnectWorkspace::EnsureSelectedMessengerPeerVisible() {
+    UpdateMessengerScrollLimits();
+    if (!selected_) return;
+    const auto row = std::find_if(messenger_peer_rows_.begin(), messenger_peer_rows_.end(),
+        [this](const PeerRow& entry) { return entry.key == *selected_; });
+    if (row == messenger_peer_rows_.end()) return;
+
+    const int offset = navigation_state_.ScrollOffset(ConnectColumn::Messengers);
+    int delta = 0;
+    if (row->content_row < offset) {
+        delta = row->content_row - offset;
+    } else if (row->content_row >= offset + messenger_visible_rows_) {
+        delta = row->content_row - (offset + messenger_visible_rows_ - 1);
+    }
+    navigation_state_.Scroll(ConnectColumn::Messengers, delta, messenger_scroll_max_);
 }
 
 bool ConnectWorkspace::Paste(Event event) {
@@ -828,7 +996,7 @@ bool ConnectWorkspace::Paste(Event event) {
     if (auto* chat = Selected(); chat && chat->waiting_for_pin && pin_input_->Focused()) {
         return pin_input_->OnEvent(std::move(event));
     }
-    composer_->TakeFocus();
+    FocusColumn(composer_, ConnectColumn::Conversation);
     return composer_->OnEvent(std::move(event));
 }
 
@@ -893,6 +1061,7 @@ bool ConnectWorkspace::OnEvent(Event event) {
         const auto mouse = event.mouse();
         if (Pressed(event) && workspace_tabs_.ActivateAt(mouse.x, mouse.y)) return true;
         if (navigator_box_.Contain(mouse.x, mouse.y)) return NavigatorEvent(event);
+        if (messenger_box_.Contain(mouse.x, mouse.y)) return MessengerNavigatorEvent(event);
     }
     if ((pending_share_ || preview_) && StructuredEvent(event)) return true;
     if (Paste(event)) return true;
@@ -911,20 +1080,52 @@ bool ConnectWorkspace::OnEvent(Event event) {
                         return true;
                     }
                 }
-                composer_->TakeFocus();
+                FocusColumn(composer_, ConnectColumn::Conversation);
                 return true;
             }
         }
-        if (auto* chat = Selected(); chat && chat->offer &&
-            (accept_->OnEvent(event) || decline_->OnEvent(event))) return true;
-        if ((Selected() && Selected()->waiting_for_pin &&
-             (pin_input_->OnEvent(event) || retry_pin_->OnEvent(event))) ||
-            (OffersTextFile() && draft_file_->OnEvent(event)) ||
-            (CanSendFile() && send_file_->OnEvent(event)) ||
-            (Selected() && Selected()->active_transfer && cancel_transfer_->OnEvent(event)) ||
-            composer_->OnEvent(event) || send_->OnEvent(event)) return true;
-        if (Pressed(event) && workspace_box_.Contain(mouse.x, mouse.y)) {
-            composer_->TakeFocus();
+        if (auto* chat = Selected(); chat && chat->offer) {
+            if (accept_->OnEvent(event)) {
+                FocusColumn(accept_, ConnectColumn::Conversation);
+                return true;
+            }
+            if (decline_->OnEvent(event)) {
+                FocusColumn(decline_, ConnectColumn::Conversation);
+                return true;
+            }
+        }
+        if (Selected() && Selected()->waiting_for_pin) {
+            if (pin_input_->OnEvent(event)) {
+                FocusColumn(pin_input_, ConnectColumn::Conversation);
+                return true;
+            }
+            if (retry_pin_->OnEvent(event)) {
+                FocusColumn(retry_pin_, ConnectColumn::Conversation);
+                return true;
+            }
+        }
+        if (OffersTextFile() && draft_file_->OnEvent(event)) {
+            FocusColumn(draft_file_, ConnectColumn::Conversation);
+            return true;
+        }
+        if (CanSendFile() && send_file_->OnEvent(event)) {
+            FocusColumn(send_file_, ConnectColumn::Conversation);
+            return true;
+        }
+        if (Selected() && Selected()->active_transfer && cancel_transfer_->OnEvent(event)) {
+            FocusColumn(cancel_transfer_, ConnectColumn::Conversation);
+            return true;
+        }
+        if (composer_->OnEvent(event)) {
+            FocusColumn(composer_, ConnectColumn::Conversation);
+            return true;
+        }
+        if (send_->OnEvent(event)) {
+            FocusColumn(send_, ConnectColumn::Conversation);
+            return true;
+        }
+        if (Pressed(event) && conversation_box_.Contain(mouse.x, mouse.y)) {
+            FocusColumn(composer_, ConnectColumn::Conversation);
             return true;
         }
         return false;
@@ -934,6 +1135,9 @@ bool ConnectWorkspace::OnEvent(Event event) {
         Components choices{navigator_, toggle_native_, textlt_config_, toggle_localsend_};
         if (localsend_runtime_.listening) choices.push_back(refresh_localsend_);
         choices.push_back(connect_by_ip_);
+        choices.push_back(messenger_navigator_);
+        choices.push_back(toggle_telegram_);
+        choices.push_back(telegram_settings_);
         choices.push_back(composer_);
         choices.push_back(send_);
         if (CanSendFile()) choices.push_back(send_file_);
@@ -950,10 +1154,31 @@ bool ConnectWorkspace::OnEvent(Event event) {
         const auto current = std::find(choices.begin(), choices.end(), active_);
         const int total = static_cast<int>(choices.size());
         const int index = current == choices.end() ? 0 : static_cast<int>(current - choices.begin());
-        choices[(index + total + (event == Event::Tab ? 1 : -1)) % total]->TakeFocus();
+        const Component next =
+            choices[(index + total + (event == Event::Tab ? 1 : -1)) % total];
+        if (next == navigator_ || next == toggle_native_ || next == textlt_config_ ||
+            next == toggle_localsend_ || next == refresh_localsend_ || next == connect_by_ip_) {
+            FocusColumn(next, ConnectColumn::LocalConnections);
+        } else if (next == messenger_navigator_ || next == toggle_telegram_ ||
+                   next == telegram_settings_) {
+            FocusColumn(next, ConnectColumn::Messengers);
+        } else {
+            FocusColumn(next, ConnectColumn::Conversation);
+        }
         return true;
     }
-    if (ScrollDelta(event) && active_ != navigator_) {
+    if (ScrollDelta(event) && navigation_state_.FocusedColumn() == ConnectColumn::LocalConnections) {
+        UpdateNavigatorScrollLimits();
+        navigation_state_.Scroll(ConnectColumn::LocalConnections,
+                                 ScrollDelta(event) * 5, navigator_scroll_max_);
+        return true;
+    }
+    if (ScrollDelta(event) && navigation_state_.FocusedColumn() == ConnectColumn::Messengers) {
+        navigation_state_.Scroll(ConnectColumn::Messengers, ScrollDelta(event) * 5,
+                                 messenger_scroll_max_);
+        return true;
+    }
+    if (ScrollDelta(event)) {
         if (auto* chat = Selected()) {
             chat->scroll = std::clamp(chat->scroll - ScrollDelta(event) * 5, 0,
                                       std::max(0, history_rows_ - 1));
@@ -965,44 +1190,143 @@ bool ConnectWorkspace::OnEvent(Event event) {
 
 bool ConnectWorkspace::NavigatorEvent(Event event) {
     if (event.is_mouse()) {
-        if (toggle_native_->OnEvent(event) || textlt_config_->OnEvent(event) || toggle_localsend_->OnEvent(event) ||
-            (localsend_runtime_.listening && refresh_localsend_->OnEvent(event)) ||
-            connect_by_ip_->OnEvent(event)) return true;
-        if (Pressed(event)) {
-            const auto mouse = event.mouse();
-            for (const auto& [key, box] : peer_rows_) {
-                if (box.Contain(mouse.x, mouse.y)) {
-                    CloseStructuredPicker();
-                    Select(key);
-                    navigator_->TakeFocus();
-                    break;
-                }
-            }
+        if (toggle_native_->OnEvent(event)) {
+            FocusColumn(toggle_native_, ConnectColumn::LocalConnections);
             return true;
         }
-        if (!ScrollDelta(event)) return false;
+        if (textlt_config_->OnEvent(event)) {
+            FocusColumn(textlt_config_, ConnectColumn::LocalConnections);
+            return true;
+        }
+        if (toggle_localsend_->OnEvent(event)) {
+            FocusColumn(toggle_localsend_, ConnectColumn::LocalConnections);
+            return true;
+        }
+        if (localsend_runtime_.listening && refresh_localsend_->OnEvent(event)) {
+            FocusColumn(refresh_localsend_, ConnectColumn::LocalConnections);
+            return true;
+        }
+        if (connect_by_ip_->OnEvent(event)) {
+            FocusColumn(connect_by_ip_, ConnectColumn::LocalConnections);
+            return true;
+        }
+        if (Pressed(event)) {
+            const auto mouse = event.mouse();
+            for (const auto& row : peer_rows_) {
+                if (row.box.Contain(mouse.x, mouse.y)) {
+                    CloseStructuredPicker();
+                    Select(row.key);
+                    FocusColumn(navigator_, ConnectColumn::LocalConnections);
+                    return true;
+                }
+            }
+            FocusColumn(navigator_, ConnectColumn::LocalConnections);
+            return true;
+        }
+        const int scroll_delta = ScrollDelta(event);
+        if (scroll_delta) {
+            UpdateNavigatorScrollLimits();
+            navigation_state_.Scroll(ConnectColumn::LocalConnections,
+                                     scroll_delta * 3, navigator_scroll_max_);
+            FocusColumn(navigator_, ConnectColumn::LocalConnections);
+            return true;
+        }
+        return false;
     }
-    const int delta = ScrollDelta(event) ? ScrollDelta(event) * 3 :
-                      event == Event::ArrowUp ? -1 : event == Event::ArrowDown ? 1 : 0;
-    if (delta && !peer_rows_.empty()) {
+    const int scroll_delta = ScrollDelta(event);
+    if (scroll_delta) {
+        UpdateNavigatorScrollLimits();
+        navigation_state_.Scroll(ConnectColumn::LocalConnections,
+                                 scroll_delta * 5, navigator_scroll_max_);
+        return true;
+    }
+    if (event == Event::ArrowUp || event == Event::ArrowDown) {
+        UpdateNavigatorScrollLimits();
+        const int delta = event == Event::ArrowUp ? -1 : 1;
+        if (peer_rows_.empty()) return true;
         const auto row = std::find_if(peer_rows_.begin(), peer_rows_.end(),
-                                      [this](const auto& entry) { return selected_ == entry.first; });
+                                      [this](const PeerRow& entry) { return selected_ == entry.key; });
         const int index = row == peer_rows_.end() ? 0 : static_cast<int>(row - peer_rows_.begin());
         CloseStructuredPicker();
-        Select(peer_rows_[std::clamp(index + delta, 0, static_cast<int>(peer_rows_.size()) - 1)].first);
-        navigator_->TakeFocus();
+        Select(peer_rows_[std::clamp(index + delta, 0, static_cast<int>(peer_rows_.size()) - 1)].key);
+        FocusColumn(navigator_, ConnectColumn::LocalConnections);
         return true;
     }
     if (event == Event::Return && selected_) {
-        composer_->TakeFocus();
+        FocusColumn(composer_, ConnectColumn::Conversation);
         return true;
     }
     return false;
 }
 
-Element ConnectWorkspace::RenderNavigator(int width, bool show_workspace_tabs) {
+bool ConnectWorkspace::MessengerNavigatorEvent(Event event) {
+    if (event.is_mouse()) {
+        if (toggle_telegram_->OnEvent(event)) {
+            FocusColumn(toggle_telegram_, ConnectColumn::Messengers);
+            return true;
+        }
+        if (telegram_settings_->OnEvent(event)) {
+            FocusColumn(telegram_settings_, ConnectColumn::Messengers);
+            return true;
+        }
+        if (Pressed(event)) {
+            const auto mouse = event.mouse();
+            for (const auto& row : messenger_peer_rows_) {
+                if (!row.box.Contain(mouse.x, mouse.y)) continue;
+                Select(row.key);
+                FocusColumn(messenger_navigator_, ConnectColumn::Messengers);
+                return true;
+            }
+            FocusColumn(messenger_navigator_, ConnectColumn::Messengers);
+            return true;
+        }
+        const int scroll_delta = ScrollDelta(event);
+        if (scroll_delta) {
+            UpdateMessengerScrollLimits();
+            navigation_state_.Scroll(ConnectColumn::Messengers, scroll_delta * 3,
+                                     messenger_scroll_max_);
+            FocusColumn(messenger_navigator_, ConnectColumn::Messengers);
+            return true;
+        }
+        return false;
+    }
+
+    if (ScrollDelta(event)) {
+        UpdateMessengerScrollLimits();
+        navigation_state_.Scroll(ConnectColumn::Messengers, ScrollDelta(event) * 5,
+                                 messenger_scroll_max_);
+        return true;
+    }
+    if (event == Event::ArrowUp || event == Event::ArrowDown) {
+        if (messenger_peer_rows_.empty()) return true;
+        const auto row = std::find_if(messenger_peer_rows_.begin(), messenger_peer_rows_.end(),
+            [this](const PeerRow& entry) { return selected_ == entry.key; });
+        const int index = row == messenger_peer_rows_.end()
+            ? 0 : static_cast<int>(row - messenger_peer_rows_.begin());
+        const int delta = event == Event::ArrowUp ? -1 : 1;
+        const auto& key = messenger_peer_rows_[std::clamp(
+            index + delta, 0, static_cast<int>(messenger_peer_rows_.size()) - 1)].key;
+        Select(key);
+        FocusColumn(messenger_navigator_, ConnectColumn::Messengers);
+        return true;
+    }
+    if (event == Event::Return && selected_) {
+        FocusColumn(composer_, ConnectColumn::Conversation);
+        return true;
+    }
+    if (event == Event::PageUp || event == Event::PageDown ||
+        event == Event::ArrowUp || event == Event::ArrowDown) {
+        const int delta = event == Event::PageUp || event == Event::ArrowUp ? -3 : 3;
+        navigation_state_.Scroll(ConnectColumn::Messengers, delta, messenger_scroll_max_);
+        return true;
+    }
+    return false;
+}
+
+Element ConnectWorkspace::RenderNavigator(int width) {
     peer_rows_.clear();
     peer_rows_.reserve(conversations_.size());
+    navigator_content_rows_ = 0;
     const auto button = [](const Component& component) {
         auto rendered = component->Render();
         return component->Focused() ? rendered | focus : rendered;
@@ -1011,10 +1335,11 @@ Element ConnectWorkspace::RenderNavigator(int width, bool show_workspace_tabs) {
         refresh_localsend_->Focused() || connect_by_ip_->Focused();
     const bool compact = Terminal::Size().dimy <= 26;
     Elements rows;
-    const auto append_online_apps = [this, &rows, width, controls_focused, compact](const std::string& provider_id,
-                                                                          bool running) {
+    int wrapped_content_rows = 0;
+    const auto append_online_apps = [this, &rows, &wrapped_content_rows, width, controls_focused, compact](const std::string& provider_id,
+                                                                           bool running) {
         rows.push_back(text(" "));
-        rows.push_back(paragraph("Open the link in browser"));
+        rows.push_back(text("Open the link in browser"));
         const bool native = provider_id == kTextLTProviderId;
         const auto port = native ? native_browser_port_ : localsend_runtime_.https_port.value_or(0);
         if (running && port) {
@@ -1025,7 +1350,11 @@ Element ConnectWorkspace::RenderNavigator(int width, bool show_workspace_tabs) {
                 rows.push_back(text(link.substr(offset, line_width)) | color(theme_.header) | hyperlink(link));
             }
         } else {
-            rows.push_back(paragraph(running ? "HTTPS link unavailable" : "Start to show HTTPS link") | dim);
+            const std::string status = running ? "HTTPS link unavailable" : "Start to show HTTPS link";
+            const int line_width = std::max(1, width - 2);
+            wrapped_content_rows += std::max(
+                0, (string_width(status) + line_width - 1) / line_width - 1);
+            rows.push_back(paragraph(status) | dim);
         }
         rows.push_back(text(" "));
         rows.push_back(text("Online apps") | bold);
@@ -1053,7 +1382,8 @@ Element ConnectWorkspace::RenderNavigator(int width, bool show_workspace_tabs) {
             return;
         }
         for (const auto& [key, name] : online) {
-            peer_rows_.emplace_back(key, Box{});
+            peer_rows_.push_back(
+                {key, Box{}, static_cast<int>(rows.size()) + wrapped_content_rows});
             const int row_width = std::max(1, width - 1);
             const int status_width = std::min(7, row_width);
             const int name_width = std::max(1, row_width - status_width);
@@ -1065,10 +1395,11 @@ Element ConnectWorkspace::RenderNavigator(int width, bool show_workspace_tabs) {
                 row = row | inverted;
                 if (!controls_focused) row = row | focus;
             }
-            rows.push_back(row | reflect(peer_rows_.back().second));
+            rows.push_back(row | reflect(peer_rows_.back().box));
         }
     };
     for (const auto& provider : providers_) {
+        if (provider != kTextLTProviderId && provider != kLocalSendProviderId) continue;
         const bool native = provider == kTextLTProviderId;
         if (!native && !compact) rows.push_back(separator() | color(theme_.gutter));
         auto heading = text(native ? "TEXTLT" : "LOCALSEND") | bold | color(theme_.modal_accent);
@@ -1096,7 +1427,8 @@ Element ConnectWorkspace::RenderNavigator(int width, bool show_workspace_tabs) {
             if (key.first != provider) continue;
             if ((provider == kTextLTProviderId || provider == kLocalSendProviderId) &&
                 chat.online && chat.protocol) continue;
-            peer_rows_.emplace_back(key, Box{});
+            peer_rows_.push_back(
+                {key, Box{}, static_cast<int>(rows.size()) + wrapped_content_rows});
             std::string detail = chat.offer ? "Offer" : chat.online
                 ? (chat.configured ? "Online" : "Discovered") : chat.configured ? "Configured" : "Offline";
             const int row_width = std::max(1, width - 1);
@@ -1110,17 +1442,69 @@ Element ConnectWorkspace::RenderNavigator(int width, bool show_workspace_tabs) {
                 row = row | inverted;
                 if (!controls_focused) row = row | focus;
             }
-            rows.push_back(row | reflect(peer_rows_.back().second));
+            rows.push_back(row | reflect(peer_rows_.back().box));
         }
     }
     if (peer_rows_.empty()) rows.push_back(text("No connections") | dim);
+    navigator_content_rows_ = static_cast<int>(rows.size()) + wrapped_content_rows;
+    navigator_scroll_max_ = std::max(0, navigator_content_rows_ - navigator_visible_rows_);
+    navigation_state_.Scroll(ConnectColumn::LocalConnections, 0, navigator_scroll_max_);
     return vbox({
-        show_workspace_tabs ? workspace_tabs_.Render(theme_, WorkspaceTab::Connect) : emptyElement(),
-        show_workspace_tabs && !compact ? separator() | color(theme_.gutter) : emptyElement(),
-        text(" Connections") | bold | (navigator_->Focused() ? inverted : nothing),
-        compact ? emptyElement() : separator() | color(theme_.gutter),
-        vbox(std::move(rows)) | vscroll_indicator | yframe | flex,
+        text(" Local Connections") | bold | color(theme_.modal_accent) |
+            (navigation_state_.FocusedColumn() == ConnectColumn::LocalConnections ? inverted : nothing),
+        separator() | color(theme_.gutter),
+        vbox(std::move(rows)) | focusPosition(0, navigation_state_.ScrollOffset(
+            ConnectColumn::LocalConnections)) | vscroll_indicator | yframe | flex,
     }) | size(WIDTH, EQUAL, width) | borderStyled(LIGHT, theme_.gutter) | reflect(navigator_box_);
+}
+
+Element ConnectWorkspace::RenderMessengerNavigator(int width) {
+    Elements rows;
+    messenger_peer_rows_.clear();
+    const auto settings = telegram_provider_->Settings();
+    const auto chats = telegram_provider_->AuthorizedChats();
+    const bool controls_focused = toggle_telegram_->Focused() || telegram_settings_->Focused();
+    if (chats.empty()) {
+        const bool has_discovered = !settings.known_chats.empty();
+        rows.push_back(text(has_discovered
+            ? "No Telegram chats are authorized"
+            : "Message the bot to discover chats") | dim);
+    } else {
+        messenger_peer_rows_.reserve(chats.size());
+        for (const auto& chat_info : chats) {
+            const PeerKey key{telegram::kTelegramProviderId, chat_info.id};
+            auto& chat = conversations_[key];
+            chat.name = chat_info.title.empty() ? chat_info.id : chat_info.title;
+            messenger_peer_rows_.push_back({key, Box{}, static_cast<int>(rows.size())});
+            const int content_width = std::max(1, width - 3);
+            const auto label = chat.offer || !chat.telegram_offers.empty()
+                ? "[File] " + chat.name : chat.name;
+            Element row = text(" " + VisibleLabel(label, 0, content_width)) |
+                size(WIDTH, EQUAL, content_width);
+            if (selected_ == key) {
+                row = row | inverted;
+                if (!controls_focused) row = row | focus;
+            }
+            rows.push_back(row | reflect(messenger_peer_rows_.back().box));
+        }
+    }
+    messenger_content_rows_ = static_cast<int>(rows.size());
+    messenger_scroll_max_ = std::max(0, messenger_content_rows_ - messenger_visible_rows_);
+    navigation_state_.Scroll(ConnectColumn::Messengers, 0, messenger_scroll_max_);
+    return vbox({
+        text(" Messengers") | bold | color(theme_.modal_accent) |
+            (navigation_state_.FocusedColumn() == ConnectColumn::Messengers ? inverted : nothing),
+        separator() | color(theme_.gutter),
+        text(" Telegram") | bold,
+        hbox({
+            toggle_telegram_->Render(),
+            filler(),
+            telegram_settings_->Render(),
+        }),
+        vbox(std::move(rows)) | focusPosition(0, navigation_state_.ScrollOffset(
+            ConnectColumn::Messengers)) | vscroll_indicator | yframe | flex,
+    }) | size(WIDTH, EQUAL, width) | borderStyled(LIGHT, theme_.gutter) |
+        reflect(messenger_box_);
 }
 
 Element ConnectWorkspace::RenderChat(int width) {
@@ -1193,15 +1577,50 @@ Element ConnectWorkspace::RenderChat(int width) {
 }
 
 Element ConnectWorkspace::OnRender() {
-    const int columns = Terminal::Size().dimx;
-    const int navigator_width = std::clamp(columns / 3, columns >= 72 ? 31 : 8, 32);
-    const bool tabs_fit = navigator_width >= WorkspaceTabs::kConnectRowWidth;
-    auto layout = hbox({RenderNavigator(navigator_width, tabs_fit),
-                        RenderChat(std::max(1, columns - navigator_width - 5))}) | flex;
-    if (!tabs_fit) {
-        layout = vbox({workspace_tabs_.Render(theme_, WorkspaceTab::Connect), std::move(layout)}) | flex;
+    const auto terminal = Terminal::Size();
+    const auto layout = ComputeConnectWorkspaceLayout(terminal.dimx, terminal.dimy);
+    const int fixed_height = layout.mode == ConnectLayoutMode::ThreeColumns
+        ? terminal.dimy - 5
+        : layout.mode == ConnectLayoutMode::CompactNavigationRow
+            ? layout.navigation_height - 4
+            : layout.local_navigation_height - 4;
+    navigator_visible_rows_ = std::max(1, fixed_height);
+    const int messenger_height = layout.mode == ConnectLayoutMode::ThreeColumns
+        ? terminal.dimy - 5
+        : layout.mode == ConnectLayoutMode::CompactNavigationRow
+            ? layout.navigation_height - 5
+            : layout.messenger_navigation_height - 6;
+    messenger_visible_rows_ = std::max(1, messenger_height);
+
+    Element columns;
+    if (layout.mode == ConnectLayoutMode::ThreeColumns) {
+        columns = hbox({
+            RenderNavigator(layout.local_width),
+            RenderMessengerNavigator(layout.messenger_width),
+            RenderChat(layout.conversation_width) | reflect(conversation_box_),
+        }) | flex;
+    } else if (layout.mode == ConnectLayoutMode::CompactNavigationRow) {
+        auto navigation = hbox({
+            RenderNavigator(layout.local_width),
+            RenderMessengerNavigator(layout.messenger_width),
+        }) | size(HEIGHT, LESS_THAN, layout.navigation_height) | yflex;
+        columns = vbox({
+            std::move(navigation),
+            RenderChat(layout.conversation_width) | flex | reflect(conversation_box_),
+        }) | flex;
+    } else {
+        columns = vbox({
+            RenderNavigator(layout.local_width) |
+                size(HEIGHT, LESS_THAN, layout.local_navigation_height) | yflex,
+            RenderMessengerNavigator(layout.messenger_width) |
+                size(HEIGHT, LESS_THAN, layout.messenger_navigation_height) | yflex,
+            RenderChat(layout.conversation_width) | flex | reflect(conversation_box_),
+        }) | flex;
     }
-    return layout | reflect(workspace_box_);
+    return vbox({
+        workspace_tabs_.Render(theme_, WorkspaceTab::Connect),
+        std::move(columns) | flex,
+    }) | flex | reflect(workspace_box_);
 }
 
 } // namespace textlt::connect_ui
