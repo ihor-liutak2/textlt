@@ -77,7 +77,7 @@ int DocumentWorkspace::FindSessionByPath(const std::filesystem::path& path) cons
 
     for (size_t index = 0; index < sessions_.size(); ++index) {
         const auto& session = sessions_[index];
-        if (!session) {
+        if (!session || session->git_compare) {
             continue;
         }
 

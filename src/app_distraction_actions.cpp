@@ -45,6 +45,7 @@ void TextltApp::ApplyDistractionSettings(DistractionModeSettings settings) {
 }
 
 void TextltApp::SetDistractionEnabled(bool enabled) {
+    if (enabled) CloseGitCompare();
     distraction_controller_.SetEnabled(enabled);
     editor_config_.distraction_mode = distraction_controller_.Settings();
     SaveConfig();

@@ -37,7 +37,8 @@ void TextltApp::UpdateFileMenuLabels() {
         return;
     }
 
-    menu_bar_->SetFileFavoriteLabel(document_file_controller_.IsActiveSessionFavorite());
+    menu_bar_->SetFileMenuLabels(document_file_controller_.IsActiveSessionFavorite(),
+        IsGitCompareSession(document_workspace_.ActiveSessionPtr()));
 }
 
 
@@ -84,6 +85,7 @@ void TextltApp::RunDropdownAction(int menu_index, int item_index) {
     
 void TextltApp::CommandFileNew() {
     document_file_controller_.NewSession();
+    CloseGitCompare();
     BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
     active_action_ = "New file";

@@ -261,6 +261,9 @@ TextltApp::TextltApp()
           [this](const std::string& text) {
               return clipboard_controller_.WriteText(text);
           },
+          [this](ClipboardController::PasteCallback deliver) {
+              clipboard_controller_.ReadText(std::move(deliver));
+          },
           [this](
               const std::string& project_id,
               const std::string& connection_id,
@@ -327,11 +330,8 @@ TextltApp::TextltApp()
           &current_theme_,
           [this] { return CurrentViewLayoutSnapshot(); },
           [this](int layout_index) {
-              layout_controller_.SetModeByIndex(layout_index);
-              BindEditorComponentsToWorkspace();
-              SetActiveEditorPane(document_workspace_.ActiveEditorPaneIndex());
-              active_action_ = "View layout: " + layout_controller_.ModeLabel();
-              screen_.PostEvent(ftxui::Event::Custom);
+              SetEditorLayoutMode(layout_index == 1 ? EditorLayoutMode::TwoColumns :
+                  layout_index == 2 ? EditorLayoutMode::ThreeColumns : EditorLayoutMode::Single);
           },
           [this](size_t pane_index, size_t session_index) {
               AssignSessionToEditorPane(pane_index, session_index);

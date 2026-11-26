@@ -364,7 +364,7 @@ bool DocumentFileController::IsActiveSessionFavorite() const {
 
 void DocumentFileController::PersistActiveFavoriteCursor() {
     const DocumentSession* session = ActiveSession();
-    if (!session) {
+    if (!session || session->git_compare) {
         return;
     }
 

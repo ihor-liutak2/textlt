@@ -67,11 +67,76 @@ int TextltApp::EditorLayoutModeIndex() const {
 }
 
 void TextltApp::SetEditorLayoutMode(EditorLayoutMode mode) {
+    if (mode != EditorLayoutMode::TwoColumns) EndGitCompare();
     layout_controller_.SetMode(mode);
     BindEditorComponentsToWorkspace();
     SetActiveEditorPane(document_workspace_.ActiveEditorPaneIndex());
     active_action_ = "View layout: " + layout_controller_.ModeLabel();
     screen_.PostEvent(ftxui::Event::Custom);
+}
+
+bool TextltApp::IsGitCompareSession(const std::shared_ptr<DocumentSession>& session) const {
+    return session && git_compare_state_ &&
+        std::any_of(git_compare_state_->compare_sessions.begin(), git_compare_state_->compare_sessions.end(),
+            [&](const auto& compare) { return compare.lock() == session; });
+}
+
+void TextltApp::EndGitCompare() {
+    if (!git_compare_state_) return;
+
+    std::array<bool, 2> replaced{};
+    for (size_t pane = 0; pane < replaced.size(); ++pane) {
+        replaced[pane] = IsGitCompareSession(
+            document_workspace_.SessionPtrAt(document_workspace_.PaneSessionIndex(pane)));
+    }
+    auto active_document = document_workspace_.ActiveSessionPtr();
+    auto active_pane = document_workspace_.ActiveEditorPaneIndex();
+    if (IsGitCompareSession(active_document)) {
+        active_document = git_compare_state_->active_session.lock();
+        active_pane = git_compare_state_->active_pane;
+    }
+    for (size_t index = document_workspace_.SessionCount(); index-- > 0;) {
+        if (IsGitCompareSession(document_workspace_.SessionPtrAt(index))) {
+            document_workspace_.RemoveSession(index);
+        }
+    }
+    const auto compare = std::exchange(git_compare_state_, std::nullopt);
+    git_compare_prev_boxes_.fill({});
+    git_compare_next_boxes_.fill({});
+
+    document_file_controller_.EnsureOneSession(VisibleEditorPaneCount());
+    const auto& sessions = document_workspace_.OpenSessions();
+    const auto find_session = [&](const std::shared_ptr<DocumentSession>& document) {
+        return std::find(sessions.begin(), sessions.end(), document);
+    };
+    const auto active = find_session(active_document);
+    if (active != sessions.end()) {
+        document_workspace_.ClampActiveEditorPaneIndex(VisibleEditorPaneCount());
+        if (active_pane < VisibleEditorPaneCount()) document_workspace_.SetActiveEditorPaneIndex(active_pane);
+        document_workspace_.AssignSessionToActivePane(static_cast<size_t>(active - sessions.begin()));
+    }
+    for (size_t pane = 0; pane < replaced.size(); ++pane) {
+        if (!replaced[pane]) continue;
+        const auto previous = find_session(compare->previous_panes[pane].session.lock());
+        const size_t index = previous != sessions.end()
+            ? static_cast<size_t>(previous - sessions.begin()) : document_workspace_.ActiveSessionIndex();
+        document_workspace_.AssignSessionToPane(pane, index);
+    }
+    BindEditorComponentsToWorkspace();
+    for (size_t pane = 0; pane < replaced.size(); ++pane) {
+        const auto previous = compare->previous_panes[pane].session.lock();
+        if (previous && previous == document_workspace_.SessionPtrAt(document_workspace_.PaneSessionIndex(pane))) {
+            document_workspace_.PaneViewport(pane)->CursorState() = compare->previous_panes[pane].cursor;
+        }
+    }
+}
+
+void TextltApp::CloseGitCompare() {
+    if (!git_compare_state_) return;
+    const auto layout = git_compare_state_->previous_layout;
+    EndGitCompare();
+    SetEditorLayoutMode(layout);
+    active_action_ = "Closed Git Compare";
 }
 
 bool TextltApp::MainViewCanActivateEditorPane() const {

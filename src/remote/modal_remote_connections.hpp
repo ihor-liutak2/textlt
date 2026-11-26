@@ -27,6 +27,7 @@ class RemoteConnectionsModalContent : public IModalContent {
 public:
     using CloseCallback = std::function<void()>;
     using WriteClipboardCallback = ClipboardController::WriteCallback;
+    using ReadClipboardCallback = ClipboardController::ReadCallback;
     using AssignProjectCallback = std::function<bool(
         const std::string& project_id,
         const std::string& connection_id,
@@ -39,6 +40,7 @@ public:
         const Theme* theme,
         RemoteConfigStore* config_store,
         WriteClipboardCallback write_clipboard,
+        ReadClipboardCallback read_clipboard,
         AssignProjectCallback assign_project,
         DeleteGuardCallback can_delete,
         CloseCallback on_close);
@@ -50,7 +52,7 @@ public:
     ModalFrameStyle GetModalFrameStyle() const override { return ModalFrameStyle::TitleInBorder; }
     std::string GetFooterText() const override { return {}; }
     bool HasCustomFooter() const override { return true; }
-    int GetCustomFooterHeight() const override { return 1; }
+    int GetCustomFooterHeight() const override;
     ftxui::Element RenderCustomFooter() override;
 
     void Open();
@@ -64,6 +66,8 @@ public:
     bool HandleEvent(ftxui::Event event);
 
 private:
+    enum OverlayLayer { MainLayer, HelpLayer, CopyLayer };
+
     enum class MainTab {
         Connections,
         Sftp,
@@ -87,6 +91,7 @@ private:
     ftxui::Element RenderConnectionList();
     ftxui::Element RenderConnectionDetails();
     ftxui::Element RenderHelpOverlay();
+    ftxui::Element RenderCopyOverlay();
     ftxui::Element RenderTabButtons();
     ftxui::Element RenderOutput(int max_lines = 4);
     ftxui::Element RenderActionMessage();
@@ -114,6 +119,10 @@ private:
     void CloseHelp();
     void CopyHelpUrl();
     void CopyActionMessage();
+    void OpenCopyConnection();
+    void CloseCopyConnection();
+    void CopyConnection();
+    void PasteConnection();
     void RebuildFooterActions();
     void ReloadSshConfigHosts();
     void SyncSshConfigHostSelection();
@@ -136,6 +145,8 @@ private:
     const Theme* theme_ = nullptr;
     RemoteConfigStore* config_store_ = nullptr;
     WriteClipboardCallback write_clipboard_;
+    ReadClipboardCallback read_clipboard_;
+    size_t paste_request_ = 0;
     AssignProjectCallback assign_project_;
     DeleteGuardCallback can_delete_;
     CloseCallback on_close_;
@@ -191,6 +202,7 @@ private:
     bool status_is_error_ = false;
     std::string output_;
     bool help_active_ = false;
+    bool include_secrets_ = false;
 
     ftxui::Component list_component_;
     ftxui::Component name_input_;
@@ -227,12 +239,14 @@ private:
     ftxui::Component dropbox_tab_button_;
     ftxui::Component reload_button_;
     ftxui::Component copy_message_button_;
+    ftxui::Component copy_connection_button_, paste_connection_button_;
     ftxui::Component close_button_;
     ftxui::Component help_button_;
     ftxui::Component help_close_button_;
     ftxui::Component copy_url_button_;
     ftxui::Component help_container_;
-    int help_layer_index_ = 0;
+    ftxui::Component include_secrets_checkbox_, confirm_copy_button_, cancel_copy_button_;
+    int overlay_layer_index_ = MainLayer;
     ftxui::Component footer_actions_container_;
     ftxui::Component container_;
 };
@@ -240,6 +254,7 @@ private:
 class RemoteConnectionsModal {
 public:
     using WriteClipboardCallback = RemoteConnectionsModalContent::WriteClipboardCallback;
+    using ReadClipboardCallback = RemoteConnectionsModalContent::ReadClipboardCallback;
     using AssignProjectCallback = RemoteConnectionsModalContent::AssignProjectCallback;
     using DeleteGuardCallback = RemoteConnectionsModalContent::DeleteGuardCallback;
 
@@ -247,6 +262,7 @@ public:
         const Theme* theme,
         RemoteConfigStore* config_store,
         WriteClipboardCallback write_clipboard,
+        ReadClipboardCallback read_clipboard,
         AssignProjectCallback assign_project = {},
         DeleteGuardCallback can_delete = {});
 

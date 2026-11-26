@@ -211,6 +211,7 @@ RemoteConnectionsModal::RemoteConnectionsModal(
     const Theme* theme,
     RemoteConfigStore* config_store,
     WriteClipboardCallback write_clipboard,
+    ReadClipboardCallback read_clipboard,
     AssignProjectCallback assign_project,
     DeleteGuardCallback can_delete)
     : theme_(theme) {
@@ -218,6 +219,7 @@ RemoteConnectionsModal::RemoteConnectionsModal(
         theme_,
         config_store,
         std::move(write_clipboard),
+        std::move(read_clipboard),
         std::move(assign_project),
         std::move(can_delete),
         [this] { Close(); });

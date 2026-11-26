@@ -239,7 +239,8 @@ bool ActionRepository::MovePage(const std::string& group_id, const std::string& 
 }
 
 bool ActionRepository::CreateItem(const std::string& group_id, const std::string& page_id,
-    ActionItem item, std::string& id, std::string& error, std::string* created_page_id) {
+    ActionItem item, std::string& id, std::string& error, std::string* created_page_id,
+    std::string_view after_item_id) {
     if (item.title.empty()) { error = "Action title is required."; return false; }
     if (item.tabs.empty()) item.tabs.push_back({});
     if (item.tabs.size() > 4) { error = "An action can have at most four tabs."; return false; }
@@ -261,7 +262,9 @@ bool ActionRepository::CreateItem(const std::string& group_id, const std::string
     if (!page) { error = "Page was not found."; return false; }
     const std::string item_id = GenerateActionId();
     item.id = item_id;
-    page->items.push_back(std::move(item));
+    const auto after = std::find_if(page->items.begin(), page->items.end(),
+        [&](const ActionItem& existing) { return existing.id == after_item_id; });
+    page->items.insert(after == page->items.end() ? after : after + 1, std::move(item));
     if (!Commit(std::move(next), error)) return false;
     id = item_id;
     if (created_page_id) *created_page_id = std::move(automatic_page_id);

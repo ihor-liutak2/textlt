@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cctype>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <optional>
 #include <sstream>
@@ -12,6 +13,7 @@
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/mouse.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "ftxui/screen/terminal.hpp"
 #include "editor_utils.hpp"
 #include "ui_button.hpp"
 #include "ui_selectable_input.hpp"

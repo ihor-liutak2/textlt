@@ -154,6 +154,9 @@ private:
         const std::string& right_content,
         std::string& error);
     bool NavigateGitCompare(size_t pane_index, bool next);
+    bool IsGitCompareSession(const std::shared_ptr<DocumentSession>& session) const;
+    void EndGitCompare();
+    void CloseGitCompare();
 
     std::vector<FileSearchRoot> CurrentSearchFileRoots() const;
     bool OpenSearchFileMatch(const FileSearchMatch& match, std::string& error);
@@ -441,6 +444,18 @@ private:
     ProjectStore project_store_;
     ftxui::Component text_editor_;
     std::vector<ftxui::Component> editor_pane_components_;
+    struct GitCompareState {
+        struct Pane {
+            std::weak_ptr<DocumentSession> session;
+            EditorCursorState cursor;
+        };
+        EditorLayoutMode previous_layout;
+        size_t active_pane;
+        std::weak_ptr<DocumentSession> active_session;
+        std::array<Pane, 2> previous_panes;
+        std::array<std::weak_ptr<DocumentSession>, 2> compare_sessions;
+    };
+    std::optional<GitCompareState> git_compare_state_;
     std::array<ftxui::Box, 3> git_compare_prev_boxes_{};
     std::array<ftxui::Box, 3> git_compare_next_boxes_{};
     std::vector<ftxui::Component> editor_pane_renderers_;

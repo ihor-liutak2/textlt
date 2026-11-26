@@ -662,6 +662,22 @@ bool TextltApp::OpenGitCompareDocuments(
     left_doc->is_dirty = false;
     right_doc->is_dirty = false;
 
+    CloseGitCompare();
+    if (!right_title.empty()) {
+        if (layout_controller_.IsDistractionModeActive()) SetDistractionEnabled(false);
+        GitCompareState state{
+            layout_controller_.Mode(), document_workspace_.ActiveEditorPaneIndex(),
+            document_workspace_.ActiveSessionPtr(), {}, {left_doc, right_doc}
+        };
+        for (size_t pane = 0; pane < state.previous_panes.size(); ++pane) {
+            state.previous_panes[pane] = {
+                document_workspace_.SessionPtrAt(document_workspace_.PaneSessionIndex(pane)),
+                document_workspace_.PaneViewport(pane)->CursorState()
+            };
+        }
+        git_compare_state_ = std::move(state);
+    }
+
     const size_t left_index = document_workspace_.AddSession(left_doc);
     size_t right_index = left_index;
     if (!right_title.empty()) {

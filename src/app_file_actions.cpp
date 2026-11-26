@@ -46,6 +46,7 @@ bool TextltApp::OpenFile(const std::string& path, std::string& error) {
             throw std::runtime_error(error);
         }
 
+        CloseGitCompare();
         BindEditorComponentsToWorkspace();
         RefreshOpenedDocumentsSidebar();
         UpdateFileMenuLabels();

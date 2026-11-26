@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <functional>
 #include <string>
+#include <string_view>
 
 #include "actions/action_model.hpp"
 
@@ -62,7 +63,7 @@ public:
     // An empty page_id and a created_page_id output allow adding to a new page.
     bool CreateItem(const std::string& group_id, const std::string& page_id,
         ActionItem item, std::string& id, std::string& error,
-        std::string* created_page_id = nullptr);
+        std::string* created_page_id = nullptr, std::string_view after_item_id = {});
     bool AppendItems(const std::string& group_id, const std::string& page_id,
         std::vector<ActionItem> items, std::string& error);
     bool UpdateItem(const std::string& group_id, const std::string& page_id,

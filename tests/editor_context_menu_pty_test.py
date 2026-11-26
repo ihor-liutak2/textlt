@@ -166,7 +166,7 @@ def test_editing(term, path, clipboard):
     term.require_closed()
 
 
-def test_read_only(term, clipboard):
+def open_compare(term):
     term.click(" Tools ")
     term.click_at(term.wait_for("Git..."))
     # Opening the Git modal refreshes repository status before its first frame.
@@ -175,6 +175,10 @@ def test_read_only(term, clipboard):
     term.wait_for("[RO]")
     # The new pane needs a repaint after its first layout pass.
     term.send(mouse(35, (1, 1)))
+
+
+def test_read_only(term, clipboard):
+    open_compare(term)
     x, y = term.position("left aBc right")
     term.drag((x + 5, y), (x + 8, y))
     term.click("old line")
@@ -186,6 +190,45 @@ def test_read_only(term, clipboard):
     assert clipboard.read_text() == "aBc"
     term.position("left aBc right")
     term.require_closed()
+
+
+def require_compare_closed(term):
+    term.wait_for("| Plain Text")
+    frame = "\n".join(term.rows)
+    assert "[RO]" not in frame and "↑ Prev" not in frame and "↓ Next" not in frame, frame
+    term.position("left abc right")
+
+
+def test_compare_exit(term):
+    term.click(" Options ")
+    term.click_at(term.wait_for("View Layout..."))
+    term.click_at(term.wait_for("Three columns"))
+    term.wait_for("Set pane 3")
+    term.send(ESC)
+    require_compare_closed(term)
+    term.position("3: sample.txt")
+
+    open_compare(term)
+    term.click(" File ")
+    term.click_at(term.wait_for("Close Git Compare"))
+    require_compare_closed(term)
+    term.position("3: sample.txt")
+
+    open_compare(term)
+    term.click(" File ")
+    term.click_at(term.wait_for("Recent Files"))
+    term.wait_for("Enter or double-click opens selected file")
+    term.send("\r")
+    require_compare_closed(term)
+    term.position("3: sample.txt")
+
+    open_compare(term)
+    term.click(" Options ")
+    term.click_at(term.wait_for("View Layout..."))
+    term.click_at(term.wait_for(" Single "))
+    term.send(ESC)
+    require_compare_closed(term)
+    assert "2: sample.txt" not in "\n".join(term.rows), term.rows
 
 
 def test_terminal_clipboard(term):
@@ -213,7 +256,7 @@ def run(binary):
         helper.write_text('#!/bin/sh\ncase "$3" in\n -i) cat > "$TEXTLT_TEST_CLIPBOARD";;\n'
                           ' -o) cat "$TEXTLT_TEST_CLIPBOARD";;\nesac\n')
         helper.chmod(0o755)
-        environment = dict(os.environ, HOME=directory, TERM="xterm-256color",
+        environment = dict(os.environ, HOME=directory, TERM="xterm-256color", COLORTERM="truecolor",
                            XDG_CONFIG_HOME=str(config.parent), XDG_DATA_HOME=str(root / "data"),
                            XDG_CACHE_HOME=str(root / "cache"), XDG_STATE_HOME=str(root / "state"),
                            PATH=f"{tools}:{os.defpath}", DISPLAY=":test",
@@ -231,9 +274,12 @@ def run(binary):
                 subprocess.run([git, *args], cwd=root, env=environment, check=True)
         path.write_text("left aBc right\nsecond\nthird\n")
         with Terminal(binary, root, path, environment) as term:
+            ordinary_frame = term.send(mouse(35, (1, 1)))
+            assert b"left" in ANSI.sub(b"", ordinary_frame) and b"\x1b[48;2;40;92;135m" not in ordinary_frame
             test_editing(term, path, clipboard)
             if git:
                 test_read_only(term, clipboard)
+                test_compare_exit(term)
         with Terminal(binary, root, path, dict(environment, SSH_CONNECTION="fixture")) as term:
             test_terminal_clipboard(term)
 

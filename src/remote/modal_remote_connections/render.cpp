@@ -12,8 +12,8 @@ ftxui::Element RemoteConnectionsModalContent::Render() {
         RenderCurrentTab() | flex,
     }) | bgcolor(theme.modal_background) | color(theme.modal_text_color);
 
-    if (help_active_) {
-        ftxui::Element overlay = RenderHelpOverlay();
+    if (help_active_ || overlay_layer_index_ == CopyLayer) {
+        auto overlay = help_active_ ? RenderHelpOverlay() : RenderCopyOverlay();
         ftxui::Element centered = ftxui::vbox(
             ftxui::filler(),
             ftxui::hbox(filler(), overlay, filler()),
@@ -25,6 +25,21 @@ ftxui::Element RemoteConnectionsModalContent::Render() {
     }
 
     return body;
+}
+
+ftxui::Element RemoteConnectionsModalContent::RenderCopyOverlay() {
+    using namespace ftxui;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    return vbox({
+        text(" Copy remote connection ") | bold | color(theme.modal_accent),
+        separator() | color(theme.modal_border),
+        paragraph("Including secrets puts saved credentials in the clipboard JSON."),
+        text(" "),
+        include_secrets_checkbox_->Render(),
+        text(" "),
+        hbox({filler(), confirm_copy_button_->Render(), text(" "), cancel_copy_button_->Render()}),
+    }) | size(WIDTH, LESS_THAN, 54) | borderStyled(LIGHT, theme.modal_border) |
+        bgcolor(theme.modal_background) | color(theme.modal_text_color) | clear_under;
 }
 
 ftxui::Element RemoteConnectionsModalContent::RenderCurrentTab() {
@@ -111,20 +126,36 @@ ftxui::Element RemoteConnectionsModalContent::RenderActionMessage() {
         bgcolor(theme.modal_input_bg);
 }
 
+int RemoteConnectionsModalContent::GetCustomFooterHeight() const {
+    return selected_tab_ == MainTab::Connections &&
+        ftxui::Terminal::Size().dimx < GetModalSizePreference().width ? 2 : 1;
+}
+
 ftxui::Element RemoteConnectionsModalContent::RenderCustomFooter() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     Elements buttons;
+    Element first_row;
 
     if (selected_tab_ == MainTab::Connections) {
         buttons.push_back(edit_button_->Render());
+        buttons.push_back(text(" "));
+        buttons.push_back(copy_connection_button_->Render());
+        buttons.push_back(text(" "));
+        buttons.push_back(paste_connection_button_->Render());
         buttons.push_back(text(" "));
         if (!assignment_project_id_.empty()) {
             buttons.push_back(assign_project_button_->Render());
         } else {
             buttons.push_back(set_active_button_->Render());
         }
-        buttons.push_back(text(" "));
+        if (GetCustomFooterHeight() == 2) {
+            buttons.push_back(filler());
+            first_row = hbox(std::move(buttons));
+            buttons.clear();
+        } else {
+            buttons.push_back(text(" "));
+        }
         buttons.push_back(test_button_->Render());
         buttons.push_back(text(" "));
         buttons.push_back(delete_button_->Render());
@@ -153,7 +184,9 @@ ftxui::Element RemoteConnectionsModalContent::RenderCustomFooter() {
     buttons.push_back(filler());
     buttons.push_back(close_button_->Render());
 
-    return hbox(std::move(buttons)) |
+    auto last_row = hbox(std::move(buttons));
+    auto footer = first_row ? vbox({std::move(first_row), std::move(last_row)}) : std::move(last_row);
+    return footer |
         bgcolor(theme.modal_background) |
         color(theme.modal_text_color);
 }

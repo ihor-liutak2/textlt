@@ -605,6 +605,7 @@ add_executable(textlt_remote_config_store_test
   tests/remote_config_store_test.cpp
   src/remote/remote_connection_config.cpp
   src/remote/remote_config_store.cpp
+  src/remote/remote_oauth_token_store.cpp
 )
 
 add_executable(textlt_project_store_test

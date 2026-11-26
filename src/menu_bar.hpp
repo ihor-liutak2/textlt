@@ -33,7 +33,7 @@ public:
     void SetActionsMenuVisible(bool visible);
     void SetConnectMenuVisible(bool visible);
     void SetNotesTrashSelected(bool trash_selected);
-    void SetFileFavoriteLabel(bool is_favorite);
+    void SetFileMenuLabels(bool is_favorite, bool comparing);
     void SetOptionLabels(
         bool smart_word_wrap,
         bool syntax_highlighting,

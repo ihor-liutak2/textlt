@@ -25,10 +25,11 @@ RemoteConnectionConfig RemoteConnectionsModalContent::ActionConfig() const {
 }
 
 void RemoteConnectionsModalContent::SelectTab(MainTab tab) {
+    ++paste_request_;
     selected_tab_ = tab;
     RebuildFooterActions();
     help_active_ = false;
-    help_layer_index_ = 0;
+    overlay_layer_index_ = MainLayer;
     output_.clear();
 
     if (tab == MainTab::Connections) {
@@ -52,7 +53,7 @@ void RemoteConnectionsModalContent::SelectType(RemoteConnectionType type) {
     output_.clear();
     SetStatus("Selected " + TypeDisplayName(type) + " connection type.");
     help_active_ = false;
-    help_layer_index_ = 0;
+    overlay_layer_index_ = MainLayer;
 }
 
 void RemoteConnectionsModalContent::ApplyTypeDefaults(RemoteConnectionType type) {
@@ -154,7 +155,8 @@ void RemoteConnectionsModalContent::LoadSelectedIntoForm() {
     known_hosts_file_value_ = config.known_hosts_file;
     ssh_config_host_value_ = config.ssh_config_host;
     SelectSshConfigHostValue(ssh_config_host_value_);
-    token_file_value_ = config.token_file;
+    token_file_value_ = config.type == RemoteConnectionType::Dropbox && config.token_file.empty()
+        ? DefaultRemoteTokenPath(config.type, config.id).string() : config.token_file;
     app_key_value_ = config.app_key;
     app_secret_value_ = config.app_secret;
     access_token_value_.clear();
@@ -341,7 +343,7 @@ void RemoteConnectionsModalContent::TestSelected() {
         return;
     }
     if (config.type == RemoteConnectionType::Dropbox && config.token_file.empty()) {
-        config.token_file = SuggestedTokenFile(config.type);
+        config.token_file = DefaultRemoteTokenPath(config.type, config.id).string();
         token_file_value_ = config.token_file;
     }
 
@@ -488,7 +490,7 @@ void RemoteConnectionsModalContent::OpenHelp() {
         return;
     }
     help_active_ = true;
-    help_layer_index_ = 1;
+    overlay_layer_index_ = HelpLayer;
     if (help_close_button_) {
         help_close_button_->TakeFocus();
     }
@@ -508,6 +510,8 @@ void RemoteConnectionsModalContent::RebuildFooterActions() {
 
     if (selected_tab_ == MainTab::Connections) {
         add(edit_button_);
+        add(copy_connection_button_);
+        add(paste_connection_button_);
         if (!assignment_project_id_.empty()) {
             add(assign_project_button_);
         } else {
@@ -534,7 +538,7 @@ void RemoteConnectionsModalContent::RebuildFooterActions() {
 
 void RemoteConnectionsModalContent::CloseHelp() {
     help_active_ = false;
-    help_layer_index_ = 0;
+    overlay_layer_index_ = MainLayer;
 }
 
 void RemoteConnectionsModalContent::CopyHelpUrl() {
@@ -548,4 +552,57 @@ void RemoteConnectionsModalContent::CopyActionMessage() {
     if (!write_clipboard_ || !write_clipboard_(ActionMessageText())) {
         SetStatus(ClipboardController::kWriteFailed, true);
     }
+}
+
+void RemoteConnectionsModalContent::OpenCopyConnection() {
+    if (SelectedConnectionConfig().id.empty()) {
+        SetStatus("Select a saved connection to copy.", true);
+        return;
+    }
+    include_secrets_ = false;
+    overlay_layer_index_ = CopyLayer;
+    include_secrets_checkbox_->TakeFocus();
+}
+
+void RemoteConnectionsModalContent::CloseCopyConnection() {
+    include_secrets_ = false;
+    overlay_layer_index_ = MainLayer;
+    copy_connection_button_->TakeFocus();
+}
+
+void RemoteConnectionsModalContent::CopyConnection() {
+    const auto config = SelectedConnectionConfig();
+    const bool include_secrets = include_secrets_;
+    CloseCopyConnection();
+    try {
+        const bool copied = write_clipboard_ && write_clipboard_(EncodeSharedRemoteConnection(config, include_secrets));
+        SetStatus(copied ? "Copied connection JSON for sharing." : ClipboardController::kWriteFailed, !copied);
+    } catch (const std::exception& error) {
+        SetStatus(error.what(), true);
+    }
+}
+
+void RemoteConnectionsModalContent::PasteConnection() {
+    if (!config_store_ || !read_clipboard_) {
+        SetStatus("Connection paste is unavailable.", true);
+        return;
+    }
+    const auto request = ++paste_request_;
+    read_clipboard_([this, request](std::optional<std::string> text) {
+        if (request != paste_request_) return;
+        if (!text || text->empty()) {
+            SetStatus("Clipboard has no text.", true);
+            return;
+        }
+        std::string id, error;
+        if (!config_store_->ImportSharedConnection(*text, id, error)) {
+            SetStatus(error, true);
+            return;
+        }
+        connections_ = config_store_->Connections();
+        connection_boxes_.resize(connections_.size());
+        SelectConnection(static_cast<int>(connections_.size()) - 1);
+        LoadSelectedIntoForm();
+        SetStatus("Added a new connection: " + name_value_);
+    });
 }

@@ -3,10 +3,14 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <limits>
+#include <optional>
+#include <stdexcept>
 #include <system_error>
 #include <utility>
 
 #include "json_utils.hpp"
+#include "remote/remote_oauth_token_store.hpp"
 
 namespace textlt {
 namespace {
@@ -113,7 +117,145 @@ Json SerializeConnection(const RemoteConnectionConfig& config) {
     return object;
 }
 
+constexpr char kSharedConnectionFormat[] = "textlt.remote_connection";
+
+std::string SharedString(const Json& object, const char* field) {
+    auto value = object.at(field).get<std::string>();
+    if (std::any_of(value.begin(), value.end(), [](unsigned char ch) { return ch < ' ' || ch == 127; })) {
+        throw std::invalid_argument(std::string("Invalid connection field: ") + field);
+    }
+    return value;
+}
+
+struct SharedConnection {
+    RemoteConnectionConfig config;
+    std::optional<RemoteOAuthToken> token;
+};
+
+SharedConnection DecodeSharedConnection(std::string_view text) {
+    if (text.find('\0') != std::string_view::npos) throw std::invalid_argument("Invalid connection JSON.");
+    const auto object = Json::parse(text.begin(), text.end(), [](int depth, Json::parse_event_t, Json&) {
+        if (depth > 4) throw std::invalid_argument("Invalid connection JSON.");
+        return true;
+    });
+    if (object.at("format") != kSharedConnectionFormat || !object.at("version").is_number_integer() ||
+        object.at("version") != 1) {
+        throw std::invalid_argument("Unsupported connection format or version.");
+    }
+    SharedConnection shared;
+    auto& config = shared.config;
+    config.name = SharedString(object, "name");
+    if (config.name.find_first_not_of(' ') == std::string::npos) {
+        throw std::invalid_argument("Connection name is required.");
+    }
+    config.remote_root = NormalizeRemoteDirectory(SharedString(object, "remote_root"));
+    const auto type = SharedString(object, "type");
+    if (type == "sftp") {
+        config.ssh_config_host = SharedString(object, "ssh_config_host");
+        if (config.ssh_config_host.empty() || config.ssh_config_host.front() == '-' ||
+            config.ssh_config_host.find_first_of(" /?#@\\*?!") != std::string::npos) {
+            throw std::invalid_argument("SFTP connection needs a Host alias from ~/.ssh/config.");
+        }
+        config.auth_mode = "ssh_config";
+    } else if (type == "ftps") {
+        config.type = RemoteConnectionType::Ftps;
+        config.host = SharedString(object, "host");
+        config.user = SharedString(object, "user");
+        const auto& port = object.at("port");
+        if (config.host.empty() || config.host.find_first_of(" /?#@\\") != std::string::npos ||
+            !port.is_number_integer() || port < 1 || port > 65535) {
+            throw std::invalid_argument("FTPS needs a host and a port from 1 to 65535.");
+        }
+        config.port = port.get<int>();
+        config.ftps_tls_mode = SharedString(object, "ftps_tls_mode");
+        std::transform(config.ftps_tls_mode.begin(), config.ftps_tls_mode.end(), config.ftps_tls_mode.begin(),
+            [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        if (config.ftps_tls_mode != "explicit" && config.ftps_tls_mode != "implicit") {
+            throw std::invalid_argument("FTPS TLS mode must be explicit or implicit.");
+        }
+        config.ftps_passive = object.at("ftps_passive").get<bool>();
+    } else if (type == "dropbox") {
+        config.type = RemoteConnectionType::Dropbox;
+        config.app_key = SharedString(object, "app_key");
+    } else {
+        throw std::invalid_argument("Unsupported connection type.");
+    }
+    if (const auto secrets = object.find("secrets"); secrets != object.end()) {
+        if (!secrets->is_object()) throw std::invalid_argument("Invalid connection secrets.");
+        const auto read_secret = [&](const char* key, std::string& value) {
+            if (secrets->contains(key)) value = SharedString(*secrets, key);
+        };
+        read_secret("password", config.password);
+        read_secret("key_passphrase", config.key_passphrase);
+        read_secret("app_secret", config.app_secret);
+        if (const auto oauth = secrets->find("oauth"); oauth != secrets->end()) {
+            if (config.type != RemoteConnectionType::Dropbox) {
+                throw std::invalid_argument("OAuth credentials are only supported for Dropbox.");
+            }
+            RemoteOAuthToken token;
+            token.provider = RemoteTokenProviderName(config.type);
+            token.display_name = config.name;
+            token.access_token = SharedString(*oauth, "access_token");
+            token.refresh_token = SharedString(*oauth, "refresh_token");
+            token.token_type = SharedString(*oauth, "token_type");
+            token.scope = SharedString(*oauth, "scope");
+            const auto& expires = oauth->at("expires_at_unix");
+            if (!expires.is_number_integer() ||
+                (!expires.is_number_unsigned() && expires.get<std::int64_t>() < 0) ||
+                expires.get<std::uint64_t>() > static_cast<std::uint64_t>((std::numeric_limits<std::int64_t>::max)()) ||
+                !token.HasUsableToken()) {
+                throw std::invalid_argument("Invalid Dropbox OAuth credentials.");
+            }
+            token.expires_at_unix = expires.get<std::int64_t>();
+            shared.token = std::move(token);
+        }
+    }
+    return shared;
+}
+
 } // namespace
+
+std::string EncodeSharedRemoteConnection(const RemoteConnectionConfig& config, bool include_secrets) {
+    Json object = {{"format", kSharedConnectionFormat}, {"version", 1}, {"name", config.name},
+        {"type", RemoteConnectionTypeToString(config.type)}, {"remote_root", config.remote_root}};
+    switch (config.type) {
+        case RemoteConnectionType::Sftp:
+            object["ssh_config_host"] = config.ssh_config_host;
+            break;
+        case RemoteConnectionType::Ftps:
+            object["host"] = config.host;
+            object["port"] = config.port;
+            object["user"] = config.user;
+            object["ftps_tls_mode"] = config.ftps_tls_mode;
+            object["ftps_passive"] = config.ftps_passive;
+            break;
+        case RemoteConnectionType::Dropbox:
+            object["app_key"] = config.app_key;
+            break;
+    }
+    if (include_secrets) {
+        auto secrets = Json::object();
+        if (!config.password.empty()) secrets["password"] = config.password;
+        if (!config.key_passphrase.empty()) secrets["key_passphrase"] = config.key_passphrase;
+        if (!config.app_secret.empty()) secrets["app_secret"] = config.app_secret;
+        if (config.type == RemoteConnectionType::Dropbox && !config.token_file.empty()) {
+            const RemoteOAuthTokenStore token_store(ExpandRemoteUserPath(config.token_file));
+            if (token_store.Exists()) {
+                RemoteOAuthToken token;
+                std::string error;
+                if (!token_store.Load(token, error)) throw std::runtime_error(error);
+                if (token.HasUsableToken()) {
+                    secrets["oauth"] = {{"access_token", token.access_token}, {"refresh_token", token.refresh_token},
+                        {"token_type", token.token_type}, {"scope", token.scope}, {"expires_at_unix", token.expires_at_unix}};
+                }
+            }
+        }
+        if (!secrets.empty()) object["secrets"] = std::move(secrets);
+    }
+    auto text = object.dump();
+    DecodeSharedConnection(text);
+    return text;
+}
 
 RemoteConfigStore::RemoteConfigStore(std::filesystem::path path)
     : path_(path.empty() ? DefaultRemoteConfigPath() : std::move(path)) {
@@ -163,23 +305,46 @@ bool RemoteConfigStore::Save(std::string& error) const {
         root["connections"].push_back(SerializeConnection(config));
     }
 
-    if (!WriteJsonAtomically(path_, root)) {
+    if (!WriteJsonAtomically(path_, root, true)) {
         error = "Cannot write remote config: " + path_.string();
         return false;
     }
-#ifndef _WIN32
-    std::error_code permission_error;
-    std::filesystem::permissions(
-        path_,
-        std::filesystem::perms::owner_read | std::filesystem::perms::owner_write,
-        std::filesystem::perm_options::replace,
-        permission_error);
-    if (permission_error) {
-        error = "Cannot protect remote config permissions: " + path_.string();
+    error.clear();
+    return true;
+}
+
+bool RemoteConfigStore::ImportSharedConnection(std::string_view json, std::string& new_id, std::string& error) {
+    SharedConnection shared;
+    try {
+        shared = DecodeSharedConnection(json);
+    } catch (const std::invalid_argument& reason) {
+        error = reason.what();
+        return false;
+    } catch (const Json::exception&) {
+        error = "Clipboard does not contain a valid remote connection.";
         return false;
     }
-#endif
-    error.clear();
+    auto& config = shared.config;
+    std::filesystem::path token_path;
+    do {
+        config.id = MakeRemoteConnectionId();
+        token_path = path_.parent_path() / "remote_tokens" / ("dropbox-" + config.id + ".json");
+    } while (FindById(config.id) || (shared.token && RemoteOAuthTokenStore(token_path).Exists()));
+    const auto id = config.id;
+    const RemoteOAuthTokenStore token_store(token_path);
+    if (shared.token) {
+        if (!token_store.Save(*shared.token, error)) return false;
+        config.token_file = token_path.string();
+    }
+    auto updated = *this;
+    updated.AddOrUpdate(std::move(config));
+    if (!updated.Save(error)) {
+        std::string cleanup;
+        if (shared.token && !token_store.Remove(cleanup)) error += "\n" + cleanup;
+        return false;
+    }
+    *this = std::move(updated);
+    new_id = id;
     return true;
 }
 

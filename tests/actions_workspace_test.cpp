@@ -498,9 +498,14 @@ void TestActionsContextMenu(const std::filesystem::path& path) {
     menu = open_menu("action-1");
     click_row(menu, 7);  // Paste.
     const auto with_copy = workspace.Groups()[0].pages[0].items;
-    Check(with_copy.size() == 5 && with_copy.back().title == decoded->title);
-    Check(with_copy.back().id != "action-4" && !with_copy.back().id.empty());
-    Check(EncodeActionSnapshot(with_copy.back()) == snapshot);
+    Check(with_copy.size() == 5 && with_copy[1].title == decoded->title);
+    Check(!with_copy[1].id.empty() && Access::SelectedItemId(workspace) == with_copy[1].id);
+    Check(EncodeActionSnapshot(with_copy[1]) == snapshot);
+    for (size_t index = 0; index < items.size(); ++index) {
+        const auto& original = with_copy[index == 0 ? index : index + 1];
+        Check(original.id == items[index].id && original.id != with_copy[1].id);
+        Check(EncodeActionSnapshot(original) == EncodeActionSnapshot(items[index]));
+    }
 
     ActionRepository failing_write(path, [](const auto&, const auto&, std::string& message) {
         message = "Write failed";
@@ -508,9 +513,9 @@ void TestActionsContextMenu(const std::filesystem::path& path) {
     });
     Check(failing_write.Load(error));
     Check(!failing_write.RenameItem("context-group", "context-page", "action-3", "Unsaved", error));
-    Check(failing_write.Data().groups[0].pages[0].items[2].title == "Target 3 renamed");
+    Check(failing_write.Data().groups[0].pages[0].items[3].title == "Target 3 renamed");
     Check(ActionSerializer::Load(path, saved, error));
-    Check(saved.groups[0].pages[0].items[2].title == "Target 3 renamed");
+    Check(saved.groups[0].pages[0].items[3].title == "Target 3 renamed");
 
     const auto empty_items = Access::SelectPageAndRenderItems(workspace, "empty-page");
     Check(mouse(Mouse::Right, Mouse::Pressed, empty_items.x_min + 1, empty_items.y_min));

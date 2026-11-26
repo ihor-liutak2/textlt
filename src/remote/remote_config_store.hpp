@@ -2,11 +2,14 @@
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "remote/remote_connection_config.hpp"
 
 namespace textlt {
+
+std::string EncodeSharedRemoteConnection(const RemoteConnectionConfig& config, bool include_secrets = false);
 
 class RemoteConfigStore {
 public:
@@ -14,6 +17,7 @@ public:
 
     bool Load(std::string& error);
     bool Save(std::string& error) const;
+    bool ImportSharedConnection(std::string_view json, std::string& new_id, std::string& error);
 
     const std::vector<RemoteConnectionConfig>& Connections() const { return connections_; }
     std::vector<RemoteConnectionConfig>& MutableConnections() { return connections_; }

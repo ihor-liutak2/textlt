@@ -2,12 +2,14 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     const Theme* theme,
     RemoteConfigStore* config_store,
     WriteClipboardCallback write_clipboard,
+    ReadClipboardCallback read_clipboard,
     AssignProjectCallback assign_project,
     DeleteGuardCallback can_delete,
     CloseCallback on_close)
     : theme_(theme),
       config_store_(config_store),
       write_clipboard_(std::move(write_clipboard)),
+      read_clipboard_(std::move(read_clipboard)),
       assign_project_(std::move(assign_project)),
       can_delete_(std::move(can_delete)),
       on_close_(std::move(on_close)) {
@@ -131,6 +133,8 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
         ButtonRole::Cancel, ButtonVariant::AccentEdges, "⟳");
     copy_message_button_ = MakeTextButton("Copy Message", [this] { CopyActionMessage(); },
         ButtonRole::Utility, ButtonVariant::AccentEdges, "⧉");
+    copy_connection_button_ = MakeTextButton("Copy", [this] { OpenCopyConnection(); }, ButtonRole::Utility);
+    paste_connection_button_ = MakeTextButton("Paste", [this] { PasteConnection(); }, ButtonRole::Utility);
     help_button_ = MakeTextButton("Info", [this] { OpenHelp(); },
         ButtonRole::Utility, ButtonVariant::AccentEdges, "i");
     close_button_ = MakeTextButton("Close", [this] {
@@ -216,11 +220,26 @@ RemoteConnectionsModalContent::RemoteConnectionsModalContent(
     help_children.push_back(help_close_button_);
     help_container_ = ftxui::Container::Horizontal(help_children);
 
+    include_secrets_checkbox_ = ftxui::Checkbox("Include secrets", &include_secrets_, checkbox_option);
+    confirm_copy_button_ = MakeTextButton("Copy JSON", [this] { CopyConnection(); },
+        ButtonRole::Primary);
+    cancel_copy_button_ = MakeTextButton("Cancel", [this] { CloseCopyConnection(); },
+        ButtonRole::Cancel);
+    auto copy_container = ftxui::CatchEvent(ftxui::Container::Vertical({
+        include_secrets_checkbox_,
+        ftxui::Container::Horizontal({confirm_copy_button_, cancel_copy_button_}),
+    }), [this](ftxui::Event event) {
+        if (event != ftxui::Event::Escape) return false;
+        CloseCopyConnection();
+        return true;
+    });
+
     ftxui::Components tab_children;
     tab_children.push_back(main_container);
     tab_children.push_back(help_container_);
+    tab_children.push_back(copy_container);
     container_ = ftxui::Container::Tab(
-        tab_children, &help_layer_index_);
+        tab_children, &overlay_layer_index_);
     ReloadSshConfigHosts();
     Reload();
 }
@@ -274,7 +293,7 @@ void RemoteConnectionsModalContent::Open() {
     ReloadSshConfigHosts();
     Reload();
     help_active_ = false;
-    help_layer_index_ = 0;
+    overlay_layer_index_ = MainLayer;
     if (list_component_) {
         list_component_->TakeFocus();
     }
@@ -294,7 +313,7 @@ void RemoteConnectionsModalContent::OpenForProject(
     ReloadSshConfigHosts();
     Reload();
     help_active_ = false;
-    help_layer_index_ = 0;
+    overlay_layer_index_ = MainLayer;
     if (list_component_) {
         list_component_->TakeFocus();
     }
@@ -313,11 +332,13 @@ void RemoteConnectionsModalContent::OpenForEdit(std::string connection_id) {
 }
 
 void RemoteConnectionsModalContent::Close() {
+    ++paste_request_;
+    include_secrets_ = false;
     output_.clear();
     status_ = "Ready.";
     status_is_error_ = false;
     help_active_ = false;
-    help_layer_index_ = 0;
+    overlay_layer_index_ = MainLayer;
     assignment_project_id_.clear();
     assignment_project_name_.clear();
     preferred_connection_id_.clear();

@@ -33,10 +33,7 @@ ftxui::Element EditorComponent::RenderViewport() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     const std::string file_path = session_ && !session_->lexer_path.empty()
         ? session_->lexer_path : CurrentFilePath();
-    size_t active_diff_row = session_ ? session_->diff_line_kinds.size() : 0;
-    if (session_ && session_->git_compare && session_->git_compare_has_navigation) {
-        active_diff_row = session_->git_compare_navigation_line;
-    }
+    const bool highlight_diff_navigation = session_ && session_->git_compare && session_->git_compare_has_navigation;
 
     const size_t total_lines = session_ ? session_->lines.size() : 0;
     const size_t effective_total = (smart_word_wrap && session_ && viewport_)
@@ -141,7 +138,7 @@ ftxui::Element EditorComponent::RenderViewport() {
                 case DiffLineKind::None: break;
             }
         }
-        if (line_index == active_diff_row) {
+        if (highlight_diff_navigation && line_index == session_->git_compare_navigation_line) {
             diff_background = theme.IsLight()
                 ? (ftxui::Color::RGB)(174, 218, 255)
                 : (ftxui::Color::RGB)(40, 92, 135);

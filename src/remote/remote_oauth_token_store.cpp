@@ -229,7 +229,7 @@ bool RemoteOAuthTokenStore::Save(const RemoteOAuthToken& token, std::string& err
     if (!EnsureParentDirectory(error)) {
         return false;
     }
-    if (!WriteJsonAtomically(path_, SerializeToken(token))) {
+    if (!WriteJsonAtomically(path_, SerializeToken(token), true)) {
         error = "Cannot write token file: " + path_.string();
         return false;
     }

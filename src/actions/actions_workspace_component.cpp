@@ -1215,7 +1215,7 @@ ActionsContextMenu::Result ActionsWorkspaceComponent::ExecuteContextCommand(
     if (page < 0) { Notify("Action is no longer available"); return Result::Close; }
     if (command == Command::Paste) {
         if (!read_clipboard_ || groups[group].trash) return Result::Close;
-        read_clipboard_([this, group_id = target.group_id, page_id = target.page_id](std::optional<std::string> text) {
+        read_clipboard_([this, target](std::optional<std::string> text) {
             if (!text || text->empty()) {
                 Notify("Clipboard has no text");
                 return;
@@ -1225,8 +1225,22 @@ ActionsContextMenu::Result ActionsWorkspaceComponent::ExecuteContextCommand(
                 Notify("Clipboard does not contain a valid action item");
                 return;
             }
-            std::string error;
-            if (!ImportActionsTo({std::move(*action)}, group_id, page_id, error)) Notify(error);
+            std::string id, error;
+            if (!repository_.CreateItem(target.group_id, target.page_id, std::move(*action), id, error,
+                    nullptr, target.item_id)) {
+                Notify(error);
+                return;
+            }
+            selected_group_id_ = target.group_id;
+            selected_page_id_ = target.page_id;
+            selected_item_id_ = std::move(id);
+            focus_ = FocusArea::Items;
+            const size_t row = static_cast<size_t>(IndexById(SelectedPage()->items, selected_item_id_));
+            const size_t visible = std::max<size_t>(1, items_visible_count_);
+            if (row < item_scroll_) item_scroll_ = row;
+            else if (row - item_scroll_ >= visible) item_scroll_ = row + 1 - visible;
+            if (groups_changed_) groups_changed_();
+            Notify("Added a new action from the clipboard");
         });
         return Result::Close;
     }

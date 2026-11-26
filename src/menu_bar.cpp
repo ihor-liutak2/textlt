@@ -468,7 +468,8 @@ void MenuBarComponent::RefreshShortcutLabels() {
     RefreshCurrentDropdownEntries();
 }
 
-void MenuBarComponent::SetFileFavoriteLabel(bool is_favorite) {
+void MenuBarComponent::SetFileMenuLabels(bool is_favorite, bool comparing) {
+    SetItemLabel("file.close", comparing ? " Close Git Compare " : " Close ");
     SetItemLabel("file.toggle_favorite", is_favorite
         ? " [X] Remove from Favorites "
         : " [ ] Add to Favorites ");

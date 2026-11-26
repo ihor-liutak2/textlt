@@ -247,6 +247,12 @@ void TextltApp::RemoveOpenSession(size_t index) {
 
 
 void TextltApp::CloseCurrentFile() {
+    if (IsGitCompareSession(document_workspace_.ActiveSessionPtr())) {
+        CloseGitCompare();
+        CloseDropdown();
+        FocusEditor();
+        return;
+    }
     std::string closed_name;
     document_file_controller_.CloseActiveSession(VisibleEditorPaneCount(), closed_name);
     BindEditorComponentsToWorkspace();
@@ -260,6 +266,7 @@ void TextltApp::CloseCurrentFile() {
 
 
 void TextltApp::CloseAllOpenedFiles() {
+    CloseGitCompare();
     document_file_controller_.CloseAllSessions(VisibleEditorPaneCount());
     BindEditorComponentsToWorkspace();
     RefreshOpenedDocumentsSidebar();
@@ -271,9 +278,13 @@ void TextltApp::CloseAllOpenedFiles() {
 }
 
 void TextltApp::CloseSidebarOpenedFile(size_t index) {
-    RemoveOpenSession(index);
-    UpdateFileMenuLabels();
-    active_action_ = "Closed opened file";
+    if (IsGitCompareSession(document_workspace_.SessionPtrAt(index))) {
+        CloseGitCompare();
+    } else {
+        RemoveOpenSession(index);
+        UpdateFileMenuLabels();
+        active_action_ = "Closed opened file";
+    }
     FocusSidebar();
     screen_.PostEvent(ftxui::Event::Custom);
 }
@@ -297,6 +308,7 @@ void TextltApp::ActivateOpenSession(size_t index) {
         return;
     }
 
+    if (!IsGitCompareSession(document_workspace_.ActiveSessionPtr())) CloseGitCompare();
     BindEditorComponentsToWorkspace();
     const auto editor_ptr = ActiveEditor();
     RefreshOpenedDocumentsSidebar();
