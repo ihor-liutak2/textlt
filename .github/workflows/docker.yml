@@ -1,23 +1,22 @@
+
 name: Docker
 
 on:
   pull_request:
   push:
     branches: [main]
-    tags: ["v*"]
+  release:
+    types: [published]
   workflow_dispatch:
-    inputs:
-      publish:
-        description: Publish the checked image to Docker Hub
-        type: boolean
-        default: false
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   image:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v7
         with:
@@ -26,7 +25,7 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
-      - name: Build the triggering commit
+      - name: Build Docker image
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -59,24 +58,37 @@ jobs:
             /usr/local/share/textlt/piper/bin/piper-runtime/piper --help >/dev/null 2>&1
           '
 
-      - name: Log in to Docker Hub
-        if: github.event_name == 'workflow_dispatch' && inputs.publish
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'release' && !github.event.release.prerelease && !github.event.release.draft
         uses: docker/login-action@v4
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish the checked image
-        if: github.event_name == 'workflow_dispatch' && inputs.publish
+      - name: Publish stable Docker image
+        if: github.event_name == 'release' && !github.event.release.prerelease && !github.event.release.draft
         env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          repo="docker.io/${DOCKERHUB_USERNAME}/textlt"
-          revision_tag="$repo:sha-$GITHUB_SHA"
-          docker tag textlt:demo "$revision_tag"
-          docker push "$revision_tag"
-          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            release_tag="$repo:$GITHUB_REF_NAME"
-            docker tag textlt:demo "$release_tag"
-            docker push "$release_tag"
+          set -euo pipefail
+
+          repo="ghcr.io/${GITHUB_REPOSITORY,,}"
+
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Unsupported release tag: $RELEASE_TAG"
+            exit 1
+          fi
+
+          docker tag textlt:demo "$repo:$RELEASE_TAG"
+          docker push "$repo:$RELEASE_TAG"
+
+          latest_release=$(gh api \
+            "repos/$GITHUB_REPOSITORY/releases/latest" \
+            --jq '.tag_name')
+
+          if [[ "$RELEASE_TAG" == "$latest_release" ]]; then
+            docker tag textlt:demo "$repo:latest"
+            docker push "$repo:latest"
           fi
