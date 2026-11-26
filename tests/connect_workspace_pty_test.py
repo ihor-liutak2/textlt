@@ -2,7 +2,6 @@ import errno
 import fcntl
 import os
 from pathlib import Path
-import pty
 import re
 import select
 import signal
@@ -10,6 +9,8 @@ import struct
 import tempfile
 import termios
 import time
+
+from pty_session import start_pty, terminate_process
 
 
 ESC = "\x1b"
@@ -24,27 +25,21 @@ class Terminal:
         self.columns = columns
         self.height = rows
         self.rows = []
-        self.pid, self.fd = pty.fork()
-        if self.pid == 0:
-            os.chdir(root)
-            fcntl.ioctl(0, termios.TIOCSWINSZ,
-                        struct.pack("HHHH", rows, columns, 0, 0))
-            os.execve(binary, [binary], environment)
-        self.read(timeout=8)
+        self.process, self.fd = start_pty([binary], root, environment, columns, rows)
+        try:
+            self.read(timeout=8)
+        except BaseException:
+            self.close()
+            raise
 
     def close(self):
         if self.fd is None:
             return
         try:
-            os.kill(self.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-        try:
-            os.waitpid(self.pid, 0)
-        except ChildProcessError:
-            pass
-        os.close(self.fd)
-        self.fd = None
+            terminate_process(self.process)
+        finally:
+            os.close(self.fd)
+            self.fd = None
 
     def __enter__(self):
         return self
@@ -110,7 +105,7 @@ class Terminal:
         self.height = rows
         fcntl.ioctl(self.fd, termios.TIOCSWINSZ,
                     struct.pack("HHHH", rows, columns, 0, 0))
-        os.kill(self.pid, signal.SIGWINCH)
+        self.process.send_signal(signal.SIGWINCH)
         self.read(timeout=2)
 
     def wheel_down(self, x, y):

@@ -1,4 +1,3 @@
-import base64
 import argparse
 import base64
 import errno
@@ -9,7 +8,6 @@ import pty
 import re
 import select
 import shutil
-import signal
 import struct
 import subprocess
 import tempfile
@@ -17,50 +15,13 @@ import termios
 import time
 import unicodedata
 
+from pty_session import start_pty, terminate_process
+
 
 ESC = "\x1b"
 WIDTH, HEIGHT = 128, 36
 ANSI = re.compile(rb"\x1b\[[0-?]*[ -/]*[@-~]|\x1b[P\]][^\x07\x1b]*(?:\x07|\x1b\\)"
                  rb"|\x1b[()][0-9A-Za-z]|\x1b.")
-
-
-def terminate_and_reap(pid, grace=0.5):
-    """Stop a child if needed, and always collect its exit status."""
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except ProcessLookupError:
-        pass
-
-    deadline = time.monotonic() + grace
-    while time.monotonic() < deadline:
-        try:
-            waited, _ = os.waitpid(pid, os.WNOHANG)
-        except ChildProcessError:
-            return
-        if waited == pid:
-            return
-        time.sleep(0.02)
-
-    try:
-        os.kill(pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
-    try:
-        os.waitpid(pid, 0)
-    except ChildProcessError:
-        pass
-
-
-def terminate_process(process, grace=0.5):
-    if process.poll() is not None:
-        process.wait()
-        return
-    process.terminate()
-    try:
-        process.wait(timeout=grace)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait()
 
 
 def mouse(button, point, suffix="M"):
@@ -71,11 +32,7 @@ def mouse(button, point, suffix="M"):
 class Terminal:
     def __init__(self, binary, root, path, environment):
         self.rows = []
-        self.pid, self.fd = pty.fork()
-        if self.pid == 0:
-            os.chdir(root)
-            fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", HEIGHT, WIDTH, 0, 0))
-            os.execve(binary, [binary, str(path)], environment)
+        self.process, self.fd = start_pty([binary, str(path)], root, environment, WIDTH, HEIGHT)
         try:
             self.read(timeout=5, settle=0.8)
         except BaseException:
@@ -91,10 +48,10 @@ class Terminal:
     def close(self):
         if self.fd is None:
             return
-        terminate_and_reap(self.pid)
         try:
-            os.close(self.fd)
+            terminate_process(self.process)
         finally:
+            os.close(self.fd)
             self.fd = None
 
     def read(self, timeout=2, settle=0.12):
