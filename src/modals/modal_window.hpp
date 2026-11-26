@@ -50,6 +50,8 @@ public:
     void SetBodyWidth(int columns);
     void SetModalSize(int columns, int rows);
     void SetBodyFrameScrolling(bool enabled) { body_frame_scrolling_ = enabled; }
+    void SetCycleBodyWithFooter(bool enabled) { cycle_body_with_footer_ = enabled; }
+    void SetWrapFooterButtons(bool enabled) { wrap_footer_buttons_ = enabled; }
     void RefreshChildren() { RebuildChildren(); }
 
 private:
@@ -65,6 +67,7 @@ private:
     bool IsChildEnabled(size_t child_index) const;
     ftxui::Element RenderHeader(const Theme& theme);
     ftxui::Element RenderFooter(const Theme& theme);
+    std::vector<std::pair<size_t, size_t>> FooterButtonRows() const;
     ftxui::Element RenderBody(const Theme& theme);
     ModalFrameStyle FrameStyle() const;
     int ModalWidth() const;
@@ -78,6 +81,7 @@ private:
     ftxui::Component header_close_button_;
     std::vector<ftxui::Component> footer_buttons_;
     std::vector<ButtonEnabledCallback> footer_button_enabled_;
+    std::vector<int> footer_button_widths_;
     size_t left_aligned_footer_count_ = 0;
     std::string footer_text_;
     bool show_header_ = true;
@@ -90,6 +94,8 @@ private:
     bool modal_size_overridden_ = false;
     size_t active_child_index_ = 0;
     bool body_frame_scrolling_ = true;
+    bool cycle_body_with_footer_ = false;
+    bool wrap_footer_buttons_ = false;
     ftxui::Box body_box_;
 };
 

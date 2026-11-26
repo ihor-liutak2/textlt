@@ -103,6 +103,20 @@ void TextltApp::CloseTelegramSettingsModal() {
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
+void TextltApp::OpenIrcSettingsModal() {
+    if (workspace_mode_ != WorkspaceMode::Connect) return;
+    CloseDropdown();
+    SetActiveLayer(UiLayer::IrcSettings);
+    irc_settings_modal_.Open();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::CloseIrcSettingsModal() {
+    irc_settings_modal_.Close();
+    FocusEditor();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
 void TextltApp::OpenTextLTConfigModal() {
     if (workspace_mode_ != WorkspaceMode::Connect) return;
     CloseDropdown();

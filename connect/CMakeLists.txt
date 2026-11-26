@@ -90,6 +90,8 @@ add_library(textlt_connect STATIC
   src/browser/websocket.cpp
   src/identity.cpp
   src/service.cpp
+  src/providers/irc/irc_provider.cpp
+  src/providers/irc/protocol.cpp
   src/providers/localsend/https.cpp
   src/providers/localsend/localsend_provider.cpp
   src/providers/textlt/discovery.cpp
@@ -124,4 +126,16 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   add_executable(textlt_connect_loopback examples/textlt_loopback.cpp)
   target_link_libraries(textlt_connect_loopback PRIVATE textlt::connect)
   set_target_properties(textlt_connect_loopback PROPERTIES CXX_EXTENSIONS OFF)
+endif()
+
+if(CMAKE_PROJECT_NAME STREQUAL "textlt")
+  add_executable(textlt_irc_provider_test ../tests/irc_provider_test.cpp)
+  target_include_directories(textlt_irc_provider_test PRIVATE src)
+  target_link_libraries(textlt_irc_provider_test PRIVATE
+    textlt::connect Threads::Threads ${TEXTLT_CONNECT_BOOST_TARGETS} OpenSSL::SSL OpenSSL::Crypto)
+  if(WIN32)
+    target_compile_definitions(textlt_irc_provider_test PRIVATE _WIN32_WINNT=0x0601)
+  endif()
+  add_test(NAME textlt_irc_provider_test COMMAND textlt_irc_provider_test)
+  set_tests_properties(textlt_irc_provider_test PROPERTIES TIMEOUT 35)
 endif()

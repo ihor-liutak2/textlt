@@ -281,6 +281,7 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
     if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Connect) {
         if (app_.connect_workspace_->HandleMessageMenuEvent(event)) return true;
         if (app_.connect_workspace_->Paste(event)) return true;
+        if (app_.connect_workspace_->HandleSendEnter(event)) return true;
         if (event.is_mouse()) return false;
         return app_.RunMenuShortcut(event) || HandleFunctionKeyEvent(event);
     }

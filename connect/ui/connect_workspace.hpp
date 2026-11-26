@@ -24,6 +24,7 @@ enum class ButtonRole;
 namespace telegram {
 class TelegramProvider;
 }
+namespace connect { class IrcProvider; }
 
 namespace connect_ui {
 
@@ -65,6 +66,7 @@ public:
                      std::function<void()> pick_file, std::function<std::filesystem::path()> downloads,
                      std::filesystem::path localsend_identity, std::function<void()> open_textlt_config,
                      std::function<void()> open_telegram_settings,
+                     std::function<void()> open_irc_settings,
                      std::function<bool(const std::string&)> write_clipboard);
     ~ConnectWorkspace() override;
 
@@ -102,11 +104,13 @@ public:
     const std::string& Status() const { return status_; }
     bool Running() const;
     telegram::TelegramProvider& Telegram();
+    connect::IrcProvider& Irc();
     void Stop();
     void DrainEvents();
     void UpdateBrowserTheme();
     bool Paste(ftxui::Event event);
     bool HandleMessageMenuEvent(ftxui::Event event);
+    bool HandleSendEnter(ftxui::Event event);
     void CloseMessageMenu();
     ftxui::Element RenderMessageMenu();
     void RegisterContentHandler(std::unique_ptr<connect::ContentHandler> handler);
@@ -145,6 +149,12 @@ private:
         int scroll = 0;
     };
 
+    struct IrcLeaveControl {
+        PeerKey key;
+        ftxui::Component button;
+        ftxui::Box box;
+    };
+
     struct PeerRow {
         PeerKey key;
         ftxui::Box box;
@@ -157,12 +167,21 @@ private:
     connect::BrowserTheme BrowserTheme() const;
     void LoadSettings();
     void LoadNativeConnections();
-    ftxui::Component FlatAction(std::string label, ButtonRole role, std::function<void()> action) const;
+    ftxui::Component FlatAction(std::string label, ButtonRole role, std::function<void()> action,
+                                std::function<bool()> enabled = {}) const;
     void StartNative();
     void ToggleNative();
     connect::ProviderResult StartLocalSend(bool test_ports = false);
     void ToggleLocalSend();
     void ToggleTelegram();
+    void ToggleIrc();
+    void UseIrcTarget(bool channel);
+    std::string SelectedIrcServer() const;
+    std::string IrcControlServer() const;
+    std::string SelectedIrcTarget() const;
+    bool IsIrcServerSelected() const;
+    bool CanJoinIrcChannel() const;
+    bool CanSendIrcMessage() const;
     void RefreshLocalSendPeers();
     void ConnectLocalSendByIp();
     void StopProvider(std::string_view provider);
@@ -230,6 +249,7 @@ private:
     std::unique_ptr<connect::ConnectService> service_;
     connect::ConnectService content_;
     telegram::TelegramProvider* telegram_provider_ = nullptr;
+    connect::IrcProvider* irc_provider_ = nullptr;
     std::vector<std::string> providers_;
     bool native_running_ = false;
     std::string native_browser_ip_;
@@ -261,9 +281,14 @@ private:
     int messenger_content_rows_ = 0;
     int messenger_visible_rows_ = 1;
     int messenger_scroll_max_ = 0;
+    int irc_controls_row_ = 0;
+    int irc_toggle_row_ = 0;
     ftxui::Component navigator_, messenger_navigator_, composer_, send_, accept_, decline_, send_file_, cancel_transfer_, draft_file_, pin_input_, retry_pin_;
     ftxui::Component toggle_native_, textlt_config_, toggle_localsend_, refresh_localsend_, connect_by_ip_;
     ftxui::Component toggle_telegram_, telegram_settings_;
+    ftxui::Component toggle_irc_, irc_settings_, irc_target_input_, irc_join_, irc_private_;
+    std::vector<IrcLeaveControl> irc_leave_controls_;
+    std::string irc_target_;
     ftxui::Component active_;
     ConnectNavigationState navigation_state_;
 

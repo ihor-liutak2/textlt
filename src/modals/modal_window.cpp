@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "ui_button.hpp"
+#include "ftxui/screen/string.hpp"
 
 namespace textlt {
 
@@ -109,6 +110,7 @@ void ModalWindow::SetFooterButtons(std::vector<FooterButton> buttons, size_t lef
     separate_footer_status_ = separate_status;
     footer_buttons_.clear();
     footer_button_enabled_.clear();
+    footer_button_widths_.clear();
     const size_t count = std::min(buttons.size(), kMaximumFooterButtons);
     left_aligned_footer_count_ = std::min(left_aligned_count, count);
     footer_buttons_.reserve(count);
@@ -117,6 +119,8 @@ void ModalWindow::SetFooterButtons(std::vector<FooterButton> buttons, size_t lef
         auto callback = std::move(buttons[index].on_click);
         auto enabled = std::move(buttons[index].enabled);
         footer_button_enabled_.push_back(enabled);
+        footer_button_widths_.push_back(ftxui::string_width(
+            ButtonCaptionText(ButtonSpecFromLabel(buttons[index].label, buttons[index].role))) + 4);
         footer_buttons_.push_back(ftxui::Button(MakeTextButtonOption(
             buttons[index].label,
             [callback = std::move(callback)] {
@@ -168,17 +172,18 @@ void ModalWindow::MoveActionFocus(int delta) {
         return;
     }
 
-    const size_t action_count = children().size() - 1;
-    long long current = active_child_index_ == 0
+    const size_t first = cycle_body_with_footer_ ? 0 : 1;
+    const size_t action_count = children().size() - first;
+    long long current = active_child_index_ < first
         ? (delta > 0 ? -1 : 0)
-        : static_cast<long long>(active_child_index_ - 1);
+        : static_cast<long long>(active_child_index_ - first);
     for (size_t attempt = 0; attempt < action_count; ++attempt) {
         current += delta;
         const long long wrapped =
             (current % static_cast<long long>(action_count) +
              static_cast<long long>(action_count)) %
             static_cast<long long>(action_count);
-        const size_t candidate = 1 + static_cast<size_t>(wrapped);
+        const size_t candidate = first + static_cast<size_t>(wrapped);
         if (IsChildEnabled(candidate)) {
             active_child_index_ = candidate;
             return;
@@ -229,6 +234,22 @@ ftxui::Element ModalWindow::RenderBody(const Theme& theme) {
         color(theme.modal_input_fg);
 }
 
+std::vector<std::pair<size_t, size_t>> ModalWindow::FooterButtonRows() const {
+    std::vector<std::pair<size_t, size_t>> rows;
+    size_t start = 0;
+    int width = 0;
+    for (size_t i = 0; i < footer_button_widths_.size(); ++i) {
+        if (i > start && width + footer_button_widths_[i] + 1 > BodyWidth()) {
+            rows.emplace_back(start, i);
+            start = i;
+            width = 0;
+        }
+        width += footer_button_widths_[i] + (i > start ? 1 : 0);
+    }
+    if (start < footer_buttons_.size()) rows.emplace_back(start, footer_buttons_.size());
+    return rows;
+}
+
 ftxui::Element ModalWindow::RenderFooter(const Theme& theme) {
     using namespace ftxui;
 
@@ -272,7 +293,21 @@ ftxui::Element ModalWindow::RenderFooter(const Theme& theme) {
             })),
         };
         if (separate_footer_status_) rows.push_back(separator() | color(theme.modal_border));
-        rows.push_back(footer_style(hbox(std::move(button_row))));
+        const auto wrapped = wrap_footer_buttons_ ? FooterButtonRows()
+            : std::vector<std::pair<size_t, size_t>>{};
+        if (wrapped.size() <= 1) {
+            rows.push_back(footer_style(hbox(std::move(button_row))));
+        } else {
+            for (const auto& [begin, end] : wrapped) {
+                Elements actions;
+                for (auto i = begin; i < end; ++i) {
+                    if (i > begin) actions.push_back(text(" "));
+                    actions.push_back(footer_buttons_[i]->Render());
+                }
+                actions.push_back(filler());
+                rows.push_back(footer_style(hbox(std::move(actions))));
+            }
+        }
         return vbox(std::move(rows));
     }
 
@@ -324,6 +359,7 @@ int ModalWindow::BodyHeight() const {
             used_rows += 1 + (content_ && content_->HasCustomFooter()
                 ? std::max(1, content_->GetCustomFooterHeight())
                 : content_ && content_->FooterTextAboveButtons() ? 2 + int(separate_footer_status_) : 1);
+            if (wrap_footer_buttons_) used_rows += std::max(0, static_cast<int>(FooterButtonRows().size()) - 1);
         }
         return std::max(1, modal_height - used_rows);
     }

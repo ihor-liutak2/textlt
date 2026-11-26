@@ -291,6 +291,12 @@ settings modal; no chat IDs need to be entered. Telegram settings and the bot
 token are kept in the existing `/state` volume. See the
 [Telegram bot setup guide](docs/telegram-bot-setup.md).
 
+### IRC
+
+Use **Options → Connect → IRC Settings** to save IRC servers. Select a server
+in **Messengers** to connect, join channels, or open a private chat. See the
+[IRC setup guide](docs/irc-setup.md).
+
 ### Connect to a host AI service
 
 In **Tools → AI Settings**, set the provider URL. For Ollama on Docker Desktop,

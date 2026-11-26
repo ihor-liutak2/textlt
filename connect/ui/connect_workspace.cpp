@@ -18,6 +18,8 @@
 #include "textlt/connect/localsend_provider.hpp"
 #include "telegram/telegram_api.hpp"
 #include "telegram/telegram_provider.hpp"
+#include "irc/irc_settings.hpp"
+#include "textlt/connect/irc_provider.hpp"
 #include "theme.hpp"
 #include "ui_button.hpp"
 #include "ui_horizontal_scroll.hpp"
@@ -97,6 +99,7 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
                                    std::filesystem::path localsend_identity,
                                    std::function<void()> open_textlt_config,
                                    std::function<void()> open_telegram_settings,
+                                   std::function<void()> open_irc_settings,
                                    std::function<bool(const std::string&)> write_clipboard)
     : theme_(theme), workspace_tabs_(std::move(workspaces)), redraw_(std::move(redraw)),
       pick_file_(std::move(pick_file)), downloads_(std::move(downloads)),
@@ -143,6 +146,23 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
     toggle_telegram_ = Button(std::move(telegram_toggle));
     telegram_settings_ = FlatAction(
         "Settings", ButtonRole::Utility, open_telegram_settings_);
+    auto irc_toggle = ButtonOption::Simple();
+    irc_toggle.on_click = [this] { ToggleIrc(); };
+    irc_toggle.transform = [this](const EntryState& state) {
+        const bool running = irc_provider_ && irc_provider_->Status(IrcControlServer()).running;
+        const auto spec = ButtonSpecFromLabel(running ? "Stop" : "Start",
+            running ? ButtonRole::Cancel : ButtonRole::Primary, ButtonVariant::Minimal, ButtonSize::Compact);
+        return RenderModalFlatButton(theme_, spec, state.focused);
+    };
+    toggle_irc_ = Button(std::move(irc_toggle));
+    irc_settings_ = FlatAction("IRC Settings", ButtonRole::Utility, std::move(open_irc_settings));
+    InputOption target_input;
+    target_input.multiline = false;
+    target_input.transform = [this](InputState state) { return theme_.InputTransform(std::move(state)); };
+    irc_target_input_ = ClipboardController::MakeInput(&irc_target_, "Channel or nickname", std::move(target_input));
+    irc_join_ = FlatAction("Join Channel", ButtonRole::Primary, [this] { UseIrcTarget(true); },
+                           [this] { return CanJoinIrcChannel(); });
+    irc_private_ = FlatAction("Open Private Chat", ButtonRole::Utility, [this] { UseIrcTarget(false); });
     InputOption input;
     input.multiline = false;
     input.cursor_position = &cursor_;
@@ -151,7 +171,8 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
         return theme_.InputTransform(std::move(state));
     };
     composer_ = ClipboardController::MakeInput(&draft_, "Type a message", std::move(input));
-    send_ = FlatAction("Send", ButtonRole::Primary, [this] { Send(); });
+    send_ = FlatAction("Send", ButtonRole::Primary, [this] { Send(); },
+                       [this] { return CanSendIrcMessage(); });
     accept_ = FlatAction("Accept", ButtonRole::Primary, [this] { Decide(true); });
     decline_ = FlatAction("Decline", ButtonRole::Cancel, [this] { Decide(false); });
     send_file_ = FlatAction("Send File…", ButtonRole::Utility, [this] {
@@ -180,6 +201,7 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
     Add(connect_by_ip_);
     Add(toggle_telegram_);
     Add(telegram_settings_);
+    for (const auto& control : {toggle_irc_, irc_settings_, irc_target_input_, irc_join_, irc_private_}) Add(control);
     Add(composer_);
     Add(send_);
     Add(accept_);
@@ -191,7 +213,14 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
         telegram::MakeTelegramHttpApi(), std::filesystem::path{}, [this] { redraw_(); });
     telegram_provider_ = telegram.get();
     service_->RegisterProvider(std::move(telegram));
-    providers_ = {kTextLTProviderId, kLocalSendProviderId, telegram::kTelegramProviderId};
+    auto irc = std::make_unique<IrcProvider>([this] { redraw_(); });
+    irc_provider_ = irc.get();
+    irc_provider_->SetProfiles(textlt::irc::LoadSettings(localsend_identity_.parent_path() / "irc-settings.json"));
+    service_->RegisterProvider(std::move(irc));
+    providers_ = {kTextLTProviderId, kLocalSendProviderId, telegram::kTelegramProviderId, kIrcProviderId};
+    const auto irc_start = irc_provider_->Start(
+        [this](connect::ProviderEvent event) { QueueProviderEvent(std::move(event)); });
+    if (!irc_start.accepted) status_ = irc_start.reason;
 
     const auto telegram_settings = telegram_provider_->Settings();
     if (telegram_settings.start_on_launch && !telegram_settings.bot_token.empty()) {
@@ -201,12 +230,16 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
     }
 }
 
-Component ConnectWorkspace::FlatAction(std::string label, ButtonRole role, std::function<void()> action) const {
+Component ConnectWorkspace::FlatAction(std::string label, ButtonRole role, std::function<void()> action,
+                                       std::function<bool()> enabled) const {
     auto option = ButtonOption::Simple();
     option.label = label;
-    option.on_click = std::move(action);
-    option.transform = [this, spec = ButtonSpecFromLabel(std::move(label), role, ButtonVariant::Minimal,
-                                                        ButtonSize::Compact)](const EntryState& state) {
+    option.on_click = [action = std::move(action), enabled] {
+        if ((!enabled || enabled()) && action) action();
+    };
+    option.transform = [this, enabled, spec = ButtonSpecFromLabel(std::move(label), role, ButtonVariant::Minimal,
+                                     ButtonSize::Compact)](const EntryState& state) mutable {
+        spec.enabled = !enabled || enabled();
         return RenderModalFlatButton(theme_, spec, state.focused);
     };
     return Button(std::move(option));
@@ -424,11 +457,62 @@ void ConnectWorkspace::ToggleTelegram() {
 
 bool ConnectWorkspace::Running() const {
     return native_running_ || localsend_runtime_.listening ||
-        (telegram_provider_ && telegram_provider_->Running());
+        (telegram_provider_ && telegram_provider_->Running()) ||
+        (irc_provider_ && irc_provider_->Status(SelectedIrcServer()).running);
 }
 
 telegram::TelegramProvider& ConnectWorkspace::Telegram() {
     return *telegram_provider_;
+}
+
+IrcProvider& ConnectWorkspace::Irc() { return *irc_provider_; }
+
+std::string ConnectWorkspace::SelectedIrcServer() const {
+    return selected_ && selected_->first == kIrcProviderId
+        ? IrcServerFromPeer(selected_->second) : std::string{};
+}
+
+std::string ConnectWorkspace::SelectedIrcTarget() const {
+    const auto server = SelectedIrcServer();
+    return server.empty() ? std::string{} : selected_->second.substr(server.size() + 1);
+}
+
+std::string ConnectWorkspace::IrcControlServer() const {
+    auto server = SelectedIrcServer();
+    if (!server.empty()) return server;
+    const auto profiles = irc_provider_->Profiles();
+    return profiles.size() == 1 ? profiles.front().id : std::string{};
+}
+
+bool ConnectWorkspace::IsIrcServerSelected() const {
+    return !SelectedIrcServer().empty() && SelectedIrcTarget().empty();
+}
+
+bool ConnectWorkspace::CanJoinIrcChannel() const {
+    return !SelectedIrcServer().empty() && irc_provider_->Status(SelectedIrcServer()).online;
+}
+
+bool ConnectWorkspace::CanSendIrcMessage() const {
+    if (!selected_ || selected_->first != kIrcProviderId) return true;
+    return !IsIrcServerSelected() && conversations_.at(*selected_).online &&
+        irc_provider_->Status(SelectedIrcServer()).online;
+}
+
+void ConnectWorkspace::ToggleIrc() {
+    const auto server = IrcControlServer();
+    if (SelectedIrcServer().empty() && !server.empty()) {
+        Select({kIrcProviderId, server + "/"});
+    }
+    const bool running = irc_provider_->Status(server).running;
+    const auto result = running ? irc_provider_->StopServer(server) : irc_provider_->StartServer(server);
+    status_ = result.accepted ? (running ? "Stopping IRC" : "Starting IRC") : result.reason;
+}
+
+void ConnectWorkspace::UseIrcTarget(bool channel) {
+    const auto result = channel ? irc_provider_->Join(SelectedIrcServer(), irc_target_)
+                                : irc_provider_->OpenPrivate(SelectedIrcServer(), irc_target_);
+    status_ = result.accepted ? (channel ? "IRC channel requested" : "IRC private chat opened") : result.reason;
+    if (result.accepted) irc_target_.clear();
 }
 
 void ConnectWorkspace::RefreshLocalSendPeers() {
@@ -476,7 +560,7 @@ ProviderResult ConnectWorkspace::StartNativeListener() {
 
 void ConnectWorkspace::StopProvider(std::string_view provider) {
     if (auto* transport = service_->FindProvider(provider)) transport->Stop();
-    if (provider != telegram::kTelegramProviderId) {
+    if (provider != telegram::kTelegramProviderId && provider != kIrcProviderId) {
         service_->UnregisterProvider(provider);
     }
     DrainEvents();
@@ -564,12 +648,16 @@ void ConnectWorkspace::Select(const PeerKey& key) {
     if (!first) draft_ = selected_chat.draft;
     cursor_ = static_cast<int>(draft_.size());
     pin_ = selected_chat.pin;
-    if (key.first == telegram::kTelegramProviderId) EnsureSelectedMessengerPeerVisible();
+    if (key.first == telegram::kTelegramProviderId || key.first == kIrcProviderId) EnsureSelectedMessengerPeerVisible();
     else EnsureSelectedPeerVisible();
 }
 
 void ConnectWorkspace::Send() {
     if (draft_.empty()) return;
+    if (!CanSendIrcMessage()) {
+        status_ = "Connect and join the IRC channel, or select an online private chat.";
+        return;
+    }
     if (!Running() || !selected_) {
         status_ = Running() ? "Select a connection to send"
             : selected_ && selected_->first == telegram::kTelegramProviderId
@@ -597,8 +685,9 @@ void ConnectWorkspace::Send() {
     }
     auto& chat = *Selected();
     const bool telegram_message = selected_->first == telegram::kTelegramProviderId;
+    const bool irc_message = selected_->first == kIrcProviderId;
     chat.messages.push_back({id, std::move(draft_),
-        telegram_message ? "Sending" : "Waiting for acceptance", true});
+        telegram_message || irc_message ? "Sending" : "Waiting for acceptance", true});
     if (selected_->first == kLocalSendProviderId) {
         chat.active_transfer = std::make_pair(TransferIdentity{{selected_->first, PeerRoute()}, id},
                                                TransferDirection::Outgoing);
@@ -606,7 +695,8 @@ void ConnectWorkspace::Send() {
     chat.scroll = 0;
     draft_.clear();
     cursor_ = 0;
-    status_ = telegram_message ? "Sending via Telegram" : "Waiting for acceptance";
+    status_ = irc_message ? "Sending via IRC"
+        : telegram_message ? "Sending via Telegram" : "Waiting for acceptance";
 }
 
 bool ConnectWorkspace::CanSendFile() {
@@ -858,7 +948,8 @@ void ConnectWorkspace::Handle(const TransferEvent& transfer) {
     if (transfer.state == TransferState::Pending && transfer.failure == TransferFailure::PinRequired) {
         chat.waiting_for_pin = true;
     }
-    const auto summary = !outgoing && transfer.state == TransferState::Completed
+    const auto summary = outgoing && peer.provider_id == kIrcProviderId && transfer.state == TransferState::Completed
+        ? "Sent" : !outgoing && transfer.state == TransferState::Completed
         ? "Received" : telegram_file && !outgoing && transfer.state == TransferState::InProgress
             ? "Downloading" : TransferLabel(transfer.state);
     status_ = transfer.reason ? summary + ": " + *transfer.reason : summary;
@@ -923,7 +1014,7 @@ void ConnectWorkspace::SetActiveChild(ComponentBase* child) {
             navigation_state_.Focus(ConnectColumn::LocalConnections);
         }
         else if (component == messenger_navigator_ || component == toggle_telegram_ ||
-                 component == telegram_settings_) {
+                 component == telegram_settings_ || component == toggle_irc_ || component == irc_settings_) {
             navigation_state_.Focus(ConnectColumn::Messengers);
         }
         else navigation_state_.Focus(ConnectColumn::Conversation);
@@ -935,6 +1026,11 @@ void ConnectWorkspace::FocusColumn(Component component, ConnectColumn column) {
     if (!component) return;
     active_ = component;
     navigation_state_.Focus(column);
+    if (component == toggle_irc_ || component == irc_settings_) {
+        const int row = component == toggle_irc_ ? irc_toggle_row_ : irc_controls_row_;
+        navigation_state_.Scroll(column, row - navigation_state_.ScrollOffset(column),
+                                 messenger_scroll_max_);
+    }
     component->TakeFocus();
 }
 
@@ -967,7 +1063,7 @@ void ConnectWorkspace::EnsureSelectedPeerVisible() {
 void ConnectWorkspace::UpdateMessengerScrollLimits() {
     if (!messenger_box_.IsEmpty()) {
         const int height = messenger_box_.y_max - messenger_box_.y_min + 1;
-        messenger_visible_rows_ = std::max(1, height - 6);
+        messenger_visible_rows_ = std::max(1, height - 9);
     }
     messenger_scroll_max_ = std::max(0, messenger_content_rows_ - messenger_visible_rows_);
     navigation_state_.Scroll(ConnectColumn::Messengers, 0, messenger_scroll_max_);
@@ -993,6 +1089,9 @@ void ConnectWorkspace::EnsureSelectedMessengerPeerVisible() {
 bool ConnectWorkspace::Paste(Event event) {
     if (!ClipboardController::IsPasteEvent(event)) return false;
     if (pending_share_ || preview_) return true;
+    if (!SelectedIrcServer().empty() && irc_target_input_->Focused()) {
+        return irc_target_input_->OnEvent(std::move(event));
+    }
     if (auto* chat = Selected(); chat && chat->waiting_for_pin && pin_input_->Focused()) {
         return pin_input_->OnEvent(std::move(event));
     }
@@ -1025,6 +1124,13 @@ bool ConnectWorkspace::HandleMessageMenuEvent(Event event) {
         {"delete", "Delete"},
         {"cut", "Cut", can_copy},
     });
+    return true;
+}
+
+bool ConnectWorkspace::HandleSendEnter(Event event) {
+    if ((event != Event::Return && event.input() != "\n" && event.input() != "\r") ||
+        !composer_->Focused()) return false;
+    Send();
     return true;
 }
 
@@ -1094,6 +1200,10 @@ bool ConnectWorkspace::OnEvent(Event event) {
                 return true;
             }
         }
+        if (!SelectedIrcServer().empty() && irc_target_input_->OnEvent(event)) {
+            FocusColumn(irc_target_input_, ConnectColumn::Messengers);
+            return true;
+        }
         if (Selected() && Selected()->waiting_for_pin) {
             if (pin_input_->OnEvent(event)) {
                 FocusColumn(pin_input_, ConnectColumn::Conversation);
@@ -1120,7 +1230,7 @@ bool ConnectWorkspace::OnEvent(Event event) {
             FocusColumn(composer_, ConnectColumn::Conversation);
             return true;
         }
-        if (send_->OnEvent(event)) {
+        if (CanSendIrcMessage() && send_->OnEvent(event)) {
             FocusColumn(send_, ConnectColumn::Conversation);
             return true;
         }
@@ -1138,8 +1248,10 @@ bool ConnectWorkspace::OnEvent(Event event) {
         choices.push_back(messenger_navigator_);
         choices.push_back(toggle_telegram_);
         choices.push_back(telegram_settings_);
-        choices.push_back(composer_);
-        choices.push_back(send_);
+        if (!IsIrcServerSelected()) {
+            choices.push_back(composer_);
+            if (CanSendIrcMessage()) choices.push_back(send_);
+        }
         if (CanSendFile()) choices.push_back(send_file_);
         if (OffersTextFile()) choices.push_back(draft_file_);
         if (Selected() && Selected()->waiting_for_pin) {
@@ -1151,6 +1263,17 @@ bool ConnectWorkspace::OnEvent(Event event) {
             choices.push_back(accept_);
             choices.push_back(decline_);
         }
+        choices.push_back(irc_settings_);
+        if (!irc_provider_->Profiles().empty()) choices.push_back(toggle_irc_);
+        if (!SelectedIrcServer().empty()) {
+            choices.push_back(irc_target_input_);
+            if (CanJoinIrcChannel()) choices.push_back(irc_join_);
+            choices.push_back(irc_private_);
+        } else if (IsIrcChannel(SelectedIrcTarget())) {
+            const auto leave = std::find_if(irc_leave_controls_.begin(), irc_leave_controls_.end(),
+                [this](const IrcLeaveControl& item) { return selected_ && item.key == *selected_; });
+            if (leave != irc_leave_controls_.end()) choices.push_back(leave->button);
+        }
         const auto current = std::find(choices.begin(), choices.end(), active_);
         const int total = static_cast<int>(choices.size());
         const int index = current == choices.end() ? 0 : static_cast<int>(current - choices.begin());
@@ -1160,7 +1283,12 @@ bool ConnectWorkspace::OnEvent(Event event) {
             next == toggle_localsend_ || next == refresh_localsend_ || next == connect_by_ip_) {
             FocusColumn(next, ConnectColumn::LocalConnections);
         } else if (next == messenger_navigator_ || next == toggle_telegram_ ||
-                   next == telegram_settings_) {
+                   next == telegram_settings_ || next == toggle_irc_ || next == irc_settings_) {
+            FocusColumn(next, ConnectColumn::Messengers);
+        } else if (next == irc_target_input_ || next == irc_join_ || next == irc_private_) {
+            FocusColumn(next, ConnectColumn::Messengers);
+        } else if (std::any_of(irc_leave_controls_.begin(), irc_leave_controls_.end(),
+                       [&](const IrcLeaveControl& item) { return item.button == next; })) {
             FocusColumn(next, ConnectColumn::Messengers);
         } else {
             FocusColumn(next, ConnectColumn::Conversation);
@@ -1261,6 +1389,11 @@ bool ConnectWorkspace::NavigatorEvent(Event event) {
 
 bool ConnectWorkspace::MessengerNavigatorEvent(Event event) {
     if (event.is_mouse()) {
+        for (auto& control : irc_leave_controls_) {
+            if (!control.box.Contain(event.mouse().x, event.mouse().y) || !control.button->OnEvent(event)) continue;
+            FocusColumn(control.button, ConnectColumn::Messengers);
+            return true;
+        }
         if (toggle_telegram_->OnEvent(event)) {
             FocusColumn(toggle_telegram_, ConnectColumn::Messengers);
             return true;
@@ -1268,6 +1401,22 @@ bool ConnectWorkspace::MessengerNavigatorEvent(Event event) {
         if (telegram_settings_->OnEvent(event)) {
             FocusColumn(telegram_settings_, ConnectColumn::Messengers);
             return true;
+        }
+        if (irc_settings_->OnEvent(event)) {
+            FocusColumn(irc_settings_, ConnectColumn::Messengers);
+            return true;
+        }
+        if (!irc_provider_->Profiles().empty() && toggle_irc_->OnEvent(event)) {
+            FocusColumn(toggle_irc_, ConnectColumn::Messengers);
+            return true;
+        }
+        if (!SelectedIrcServer().empty()) {
+            for (const auto& control : {irc_target_input_, irc_join_, irc_private_}) {
+                if (control == irc_join_ && !CanJoinIrcChannel()) continue;
+                if (!control->OnEvent(event)) continue;
+                FocusColumn(control, ConnectColumn::Messengers);
+                return true;
+            }
         }
         if (Pressed(event)) {
             const auto mouse = event.mouse();
@@ -1301,9 +1450,9 @@ bool ConnectWorkspace::MessengerNavigatorEvent(Event event) {
         if (messenger_peer_rows_.empty()) return true;
         const auto row = std::find_if(messenger_peer_rows_.begin(), messenger_peer_rows_.end(),
             [this](const PeerRow& entry) { return selected_ == entry.key; });
-        const int index = row == messenger_peer_rows_.end()
-            ? 0 : static_cast<int>(row - messenger_peer_rows_.begin());
         const int delta = event == Event::ArrowUp ? -1 : 1;
+        const int index = row == messenger_peer_rows_.end()
+            ? (delta > 0 ? -1 : 0) : static_cast<int>(row - messenger_peer_rows_.begin());
         const auto& key = messenger_peer_rows_[std::clamp(
             index + delta, 0, static_cast<int>(messenger_peer_rows_.size()) - 1)].key;
         Select(key);
@@ -1311,7 +1460,14 @@ bool ConnectWorkspace::MessengerNavigatorEvent(Event event) {
         return true;
     }
     if (event == Event::Return && selected_) {
-        FocusColumn(composer_, ConnectColumn::Conversation);
+        const auto leave = std::find_if(irc_leave_controls_.begin(), irc_leave_controls_.end(),
+            [this](const IrcLeaveControl& item) { return item.key == *selected_; });
+        if (leave != irc_leave_controls_.end() && leave->button->Focused()) {
+            leave->button->OnEvent(event);
+            return true;
+        }
+        FocusColumn(IsIrcServerSelected() ? irc_target_input_ : composer_,
+                    IsIrcServerSelected() ? ConnectColumn::Messengers : ConnectColumn::Conversation);
         return true;
     }
     if (event == Event::PageUp || event == Event::PageDown ||
@@ -1459,18 +1615,26 @@ Element ConnectWorkspace::RenderNavigator(int width) {
 }
 
 Element ConnectWorkspace::RenderMessengerNavigator(int width) {
+    for (auto& control : irc_leave_controls_) control.box = {};
     Elements rows;
     messenger_peer_rows_.clear();
     const auto settings = telegram_provider_->Settings();
     const auto chats = telegram_provider_->AuthorizedChats();
-    const bool controls_focused = toggle_telegram_->Focused() || telegram_settings_->Focused();
+    const bool controls_focused = toggle_telegram_->Focused() || telegram_settings_->Focused() ||
+        toggle_irc_->Focused() || irc_settings_->Focused();
+    const auto profiles = irc_provider_->Profiles();
+    std::size_t irc_rows = profiles.size();
+    for (const auto& [key, chat] : conversations_) {
+        if (key.first == kIrcProviderId) ++irc_rows;
+    }
+    // Row elements refer to the stored hit boxes until the next render.
+    messenger_peer_rows_.reserve(chats.size() + irc_rows);
     if (chats.empty()) {
         const bool has_discovered = !settings.known_chats.empty();
         rows.push_back(text(has_discovered
             ? "No Telegram chats are authorized"
             : "Message the bot to discover chats") | dim);
     } else {
-        messenger_peer_rows_.reserve(chats.size());
         for (const auto& chat_info : chats) {
             const PeerKey key{telegram::kTelegramProviderId, chat_info.id};
             auto& chat = conversations_[key];
@@ -1488,6 +1652,60 @@ Element ConnectWorkspace::RenderMessengerNavigator(int width) {
             rows.push_back(row | reflect(messenger_peer_rows_.back().box));
         }
     }
+    rows.push_back(separator() | color(theme_.gutter));
+    if (width < 51) rows.push_back(text(" IRC") | bold);
+    const bool separate_irc_toggle = width < 29 && !profiles.empty();
+    irc_toggle_row_ = static_cast<int>(rows.size());
+    if (separate_irc_toggle) rows.push_back(hbox({toggle_irc_->Render(), filler()}));
+    irc_controls_row_ = static_cast<int>(rows.size());
+    rows.push_back(hbox({
+        width >= 51 ? text(" IRC ") | bold : emptyElement(),
+        profiles.empty() || separate_irc_toggle ? emptyElement() : toggle_irc_->Render(),
+        filler(), irc_settings_->Render(),
+    }));
+    if (profiles.empty()) rows.push_back(text("No IRC servers saved") | dim);
+    const auto append_irc = [&](const PeerKey& key, const std::string& label, bool channel = false) {
+        messenger_peer_rows_.push_back({key, Box{}, static_cast<int>(rows.size())});
+        auto row = text(VisibleLabel(label, 0, std::max(1, width - 3)));
+        Element content = row | xflex;
+        Component leave_button;
+        if (channel) {
+            auto control = std::find_if(irc_leave_controls_.begin(), irc_leave_controls_.end(),
+                [&](const IrcLeaveControl& item) { return item.key == key; });
+            if (control == irc_leave_controls_.end()) {
+                auto button = FlatAction("Leave", ButtonRole::Cancel, [this, key] {
+                    const auto server_id = IrcServerFromPeer(key.second);
+                    const auto target = key.second.substr(server_id.size() + 1);
+                    const auto result = irc_provider_->Part(server_id, target);
+                    status_ = result.accepted ? "Leaving " + target : result.reason;
+                });
+                irc_leave_controls_.push_back({key, std::move(button), {}});
+                control = std::prev(irc_leave_controls_.end());
+            }
+            leave_button = control->button;
+            content = hbox({std::move(content), control->button->Render() | reflect(control->box)});
+        }
+        if (selected_ == key) {
+            content |= inverted;
+            if (!controls_focused && (!channel || !leave_button->Focused())) content |= focus;
+        }
+        rows.push_back(content | reflect(messenger_peer_rows_.back().box));
+    };
+    for (const auto& profile : profiles) {
+        const PeerKey key{kIrcProviderId, profile.id + "/"};
+        auto& server = Get({key.first, key.second});
+        server.name = profile.name;
+        const auto state = irc_provider_->Status(profile.id);
+        server.online = state.online;
+        append_irc(key, std::string(state.online ? " * " : state.running ? " ~ " : "   ") + profile.name);
+        for (const auto& [peer, chat] : conversations_) {
+            if (peer.first != kIrcProviderId || peer == key || IrcServerFromPeer(peer.second) != profile.id) continue;
+            const auto slash = chat.name.find(" / ");
+            const bool channel = IsIrcChannel(peer.second.substr(profile.id.size() + 1));
+            append_irc(peer, std::string(chat.online ? "     " : "   - ") +
+                (slash == std::string::npos ? chat.name : chat.name.substr(slash + 3)), channel && chat.online);
+        }
+    }
     messenger_content_rows_ = static_cast<int>(rows.size());
     messenger_scroll_max_ = std::max(0, messenger_content_rows_ - messenger_visible_rows_);
     navigation_state_.Scroll(ConnectColumn::Messengers, 0, messenger_scroll_max_);
@@ -1503,6 +1721,12 @@ Element ConnectWorkspace::RenderMessengerNavigator(int width) {
         }),
         vbox(std::move(rows)) | focusPosition(0, navigation_state_.ScrollOffset(
             ConnectColumn::Messengers)) | vscroll_indicator | yframe | flex,
+        SelectedIrcServer().empty() ? emptyElement() : vbox({
+            text(irc_provider_->Status(IrcControlServer()).diagnostic) | dim,
+            hbox({irc_target_input_->Render() | flex}),
+            width >= 42 ? hbox({irc_join_->Render(), filler(), irc_private_->Render()})
+                        : vbox({irc_join_->Render(), irc_private_->Render()}),
+        }),
     }) | size(WIDTH, EQUAL, width) | borderStyled(LIGHT, theme_.gutter) |
         reflect(messenger_box_);
 }
@@ -1572,7 +1796,9 @@ Element ConnectWorkspace::RenderChat(int width) {
             OffersTextFile() ? draft_file_->Render() : emptyElement(), filler(),
             chat && chat->active_transfer ? cancel_transfer_->Render() : emptyElement()}));
     }
-    body.push_back(text(status_) | dim);
+    const auto irc_status = selected_ && selected_->first == kIrcProviderId
+        ? irc_provider_->Status(SelectedIrcServer()).diagnostic : status_;
+    body.push_back(text(irc_status) | dim);
     return vbox(std::move(body)) | flex | borderStyled(LIGHT, theme_.gutter);
 }
 
@@ -1590,7 +1816,7 @@ Element ConnectWorkspace::OnRender() {
         : layout.mode == ConnectLayoutMode::CompactNavigationRow
             ? layout.navigation_height - 5
             : layout.messenger_navigation_height - 6;
-    messenger_visible_rows_ = std::max(1, messenger_height);
+    messenger_visible_rows_ = std::max(1, messenger_height - 9);
 
     Element columns;
     if (layout.mode == ConnectLayoutMode::ThreeColumns) {

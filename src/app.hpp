@@ -36,6 +36,7 @@
 #include "modals/modal_git_settings.hpp"
 #include "modals/modal_connect_settings.hpp"
 #include "modals/modal_telegram_settings.hpp"
+#include "modals/modal_irc_settings.hpp"
 #include "modals/modal_textlt_config.hpp"
 #include "modals/modal_recent_files.hpp"
 #include "modals/modal_tts.hpp"
@@ -123,6 +124,7 @@ private:
         ConnectSettings,
         TextLTConfig,
         TelegramSettings,
+        IrcSettings,
     };
 
     void SetActiveLayer(UiLayer layer);
@@ -305,6 +307,8 @@ private:
     void CloseConnectSettingsModal();
     void OpenTelegramSettingsModal();
     void CloseTelegramSettingsModal();
+    void OpenIrcSettingsModal();
+    void CloseIrcSettingsModal();
     void OpenTextLTConfigModal();
     void CloseTextLTConfigModal();
     void ShowDocumentsWorkspace();
@@ -495,6 +499,7 @@ private:
     GitSettingsModal git_settings_modal_;
     ConnectSettingsModal connect_settings_modal_;
     TelegramSettingsModal telegram_settings_modal_;
+    IrcSettingsModal irc_settings_modal_;
     TextLTConfigModal textlt_config_modal_;
 
     CloudTtsPipeline cloud_tts_pipeline_;

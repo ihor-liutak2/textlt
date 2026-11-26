@@ -215,6 +215,8 @@ add_executable(textlt
   src/connect_content.cpp
   src/modals/modal_connect_settings.cpp
   src/modals/modal_telegram_settings.cpp
+  src/modals/modal_irc_settings.cpp
+  src/irc/irc_settings.cpp
   src/modals/modal_textlt_config.cpp
   src/app.cpp
   src/app_command_registry.cpp
@@ -932,6 +934,10 @@ if(UNIX)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/connect_workspace_pty_test.py
         $<TARGET_FILE:textlt>)
     set_tests_properties(textlt_connect_workspace_pty_test PROPERTIES TIMEOUT 60)
+    add_test(NAME textlt_irc_settings_pty_test
+      COMMAND ${Python3_EXECUTABLE} -B
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/irc_settings_pty_test.py $<TARGET_FILE:textlt>)
+    set_tests_properties(textlt_irc_settings_pty_test PROPERTIES TIMEOUT 60)
     set_tests_properties(textlt_editor_context_menu_pty_failed_native_write_test
       PROPERTIES TIMEOUT 15)
     set_tests_properties(textlt_editor_context_menu_pty_failed_osc52_fallback_test

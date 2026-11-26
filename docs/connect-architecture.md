@@ -1,8 +1,8 @@
 # TextLT Connect Architecture
 
-The standalone library, TextLT and LocalSend providers, and Connect editor
-workspace are implemented. Telegram is an application-level provider adapter
-using the same provider contract. Baseline: TextLT `main` at
+The standalone library includes the TextLT, LocalSend and IRC providers.
+Telegram is an application-level adapter using the same provider contract.
+Baseline: TextLT `main` at
 [`d2b7763`](https://github.com/ihor-liutak2/textlt/commit/d2b77630b65920487709458bac27fd4ee402bb76).
 
 ## Component boundary
@@ -19,8 +19,8 @@ it does not add dependencies to the standalone library.
 The editor wires the command registry, workspace selection, focus, modal
 layers, and screen wake-up callback. `connect/ui/` owns provider registration,
 the event queue, peer selection, offers, conversation history, and drafts.
-Connect Settings stays in its existing modal; Telegram has a separate settings
-modal and settings file. File picking and Downloads resolution enter through
+Connect Settings stays in its existing modal. Telegram and IRC each have a
+separate settings modal and settings file. File picking and Downloads resolution enter through
 host callbacks. Notes and Actions snapshot serialization and imports stay in
 the editor adapter. The standalone provider sources remain within `connect/`;
 Telegram uses the application HTTP adapter without adding FTXUI to the core.
@@ -33,6 +33,8 @@ flowchart TB
     Service --> Native["TextLT provider"]
     Service --> LocalSend["LocalSend provider"]
     Service --> Telegram["Telegram app adapter"]
+    Service --> IRC["IRC provider"]
+    IRC --> Asio["Boost.Asio / OpenSSL"]
     Telegram --> Http["RemoteHttpClient / HTTPS"]
     Service --> Handlers["Registered content handlers"]
     Adapter --> Handlers
@@ -49,9 +51,8 @@ The workspace has three panels:
 
 1. **Local Connections** contains the existing TextLT and LocalSend controls,
    provider status, online peers, and configured/discovered conversations.
-2. **Messengers** contains Telegram Start/Stop and Settings controls and
-   authorized Telegram chats. Additional messenger providers are not
-   implemented here.
+2. **Messengers** contains Telegram controls and authorized chats alongside
+   IRC controls and saved servers, channels and private chats.
 3. **Conversation** renders one selected peer's history, incoming-offer
    controls, and composer. It uses the same conversation map and transfer
    capabilities as before; file actions remain available only when the
@@ -62,7 +63,7 @@ At terminal widths of 96 cells or more, the panels use approximately
 the two navigation panels share a row above the full-width conversation; at
 very narrow widths the navigation panels stack above it. Layout is recomputed
 on render after terminal resize. Each navigation panel has its own focus target
-and scroll state; the Messenger panel scrolls its authorized-chat list.
+and scroll state. Messengers scrolls its Telegram and IRC entries.
 Tab/Shift+Tab crosses from local connections to Messengers and then to
 conversation controls. Navigation titles remain outside their scrolling
 content. The conversation heading, composer, and active transfer controls
@@ -77,7 +78,7 @@ conversation storage.
 
 The left panel retains independent **Start** and **Stop** controls for TextLT
 and LocalSend. Connect Settings saves configuration. The Messengers panel
-owns Telegram's independent controls and settings modal. The native TextLT
+owns Telegram and IRC controls and their settings modals. The native TextLT
 listener defaults to TCP `53327`; LocalSend defaults to TCP and UDP `53317`.
 TextLT generates a local identity on first use unless one is configured.
 Pairing saves the peer ID and certificate fingerprint exchanged in the
@@ -92,9 +93,8 @@ initial listener setting.
 ### Telegram Bot API
 
 `TelegramProvider` in `src/telegram/` implements the existing
-`IConnectProvider` contract with the stable provider ID `telegram`. The
-standalone `textlt::connect` library and its TextLT/LocalSend transports are
-unchanged. `TelegramHttpApi` uses the existing HTTPS `RemoteHttpClient` and
+`IConnectProvider` contract with the stable provider ID `telegram`.
+`TelegramHttpApi` uses the existing HTTPS `RemoteHttpClient` and
 the official `getMe`, `getUpdates`, `sendMessage`, `sendDocument`, and
 `getFile` Bot API methods.
 
@@ -121,6 +121,20 @@ Linux, and `/state/.config/textlt/telegram-settings.json` in the current
 Docker image). The token is protected by private POSIX file permissions but
 is plaintext at rest; it is not written to application status or error
 messages. See the [Telegram bot setup guide](telegram-bot-setup.md).
+
+### IRC
+
+`IrcProvider` implements the `irc` provider ID in the standalone Connect
+library. An Asio worker handles independent server sessions, including TCP
+and verified TLS, IRC registration, SASL PLAIN over TLS, and reconnect
+timers. Each channel or private conversation uses a peer ID scoped to its
+saved server. Only unversioned text is advertised. A successful send means
+the client wrote the IRC command to the connection.
+
+The editor stores profiles in `irc-settings.json`. The settings modal
+can test a draft profile using a separate registration, and shows the
+result without logging IRC authentication traffic. See the
+[IRC setup guide](irc-setup.md).
 
 ### Network diagnostics
 
@@ -155,12 +169,12 @@ the editor diagnostics code.
 
 ## First release
 
-| Content | TextLT provider | LocalSend provider | Telegram provider | On receipt by TextLT |
-| --- | --- | --- | --- | --- |
-| Text | One-to-one chat between TextLT peers | One-off text transfer | Bot API message for an authorized chat | Show in the selected peer's conversation. For LocalSend, label it as a LocalSend transfer. |
-| File | Direct transfer between TextLT peers | LocalSend file transfer | Bot API document for an authorized chat | Save a supported incoming file to Downloads after acceptance. |
-| Note | Structured payload | Unsupported | Unsupported | Preview, then import a copy into Notes on request. |
-| Action | Structured payload | Unsupported | Unsupported | Preview, then import a copy into the selected Actions page on request. |
+| Content | TextLT provider | LocalSend provider | Telegram provider | IRC provider | On receipt by TextLT |
+| --- | --- | --- | --- | --- | --- |
+| Text | One-to-one chat between TextLT peers | One-off text transfer | Bot API message for an authorized chat | Channel or private conversation | Show in the selected peer's conversation. |
+| File | Direct transfer between TextLT peers | LocalSend file transfer | Bot API document for an authorized chat | Unsupported | Save an incoming file to Downloads after acceptance. |
+| Note | Structured payload | Unsupported | Unsupported | Unsupported | Preview, then import a copy into Notes on request. |
+| Action | Structured payload | Unsupported | Unsupported | Unsupported | Preview, then import a copy into the selected Actions page on request. |
 
 Connect shows peers with their provider and enables the actions a selected peer
 supports. It shows transfer progress and outcomes separately from import
@@ -183,12 +197,13 @@ Connect exposes the following contracts in `textlt::connect`.
 | `MakeTextLTProvider` | Create a text, file, and structured content provider with a local listen endpoint, a manually configured remote endpoint, or both. `TextLTProviderOptions` adds `listen_ip`, `peer_ip`, and optional `TextLTTlsOptions` for the certificate, key, and expected peer fingerprint. `TextLTDiscoveryOptions` enables discovery, and `trusted_discovery_peer_id` binds the configured pin to one discovery ID. |
 | `MakeLocalSendProvider` | Create the LocalSend v2.2 HTTPS provider from the identity path, alias, IPv4 bind and multicast settings, ports, and deadlines. |
 | Telegram application adapter | Implements `IConnectProvider` in `src/telegram/` and uses the existing `RemoteHttpClient` for the Bot API. It is outside the standalone Connect library and has no FTXUI dependency. |
+| IRC provider | Implements `IConnectProvider` in the standalone library and uses Boost.Asio and OpenSSL for IRC TCP/TLS sessions. |
 | `TextLTCertificateFingerprint` | Read a PEM certificate and return its SHA-256 fingerprint for display or out-of-band verification. |
 | `ContentHandler` | Declare a structured type and its supported schema versions. Validate a payload, supply a preview, and import it through a host callback. |
 | Editor adapter | Supply domain payloads on send and turn incoming import requests into calls to the relevant TextLT workspace. Open the corresponding destination picker where needed. |
 
 Providers and handlers register under stable string IDs. The editor adapter
-registers `textlt`, `localsend`, and the application-layer `telegram` adapter.
+registers `textlt`, `localsend`, `irc`, and the application-layer `telegram` adapter.
 The Telegram adapter advertises unversioned text and files. The workspace builds
 operations from the selected peer's capabilities. For typed data, both ends
 must support a common payload version. The LocalSend adapter supplies its text
