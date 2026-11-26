@@ -365,3 +365,13 @@ jobs:
             release-assets/TextLT-x86_64.AppImage
             release-assets/textlt-windows-x64.zip
             release-assets/textlt-macos-arm64.tar.gz
+            
+  publish-docker:
+     name: Build and publish Docker image
+     needs: release
+     permissions:
+       contents: read
+       packages: write
+     uses: ./.github/workflows/docker.yml
+     with:
+       publish: true         
