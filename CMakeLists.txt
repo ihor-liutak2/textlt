@@ -870,10 +870,36 @@ add_test(NAME textlt_editor_context_menu_test COMMAND textlt_editor_context_menu
 if(UNIX)
   find_package(Python3 QUIET COMPONENTS Interpreter)
   if(Python3_Interpreter_FOUND)
-    add_test(NAME textlt_editor_context_menu_pty_test
-      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/editor_context_menu_pty_test.py
-        $<TARGET_FILE:textlt>)
-    set_tests_properties(textlt_editor_context_menu_pty_test PROPERTIES TIMEOUT 40)
+    set(pty_scenarios
+      editing
+      read_only
+      compare_exit
+      terminal_clipboard
+      osc52_multiline_utf8
+      failed_native_write
+      failed_osc52_fallback
+    )
+    foreach(scenario IN LISTS pty_scenarios)
+      set(test_name textlt_editor_context_menu_pty_${scenario}_test)
+      add_test(NAME ${test_name}
+        COMMAND ${Python3_EXECUTABLE}
+          ${CMAKE_CURRENT_SOURCE_DIR}/tests/editor_context_menu_pty_test.py
+          $<TARGET_FILE:textlt> --scenario ${scenario})
+    endforeach()
+    set_tests_properties(
+      textlt_editor_context_menu_pty_editing_test
+      textlt_editor_context_menu_pty_read_only_test
+      PROPERTIES TIMEOUT 30)
+    set_tests_properties(textlt_editor_context_menu_pty_compare_exit_test
+      PROPERTIES TIMEOUT 35)
+    set_tests_properties(
+      textlt_editor_context_menu_pty_terminal_clipboard_test
+      textlt_editor_context_menu_pty_osc52_multiline_utf8_test
+      PROPERTIES TIMEOUT 20)
+    set_tests_properties(textlt_editor_context_menu_pty_failed_native_write_test
+      PROPERTIES TIMEOUT 15)
+    set_tests_properties(textlt_editor_context_menu_pty_failed_osc52_fallback_test
+      PROPERTIES TIMEOUT 20)
   endif()
 endif()
 add_test(NAME textlt_theme_customization_test COMMAND textlt_theme_customization_test)

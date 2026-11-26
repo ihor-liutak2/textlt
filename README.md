@@ -50,37 +50,30 @@ a voice model when you first need one.
 
 ### Build locally or from GitHub
 
-From a local checkout, build with your Bash or WSL user and group IDs. The image
-runs as that non-root user and creates Linux workspace files under your UID/GID.
+From a local checkout, the build helper reads the version from `CMakeLists.txt`,
+tags the image `textlt:vX.Y.Z`, and uses your Bash or WSL user and group IDs.
+The image runs as that non-root user and creates Linux workspace files under
+your UID/GID.
 
 ```bash
-docker build --build-arg TEXTLT_UID="$(id -u)" --build-arg TEXTLT_GID="$(id -g)" -t textlt:demo .
+./docs/docker/build
+image="textlt:$(./scripts/textlt-docker-version.sh)"
 ```
 
-BuildKit can also fetch a committed branch or tag directly from GitHub. The
-selected branch or tag must contain the Dockerfile.
+To build from a GitHub release source, the same version is used for the Git
+ref, build argument, and image tag:
 
 ```bash
 repo=https://github.com/ihor-liutak2/textlt.git
-docker buildx build --load --build-arg TEXTLT_UID="$(id -u)" --build-arg TEXTLT_GID="$(id -g)" -t textlt:demo "$repo#main"
-
-read -r -p 'Release tag (vX.Y.Z): ' tag
-docker buildx build --load --build-arg TEXTLT_UID="$(id -u)" --build-arg TEXTLT_GID="$(id -g)" -t textlt:demo "$repo#$tag"
-```
-
-The Docker integration is based on the latest stable GitHub release
-[`v1.1.0`](https://github.com/ihor-liutak2/textlt/releases/tag/v1.1.0). To
-build the exact published `v1.1.0` editor source with this checkout’s Docker
-recipe and conversion Actions, pass the recipe and Actions as build inputs.
-The exact tag predates the Docker-specific editor changes for Diagnostics and
-workspace selection, and explicit terminal clipboard mode.
-
-```bash
-docker buildx build --load -f - \
-  --build-context conversion-assets=./docs/docker \
+tag="$(./scripts/textlt-docker-version.sh)"
+docker buildx build --load --build-arg "TEXTLT_VERSION=$tag" \
   --build-arg TEXTLT_UID="$(id -u)" --build-arg TEXTLT_GID="$(id -g)" \
-  -t textlt:demo 'https://github.com/ihor-liutak2/textlt.git#v1.1.0' < Dockerfile
+  -t "textlt:$tag" "$repo#$tag"
 ```
+
+The version helper is also used by the Docker launcher and Compose wrapper.
+Builds of the same version replace the local tag, so rebuilding does not
+require removing an old image first.
 
 ### Launch the editor
 
@@ -89,7 +82,7 @@ enable Docker Desktop's WSL integration for that distribution and run the
 command in that distro.
 
 ```bash
-docker compose run --rm textlt
+./docs/docker/compose run --rm textlt
 ```
 
 TextLT opens your Bash home directory at `/work` and keeps the terminal
@@ -102,8 +95,8 @@ Override the workspace with an existing directory. In WSL, the Windows profile
 can be selected through its `/mnt/c/Users/…` path.
 
 ```bash
-TEXTLT_WORKSPACE="/path/to/project" docker compose run --rm textlt
-TEXTLT_WORKSPACE="/mnt/c/Users/Your Name" docker compose run --rm textlt
+TEXTLT_WORKSPACE="/path/to/project" ./docs/docker/compose run --rm textlt
+TEXTLT_WORKSPACE="/mnt/c/Users/Your Name" ./docs/docker/compose run --rm textlt
 ```
 
 If you use the Windows Docker CLI from WSL, give it the Windows path and pass
@@ -111,19 +104,24 @@ the override through `WSLENV`.
 
 ```bash
 TEXTLT_WORKSPACE="C:/Users/Your Name" \
-  WSLENV="${WSLENV:+$WSLENV:}TEXTLT_WORKSPACE" docker.exe compose run --rm textlt
+  TEXTLT_DOCKER=docker.exe \
+  WSLENV="${WSLENV:+$WSLENV:}TEXTLT_WORKSPACE:TEXTLT_DOCKER" \
+  ./docs/docker/compose run --rm textlt
 ```
 
-For an image built from a remote context or pulled from Docker Hub, launch
-without a checkout. To open a file directly, append its path under `/work` to
-the command. Images published by the workflow use UID/GID `1000:1000`. Build
-locally with the IDs above if your Linux user has different IDs.
+For an image pulled from GHCR, launch it without Compose using the matching
+version tag. From a checkout, resolve the tag and pull it as follows. To open a
+file directly, append its path under `/work` to the command. Images published
+by the workflow use UID/GID `1000:1000`. Build locally with the IDs above if
+your Linux user has different IDs.
 
 ```bash
+image="ghcr.io/ihor-liutak2/textlt:$(./scripts/textlt-docker-version.sh)"
+docker pull "$image"
 docker run --rm -it \
   --mount "type=bind,src=${TEXTLT_WORKSPACE:-$HOME},dst=/work" \
   --mount "type=volume,src=${TEXTLT_STATE_VOLUME:-textlt-state},dst=/state" \
-  textlt:demo
+  "$image"
 ```
 
 ### Terminal and clipboard
@@ -189,7 +187,7 @@ Git, OpenSSH, curl, and the system CA certificates are available in the image.
 From a container shell, check a repository mounted under `/work`.
 
 ```bash
-docker compose run --rm --entrypoint bash textlt
+./docs/docker/compose run --rm --entrypoint bash textlt
 id
 git -C /work/my-repo status
 ```
@@ -213,7 +211,7 @@ docker run --rm -it \
   --mount "type=bind,src=${TEXTLT_WORKSPACE:-$HOME},dst=/work" \
   --mount "type=volume,src=${TEXTLT_STATE_VOLUME:-textlt-state},dst=/state" \
   --mount "type=bind,src=$SSH_AUTH_SOCK,dst=/tmp/textlt-ssh-agent,readonly" \
-  -e SSH_AUTH_SOCK=/tmp/textlt-ssh-agent textlt:demo
+  -e SSH_AUTH_SOCK=/tmp/textlt-ssh-agent "$image"
 ```
 
 Docker Desktop on macOS and Linux offers a host-agent socket. Use the same
@@ -245,7 +243,7 @@ peer connections.
 docker run --rm -it --network host -e TEXTLT_CONTAINER_NETWORK=host \
   --mount "type=bind,src=${TEXTLT_WORKSPACE:-$HOME},dst=/work" \
   --mount "type=volume,src=${TEXTLT_STATE_VOLUME:-textlt-state},dst=/state" \
-  textlt:demo
+  "$image"
 ```
 
 On **Docker Desktop**, publish TCP 53317 for LocalSend by IP and start
@@ -255,7 +253,7 @@ port 53317. Allow inbound TCP 53317 in the host firewall for the trusted LAN.
 Accepted files are saved in `/work/Downloads` with the default image settings.
 
 ```bash
-docker compose run --rm -p 53317:53317/tcp textlt
+./docs/docker/compose run --rm -p 53317:53317/tcp textlt
 ```
 
 The TCP mapping supports direct LocalSend transfers. LAN multicast discovery
@@ -269,7 +267,7 @@ For troubleshooting, start a named container from one terminal and run the
 following checks from another while the LocalSend listener is running.
 
 ```bash
-docker compose run --rm --name textlt-net -p 53317:53317/tcp textlt
+./docs/docker/compose run --rm --name textlt-net -p 53317:53317/tcp textlt
 ```
 
 ```bash
@@ -295,7 +293,7 @@ to listen on an interface reachable from the Docker bridge.
 docker run --rm -it --add-host=host.docker.internal:host-gateway \
   --mount "type=bind,src=${TEXTLT_WORKSPACE:-$HOME},dst=/work" \
   --mount "type=volume,src=${TEXTLT_STATE_VOLUME:-textlt-state},dst=/state" \
-  textlt:demo
+  "$image"
 ```
 
 In that last setup use `http://host.docker.internal:11434/v1` in AI Settings.
@@ -314,7 +312,7 @@ the bundled TextLT Piper server, and writes `textlt-demo.wav` into the mounted
 workspace. Choose an unused output filename if you want to keep an existing WAV.
 
 ```bash
-docker compose run --rm -T --entrypoint bash textlt -euc '
+./docs/docker/compose run --rm -T --entrypoint bash textlt -euc '
   model_dir="$HOME/.local/share/textlt/piper/models/en_US-lessac-medium"
   mkdir -p "$model_dir"
   voice=https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium
@@ -355,7 +353,7 @@ docker run --rm -it \
   --mount "type=volume,src=${TEXTLT_STATE_VOLUME:-textlt-state},dst=/state" \
   --mount "type=bind,src=${XDG_RUNTIME_DIR}/pulse/native,dst=/tmp/textlt-pulse,readonly" \
   -e PULSE_SERVER=unix:/tmp/textlt-pulse \
-  textlt:demo
+  "$image"
 ```
 
 ### Convert Word, Markdown, PDF, and JSON
@@ -367,7 +365,7 @@ quoted paths, and run it in the container’s Bash shell. The same commands
 work directly with an existing Actions library or an older state volume.
 
 ```bash
-docker compose run --rm --entrypoint bash textlt
+./docs/docker/compose run --rm --entrypoint bash textlt
 
 textlt-convert markdown-to-word "/work/Report.md"
 textlt-convert markdown-to-word "/work/Styled report.md" "/work/Reference.docx"
@@ -384,29 +382,25 @@ PDF extraction uses the document’s text layer. Scanned pages need OCR before
 text extraction. LibreOffice is optional for opening or editing the resulting
 Word files on the host.
 
-### Publish to Docker Hub
+### Publish to GitHub Container Registry
 
 The [Docker workflow](.github/workflows/docker.yml) builds and checks the
-triggering commit on Linux amd64. Pushes and pull requests run the checks.
-To publish, create the `textlt` repository on Docker Hub and set the GitHub
-repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` with a
-Docker Hub token that can write to that repository. In **Actions → Docker →
-Run workflow**, choose the branch or tag and enable **publish**. You can also
-dispatch it with the GitHub CLI.
+triggering commit on Linux amd64. Pushes and pull requests run the checks. A
+stable release build is validated against the version in `CMakeLists.txt` and
+published as `ghcr.io/<owner>/textlt:vX.Y.Z`. The `latest` alias is updated only
+for the latest stable GitHub release. The release workflow publishes
+automatically; a manual Docker workflow publish must target a validated stable
+release tag.
 
 ```bash
-gh workflow run docker.yml --ref main -f publish=true
+tag="$(./scripts/textlt-docker-version.sh)"
+gh workflow run docker.yml --ref "$tag" -f publish=true
 ```
 
-The workflow pushes a `sha-<commit>` tag and also pushes the `vX.Y.Z` tag
-when dispatched on that release. To publish the image already built locally
-with your Docker Hub account instead, use the following commands.
+To pull the current release image:
 
 ```bash
-read -r -p 'Docker Hub username: ' dockerhub_user
-docker login --username "$dockerhub_user"
-docker tag textlt:demo "$dockerhub_user/textlt:demo"
-docker push "$dockerhub_user/textlt:demo"
+docker pull "ghcr.io/ihor-liutak2/textlt:$(./scripts/textlt-docker-version.sh)"
 ```
 
 ### Verification

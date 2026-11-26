@@ -1,8 +1,11 @@
 # syntax=docker/dockerfile:1
+ARG TEXTLT_VERSION
+
 FROM ubuntu:26.04 AS build
 
 ARG TARGETARCH
 ARG BUILD_JOBS=3
+ARG TEXTLT_VERSION
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -25,7 +28,11 @@ RUN case "$TARGETARCH" in \
 
 WORKDIR /src
 COPY --exclude=docs . .
-RUN cmake -S . -B /build -G Ninja \
+RUN project_version="$(./scripts/textlt-docker-version.sh)" \
+    && if [ -n "$TEXTLT_VERSION" ] && [ "$TEXTLT_VERSION" != "$project_version" ]; then \
+        echo "TEXTLT_VERSION=$TEXTLT_VERSION does not match CMake version $project_version" >&2; exit 1; \
+    fi \
+    && cmake -S . -B /build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local \
         -DTEXTLT_FETCH_BOOST=OFF \
     && cmake --build /build --target textlt textlt-piper-server --parallel "$BUILD_JOBS" \
@@ -39,6 +46,9 @@ FROM ubuntu:26.04 AS runtime
 
 ARG TEXTLT_UID=1000
 ARG TEXTLT_GID=1000
+ARG TEXTLT_VERSION
+
+LABEL org.opencontainers.image.version="${TEXTLT_VERSION}"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

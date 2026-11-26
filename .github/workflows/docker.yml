@@ -36,22 +36,33 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Validate release before publishing
-        if: inputs.publish
+      - name: Resolve and validate image version
+        id: version
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUBLISH: ${{ inputs.publish }}
         run: |
           set -euo pipefail
 
-          if [[ "$GITHUB_REF_TYPE" != tag || ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Publishing requires a stable version tag."
-            exit 1
+          image_tag="$(./scripts/textlt-docker-version.sh)"
+          if [[ "$PUBLISH" == "true" ]]; then
+            if [[ "$GITHUB_REF_TYPE" != tag || ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Publishing requires a stable version tag."
+              exit 1
+            fi
+            if [[ "$GITHUB_REF_NAME" != "$image_tag" ]]; then
+              echo "Release tag $GITHUB_REF_NAME does not match CMake version $image_tag." >&2
+              exit 1
+            fi
+
+            gh api \
+              "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" \
+              --jq '[.draft, .prerelease] == [false, false]' |
+              grep -qx true
+            image_tag="$GITHUB_REF_NAME"
           fi
 
-          gh api \
-            "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" \
-            --jq '[.draft, .prerelease] == [false, false]' |
-            grep -qx true
+          echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v4
 
@@ -61,18 +72,23 @@ jobs:
           context: .
           platforms: linux/amd64
           load: true
-          tags: textlt:demo
+          tags: textlt:${{ steps.version.outputs.image_tag }}
+          build-args: |
+            TEXTLT_VERSION=${{ steps.version.outputs.image_tag }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.image_tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Check the image
+        env:
+          LOCAL_IMAGE: textlt:${{ steps.version.outputs.image_tag }}
         run: |
-          docker run --rm textlt:demo --startup-check
+          docker run --rm "$LOCAL_IMAGE" --startup-check
 
-          docker run --rm --entrypoint sh textlt:demo -ec '
+          docker run --rm --entrypoint sh "$LOCAL_IMAGE" -ec '
             test "$(id -u)" -ne 0
             test "$(pwd)" = /work
             test -w /state
@@ -106,8 +122,9 @@ jobs:
 
           repo="ghcr.io/${GITHUB_REPOSITORY,,}"
           release_tag="$GITHUB_REF_NAME"
+          local_image="textlt:$release_tag"
 
-          docker tag textlt:demo "$repo:$release_tag"
+          docker tag "$local_image" "$repo:$release_tag"
           docker push "$repo:$release_tag"
 
           latest_release=$(gh api \
@@ -115,6 +132,6 @@ jobs:
             --jq '.tag_name')
 
           if [[ "$release_tag" == "$latest_release" ]]; then
-            docker tag textlt:demo "$repo:latest"
+            docker tag "$local_image" "$repo:latest"
             docker push "$repo:latest"
           fi

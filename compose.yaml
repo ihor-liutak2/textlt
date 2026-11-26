@@ -1,11 +1,12 @@
 services:
   textlt:
-    image: textlt:demo
+    image: "textlt:${TEXTLT_VERSION:?Use ./docs/docker/compose to resolve the CMake version}"
     build:
       context: .
       args:
         TEXTLT_UID: "${TEXTLT_UID:-1000}"
         TEXTLT_GID: "${TEXTLT_GID:-1000}"
+        TEXTLT_VERSION: "${TEXTLT_VERSION:?Use ./docs/docker/compose to resolve the CMake version}"
     stdin_open: true
     tty: true
     volumes:

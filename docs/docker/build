@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
+docker=${TEXTLT_DOCKER:-docker}
+version=$("$repo_root/scripts/textlt-docker-version.sh")
+uid=${TEXTLT_UID:-$(id -u)}
+gid=${TEXTLT_GID:-$(id -g)}
+context=$repo_root
+if [[ "${docker##*/}" == docker.exe ]]; then
+    context=$(wslpath -w "$context")
+fi
+
+exec "$docker" build \
+    --build-arg "TEXTLT_VERSION=$version" \
+    --build-arg "TEXTLT_UID=$uid" \
+    --build-arg "TEXTLT_GID=$gid" \
+    -t "textlt:$version" \
+    "$@" "$context"

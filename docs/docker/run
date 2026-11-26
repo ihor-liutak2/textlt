@@ -7,6 +7,16 @@ fail() {
 }
 
 docker=${TEXTLT_DOCKER:-docker}
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
+if [[ -n "${TEXTLT_IMAGE:-}" ]]; then
+    image=$TEXTLT_IMAGE
+else
+    image_version=$("$repo_root/scripts/textlt-docker-version.sh") ||
+        fail 'Could not resolve the version from CMakeLists.txt.'
+    image="textlt:$image_version"
+fi
+
 workspace=${TEXTLT_WORKSPACE:-${HOME:?Set HOME or TEXTLT_WORKSPACE}}
 if [[ "$workspace" =~ ^[a-zA-Z]: ]]; then
     workspace=$(wslpath -u "$workspace") || fail 'Could not translate the Windows workspace path.'
@@ -76,4 +86,4 @@ case "$clipboard" in
     *) fail 'Set TEXTLT_CLIPBOARD to auto, wayland, x11, terminal, or none.' ;;
 esac
 
-exec "$docker" "${args[@]}" "${TEXTLT_IMAGE:-textlt:demo}" "$@"
+exec "$docker" "${args[@]}" "$image" "$@"

@@ -1,4 +1,7 @@
 import base64
+import argparse
+import base64
+import errno
 import fcntl
 import os
 from pathlib import Path
@@ -9,7 +12,6 @@ import shutil
 import signal
 import struct
 import subprocess
-import sys
 import tempfile
 import termios
 import time
@@ -20,6 +22,45 @@ ESC = "\x1b"
 WIDTH, HEIGHT = 128, 36
 ANSI = re.compile(rb"\x1b\[[0-?]*[ -/]*[@-~]|\x1b[P\]][^\x07\x1b]*(?:\x07|\x1b\\)"
                  rb"|\x1b[()][0-9A-Za-z]|\x1b.")
+
+
+def terminate_and_reap(pid, grace=0.5):
+    """Stop a child if needed, and always collect its exit status."""
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+
+    deadline = time.monotonic() + grace
+    while time.monotonic() < deadline:
+        try:
+            waited, _ = os.waitpid(pid, os.WNOHANG)
+        except ChildProcessError:
+            return
+        if waited == pid:
+            return
+        time.sleep(0.02)
+
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
+        os.waitpid(pid, 0)
+    except ChildProcessError:
+        pass
+
+
+def terminate_process(process, grace=0.5):
+    if process.poll() is not None:
+        process.wait()
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=grace)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
 
 
 def mouse(button, point, suffix="M"):
@@ -35,18 +76,26 @@ class Terminal:
             os.chdir(root)
             fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", HEIGHT, WIDTH, 0, 0))
             os.execve(binary, [binary, str(path)], environment)
-        self.read(timeout=5, settle=0.8)
+        try:
+            self.read(timeout=5, settle=0.8)
+        except BaseException:
+            self.close()
+            raise
 
     def __enter__(self):
         return self
 
     def __exit__(self, *_):
+        self.close()
+
+    def close(self):
+        if self.fd is None:
+            return
+        terminate_and_reap(self.pid)
         try:
-            os.kill(self.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        os.waitpid(self.pid, 0)
-        os.close(self.fd)
+            os.close(self.fd)
+        finally:
+            self.fd = None
 
     def read(self, timeout=2, settle=0.12):
         chunks = []
@@ -55,7 +104,16 @@ class Terminal:
             wait = min(settle, deadline - time.monotonic()) if chunks else deadline - time.monotonic()
             if not select.select([self.fd], [], [], max(0, wait))[0]:
                 break
-            chunks.append(os.read(self.fd, 65536))
+            try:
+                chunk = os.read(self.fd, 65536)
+            except OSError as error:
+                # PTY masters report EIO on Linux/macOS after the slave closes.
+                if error.errno == errno.EIO:
+                    break
+                raise
+            if not chunk:
+                break
+            chunks.append(chunk)
         if chunks:
             output = b"".join(chunks)
             plain = ANSI.sub(b"", output).decode("utf-8").replace("\x00", "")
@@ -297,30 +355,80 @@ def test_failed_native_write(term):
 def test_failed_osc52_falls_back(binary, path, environment, clipboard):
     input_master, input_slave = pty.openpty()
     output_master, output_slave = pty.openpty()
-    process = subprocess.Popen(
-        [binary, str(path)], stdin=input_slave, stdout=output_slave,
-        stderr=subprocess.DEVNULL, env=environment)
-    os.close(input_slave)
-    os.close(output_slave)
-    os.close(output_master)
-    clipboard.unlink(missing_ok=True)
+    window_size = struct.pack("HHHH", HEIGHT, WIDTH, 0, 0)
+    fcntl.ioctl(input_slave, termios.TIOCSWINSZ, window_size)
+    fcntl.ioctl(output_slave, termios.TIOCSWINSZ, window_size)
+    process = None
     try:
-        time.sleep(1)
+        process = subprocess.Popen(
+            [binary, str(path)], stdin=input_slave, stdout=output_slave,
+            stderr=subprocess.DEVNULL, env=environment)
+        os.close(input_slave)
+        input_slave = None
+        os.close(output_slave)
+        output_slave = None
+
+        # Let startup output reach the PTY before disabling the output path.
+        # Keeping stdin on its own PTY allows the test to trigger Cut after
+        # stdout fails, which exercises native clipboard fallback.
+        deadline = time.monotonic() + 5
+        last_output = None
+        received_output = False
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                raise AssertionError("TextLT exited before PTY output was disabled")
+            readable, _, _ = select.select([output_master], [], [], 0.1)
+            if readable:
+                try:
+                    data = os.read(output_master, 65536)
+                except OSError as error:
+                    if error.errno == errno.EIO:
+                        break
+                    raise
+                if not data:
+                    break
+                received_output = True
+                last_output = time.monotonic()
+            elif received_output and time.monotonic() - last_output >= 0.5:
+                break
+        assert received_output, "TextLT did not initialize its output PTY"
+
+        os.close(output_master)
+        output_master = None
+        clipboard.unlink(missing_ok=True)
         os.write(input_master, b"\x18")  # Cut the current line.
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline and not clipboard.exists():
+            if process.poll() is not None:
+                raise AssertionError("TextLT exited before native clipboard fallback")
             time.sleep(0.05)
         assert clipboard.exists(), "Failed OSC 52 transmission did not fall back to native clipboard"
         assert clipboard.read_text() == "left aBc right", \
             "Native fallback received incorrect current-line content"
     finally:
-        process.terminate()
-        process.wait(timeout=5)
-        os.close(input_master)
+        if process is not None:
+            terminate_process(process)
+        for fd in (input_master, input_slave, output_master, output_slave):
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
 
 
-def run(binary):
-    with tempfile.TemporaryDirectory(prefix="textlt-editor-context-") as directory:
+SCENARIOS = (
+    "editing",
+    "read_only",
+    "compare_exit",
+    "terminal_clipboard",
+    "osc52_multiline_utf8",
+    "failed_native_write",
+    "failed_osc52_fallback",
+)
+
+
+def run_scenario(binary, scenario):
+    with tempfile.TemporaryDirectory(prefix=f"textlt-{scenario}-") as directory:
         root = Path(directory).resolve()
         config = root / ".config" / "textlt"
         config.mkdir(parents=True)
@@ -333,51 +441,86 @@ def run(binary):
         helper.write_text('#!/bin/sh\ncase "$3" in\n -i) cat > "$TEXTLT_TEST_CLIPBOARD";;\n'
                           ' -o) cat "$TEXTLT_TEST_CLIPBOARD";;\nesac\n')
         helper.chmod(0o755)
-        environment = dict(os.environ, HOME=directory, TERM="xterm-256color", COLORTERM="truecolor",
-                           XDG_CONFIG_HOME=str(config.parent), XDG_DATA_HOME=str(root / "data"),
-                           XDG_CACHE_HOME=str(root / "cache"), XDG_STATE_HOME=str(root / "state"),
-                           PATH=f"{tools}:{os.defpath}", DISPLAY=":test",
-                           TEXTLT_TEST_CLIPBOARD=str(clipboard), GIT_CONFIG_NOSYSTEM="1",
-                           GIT_CONFIG_GLOBAL=str(root / "git-config"))
+        environment = dict(os.environ)
+        # Never inherit the opt-in from a developer or CI shell. These tests
+        # enable OSC 52 only through SSH markers in scenarios that need it.
+        environment.pop("TEXTLT_TERMINAL_CLIPBOARD", None)
+        environment.update(
+            HOME=directory, TERM="xterm-256color", COLORTERM="truecolor",
+            XDG_CONFIG_HOME=str(config.parent), XDG_DATA_HOME=str(root / "data"),
+            XDG_CACHE_HOME=str(root / "cache"), XDG_STATE_HOME=str(root / "state"),
+            PATH=f"{tools}:{os.defpath}", DISPLAY=":test",
+            TEXTLT_TEST_CLIPBOARD=str(clipboard), GIT_CONFIG_NOSYSTEM="1",
+            GIT_CONFIG_GLOBAL=str(root / "git-config"))
         for key in ("SSH_CONNECTION", "SSH_TTY", "SSH_CLIENT", "WSL_INTEROP", "WSL_DISTRO_NAME",
                     "XDG_SESSION_TYPE", "WAYLAND_DISPLAY", "WAYLAND_SOCKET"):
             environment.pop(key, None)
-        git = shutil.which("git", path=environment["PATH"])
-        if git:
+
+        if scenario in {"read_only", "compare_exit"}:
+            git = shutil.which("git", path=environment["PATH"])
+            if not git:
+                raise RuntimeError(f"Git is required for the {scenario} PTY scenario")
             path.write_text("old line\nsecond\nthird\n")
             for args in (("init", "-q"), ("add", path.name),
                          ("-c", "user.name=Context Test", "-c", "user.email=test@example.invalid",
                           "commit", "-qm", "baseline")):
                 subprocess.run([git, *args], cwd=root, env=environment, check=True)
-        path.write_text("left aBc right\nsecond\nthird\n")
-        with Terminal(binary, root, path, environment) as term:
-            ordinary_frame = term.send(mouse(35, (1, 1)))
-            assert b"left" in ANSI.sub(b"", ordinary_frame) and b"\x1b[48;2;40;92;135m" not in ordinary_frame
-            test_editing(term, path, clipboard)
-            if git:
+
+        current_line = "left abc right" if scenario == "compare_exit" else "left aBc right"
+        path.write_text(f"{current_line}\nsecond\nthird\n")
+        binary = str(Path(binary).resolve())
+
+        if scenario == "editing":
+            with Terminal(binary, root, path, environment) as term:
+                ordinary_frame = term.send(mouse(35, (1, 1)))
+                assert b"left" in ANSI.sub(b"", ordinary_frame) and \
+                    b"\x1b[48;2;40;92;135m" not in ordinary_frame
+                test_editing(term, path, clipboard)
+        elif scenario == "read_only":
+            with Terminal(binary, root, path, environment) as term:
                 test_read_only(term, clipboard)
+        elif scenario == "compare_exit":
+            with Terminal(binary, root, path, environment) as term:
                 test_compare_exit(term)
-        with Terminal(binary, root, path, dict(environment, SSH_CONNECTION="fixture")) as term:
-            test_terminal_clipboard(term)
+        elif scenario == "terminal_clipboard":
+            with Terminal(binary, root, path, dict(environment, SSH_CONNECTION="fixture")) as term:
+                test_terminal_clipboard(term)
+        elif scenario == "osc52_multiline_utf8":
+            unicode_path = root / "unicode.txt"
+            unicode_path.write_text("éΣ\nsecond\nthird\n")
+            with Terminal(binary, root, unicode_path,
+                          dict(environment, SSH_CONNECTION="fixture")) as term:
+                test_osc52_multiline_utf8(term)
+        elif scenario == "failed_native_write":
+            no_clipboard_environment = dict(environment)
+            for key in ("DISPLAY", "SSH_CONNECTION", "SSH_TTY", "SSH_CLIENT", "WSL_INTEROP",
+                        "WSL_DISTRO_NAME", "WAYLAND_DISPLAY", "WAYLAND_SOCKET", "XDG_SESSION_TYPE"):
+                no_clipboard_environment.pop(key, None)
+            with Terminal(binary, root, path, no_clipboard_environment) as term:
+                test_failed_native_write(term)
+        elif scenario == "failed_osc52_fallback":
+            test_failed_osc52_falls_back(
+                binary, path, dict(environment, SSH_CONNECTION="fixture"), clipboard)
+        else:
+            raise ValueError(f"Unknown PTY scenario: {scenario}")
 
-        unicode_path = root / "unicode.txt"
-        unicode_path.write_text("éΣ\nsecond\nthird\n")
-        with Terminal(binary, root, unicode_path, dict(environment, SSH_CONNECTION="fixture")) as term:
-            test_osc52_multiline_utf8(term)
 
-        no_clipboard_environment = dict(environment)
-        for key in ("DISPLAY", "SSH_CONNECTION", "SSH_TTY", "SSH_CLIENT", "WSL_INTEROP",
-                    "WSL_DISTRO_NAME", "WAYLAND_DISPLAY", "WAYLAND_SOCKET", "XDG_SESSION_TYPE"):
-            no_clipboard_environment.pop(key, None)
-        with Terminal(binary, root, path, no_clipboard_environment) as term:
-            test_failed_native_write(term)
-
-        fallback_environment = dict(environment, SSH_CONNECTION="fixture")
-        with path.open("w") as source:
-            source.write("left aBc right\n")
-        test_failed_osc52_falls_back(
-            str(Path(binary).resolve()), path, fallback_environment, clipboard)
+def run(binary, scenario):
+    started = time.monotonic()
+    print(f"[{scenario}] starting (elapsed 0.00s)", flush=True)
+    try:
+        run_scenario(binary, scenario)
+    except BaseException:
+        elapsed = time.monotonic() - started
+        print(f"[{scenario}] failed after {elapsed:.2f}s", flush=True)
+        raise
+    elapsed = time.monotonic() - started
+    print(f"[{scenario}] passed in {elapsed:.2f}s", flush=True)
 
 
 if __name__ == "__main__":
-    run(str(Path(sys.argv[1]).resolve()))
+    parser = argparse.ArgumentParser()
+    parser.add_argument("binary", type=lambda value: str(Path(value).resolve()))
+    parser.add_argument("--scenario", choices=SCENARIOS, required=True)
+    args = parser.parse_args()
+    run(args.binary, args.scenario)
