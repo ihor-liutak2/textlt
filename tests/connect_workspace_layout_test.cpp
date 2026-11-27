@@ -12,14 +12,17 @@ bool Check(bool condition, const char* message) {
 int main() {
     const auto wide = ComputeConnectWorkspaceLayout(140, 40);
     if (!Check(wide.mode == ConnectLayoutMode::ThreeColumns, "wide mode")) return 1;
-    if (!Check(wide.local_width == 28, "wide local width")) return 1;
-    if (!Check(wide.messenger_width == 28, "wide messenger width")) return 1;
-    if (!Check(wide.conversation_width == 84, "wide conversation width")) return 1;
+    if (!Check(wide.local_width == 26, "wide local width")) return 1;
+    if (!Check(wide.messenger_width == wide.local_width, "wide navigation widths match")) return 1;
+    if (!Check(wide.conversation_width == 80, "wide conversation width")) return 1;
+    if (!Check(wide.local_width + wide.messenger_width + wide.conversation_width + 8 == 140,
+               "wide panes and gutters fill terminal")) return 1;
 
     const auto minimum_wide = ComputeConnectWorkspaceLayout(96, 30);
     if (!Check(minimum_wide.mode == ConnectLayoutMode::ThreeColumns, "minimum wide mode")) return 1;
     if (!Check(minimum_wide.local_width >= 18, "minimum local width")) return 1;
-    if (!Check(minimum_wide.messenger_width >= 16, "minimum messenger width")) return 1;
+    if (!Check(minimum_wide.messenger_width == minimum_wide.local_width,
+               "minimum navigation widths match")) return 1;
     if (!Check(minimum_wide.conversation_width >= 36, "minimum conversation width")) return 1;
 
     const auto compact = ComputeConnectWorkspaceLayout(80, 36);

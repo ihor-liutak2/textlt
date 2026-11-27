@@ -242,6 +242,6 @@ Element ConnectWorkspace::RenderStructuredPicker(int width) {
         filler(), structured_close_->Render(),
     }));
     if (pending_share_) rows.push_back(text(status_) | dim);
-    return vbox(std::move(rows)) | flex | borderStyled(LIGHT, theme_.gutter);
+    return vbox(std::move(rows)) | flex;
 }
 } // namespace textlt::connect_ui

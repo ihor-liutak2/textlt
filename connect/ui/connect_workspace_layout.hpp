@@ -33,10 +33,12 @@ inline ConnectWorkspaceLayout ComputeConnectWorkspaceLayout(int columns, int row
 
     if (width >= 96) {
         layout.mode = ConnectLayoutMode::ThreeColumns;
-        layout.local_width = std::max(18, width / 5);
-        layout.messenger_width = std::max(16, width / 5);
+        // Keep two-column gutters at the outside edges and between each pane.
+        const int pane_width = std::max(1, width - 8);
+        layout.local_width = std::max(18, pane_width / 5);
+        layout.messenger_width = layout.local_width;
         layout.conversation_width =
-            std::max(1, width - layout.local_width - layout.messenger_width);
+            std::max(1, pane_width - layout.local_width - layout.messenger_width);
         return layout;
     }
 

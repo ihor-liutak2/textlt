@@ -178,6 +178,8 @@ private:
     std::string SelectedIrcServer() const;
     std::string IrcControlServer() const;
     std::string SelectedIrcTarget() const;
+    std::string ServerResponses() const;
+    void CopyServerResponses();
     bool IsIrcServerSelected() const;
     bool CanJoinIrcChannel() const;
     bool CanSendIrcMessage() const;
@@ -285,6 +287,7 @@ private:
     ftxui::Component toggle_native_, textlt_config_, toggle_localsend_, refresh_localsend_, connect_by_ip_;
     ftxui::Component toggle_telegram_, telegram_settings_;
     ftxui::Component toggle_irc_, irc_settings_, irc_target_input_, irc_join_, irc_private_;
+    ftxui::Component copy_server_responses_;
     std::vector<IrcLeaveControl> irc_leave_controls_;
     std::string irc_target_;
     ftxui::Component active_;

@@ -90,6 +90,14 @@ int ScrollDelta(Event event) {
     return 0;
 }
 
+Element FixedWidthPane(Element content, int width) {
+    return std::move(content) | size(WIDTH, EQUAL, width);
+}
+
+Element EmptyColumns(int width) {
+    return emptyElement() | size(WIDTH, EQUAL, width);
+}
+
 } // namespace
 
 ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> redraw,
@@ -172,6 +180,9 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
     composer_ = ClipboardController::MakeInput(&draft_, "Type a message", std::move(input));
     send_ = FlatAction("Send", ButtonRole::Primary, [this] { Send(); },
                        [this] { return CanSendIrcMessage(); });
+    copy_server_responses_ = FlatAction("Copy", ButtonRole::Utility,
+        [this] { CopyServerResponses(); },
+        [this] { return write_clipboard_ && !ServerResponses().empty(); });
     accept_ = FlatAction("Accept", ButtonRole::Primary, [this] { Decide(true); });
     decline_ = FlatAction("Decline", ButtonRole::Cancel, [this] { Decide(false); });
     send_file_ = FlatAction("Send File…", ButtonRole::Utility, [this] {
@@ -203,6 +214,7 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
     for (const auto& control : {toggle_irc_, irc_settings_, irc_target_input_, irc_join_, irc_private_}) Add(control);
     Add(composer_);
     Add(send_);
+    Add(copy_server_responses_);
     Add(accept_);
     Add(decline_);
     active_ = composer_;
@@ -481,6 +493,25 @@ std::string ConnectWorkspace::IrcControlServer() const {
     if (!server.empty()) return server;
     const auto profiles = irc_provider_->Profiles();
     return profiles.size() == 1 ? profiles.front().id : std::string{};
+}
+
+std::string ConnectWorkspace::ServerResponses() const {
+    if (!irc_provider_) return {};
+    const auto profiles = irc_provider_->Profiles();
+    std::string responses;
+    for (const auto& profile : profiles) {
+        if (!responses.empty()) responses += '\n';
+        if (profiles.size() > 1) responses += profile.name + ": ";
+        responses += irc_provider_->Status(profile.id).diagnostic;
+    }
+    return responses;
+}
+
+void ConnectWorkspace::CopyServerResponses() {
+    const auto responses = ServerResponses();
+    if (responses.empty()) return;
+    status_ = write_clipboard_ && write_clipboard_(responses)
+        ? "Server responses copied" : ClipboardController::kWriteFailed;
 }
 
 bool ConnectWorkspace::IsIrcServerSelected() const {
@@ -1603,13 +1634,21 @@ Element ConnectWorkspace::RenderNavigator(int width) {
     navigator_content_rows_ = static_cast<int>(rows.size()) + wrapped_content_rows;
     navigator_scroll_max_ = std::max(0, navigator_content_rows_ - navigator_visible_rows_);
     navigation_state_.Scroll(ConnectColumn::LocalConnections, 0, navigator_scroll_max_);
-    return vbox({
+    Elements local_status_lines;
+    AppendMessageLines(local_status_lines, status_, std::max(1, width - 2));
+    if (local_status_lines.empty()) local_status_lines.push_back(text(""));
+    if (local_status_lines.size() > 2) local_status_lines.resize(2);
+    auto content = vbox({
         text(" Local Connections") | bold | color(theme_.modal_accent) |
             (navigation_state_.FocusedColumn() == ConnectColumn::LocalConnections ? inverted : nothing),
         separator() | color(theme_.gutter),
         vbox(std::move(rows)) | focusPosition(0, navigation_state_.ScrollOffset(
             ConnectColumn::LocalConnections)) | vscroll_indicator | yframe | flex,
-    }) | size(WIDTH, EQUAL, width) | borderStyled(LIGHT, theme_.gutter) | reflect(navigator_box_);
+        separator() | color(theme_.gutter),
+        text("Local:") | bold,
+        vbox(std::move(local_status_lines)),
+    });
+    return FixedWidthPane(std::move(content), width) | reflect(navigator_box_);
 }
 
 Element ConnectWorkspace::RenderMessengerNavigator(int width) {
@@ -1707,7 +1746,13 @@ Element ConnectWorkspace::RenderMessengerNavigator(int width) {
     messenger_content_rows_ = static_cast<int>(rows.size());
     messenger_scroll_max_ = std::max(0, messenger_content_rows_ - messenger_visible_rows_);
     navigation_state_.Scroll(ConnectColumn::Messengers, 0, messenger_scroll_max_);
-    return vbox({
+    auto server_responses = ServerResponses();
+    if (server_responses.empty()) server_responses = "No server responses";
+    Elements response_lines;
+    AppendMessageLines(response_lines, server_responses, std::max(1, width - 2));
+    if (response_lines.empty()) response_lines.push_back(text(""));
+    if (response_lines.size() > 2) response_lines.resize(2);
+    auto content = vbox({
         text(" Messengers") | bold | color(theme_.modal_accent) |
             (navigation_state_.FocusedColumn() == ConnectColumn::Messengers ? inverted : nothing),
         separator() | color(theme_.gutter),
@@ -1719,14 +1764,11 @@ Element ConnectWorkspace::RenderMessengerNavigator(int width) {
         }),
         vbox(std::move(rows)) | focusPosition(0, navigation_state_.ScrollOffset(
             ConnectColumn::Messengers)) | vscroll_indicator | yframe | flex,
-        SelectedIrcServer().empty() ? emptyElement() : vbox({
-            text(irc_provider_->Status(IrcControlServer()).diagnostic) | dim,
-            hbox({irc_target_input_->Render() | flex}),
-            width >= 42 ? hbox({irc_join_->Render(), filler(), irc_private_->Render()})
-                        : vbox({irc_join_->Render(), irc_private_->Render()}),
-        }),
-    }) | size(WIDTH, EQUAL, width) | borderStyled(LIGHT, theme_.gutter) |
-        reflect(messenger_box_);
+        separator() | color(theme_.gutter),
+        hbox({text("Server:") | bold, filler(), copy_server_responses_->Render()}),
+        vbox(std::move(response_lines)),
+    });
+    return FixedWidthPane(std::move(content), width) | reflect(messenger_box_);
 }
 
 Element ConnectWorkspace::RenderChat(int width) {
@@ -1774,6 +1816,12 @@ Element ConnectWorkspace::RenderChat(int width) {
         vbox(std::move(history)) | focusPosition(0, anchor) | vscroll_indicator | yframe | flex |
             reflect(history_box_),
     };
+    if (!SelectedIrcServer().empty()) {
+        body.push_back(hbox({irc_target_input_->Render() | flex}));
+        body.push_back(width >= 42
+            ? hbox({irc_join_->Render(), filler(), irc_private_->Render()})
+            : vbox({irc_join_->Render(), irc_private_->Render()}));
+    }
     if (chat && chat->offer) {
         body.push_back(hbox({
             text(chat->offer->metadata.schema_version
@@ -1794,23 +1842,20 @@ Element ConnectWorkspace::RenderChat(int width) {
             OffersTextFile() ? draft_file_->Render() : emptyElement(), filler(),
             chat && chat->active_transfer ? cancel_transfer_->Render() : emptyElement()}));
     }
-    const auto irc_status = selected_ && selected_->first == kIrcProviderId
-        ? irc_provider_->Status(SelectedIrcServer()).diagnostic : status_;
-    body.push_back(text(irc_status) | dim);
-    return vbox(std::move(body)) | flex | borderStyled(LIGHT, theme_.gutter);
+    return FixedWidthPane(vbox(std::move(body)) | flex, width);
 }
 
 Element ConnectWorkspace::OnRender() {
     const auto terminal = Terminal::Size();
     const auto layout = ComputeConnectWorkspaceLayout(terminal.dimx, terminal.dimy);
     const int fixed_height = layout.mode == ConnectLayoutMode::ThreeColumns
-        ? terminal.dimy - 5
+        ? terminal.dimy - 9
         : layout.mode == ConnectLayoutMode::CompactNavigationRow
             ? layout.navigation_height - 4
             : layout.local_navigation_height - 4;
     navigator_visible_rows_ = std::max(1, fixed_height);
     const int messenger_height = layout.mode == ConnectLayoutMode::ThreeColumns
-        ? terminal.dimy - 5
+        ? terminal.dimy - 9
         : layout.mode == ConnectLayoutMode::CompactNavigationRow
             ? layout.navigation_height - 5
             : layout.messenger_navigation_height - 6;
@@ -1819,9 +1864,13 @@ Element ConnectWorkspace::OnRender() {
     Element columns;
     if (layout.mode == ConnectLayoutMode::ThreeColumns) {
         columns = hbox({
+            EmptyColumns(2),
             RenderNavigator(layout.local_width),
+            EmptyColumns(2),
             RenderMessengerNavigator(layout.messenger_width),
+            EmptyColumns(2),
             RenderChat(layout.conversation_width) | reflect(conversation_box_),
+            EmptyColumns(2),
         }) | flex;
     } else if (layout.mode == ConnectLayoutMode::CompactNavigationRow) {
         auto navigation = hbox({
