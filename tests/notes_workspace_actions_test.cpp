@@ -178,6 +178,9 @@ public:
     static ftxui::Box SidebarBox(const NotesWorkspaceComponent& component) {
         return component.sidebar_box_;
     }
+    static ftxui::Box OverviewBox(const NotesWorkspaceComponent& component) {
+        return component.overview_box_;
+    }
     static NoteSession& Session(NotesWorkspaceComponent& component) {
         return component.session_;
     }
@@ -1035,8 +1038,7 @@ int main() {
     fs::remove_all(copy_root, cleanup_error);
 
     // Cards in one overview row must have identical widths. Otherwise long
-    // titles/previews make one card wider, overflow the row, and interrupt the
-    // neighboring cards' vertical borders.
+    // titles/previews make one card wider and overflow its allocated column.
     const fs::path cards_root =
         fs::temp_directory_path() / "textlt_notes_workspace_cards_test";
     fs::remove_all(cards_root, cleanup_error);
@@ -1051,18 +1053,71 @@ int main() {
         "Third card with a long title as well so all previews are constrained");
     NotesWorkspaceActionsTestAccess::RenderWorkspace(cards_component, 160, 30);
     NotesWorkspaceActionsTestAccess::RenderWorkspace(cards_component, 160, 30);
+    const ftxui::Screen card_screen =
+        NotesWorkspaceActionsTestAccess::RenderWorkspaceScreen(
+            cards_component, 160, 30);
+    const ftxui::Box sidebar_box =
+        NotesWorkspaceActionsTestAccess::SidebarBox(cards_component);
+    const ftxui::Box overview_box =
+        NotesWorkspaceActionsTestAccess::OverviewBox(cards_component);
+    Expect(sidebar_box.x_max - sidebar_box.x_min + 1 == 28 &&
+            overview_box.x_min - sidebar_box.x_max - 1 == 4,
+        "The Notes sidebar should retain its width and use a four-column workspace gap.");
+    bool has_outer_sidebar_border = false;
+    for (int y = sidebar_box.y_min; y <= sidebar_box.y_max; ++y) {
+        has_outer_sidebar_border = has_outer_sidebar_border ||
+            card_screen.PixelAt(sidebar_box.x_min, y).character == "│" ||
+            card_screen.PixelAt(sidebar_box.x_max, y).character == "│";
+    }
+    Expect(!has_outer_sidebar_border,
+        "The Notes sidebar should not render an outer vertical border.");
     Expect(NotesWorkspaceActionsTestAccess::CardBoxCount(cards_component) == 3,
         "Three notes should produce three overview cards.");
     const ftxui::Box first_card =
         NotesWorkspaceActionsTestAccess::CardBox(cards_component, 0);
     const int first_width = first_card.x_max - first_card.x_min + 1;
-    Expect(first_width > 2, "Overview cards should have a visible width.");
+    Expect(first_width > 4, "Overview cards should have a visible width.");
     for (size_t index = 1; index < 3; ++index) {
         const ftxui::Box card =
             NotesWorkspaceActionsTestAccess::CardBox(cards_component, index);
         Expect(card.x_max - card.x_min + 1 == first_width,
             "Overview cards in the same row should have equal widths.");
     }
+    Expect(card_screen.PixelAt(first_card.x_min, first_card.y_min).character == "─" &&
+            card_screen.PixelAt(first_card.x_max, first_card.y_min).character == "─",
+        "Note tiles should have a thin top line without corner characters.");
+    const auto is_blank_cell = [](const ftxui::Cell& cell) {
+        return cell.character.empty() || cell.character == " ";
+    };
+    Expect(is_blank_cell(card_screen.PixelAt(
+                first_card.x_min + 2, first_card.y_min + 1)),
+        "Note tiles should have one row of top padding.");
+    Expect(card_screen.PixelAt(
+                first_card.x_min + 2, first_card.y_min + 2).character == "T",
+        "Note tile text should begin after two columns of left padding.");
+    Expect(is_blank_cell(card_screen.PixelAt(
+                first_card.x_min + 1, first_card.y_min + 2)) &&
+            is_blank_cell(card_screen.PixelAt(
+                first_card.x_min, first_card.y_min + 2)) &&
+            is_blank_cell(card_screen.PixelAt(
+                first_card.x_max - 1, first_card.y_min + 2)) &&
+            is_blank_cell(card_screen.PixelAt(
+                first_card.x_max, first_card.y_min + 2)),
+        "Note tile text should have two columns of horizontal padding.");
+    Expect(is_blank_cell(card_screen.PixelAt(
+                first_card.x_min + 2, first_card.y_max)),
+        "Note tiles should have one row of bottom padding.");
+    Expect(NotesWorkspaceActionsTestAccess::MouseAt(
+            cards_component, ftxui::Mouse::Left, ftxui::Mouse::Pressed,
+            first_card.x_min + 1, first_card.y_min + 2) &&
+            cards_component.IsEditing(),
+        "The tile's left padding should remain clickable.");
+    cards_component.OnEvent(ftxui::Event::Escape);
+    Expect(NotesWorkspaceActionsTestAccess::MouseAt(
+            cards_component, ftxui::Mouse::Left, ftxui::Mouse::Pressed,
+            first_card.x_min + 2, first_card.y_max) &&
+            cards_component.IsEditing(),
+        "The tile's bottom padding should remain clickable.");
     fs::remove_all(cards_root, cleanup_error);
 
     fs::remove_all(root, cleanup_error);

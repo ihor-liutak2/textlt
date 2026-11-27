@@ -21,12 +21,12 @@ namespace {
 constexpr int kMouseWheelScrollRows = 3;
 constexpr size_t kEditorScrollbarColumns = 2;
 constexpr int kSidebarWidth = 28;
-constexpr int kSidebarGap = 2;
+constexpr int kSidebarGap = 4;
 
-// Breathing room between the editor border and the note text.
+// Breathing room between the editor edge and the note text.
 constexpr size_t kEditorTopPadding = 1;
 constexpr size_t kEditorLeftPadding = 3;
-// Total gap between the text and the right border; the scrollbar occupies the
+// Total gap between the text and the right edge; the scrollbar occupies the
 // last kEditorScrollbarColumns of it.
 constexpr size_t kEditorRightPadding = 6;
 // Note titles are clamped to this many display columns.
@@ -1555,35 +1555,16 @@ ftxui::Element NotesWorkspaceComponent::RenderSidebar() {
             text(" "),
             tab("Content", sidebar_content_selected_, sidebar_content_tab_box_),
         }),
-        separator() | color(theme.gutter),
+        text(""),
     };
     auto render = [&] {
-        return vbox(std::move(rows)) | borderStyled(LIGHT, theme.gutter) |
-            size(WIDTH, EQUAL, kSidebarWidth) | reflect(sidebar_box_) |
+        return vbox(std::move(rows)) | size(WIDTH, EQUAL, kSidebarWidth) | reflect(sidebar_box_) |
             bgcolor(theme.background);
     };
     if (sidebar_content_selected_) {
         rows.push_back(RenderSidebarContents(theme));
         return render();
     }
-    sidebar_row_boxes_.resize(sidebar_entries_.size());
-    for (size_t i = 0; i < sidebar_entries_.size(); ++i) {
-        const auto& entry = sidebar_entries_[i];
-        std::string label = "  ";
-        if (entry.project) label += entry.orphaned ? "! " : "P ";
-        label += entry.label;
-        if (entry.kind != SidebarEntryKind::NewSection) label += std::string(std::max(1, 22 - static_cast<int>(label.size())), ' ') + std::to_string(entry.count);
-        Element row = text(label) | color(theme.foreground) | reflect(sidebar_row_boxes_[i]);
-        if (entry.project) row = row | color(entry.orphaned ? theme.button_danger : theme.modal_accent);
-        if (static_cast<int>(i) == selected_sidebar_) row = row | bgcolor(theme.modal_selected_item_bg) | color(theme.modal_selected_item_fg);
-        if (entry.kind == SidebarEntryKind::NewSection) row = row | color(theme.modal_accent);
-        rows.push_back(row);
-    }
-    if (focus_ == FocusArea::GroupName) {
-        rows.push_back(text(" " + std::string(editing_section_id_ ? "Rename: " : "New: ") + group_name_input_ + "▌") |
-            borderStyled(LIGHT, theme.modal_accent));
-    }
-    rows.push_back(filler());
     footer_new_note_box_ = {};
     footer_delete_note_box_ = {};
     footer_restore_note_box_ = {};
@@ -1612,7 +1593,6 @@ ftxui::Element NotesWorkspaceComponent::RenderSidebar() {
         spec.enabled = enabled;
         return RenderModalFlatButton(theme, spec) | reflect(box);
     };
-    rows.push_back(separator() | color(theme.gutter));
     rows.push_back(text(" Notes:") | bold | color(theme.foreground));
     if (trash_selected_ && !editing_) {
         const bool has_trash = !visible_notes_.empty();
@@ -1657,6 +1637,26 @@ ftxui::Element NotesWorkspaceComponent::RenderSidebar() {
             footer_button("Open Notes", ButtonRole::Primary, true, footer_project_notes_box_),
         }));
     }
+    rows.push_back(text(""));
+
+    sidebar_row_boxes_.resize(sidebar_entries_.size());
+    for (size_t i = 0; i < sidebar_entries_.size(); ++i) {
+        const auto& entry = sidebar_entries_[i];
+        std::string label = "  ";
+        if (entry.project) label += entry.orphaned ? "! " : "P ";
+        label += entry.label;
+        if (entry.kind != SidebarEntryKind::NewSection) label += std::string(std::max(1, 22 - static_cast<int>(label.size())), ' ') + std::to_string(entry.count);
+        Element row = text(label) | color(theme.foreground) | reflect(sidebar_row_boxes_[i]);
+        if (entry.project) row = row | color(entry.orphaned ? theme.button_danger : theme.modal_accent);
+        if (static_cast<int>(i) == selected_sidebar_) row = row | bgcolor(theme.modal_selected_item_bg) | color(theme.modal_selected_item_fg);
+        if (entry.kind == SidebarEntryKind::NewSection) row = row | color(theme.modal_accent);
+        rows.push_back(row);
+    }
+    if (focus_ == FocusArea::GroupName) {
+        rows.push_back(text(" " + std::string(editing_section_id_ ? "Rename: " : "New: ") + group_name_input_ + "▌") |
+            borderStyled(LIGHT, theme.modal_accent));
+    }
+    rows.push_back(filler());
     return render();
 }
 
@@ -1715,7 +1715,7 @@ ftxui::Element NotesWorkspaceComponent::RenderCard(
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     const size_t content_width = static_cast<size_t>(
-        std::max(1, card_width - 2));
+        std::max(1, card_width - 4));
     Elements lines;
 
     std::string title = note.title.empty() ? "Untitled note" : note.title;
@@ -1752,9 +1752,16 @@ ftxui::Element NotesWorkspaceComponent::RenderCard(
         text(FitText(date, content_width)) | dim,
     }));
 
-    Element card = vbox(std::move(lines)) |
-        borderStyled(selected ? HEAVY : LIGHT,
-            selected ? theme.modal_accent : theme.gutter) |
+    Element card = vbox({
+        separator() | color(selected ? theme.modal_accent : theme.gutter),
+        text(""),
+        hbox({
+            text("  "),
+            vbox(std::move(lines)) | xflex,
+            text("  "),
+        }) | xflex,
+        text(""),
+    }) |
         bgcolor(theme.background) |
         size(WIDTH, EQUAL, card_width);
     if (visible_index < card_boxes_.size()) {
@@ -1766,14 +1773,32 @@ ftxui::Element NotesWorkspaceComponent::RenderCard(
 ftxui::Element NotesWorkspaceComponent::RenderOverview() {
     using namespace ftxui; const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     std::string heading = trash_selected_ ? "Trash" : selected_section_id_.empty() ? "Home" : sidebar_entries_[selected_sidebar_].label;
-    Element search = text(" Search: " + search_ + (focus_ == FocusArea::Search ? "▌" : "")) | borderStyled(LIGHT, focus_ == FocusArea::Search ? theme.modal_accent : theme.gutter) | reflect(search_box_) | xflex;
+    const bool project_section_selected = !selected_section_id_.empty() &&
+        selected_sidebar_ >= 0 &&
+        selected_sidebar_ < static_cast<int>(sidebar_entries_.size()) &&
+        sidebar_entries_[selected_sidebar_].project;
+    const std::string heading_label = " " + heading + " ";
+    Element heading_element = project_section_selected
+        ? text(std::string(ftxui::string_width(heading_label), ' '))
+        : text(heading_label) | bold | color(theme.modal_accent);
+    const size_t note_count = visible_notes_.size();
+    const Color search_border =
+        focus_ == FocusArea::Search ? theme.modal_accent : theme.gutter;
+    Element search = hbox({
+        text("│") | color(search_border),
+        text(" Search: " + search_ + (focus_ == FocusArea::Search ? "▌" : "")) | xflex,
+        text("│") | color(search_border),
+    }) | xflex | reflect(search_box_);
     const std::string sort_name = sort_mode_ == SortMode::Updated ? "Updated" :
         sort_mode_ == SortMode::Created ? "Created" :
         sort_mode_ == SortMode::Title ? "Title" : "Pinned";
-    Element sort = text(" Sort: " + sort_name + " ↻ ") | reflect(sort_box_) |
-        color(theme.foreground) | borderStyled(LIGHT, theme.gutter);
+    Element sort = hbox({
+        text("│") | color(theme.gutter),
+        text(" Sort: " + sort_name + " ↻ ") | reflect(sort_box_) |
+            color(theme.foreground),
+        text("│") | color(theme.gutter),
+    });
     Element add = vbox({
-        text(""),
         text(" + New Note ") | bold,
     }) | color(theme.modal_selected_item_fg) |
         bgcolor(theme.modal_selected_item_bg) | reflect(new_note_box_);
@@ -1816,8 +1841,9 @@ ftxui::Element NotesWorkspaceComponent::RenderOverview() {
     if (rows.empty()) rows.push_back(vbox({filler(), text(trash_selected_ ? "Trash is empty" : "No notes here. Use New to create one.") | center | dim, filler()}) | flex);
     return vbox({
         hbox({
-            text(" " + heading + " ") | bold | color(theme.modal_accent),
-            text(std::to_string(visible_notes_.size()) + " notes ") | dim,
+            heading_element,
+            text(std::to_string(note_count) +
+                (note_count == 1 ? " note " : " notes ")) | dim,
             search, text(" "), sort, text(" "), add,
         }),
         text(""),
@@ -2140,9 +2166,8 @@ ftxui::Element NotesWorkspaceComponent::RenderEditor() {
         // Estimate from the terminal before the editor reflects its first box,
         // so the header layout does not have to wait a frame to settle.
         const int sidebar_width = sidebar_visible_ ? kSidebarWidth + kSidebarGap : 0;
-        const int editor_border = 2;
         const int estimate = ftxui::Terminal::Size().dimx - sidebar_width -
-            editor_border - static_cast<int>(kEditorLeftPadding + kEditorRightPadding);
+            static_cast<int>(kEditorLeftPadding + kEditorRightPadding);
         if (estimate > 0) content_width = static_cast<size_t>(estimate);
     }
     const size_t column_count = static_cast<size_t>(
@@ -2269,7 +2294,7 @@ ftxui::Element NotesWorkspaceComponent::RenderEditor() {
     Element status = hbox({text(" Created " + note->created_at + "  Updated " + note->updated_at) | dim, filler(), text(" " + save_status_ + " ") | color(theme.modal_accent)});
     Elements layout = {header};
     if (!inline_toolbar) layout.push_back(toolbar | borderStyled(LIGHT, theme.gutter));
-    layout.push_back(std::move(view) | borderStyled(focus_ == FocusArea::Body ? HEAVY : LIGHT, focus_ == FocusArea::Body ? theme.modal_accent : theme.gutter) | yflex);
+    layout.push_back(std::move(view) | yflex);
     layout.push_back(status);
     return vbox(std::move(layout)) | flex | bgcolor(theme.background);
 }
