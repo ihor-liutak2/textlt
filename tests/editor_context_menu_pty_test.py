@@ -158,6 +158,12 @@ def test_editing(term, path, clipboard):
     term.open_menu((x + 13, y))
     term.click("Copy File Path")
     assert clipboard.read_text() == str(path)
+    term.position("Path copied.")
+    # The toast must expire while the terminal is idle; no keypress should be
+    # required to make the normal editor row visible again.
+    time.sleep(1.1)
+    term.read(timeout=0.5, settle=0.2)
+    assert all("Path copied." not in row for row in term.rows), term.rows
     term.drag((x, y), (x + 4, y + 1))
     term.open_menu((x + 20, y))
     term.click("Indent Right")

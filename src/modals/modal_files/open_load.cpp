@@ -267,7 +267,11 @@ void FilesModalContent::CopySelectedPathText() {
     }
     if (!on_copy_path_ || !on_copy_path_(text)) {
         SetStatus("Could not copy path to the system clipboard.", true);
+        if (on_operation_notification_)
+            on_operation_notification_(NotificationType::Error, "Could not copy path.");
         return;
     }
     SetStatus("Copied path text.");
+    if (on_operation_notification_)
+        on_operation_notification_(NotificationType::Success, "Path copied.");
 }

@@ -70,6 +70,18 @@ BottomBarRowState TextltApp::CurrentBottomBarRowState() {
     return state;
 }
 
+void TextltApp::NotifySuccess(std::string message) {
+    notifications_.Success(std::move(message));
+}
+
+void TextltApp::NotifyWarning(std::string message) {
+    notifications_.Warning(std::move(message));
+}
+
+void TextltApp::NotifyError(std::string message) {
+    notifications_.Error(std::move(message));
+}
+
 ftxui::Element TextltApp::Render() {
     using namespace ftxui;
 
@@ -286,6 +298,7 @@ ftxui::Element TextltApp::Render() {
     if (unsaved_changes_dialog_.IsOpen()) {
         layers.push_back(unsaved_changes_dialog_.View()->Render() | clear_under | center);
     }
+    layers.push_back(notification_overlay_.Render(current_theme_));
 
     return dbox(std::move(layers));
 }

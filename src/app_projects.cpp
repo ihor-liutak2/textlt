@@ -167,6 +167,7 @@ void TextltApp::OpenRenameProject(const std::string& id) {
 
 void TextltApp::SubmitRenameProject() {
     if (!project_store_.Rename(rename_project_id_, project_name_, rename_project_error_)) {
+        NotifyError("Could not rename project.");
         project_name_input_->TakeFocus();
         screen_.PostEvent(ftxui::Event::Custom);
         return;
@@ -178,11 +179,13 @@ void TextltApp::SubmitRenameProject() {
     RefreshActionsSidebar();
     if (!groups_updated) {
         rename_project_error_ = "Project name saved. " + rename_project_error_;
+        NotifyWarning("Project renamed, but related groups could not be updated.");
         screen_.PostEvent(ftxui::Event::Custom);
         return;
     }
 
     active_action_ = "Renamed project: " + project.name;
+    NotifySuccess("Project renamed.");
     CloseRenameProject();
 }
 
@@ -257,6 +260,7 @@ void TextltApp::RemoveProject(const std::string& id) {
     std::string error;
     if (!project_store_.Remove(id, error)) {
         active_action_ = error;
+        NotifyError("Could not delete project.");
         screen_.PostEvent(ftxui::Event::Custom);
         return;
     }
@@ -275,7 +279,12 @@ void TextltApp::RemoveProject(const std::string& id) {
     SyncNotesProjectContext();
     SyncActionsProjectContext();
     active_action_ = "Removed project registration: " + name;
-    if (!groups_detached) active_action_ += ". " + error;
+    if (!groups_detached) {
+        active_action_ += ". " + error;
+        NotifyWarning("Project deleted, but related groups could not be detached.");
+    } else {
+        NotifySuccess("Project deleted.");
+    }
     screen_.PostEvent(ftxui::Event::Custom);
 }
 

@@ -101,12 +101,17 @@ void TextltApp::CommandFindSelection() {
 
 void TextltApp::CommandCopyFilePath() {
     const auto document = ActiveSessionPtr();
-    if (!document || !HasFilePath(*document)) return;
+    if (!document || !HasFilePath(*document)) {
+        NotifyWarning("No file path to copy.");
+        return;
+    }
 
     std::error_code error;
     const auto path = std::filesystem::absolute(document->path, error);
     active_action_ = !error && clipboard_controller_.WriteText(Utf8FromPath(path))
         ? "Copied file path to clipboard" : "Could not copy file path to the system clipboard";
+    if (active_action_ == "Copied file path to clipboard") NotifySuccess("Path copied.");
+    else NotifyError("Could not copy path.");
 }
 
 } // namespace textlt

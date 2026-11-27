@@ -219,6 +219,8 @@ add_executable(textlt
   src/irc/irc_settings.cpp
   src/modals/modal_textlt_config.cpp
   src/app.cpp
+  src/notification_manager.cpp
+  src/notification_overlay.cpp
   src/app_command_registry.cpp
   src/app_event_dispatcher.cpp
   src/app_commands.cpp
@@ -814,6 +816,29 @@ add_executable(textlt_ui_button_test
   tests/ui_button_test.cpp
 )
 
+add_executable(textlt_notification_manager_test
+  tests/notification_manager_test.cpp
+  src/notification_manager.cpp
+)
+target_include_directories(textlt_notification_manager_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+add_executable(textlt_notification_overlay_test
+  tests/notification_overlay_test.cpp
+  src/notification_manager.cpp
+  src/notification_overlay.cpp
+  src/theme.cpp
+)
+target_include_directories(textlt_notification_overlay_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+)
+target_link_libraries(textlt_notification_overlay_test PRIVATE
+  ftxui::screen
+  ftxui::dom
+  ftxui::component
+)
+
 target_include_directories(textlt_tts_audio_player_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -996,6 +1021,9 @@ add_test(NAME textlt_tts_pipeline_test COMMAND textlt_tts_pipeline_test)
 add_test(NAME textlt_piper_manager_test COMMAND textlt_piper_manager_test)
 add_test(NAME textlt_tts_audio_player_test COMMAND textlt_tts_audio_player_test)
 add_test(NAME textlt_ui_button_test COMMAND textlt_ui_button_test)
+add_test(NAME textlt_notification_manager_test COMMAND textlt_notification_manager_test)
+add_test(NAME textlt_notification_overlay_test COMMAND textlt_notification_overlay_test)
+set_tests_properties(textlt_notification_overlay_test PROPERTIES TIMEOUT 5)
 add_test(NAME textlt_remote_path_test COMMAND textlt_remote_path_test)
 add_test(NAME textlt_remote_oauth_token_store_test COMMAND textlt_remote_oauth_token_store_test)
 add_test(NAME textlt_remote_config_store_test COMMAND textlt_remote_config_store_test)

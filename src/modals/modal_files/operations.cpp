@@ -19,6 +19,8 @@ void FilesModalContent::StartDeleteOperation() {
     const std::vector<std::filesystem::path> paths = SelectedOperationPaths(error);
     if (!error.empty()) {
         SetStatus(error, true);
+        if (on_operation_notification_)
+            on_operation_notification_(NotificationType::Warning, "Select an item first.");
         return;
     }
 
@@ -85,10 +87,14 @@ void FilesModalContent::StartCopyOperation() {
     }
     if (!file_manager_->CopyItems(paths, error)) {
         SetStatus(error.empty() ? "Copy failed." : error, true);
+        if (on_operation_notification_)
+            on_operation_notification_(NotificationType::Error, "Could not prepare file copy.");
         return;
     }
     CancelPendingOperation();
     SetStatus("Copied " + std::to_string(paths.size()) + " item(s) to file clipboard.");
+    if (on_operation_notification_)
+        on_operation_notification_(NotificationType::Success, "Items ready to copy.");
 }
 
 void FilesModalContent::StartCutOperation() {
@@ -104,10 +110,14 @@ void FilesModalContent::StartCutOperation() {
     }
     if (!file_manager_->CutItems(paths, error)) {
         SetStatus(error.empty() ? "Cut failed." : error, true);
+        if (on_operation_notification_)
+            on_operation_notification_(NotificationType::Error, "Could not prepare file move.");
         return;
     }
     CancelPendingOperation();
     SetStatus("Cut " + std::to_string(paths.size()) + " item(s) to file clipboard.");
+    if (on_operation_notification_)
+        on_operation_notification_(NotificationType::Success, "Items ready to move.");
 }
 
 void FilesModalContent::StartPasteOperation() {
@@ -117,6 +127,8 @@ void FilesModalContent::StartPasteOperation() {
     }
     if (!file_manager_->CanPaste()) {
         SetStatus("File clipboard is empty.", true);
+        if (on_operation_notification_)
+            on_operation_notification_(NotificationType::Warning, "File clipboard is empty.");
         return;
     }
     const size_t count = file_manager_->ClipboardSources().size();
@@ -188,32 +200,44 @@ void FilesModalContent::ConfirmPendingOperation() {
         case PendingFileOperation::CreateDirectoryItem: {
             if (!FileManager::IsPlainName(pending_operation_input_value_)) {
                 SetStatus("Enter only a directory name.", true);
+                if (on_operation_notification_)
+                    on_operation_notification_(NotificationType::Warning, "Enter a valid folder name.");
                 return;
             }
             const std::filesystem::path target = current_directory_ / FileManager::PathFromUtf8(pending_operation_input_value_);
             if (!file_manager_->CreateDirectoryItem(target, error)) {
                 SetStatus(error.empty() ? "Create directory failed." : error, true);
+                if (on_operation_notification_)
+                    on_operation_notification_(NotificationType::Error, "Could not create folder.");
                 return;
             }
             CancelPendingOperation();
             Refresh();
             SetStatus("Directory created: " + FileManager::PathToUtf8(target.filename()));
+            if (on_operation_notification_)
+                on_operation_notification_(NotificationType::Success, "Folder created.");
             if (on_files_changed_) on_files_changed_();
             break;
         }
         case PendingFileOperation::CreateFileItem: {
             if (!FileManager::IsPlainName(pending_operation_input_value_)) {
                 SetStatus("Enter only a file name.", true);
+                if (on_operation_notification_)
+                    on_operation_notification_(NotificationType::Warning, "Enter a valid file name.");
                 return;
             }
             const std::filesystem::path target = current_directory_ / FileManager::PathFromUtf8(pending_operation_input_value_);
             if (!file_manager_->CreateEmptyFile(target, error)) {
                 SetStatus(error.empty() ? "Create file failed." : error, true);
+                if (on_operation_notification_)
+                    on_operation_notification_(NotificationType::Error, "Could not create file.");
                 return;
             }
             CancelPendingOperation();
             Refresh();
             SetStatus("File created: " + FileManager::PathToUtf8(target.filename()));
+            if (on_operation_notification_)
+                on_operation_notification_(NotificationType::Success, "File created.");
             if (on_files_changed_) on_files_changed_();
             break;
         }
@@ -228,12 +252,16 @@ void FilesModalContent::ConfirmPendingOperation() {
             }
             if (!file_manager_->DeleteItems(paths, true, error)) {
                 SetStatus(error.empty() ? "Delete failed." : error, true);
+                if (on_operation_notification_)
+                    on_operation_notification_(NotificationType::Error, "Could not delete item.");
                 return;
             }
             const size_t count = paths.size();
             CancelPendingOperation();
             Refresh();
             SetStatus("Deleted " + std::to_string(count) + " item(s).");
+            if (on_operation_notification_)
+                on_operation_notification_(NotificationType::Success, "File deleted.");
             if (on_files_changed_) on_files_changed_();
             break;
         }
@@ -257,11 +285,15 @@ void FilesModalContent::ConfirmPendingOperation() {
                     destination,
                     error)) {
                 SetStatus(error.empty() ? "Rename failed." : error, true);
+                if (on_operation_notification_)
+                    on_operation_notification_(NotificationType::Error, "Could not rename item.");
                 return;
             }
             CancelPendingOperation();
             Refresh();
             SetStatus("Renamed to: " + FileManager::PathToUtf8(destination.filename()));
+            if (on_operation_notification_)
+                on_operation_notification_(NotificationType::Success, "File renamed.");
             if (on_files_changed_) on_files_changed_();
             break;
         }
@@ -269,12 +301,16 @@ void FilesModalContent::ConfirmPendingOperation() {
             std::vector<std::filesystem::path> pasted_paths;
             if (!file_manager_->PasteItems(current_directory_, pasted_paths, error)) {
                 SetStatus(error.empty() ? "Paste failed." : error, true);
+                if (on_operation_notification_)
+                    on_operation_notification_(NotificationType::Error, "Could not paste file.");
                 return;
             }
             const size_t count = pasted_paths.size();
             CancelPendingOperation();
             Refresh();
             SetStatus("Pasted " + std::to_string(count) + " item(s).");
+            if (on_operation_notification_)
+                on_operation_notification_(NotificationType::Success, "File pasted.");
             if (on_files_changed_) on_files_changed_();
             break;
         }

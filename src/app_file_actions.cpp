@@ -97,6 +97,7 @@ void TextltApp::OpenRenameSidebarItem(const std::filesystem::path& path) {
     std::error_code error;
     if (!std::filesystem::exists(path, error) || error) {
         active_action_ = error ? error.message() : "The selected item no longer exists.";
+        NotifyWarning("The selected item no longer exists.");
         screen_.PostEvent(ftxui::Event::Custom);
         return;
     }
@@ -115,24 +116,33 @@ void TextltApp::SubmitRenameSidebarItem() {
     if (sidebar_item_operation_path_.empty()) return;
     if (!FileManager::IsPlainName(sidebar_item_name_)) {
         sidebar_item_operation_error_ = "Enter a valid file or folder name.";
+        NotifyWarning("Enter a valid file or folder name.");
         sidebar_item_name_input_->TakeFocus();
         screen_.PostEvent(ftxui::Event::Custom);
         return;
     }
     std::filesystem::path destination;
     std::string error;
+    std::error_code type_error;
+    const bool was_directory =
+        std::filesystem::is_directory(sidebar_item_operation_path_, type_error);
     if (!file_manager_.RenameItem(
             sidebar_item_operation_path_, sidebar_item_name_, destination, error)) {
         sidebar_item_operation_error_ = error.empty() ? "Rename failed." : error;
+        NotifyError("Could not rename item.");
         sidebar_item_name_input_->TakeFocus();
         screen_.PostEvent(ftxui::Event::Custom);
         return;
     }
-    if (document_file_controller_.IsFavorite(sidebar_item_operation_path_)) {
+    const bool was_favorite =
+        document_file_controller_.IsFavorite(sidebar_item_operation_path_);
+    if (was_favorite) {
         document_file_controller_.RemoveFavorite(sidebar_item_operation_path_);
         document_file_controller_.AddFavorite(destination);
     }
     active_action_ = "Renamed to " + FileManager::PathToUtf8(destination.filename());
+    NotifySuccess(was_favorite ? "Favorite renamed."
+        : was_directory ? "Folder renamed." : "File renamed.");
     sidebar_item_operation_path_.clear();
     sidebar_item_operation_error_.clear();
     SetActiveLayer(UiLayer::Main);
@@ -156,6 +166,7 @@ void TextltApp::RequestDeleteSidebarItem(const std::filesystem::path& path) {
     std::error_code error;
     if (!std::filesystem::exists(path, error) || error) {
         active_action_ = error ? error.message() : "The selected item no longer exists.";
+        NotifyWarning("The selected item no longer exists.");
         screen_.PostEvent(ftxui::Event::Custom);
         return;
     }
@@ -213,9 +224,12 @@ bool TextltApp::HandleDeleteSidebarItemEvent(ftxui::Event event) {
 void TextltApp::DeleteSidebarItem() {
     const std::filesystem::path path = sidebar_item_operation_path_;
     if (path.empty()) return;
+    std::error_code type_error;
+    const bool was_directory = std::filesystem::is_directory(path, type_error);
     std::string error;
     if (!file_manager_.DeleteItems({path}, true, error)) {
         sidebar_item_operation_error_ = error.empty() ? "Delete failed." : error;
+        NotifyError("Could not delete item.");
         screen_.PostEvent(ftxui::Event::Custom);
         return;
     }
@@ -227,6 +241,7 @@ void TextltApp::DeleteSidebarItem() {
     UpdateFileMenuLabels();
     git_manager_.Invalidate();
     active_action_ = "Deleted " + FileManager::PathToUtf8(path.filename());
+    NotifySuccess(was_directory ? "Folder deleted." : "File deleted.");
     FocusSidebar();
     screen_.PostEvent(ftxui::Event::Custom);
 }

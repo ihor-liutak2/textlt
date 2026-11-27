@@ -322,6 +322,7 @@ void TextltApp::ToggleActiveFavorite() {
     const auto result = document_file_controller_.ToggleActiveFavorite();
     if (result.status == DocumentFileController::FavoriteToggleStatus::NeedsSave) {
         active_action_ = "Save the file before adding it to favorites";
+        NotifyWarning("Save the file before adding it to favorites.");
         CloseDropdown();
         screen_.PostEvent(ftxui::Event::Custom);
         return;
@@ -329,8 +330,10 @@ void TextltApp::ToggleActiveFavorite() {
 
     if (result.status == DocumentFileController::FavoriteToggleStatus::Removed) {
         active_action_ = "Removed favorite " + result.path;
+        NotifySuccess("Removed from favorites.");
     } else {
         active_action_ = "Added favorite " + result.path;
+        NotifySuccess("Added to favorites.");
     }
 
     UpdateFileMenuLabels();
@@ -343,10 +346,13 @@ void TextltApp::AddActiveFavoriteFromSidebar() {
     const auto result = document_file_controller_.AddActiveFavorite();
     if (result.status == DocumentFileController::FavoriteToggleStatus::NeedsSave) {
         active_action_ = "Save the file before adding it to favorites";
+        NotifyWarning("Save the file before adding it to favorites.");
     } else if (result.status == DocumentFileController::FavoriteToggleStatus::AlreadyFavorite) {
         active_action_ = "Already favorite " + result.path;
+        NotifyWarning("Already in favorites.");
     } else {
         active_action_ = "Added favorite " + result.path;
+        NotifySuccess("Added to favorites.");
     }
 
     UpdateFileMenuLabels();

@@ -65,6 +65,8 @@
 #include "find_replace/find_replace_panel.hpp"
 #include "find_replace/notes_find_target.hpp"
 #include "project_store.hpp"
+#include "notification_manager.hpp"
+#include "notification_overlay.hpp"
 
 namespace textlt {
 
@@ -77,6 +79,7 @@ public:
     TextltApp();
     explicit TextltApp(const std::vector<std::string>& files_to_open);
     void Run();
+    NotificationManager& Notifications() { return notifications_; }
 
 private:
     enum class NavigationPopupMode {
@@ -319,6 +322,9 @@ private:
     void SyncActionsProjectContext();
     void ToggleOpenFilesAndFolder();
     void CopySidebarSelectedPath();
+    void NotifySuccess(std::string message);
+    void NotifyWarning(std::string message);
+    void NotifyError(std::string message);
     void InitializeProjects();
     void SyncNotesProjectContext();
     std::vector<SidebarPanel::ProjectEntry> SidebarProjects() const;
@@ -452,6 +458,8 @@ private:
     Theme current_theme_;
     ContextMenuComponent editor_context_menu_;
     ftxui::App screen_;
+    NotificationManager notifications_;
+    NotificationOverlay notification_overlay_;
     AppEventDispatcher app_event_dispatcher_;
     GitManager git_manager_;
     FileManager file_manager_;

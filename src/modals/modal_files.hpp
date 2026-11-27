@@ -17,6 +17,7 @@
 #include "file_manager.hpp"
 #include "modal_interface.hpp"
 #include "modal_window.hpp"
+#include "notification_manager.hpp"
 #include "theme.hpp"
 #include "ui_button.hpp"
 #include "ui_selectable_input.hpp"
@@ -49,6 +50,8 @@ public:
         std::string& error)>;
     using CloseCallback = std::function<void()>;
     using FilesChangedCallback = std::function<void()>;
+    using OperationNotificationCallback =
+        std::function<void(NotificationType, std::string)>;
 
     FilesModalContent(
         const Theme* theme,
@@ -73,6 +76,9 @@ public:
     std::string GetFooterText() const override { return {}; }
 
     void SetTheme(const Theme* theme) { theme_ = theme; }
+    void SetOperationNotificationCallback(OperationNotificationCallback callback) {
+        on_operation_notification_ = std::move(callback);
+    }
     void Open(FilesModalMode mode,
               const std::filesystem::path& start_path,
               std::string suggested_file_name);
@@ -189,6 +195,7 @@ private:
     ConfirmPathCallback on_confirm_path_;
     CloseCallback on_close_;
     FilesChangedCallback on_files_changed_;
+    OperationNotificationCallback on_operation_notification_;
 
     FilesModalMode mode_ = FilesModalMode::None;
     std::filesystem::path current_directory_;
@@ -267,6 +274,10 @@ public:
     void Close();
     bool IsOpen() const;
     bool OnEvent(ftxui::Event event);
+    void SetOperationNotificationCallback(
+        FilesModalContent::OperationNotificationCallback callback) {
+        content_->SetOperationNotificationCallback(std::move(callback));
+    }
 
 private:
     void RebuildFooterButtons();

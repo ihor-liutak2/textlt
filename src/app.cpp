@@ -83,6 +83,7 @@ TextltApp::TextltApp()
       current_theme_(ResolveConfiguredTheme(themes_, editor_config_)),
       editor_context_menu_(current_theme_, [this](const std::string& command) { RunCommand(command); }),
       screen_(ftxui::App::Fullscreen()),
+      notification_overlay_(notifications_, screen_),
       app_event_dispatcher_(*this),
       file_manager_(),
       document_workspace_(),
@@ -98,7 +99,10 @@ TextltApp::TextltApp()
           &git_manager_,
           [this] { return document_file_controller_.FavoriteFilePaths(); },
           [this](const std::filesystem::path& path) {
-              document_file_controller_.RemoveFavorite(path);
+              if (document_file_controller_.RemoveFavorite(path))
+                  NotifySuccess("Removed from favorites.");
+              else
+                  NotifyWarning("Favorite was not found.");
               UpdateFileMenuLabels();
               active_action_ = "Removed favorite " + Utf8FromPath(path);
               screen_.PostEvent(ftxui::Event::Custom);
@@ -108,11 +112,16 @@ TextltApp::TextltApp()
           [this](const std::filesystem::path& path) {
               if (path.empty()) {
                   active_action_ = "No Project item selected to copy";
+                  NotifyWarning("Select a path to copy.");
               } else {
                   const std::string path_text = FileManager::PathToUtf8(path);
-                  active_action_ = clipboard_controller_.WriteText(path_text)
-                      ? "Copied path: " + path_text
-                      : "Could not copy path to the system clipboard";
+                  if (clipboard_controller_.WriteText(path_text)) {
+                      active_action_ = "Copied path: " + path_text;
+                      NotifySuccess("Path copied.");
+                  } else {
+                      active_action_ = "Could not copy path to the system clipboard";
+                      NotifyError("Could not copy path.");
+                  }
               }
               screen_.PostEvent(ftxui::Event::Custom);
           },
@@ -164,14 +173,22 @@ TextltApp::TextltApp()
                std::string error;
                switch (command) {
                    case SidebarPanel::ContextCommand::Copy:
-                       if (file_manager_.CopyItems({path}, error))
+                       if (file_manager_.CopyItems({path}, error)) {
                            active_action_ = "Copied " + Utf8FromPath(path.filename());
-                       else active_action_ = error;
+                           NotifySuccess("Items ready to copy.");
+                       } else {
+                           active_action_ = error;
+                           NotifyError("Could not prepare file copy.");
+                       }
                        break;
                    case SidebarPanel::ContextCommand::Cut:
-                       if (file_manager_.CutItems({path}, error))
+                       if (file_manager_.CutItems({path}, error)) {
                            active_action_ = "Cut " + Utf8FromPath(path.filename());
-                       else active_action_ = error;
+                           NotifySuccess("Items ready to move.");
+                       } else {
+                           active_action_ = error;
+                           NotifyError("Could not prepare file move.");
+                       }
                        break;
                    case SidebarPanel::ContextCommand::Paste: {
                        std::error_code fs_error;
@@ -180,9 +197,13 @@ TextltApp::TextltApp()
                        std::vector<std::filesystem::path> pasted;
                        if (file_manager_.PasteItems(destination, pasted, error)) {
                            active_action_ = "Pasted " + std::to_string(pasted.size()) + " item(s)";
+                           NotifySuccess(pasted.size() == 1 ? "File pasted." : "Items pasted.");
                            if (sidebar) sidebar->Refresh();
                            git_manager_.Invalidate();
-                       } else active_action_ = error;
+                       } else {
+                           active_action_ = error;
+                           NotifyError("Could not paste file.");
+                       }
                        break;
                    }
                    case SidebarPanel::ContextCommand::Rename:
@@ -190,23 +211,34 @@ TextltApp::TextltApp()
                        return;
                    case SidebarPanel::ContextCommand::CopyPath: {
                        const std::string path_text = FileManager::PathToUtf8(path);
-                       active_action_ = clipboard_controller_.WriteText(path_text)
-                           ? "Copied path: " + path_text
-                           : "Could not copy path to the system clipboard";
+                       if (clipboard_controller_.WriteText(path_text)) {
+                           active_action_ = "Copied path: " + path_text;
+                           NotifySuccess("Path copied.");
+                       } else {
+                           active_action_ = "Could not copy path to the system clipboard";
+                           NotifyError("Could not copy path.");
+                       }
                        break;
                    }
                    case SidebarPanel::ContextCommand::Delete:
                        RequestDeleteSidebarItem(path);
                        return;
                    case SidebarPanel::ContextCommand::RemoveFavorite:
-                       document_file_controller_.RemoveFavorite(path);
+                       if (document_file_controller_.RemoveFavorite(path))
+                           NotifySuccess("Removed from favorites.");
+                       else
+                           NotifyWarning("Favorite was not found.");
                        UpdateFileMenuLabels();
                        active_action_ = "Removed favorite " + Utf8FromPath(path);
                        break;
                    case SidebarPanel::ContextCommand::AddFavorite:
-                       active_action_ = document_file_controller_.AddFavorite(path)
-                           ? "Added favorite " + Utf8FromPath(path)
-                           : "Already in Favorites";
+                       if (document_file_controller_.AddFavorite(path)) {
+                           active_action_ = "Added favorite " + Utf8FromPath(path);
+                           NotifySuccess("Added to favorites.");
+                       } else {
+                           active_action_ = "Already in Favorites";
+                           NotifyWarning("Already in favorites.");
+                       }
                        UpdateFileMenuLabels();
                        break;
                    case SidebarPanel::ContextCommand::SendTo:
@@ -464,6 +496,15 @@ TextltApp::TextltApp()
           [this] { SavePendingChanges(); },
           [this] { FinishPendingClose(); },
           [this] { CancelUnsavedChanges(); }) {
+    notifications_.SetOnChanged([this] { notification_overlay_.StateChanged(); });
+    files_modal_.SetOperationNotificationCallback(
+        [this](NotificationType type, std::string message) {
+            switch (type) {
+                case NotificationType::Success: NotifySuccess(std::move(message)); break;
+                case NotificationType::Warning: NotifyWarning(std::move(message)); break;
+                case NotificationType::Error: NotifyError(std::move(message)); break;
+            }
+        });
     menu_bar_ = ftxui::Make<MenuBarComponent>(
         [this](int menu_index, int item_index) {
             this->RunDropdownAction(menu_index, item_index);
@@ -828,6 +869,7 @@ void TextltApp::Run() {
     screen_.ForceHandleCtrlC(false);
     BracketedPasteModeGuard bracketed_paste_mode_guard;
     screen_.Loop(global_shortcuts_);
+    notification_overlay_.Stop();
     connect_workspace_->Stop();
     if (notes_workspace_component_) {
         std::string error;

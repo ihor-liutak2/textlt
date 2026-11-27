@@ -59,6 +59,12 @@ bool AppEventDispatcher::Handle(ftxui::Event event) {
         return true;
     }
 
+    // The toast is a non-focusable visual layer. Intercept only mouse events
+    // inside its reflected bounds; all other input follows normal routing.
+    if (app_.notification_overlay_.HandleEvent(event)) {
+        return true;
+    }
+
     if (app_.ActiveLayer() != TextltApp::UiLayer::Main) {
         return false;
     }
@@ -391,6 +397,11 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
     }
 
     if (HandleEditorEvent(event)) {
+        return true;
+    }
+
+    if (event == ftxui::Event::Escape &&
+        app_.notification_overlay_.DismissNewest()) {
         return true;
     }
 
