@@ -6,7 +6,7 @@ if(POLICY CMP0091)
   cmake_policy(SET CMP0091 NEW)
 endif()
 
-project(textlt VERSION 1.1.0 LANGUAGES C CXX)
+project(textlt VERSION 1.1.1 LANGUAGES C CXX)
 
 include(GNUInstallDirs)
 
@@ -923,10 +923,12 @@ add_test(NAME textlt_telegram_provider_test COMMAND textlt_telegram_provider_tes
 add_test(NAME textlt_editor_context_menu_test COMMAND textlt_editor_context_menu_test)
 add_test(NAME textlt_open_files_bar_test COMMAND textlt_open_files_bar_test)
 if(UNIX)
+  # Python is an optional test-only dependency; it is never installed or
+  # included in release packages.
   find_package(Python3 QUIET COMPONENTS Interpreter)
   if(Python3_Interpreter_FOUND)
     add_test(NAME textlt_open_files_bar_pty_test
-      COMMAND ${Python3_EXECUTABLE}
+      COMMAND ${Python3_EXECUTABLE} -B
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/open_files_bar_pty_test.py $<TARGET_FILE:textlt>)
     set_tests_properties(textlt_open_files_bar_pty_test PROPERTIES TIMEOUT 60)
     set(pty_scenarios
@@ -941,7 +943,7 @@ if(UNIX)
     foreach(scenario IN LISTS pty_scenarios)
       set(test_name textlt_editor_context_menu_pty_${scenario}_test)
       add_test(NAME ${test_name}
-        COMMAND ${Python3_EXECUTABLE}
+        COMMAND ${Python3_EXECUTABLE} -B
           ${CMAKE_CURRENT_SOURCE_DIR}/tests/editor_context_menu_pty_test.py
           $<TARGET_FILE:textlt> --scenario ${scenario})
     endforeach()
@@ -956,7 +958,7 @@ if(UNIX)
       textlt_editor_context_menu_pty_osc52_multiline_utf8_test
       PROPERTIES TIMEOUT 20)
     add_test(NAME textlt_connect_workspace_pty_test
-      COMMAND ${Python3_EXECUTABLE}
+      COMMAND ${Python3_EXECUTABLE} -B
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/connect_workspace_pty_test.py
         $<TARGET_FILE:textlt>)
     set_tests_properties(textlt_connect_workspace_pty_test PROPERTIES TIMEOUT 60)

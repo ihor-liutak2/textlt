@@ -44,6 +44,15 @@ jobs:
           test -f docs/install-textlt-linux.sh
           test -f docs/install-textlt-windows.ps1
           test -f docs/install-textlt-macos.sh
+          test -f "docs/releases/$GITHUB_REF_NAME.md"
+
+          grep -Fq 'textlt-linux-x64.tar.gz' docs/install-textlt-linux.sh
+          grep -Fq 'textlt-windows-x64.zip' docs/install-textlt-windows.ps1
+          grep -Fq 'textlt-macos-arm64.tar.gz' docs/install-textlt-macos.sh
+          grep -Fq 'textlt-linux-x64.tar.gz' .github/workflows/release.yml
+          grep -Fq 'TextLT-x86_64.AppImage' .github/workflows/release.yml
+          grep -Fq 'textlt-windows-x64.zip' .github/workflows/release.yml
+          grep -Fq 'textlt-macos-arm64.tar.gz' .github/workflows/release.yml
 
   build-linux:
     name: Build Linux x64
@@ -374,4 +383,4 @@ jobs:
       packages: write
     uses: ./.github/workflows/docker.yml
     with:
-      publish: true         
+      publish: true

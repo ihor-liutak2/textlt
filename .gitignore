@@ -1,6 +1,8 @@
 # CMake build artifacts
 build/
 CMakeUserPresets.json
+__pycache__/
+*.py[cod]
 
 # IDE spaces
 .vscode/

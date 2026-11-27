@@ -485,7 +485,7 @@ Installing or upgrading replaces the bundled application and resources. Your
 configuration, Connect identities and pairings, and installed Piper/TTS voices
 are preserved.
 
-See the [v1.1.0 release notes](docs/releases/v1.1.0.md) for application changes.
+See the [v1.1.1 release notes](docs/releases/v1.1.1.md) for application changes.
 
 #### Linux (Debian, Ubuntu, Fedora, Arch, and others)
 
@@ -498,7 +498,7 @@ curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-linux.sh | bash
 Or install a specific version:
 
 ```bash
-curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-linux.sh | bash -s -- v1.1.0
+curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-linux.sh | bash -s -- v1.1.1
 ```
 
 After installing, start the editor from any terminal with:
@@ -540,7 +540,7 @@ irm https://ihor-liutak2.github.io/textlt/install-textlt-windows.ps1 | iex
 Or install a specific version:
 
 ```powershell
-$env:TEXTLT_VERSION = "v1.1.0"; irm https://ihor-liutak2.github.io/textlt/install-textlt-windows.ps1 | iex
+$env:TEXTLT_VERSION = "v1.1.1"; irm https://ihor-liutak2.github.io/textlt/install-textlt-windows.ps1 | iex
 ```
 
 Open a new PowerShell window after installing so Windows reloads `PATH`, then start the editor with:
@@ -573,7 +573,7 @@ curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-macos.sh | bash
 Or install a specific version:
 
 ```bash
-curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-macos.sh | bash -s -- v1.1.0
+curl -fsSL https://ihor-liutak2.github.io/textlt/install-textlt-macos.sh | bash -s -- v1.1.1
 ```
 
 After installing, start the editor from any terminal with:
