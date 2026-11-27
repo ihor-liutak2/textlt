@@ -125,7 +125,7 @@ ftxui::Element TextltApp::Render() {
         : show_sidebar
         ? hbox({
               sidebar_panel_->Render() | yflex | size(WIDTH, EQUAL, 28),
-              text("  "),
+              text("    "),
               editor_workspace | xflex,
           })
         : hbox({

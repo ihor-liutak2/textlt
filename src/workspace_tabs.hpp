@@ -28,7 +28,11 @@ public:
         constexpr std::array labels{" Text ", " Notes ", " Actions ", " Connect "};
         ftxui::Elements tabs;
         for (std::size_t index = 0; index < labels.size(); ++index) {
-            auto tab = ftxui::text(labels[index]);
+            auto tab = ftxui::hbox({
+                ftxui::text(" "),
+                ftxui::text(labels[index]),
+                ftxui::text(" "),
+            });
             if (index == static_cast<std::size_t>(active_)) {
                 tab = tab | ftxui::bgcolor(theme.modal_selected_item_bg) |
                       ftxui::color(theme.modal_selected_item_fg);

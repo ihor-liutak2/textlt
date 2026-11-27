@@ -224,7 +224,13 @@ MenuBarComponent::MenuBarComponent(
     // Custom styling for top menu items
     top_menu_option.entries_option.transform = [this](const ftxui::EntryState& state) {
         const Theme& theme = theme_ ? *theme_ : FallbackTheme();
-        ftxui::Element item = ftxui::text(state.label);
+        const size_t left_padding = !menu_entries_.empty() &&
+            state.label == menu_entries_.front() ? 3 : 2;
+        ftxui::Element item = ftxui::hbox({
+            ftxui::text(std::string(left_padding, ' ')),
+            ftxui::text(state.label),
+            ftxui::text("  "),
+        });
         if (state.focused || state.active) {
             return MenuItemActiveStyle(theme, std::move(item));
         }
@@ -669,7 +675,7 @@ bool MenuBarComponent::IsCurrentSeparator(int item_index) const {
 int MenuBarComponent::DropdownX() const {
     int dropdown_x = top_menu_box_.x_min;
     for (int i = 0; i < active_dropdown_ && i < static_cast<int>(menu_entries_.size()); ++i) {
-        dropdown_x += static_cast<int>(menu_entries_[i].size()) + 1;
+        dropdown_x += static_cast<int>(menu_entries_[i].size()) + (i == 0 ? 6 : 5);
     }
     return dropdown_x;
 }

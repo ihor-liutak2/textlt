@@ -15,6 +15,12 @@ public:
     static int MenuIndex(const MenuBarComponent& component, const std::string& label) {
         return component.MenuIndex(label);
     }
+    static int DropdownX(const MenuBarComponent& component) {
+        return component.DropdownX();
+    }
+    static int TopMenuX(const MenuBarComponent& component) {
+        return component.top_menu_box_.x_min;
+    }
     static const MenuBarComponent::DropdownItem& ItemAt(
         const MenuBarComponent& component, int menu_index, int item_index) {
         return component.dropdown_items_[static_cast<size_t>(menu_index)]
@@ -58,7 +64,7 @@ void TestWorkspaceSwitcher() {
     }
     MenuBarComponent menu([](int, int) {}, WorkspaceTabs(active, callbacks), &theme);
     constexpr std::array labels{"Text", "Notes", "Actions", "Connect"};
-    constexpr std::array offsets{30, 24, 17, 8};
+    constexpr std::array offsets{37, 29, 20, 9};
     const auto click = [&](int x, int y) {
         Mouse mouse{};
         mouse.x = x;
@@ -95,30 +101,52 @@ void TestWorkspaceSwitcher() {
                    cell.foreground_color ==
                        (selected ? theme.modal_selected_item_fg : theme.menu_foreground),
                 "Only the active workspace button should have the theme selection colors.");
+            for (int padding_x : {
+                     x - 2,
+                     x + static_cast<int>(std::string(labels[index]).size()) - 1}) {
+                const auto& padding = screen.CellAt(padding_x, 1);
+                Expect(padding.background_color ==
+                           (selected ? theme.modal_selected_item_bg : theme.menu_background) &&
+                       padding.foreground_color ==
+                           (selected ? theme.modal_selected_item_fg : theme.menu_foreground),
+                    "Workspace button padding should share the button's theme styling.");
+            }
         }
         if (width == 80) {
-            Expect(row.find("File Project Edit Options") == 0 &&
+            Expect(row.find("   File     Project     Edit     Options") == 0 &&
+                       row.find("Project") > row.find("File") &&
+                       row.find("Edit") > row.find("Project") &&
+                       row.find("Options") > row.find("Edit") &&
                        row.find("│") == std::string::npos,
                 "The menus should be left-aligned and have no separators.");
         }
     };
     check_render(80);
+    menu.OpenDropdown(1);
+    Expect(MenuBarTestAccess::DropdownX(menu) - MenuBarTestAccess::TopMenuX(menu) == 10,
+        "The Project dropdown should align after the padded File menu item.");
+    menu.CloseDropdown();
+    Expect(click(8, 1) && menu.IsDropdownOpen() && menu.ActiveDropdown() == 0,
+        "The File menu's right padding should open its dropdown.");
+    menu.CloseDropdown();
     Expect(!click(80 - offsets[1], 0) && !click(80 - offsets[1], 2),
         "The blank menu rows should not activate workspace buttons.");
     for (std::size_t index = 1; index < labels.size(); ++index) {
-        Expect(click(80 - offsets[index], 1) && active == static_cast<WorkspaceMode>(index),
-            "A workspace button should activate its corresponding workspace.");
+        Expect(click(80 - offsets[index] - 2, 1) &&
+                   active == static_cast<WorkspaceMode>(index),
+            "A workspace button's left padding should activate it.");
         check_render(80);
     }
-    Expect(click(80 - offsets[3], 1) && switches == 3,
-        "Clicking the active workspace should preserve its state.");
-    check_render(32);
-    Expect(click(32 - offsets[0], 1) && active == WorkspaceMode::Documents,
+    Expect(click(80 - offsets[3] + static_cast<int>(std::string(labels[3]).size()) - 1, 1) &&
+               switches == 3,
+        "A workspace button's right padding should remain clickable.");
+    check_render(44);
+    Expect(click(44 - offsets[0] - 2, 1) && active == WorkspaceMode::Documents,
         "Workspace hitboxes should follow the buttons on resize.");
     active = WorkspaceMode::Actions;
-    check_render(32);
+    check_render(44);
     menu.ClearHitboxes();
-    Expect(!click(32 - offsets[0], 1), "A hidden menu should not receive workspace clicks.");
+    Expect(!click(44 - offsets[0], 1), "A hidden menu should not receive workspace clicks.");
 }
 
 } // namespace

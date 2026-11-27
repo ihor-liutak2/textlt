@@ -158,16 +158,15 @@ ftxui::Element SidebarPanel::OnRender() {
             ? emptyElement()
             : hbox({
                   RenderModeButton("Folder", SidebarMode::Folder, project_tab_box_),
-                  text(" "),
-                  RenderModeButton("Projects", SidebarMode::Projects, projects_tab_box_),
+                  RenderModeButton("Favs", SidebarMode::Favorites, favorites_tab_box_),
+                  RenderModeButton("Proj", SidebarMode::Projects, projects_tab_box_),
               }),
-        mode_ == SidebarMode::Actions
-            ? emptyElement()
-            : RenderModeButton("Favorites", SidebarMode::Favorites, favorites_tab_box_),
+        mode_ == SidebarMode::Actions ? emptyElement() : text(""),
         mode_ == SidebarMode::Folder
             ? text(" " + DisplayName(project_root_) + "/") | bold | color(sidebar_text)
             : emptyElement(),
         RenderActionRow(),
+        mode_ == SidebarMode::Actions ? emptyElement() : text(""),
         mode_ == SidebarMode::Actions
             ? separatorLight() | color(SidebarBorderColor(theme))
             : emptyElement(),
