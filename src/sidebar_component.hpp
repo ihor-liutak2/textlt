@@ -72,6 +72,13 @@ public:
         NewGroup, RenameGroup, DeleteGroup, NewPage, RenamePage, DeletePage,
     };
     using ActionCommandCallback = std::function<void(ActionCommand)>;
+    enum class ContextCommand {
+        Copy, Cut, Paste, Rename, CopyPath, Delete, SendTo, RemoveFavorite,
+        AddFavorite,
+        RenameProject, RemoveProject,
+    };
+    using ContextCommandCallback = std::function<void(
+        ContextCommand, const std::filesystem::path&, const std::string&)>;
 
     SidebarPanel(
         FileOpenCallback on_file_open,
@@ -93,7 +100,8 @@ public:
         ProjectIdCallback on_project_remote,
         ProjectIdCallback on_project_assign_remote,
         ProjectIdCallback on_project_edit_remote,
-        ProjectIdCallback on_project_unlink_remote);
+        ProjectIdCallback on_project_unlink_remote,
+        ContextCommandCallback on_context_command = {});
 
     ftxui::Element OnRender() override;
     bool OnEvent(ftxui::Event event) override;
@@ -190,6 +198,10 @@ private:
     bool HandleActionContextMenuEvent(ftxui::Event event);
     void OpenActionContextMenu(int entry_index, int mouse_x, int mouse_y);
     void ExecuteActionContextCommand(size_t command_index);
+    void OpenItemContextMenu(int entry_index, int mouse_x, int mouse_y);
+    void DrawItemContextMenu(ftxui::Screen& screen, const ftxui::Box& sidebar_box);
+    bool HandleItemContextMenuEvent(ftxui::Event event);
+    void ExecuteItemContextCommand(size_t command_index);
     void RebuildEntries();
     void RebuildProjectEntries();
     void RebuildProjectsEntries();
@@ -232,6 +244,7 @@ private:
     ProjectIdCallback on_project_assign_remote_;
     ProjectIdCallback on_project_edit_remote_;
     ProjectIdCallback on_project_unlink_remote_;
+    ContextCommandCallback on_context_command_;
     std::filesystem::path project_root_;
     std::filesystem::path current_path_;
     std::vector<std::filesystem::path> entry_paths_;
@@ -248,6 +261,13 @@ private:
     size_t action_context_selected_ = 0;
     int action_context_anchor_x_ = 0;
     int action_context_anchor_y_ = 0;
+    bool item_context_open_ = false;
+    size_t item_context_selected_ = 0;
+    int item_context_anchor_x_ = 0;
+    int item_context_anchor_y_ = 0;
+    std::vector<ContextCommand> item_context_commands_;
+    std::array<ftxui::Box, 9> item_context_item_boxes_{};
+    ftxui::Box item_context_box_;
     int selected_entry_ = 0;
     size_t list_scroll_offset_ = 0;
     int widest_label_ = 0;

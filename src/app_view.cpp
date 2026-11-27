@@ -1,6 +1,7 @@
 #include "app.hpp"
 
 #include "connect_workspace.hpp"
+#include "modals/delete_confirmation_popup.hpp"
 
 #include "keyboard_shortcuts.hpp"
 #include <algorithm>
@@ -172,6 +173,29 @@ ftxui::Element TextltApp::Render() {
     }
     if (ActiveLayer() == UiLayer::RemoveProject) {
         layers.push_back(remove_project_popup_->Render() | center);
+    }
+    if (ActiveLayer() == UiLayer::RenameSidebarItem) {
+        Elements rows = {
+            text(" Rename item ") | bold | color(current_theme_.modal_accent),
+            sidebar_item_name_input_->Render() |
+                borderStyled(LIGHT, current_theme_.modal_border),
+        };
+        if (!sidebar_item_operation_error_.empty()) {
+            rows.push_back(paragraph(sidebar_item_operation_error_) |
+                color(current_theme_.modal_text_color));
+        }
+        rows.push_back(hbox({
+            filler(),
+            rename_sidebar_item_button_->Render(),
+            text(" "),
+            cancel_rename_sidebar_item_button_->Render(),
+        }));
+        layers.push_back(vbox(std::move(rows)) | size(WIDTH, EQUAL, 48) |
+            borderStyled(LIGHT, current_theme_.modal_border) |
+            bgcolor(current_theme_.modal_background) | clear_under | center);
+    }
+    if (ActiveLayer() == UiLayer::DeleteSidebarItem) {
+        layers.push_back(delete_sidebar_item_popup_->Render() | center);
     }
     if (!distraction_mode && menu_bar_->IsDropdownOpen()) {
         layers.push_back(menu_bar_->RenderDropdown());
@@ -365,6 +389,8 @@ bool TextltApp::ActiveModalIsOpen() const {
         case UiLayer::AssistantSettings: return assistant_settings_modal_.IsOpen();
         case UiLayer::RenameProject: return !rename_project_id_.empty();
         case UiLayer::RemoveProject: return !remove_project_id_.empty();
+        case UiLayer::RenameSidebarItem:
+        case UiLayer::DeleteSidebarItem: return !sidebar_item_operation_path_.empty();
     }
     return false;
 }

@@ -77,6 +77,8 @@ public:
 
     const std::vector<FavoriteFileEntry>& FavoriteFiles() const;
     std::vector<std::filesystem::path> FavoriteFilePaths() const;
+    bool AddFavorite(const std::filesystem::path& path);
+    bool IsFavorite(const std::filesystem::path& path) const;
     bool RemoveFavorite(const std::filesystem::path& path);
     std::string ActiveSessionFavoritePath() const;
     bool IsActiveSessionFavorite() const;
@@ -105,8 +107,6 @@ private:
 
     void AddRestoredSession(const OpenedFileState& entry);
     void AddRecentFile(const std::filesystem::path& path);
-    bool AddFavorite(const std::filesystem::path& path);
-    bool IsFavorite(const std::filesystem::path& path) const;
     const FavoriteFileEntry* FindFavorite(const std::filesystem::path& path) const;
     bool UpdateFavoriteCursor(const std::filesystem::path& path, size_t row, size_t column);
     OpenedConfig CurrentOpenedConfig() const;

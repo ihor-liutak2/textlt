@@ -23,6 +23,7 @@
 #include "ui_selectable_input.hpp"
 #include "file_manager.hpp"
 #include "editor/document_session.hpp"
+#include "modals/delete_confirmation_popup.hpp"
 
 namespace textlt {
 
@@ -156,7 +157,80 @@ TextltApp::TextltApp()
           [this](const std::string& id) { OpenProjectRemote(id); },
           [this](const std::string& id) { AssignProjectConnection(id); },
           [this](const std::string& id) { EditProjectConnection(id); },
-          [this](const std::string& id) { UnlinkProjectConnection(id); })),
+           [this](const std::string& id) { UnlinkProjectConnection(id); },
+           [this](SidebarPanel::ContextCommand command,
+                  const std::filesystem::path& path, const std::string& project_id) {
+               auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
+               std::string error;
+               switch (command) {
+                   case SidebarPanel::ContextCommand::Copy:
+                       if (file_manager_.CopyItems({path}, error))
+                           active_action_ = "Copied " + Utf8FromPath(path.filename());
+                       else active_action_ = error;
+                       break;
+                   case SidebarPanel::ContextCommand::Cut:
+                       if (file_manager_.CutItems({path}, error))
+                           active_action_ = "Cut " + Utf8FromPath(path.filename());
+                       else active_action_ = error;
+                       break;
+                   case SidebarPanel::ContextCommand::Paste: {
+                       std::error_code fs_error;
+                       const std::filesystem::path destination =
+                           std::filesystem::is_directory(path, fs_error) ? path : path.parent_path();
+                       std::vector<std::filesystem::path> pasted;
+                       if (file_manager_.PasteItems(destination, pasted, error)) {
+                           active_action_ = "Pasted " + std::to_string(pasted.size()) + " item(s)";
+                           if (sidebar) sidebar->Refresh();
+                           git_manager_.Invalidate();
+                       } else active_action_ = error;
+                       break;
+                   }
+                   case SidebarPanel::ContextCommand::Rename:
+                       OpenRenameSidebarItem(path);
+                       return;
+                   case SidebarPanel::ContextCommand::CopyPath: {
+                       const std::string path_text = FileManager::PathToUtf8(path);
+                       active_action_ = clipboard_controller_.WriteText(path_text)
+                           ? "Copied path: " + path_text
+                           : "Could not copy path to the system clipboard";
+                       break;
+                   }
+                   case SidebarPanel::ContextCommand::Delete:
+                       RequestDeleteSidebarItem(path);
+                       return;
+                   case SidebarPanel::ContextCommand::RemoveFavorite:
+                       document_file_controller_.RemoveFavorite(path);
+                       UpdateFileMenuLabels();
+                       active_action_ = "Removed favorite " + Utf8FromPath(path);
+                       break;
+                   case SidebarPanel::ContextCommand::AddFavorite:
+                       active_action_ = document_file_controller_.AddFavorite(path)
+                           ? "Added favorite " + Utf8FromPath(path)
+                           : "Already in Favorites";
+                       UpdateFileMenuLabels();
+                       break;
+                   case SidebarPanel::ContextCommand::SendTo:
+                       if (!connect_workspace_->CanSendCurrentFile()) {
+                           ShowConnectWorkspace();
+                           active_action_ =
+                               "Select an active file-capable connection in Connect, then retry Send To";
+                       } else {
+                           ShowConnectWorkspace();
+                           if (connect_workspace_->SendFile(path, error))
+                               active_action_ = "Sending " + Utf8FromPath(path.filename()) + " via Connect";
+                           else active_action_ = error;
+                       }
+                       break;
+                   case SidebarPanel::ContextCommand::RenameProject:
+                       OpenRenameProject(project_id);
+                       return;
+                   case SidebarPanel::ContextCommand::RemoveProject:
+                       RequestRemoveProject(project_id);
+                       return;
+               }
+               if (sidebar) sidebar->Refresh();
+               screen_.PostEvent(ftxui::Event::Custom);
+           })),
       open_files_bar_(document_workspace_, current_theme_,
           [this](size_t index) {
               ActivateOpenSession(index);
@@ -635,6 +709,40 @@ TextltApp::TextltApp()
         ftxui::Renderer([this](bool) { return RenderRemoveProjectPopup(); }),
         [this](ftxui::Event event) { return HandleRemoveProjectEvent(std::move(event)); });
 
+    ftxui::InputOption sidebar_item_name_option;
+    sidebar_item_name_option.multiline = false;
+    sidebar_item_name_option.on_enter = [this] { SubmitRenameSidebarItem(); };
+    sidebar_item_name_option.transform = [this](ftxui::InputState state) {
+        return current_theme_.InputTransform(std::move(state));
+    };
+    sidebar_item_name_selection_ = std::make_shared<InputSelection>();
+    sidebar_item_name_input_ = MakeSelectableInput(
+        sidebar_item_name_, sidebar_item_name_selection_->cursor,
+        "Item name", std::move(sidebar_item_name_option),
+        sidebar_item_name_selection_);
+    rename_sidebar_item_button_ = ftxui::Button(MakePopupFlatButtonOption(
+        "Rename", [this] { SubmitRenameSidebarItem(); },
+        &current_theme_, ButtonRole::Primary));
+    cancel_rename_sidebar_item_button_ = ftxui::Button(MakePopupFlatButtonOption(
+        "Cancel", [this] { CloseRenameSidebarItem(); },
+        &current_theme_, ButtonRole::Cancel));
+    rename_sidebar_item_popup_ = ftxui::CatchEvent(
+        ftxui::Container::Vertical({
+            sidebar_item_name_input_,
+            ftxui::Container::Horizontal({
+                rename_sidebar_item_button_, cancel_rename_sidebar_item_button_}),
+        }),
+        [this](ftxui::Event event) {
+            if (event != ftxui::Event::Escape) return false;
+            CloseRenameSidebarItem();
+            return true;
+        });
+    delete_sidebar_item_popup_ = ftxui::CatchEvent(
+        ftxui::Renderer([this](bool) { return RenderDeleteSidebarItemPopup(); }),
+        [this](ftxui::Event event) {
+            return HandleDeleteSidebarItemEvent(std::move(event));
+        });
+
     // GitSettingsModal used to create its component lazily in Open(). Every
     // entry passed to Container::Tab must already be a valid, stable component.
     git_settings_modal_.Configure(
@@ -689,6 +797,8 @@ TextltApp::TextltApp()
         assistant_settings_modal_.View(),
         rename_project_popup_,
         remove_project_popup_,
+        rename_sidebar_item_popup_,
+        delete_sidebar_item_popup_,
         connect_settings_modal_.View(),
         textlt_config_modal_.View(),
         telegram_settings_modal_.View(),

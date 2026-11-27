@@ -333,10 +333,11 @@ void TextltApp::OpenFilesModal(FilesModalMode mode) {
 
 void TextltApp::CloseFilesModal() {
     files_modal_.Close();
-    FocusEditor();
+    if (sidebar_has_focus_) FocusSidebar();
+    else FocusEditor();
+    sidebar_has_focus_ = false;
     screen_.PostEvent(ftxui::Event::Custom);
 }
-
 
 void TextltApp::OpenTextProcessorsModal(bool quick) {
     if (menu_bar_) {

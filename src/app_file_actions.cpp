@@ -17,6 +17,7 @@
 #include "path_utils.hpp"
 #include "text_importer.hpp"
 #include "ftxui/component/event.hpp"
+#include "modals/delete_confirmation_popup.hpp"
 
 namespace textlt {
     
@@ -89,6 +90,145 @@ void TextltApp::OpenSidebarFile(const std::filesystem::path& path) {
         FocusEditor();
         screen_.PostEvent(ftxui::Event::Custom);
     }
+}
+
+void TextltApp::OpenRenameSidebarItem(const std::filesystem::path& path) {
+    if (path.empty()) return;
+    std::error_code error;
+    if (!std::filesystem::exists(path, error) || error) {
+        active_action_ = error ? error.message() : "The selected item no longer exists.";
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+    sidebar_item_operation_path_ = path;
+    sidebar_item_name_ = FileManager::PathToUtf8(path.filename());
+    sidebar_item_operation_error_.clear();
+    *sidebar_item_name_selection_ = {};
+    sidebar_item_name_selection_->cursor = static_cast<int>(sidebar_item_name_.size());
+    if (menu_bar_) menu_bar_->CloseDropdown();
+    SetActiveLayer(UiLayer::RenameSidebarItem);
+    sidebar_item_name_input_->TakeFocus();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::SubmitRenameSidebarItem() {
+    if (sidebar_item_operation_path_.empty()) return;
+    if (!FileManager::IsPlainName(sidebar_item_name_)) {
+        sidebar_item_operation_error_ = "Enter a valid file or folder name.";
+        sidebar_item_name_input_->TakeFocus();
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+    std::filesystem::path destination;
+    std::string error;
+    if (!file_manager_.RenameItem(
+            sidebar_item_operation_path_, sidebar_item_name_, destination, error)) {
+        sidebar_item_operation_error_ = error.empty() ? "Rename failed." : error;
+        sidebar_item_name_input_->TakeFocus();
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+    if (document_file_controller_.IsFavorite(sidebar_item_operation_path_)) {
+        document_file_controller_.RemoveFavorite(sidebar_item_operation_path_);
+        document_file_controller_.AddFavorite(destination);
+    }
+    active_action_ = "Renamed to " + FileManager::PathToUtf8(destination.filename());
+    sidebar_item_operation_path_.clear();
+    sidebar_item_operation_error_.clear();
+    SetActiveLayer(UiLayer::Main);
+    std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->Refresh();
+    UpdateFileMenuLabels();
+    git_manager_.Invalidate();
+    FocusSidebar();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::CloseRenameSidebarItem() {
+    sidebar_item_operation_path_.clear();
+    sidebar_item_operation_error_.clear();
+    SetActiveLayer(UiLayer::Main);
+    FocusSidebar();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::RequestDeleteSidebarItem(const std::filesystem::path& path) {
+    if (path.empty()) return;
+    std::error_code error;
+    if (!std::filesystem::exists(path, error) || error) {
+        active_action_ = error ? error.message() : "The selected item no longer exists.";
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+    sidebar_item_operation_path_ = path;
+    sidebar_item_operation_error_.clear();
+    delete_sidebar_item_cancel_box_ = {};
+    delete_sidebar_item_confirm_box_ = {};
+    if (menu_bar_) menu_bar_->CloseDropdown();
+    SetActiveLayer(UiLayer::DeleteSidebarItem);
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+ftxui::Element TextltApp::RenderDeleteSidebarItemPopup() {
+    if (sidebar_item_operation_path_.empty()) return ftxui::emptyElement();
+    std::error_code error;
+    const bool is_directory =
+        std::filesystem::is_directory(sidebar_item_operation_path_, error);
+    const std::string kind = is_directory ? "folder" : "file";
+    const std::string name =
+        FileManager::PathToUtf8(sidebar_item_operation_path_.filename());
+    std::string message = "Permanently delete " + kind + " \"" + name + "\"?";
+    if (is_directory) message += " Its contents will also be deleted.";
+    if (!sidebar_item_operation_error_.empty())
+        message += "\n" + sidebar_item_operation_error_;
+    return RenderDeleteConfirmationPopup(
+        current_theme_, "Delete " + kind, message,
+        delete_sidebar_item_cancel_box_, delete_sidebar_item_confirm_box_);
+}
+
+bool TextltApp::HandleDeleteSidebarItemEvent(ftxui::Event event) {
+    using namespace ftxui;
+    if (event == Event::Custom) return false;
+    const bool click = event.is_mouse() &&
+        event.mouse().button == Mouse::Left &&
+        event.mouse().motion == Mouse::Pressed;
+    const bool confirm = event == Event::Return ||
+        (click && delete_sidebar_item_confirm_box_.Contain(
+            event.mouse().x, event.mouse().y));
+    const bool cancel = event == Event::Escape ||
+        (click && delete_sidebar_item_cancel_box_.Contain(
+            event.mouse().x, event.mouse().y));
+    if (!confirm && !cancel) return true;
+
+    if (confirm) DeleteSidebarItem();
+    else {
+        sidebar_item_operation_path_.clear();
+        sidebar_item_operation_error_.clear();
+        SetActiveLayer(UiLayer::Main);
+        FocusSidebar();
+        screen_.PostEvent(Event::Custom);
+    }
+    return true;
+}
+
+void TextltApp::DeleteSidebarItem() {
+    const std::filesystem::path path = sidebar_item_operation_path_;
+    if (path.empty()) return;
+    std::string error;
+    if (!file_manager_.DeleteItems({path}, true, error)) {
+        sidebar_item_operation_error_ = error.empty() ? "Delete failed." : error;
+        screen_.PostEvent(ftxui::Event::Custom);
+        return;
+    }
+    document_file_controller_.RemoveFavorite(path);
+    sidebar_item_operation_path_.clear();
+    sidebar_item_operation_error_.clear();
+    SetActiveLayer(UiLayer::Main);
+    std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->Refresh();
+    UpdateFileMenuLabels();
+    git_manager_.Invalidate();
+    active_action_ = "Deleted " + FileManager::PathToUtf8(path.filename());
+    FocusSidebar();
+    screen_.PostEvent(ftxui::Event::Custom);
 }
 
 

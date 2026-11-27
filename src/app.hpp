@@ -115,6 +115,8 @@ private:
         AssistantSettings,
         RenameProject,
         RemoveProject,
+        RenameSidebarItem,
+        DeleteSidebarItem,
         ConnectSettings,
         TextLTConfig,
         TelegramSettings,
@@ -134,6 +136,13 @@ private:
     void CloseSearchFilesModal();
     void OpenFilesModal(FilesModalMode mode);
     void CloseFilesModal();
+    void OpenRenameSidebarItem(const std::filesystem::path& path);
+    void SubmitRenameSidebarItem();
+    void CloseRenameSidebarItem();
+    void RequestDeleteSidebarItem(const std::filesystem::path& path);
+    ftxui::Element RenderDeleteSidebarItemPopup();
+    bool HandleDeleteSidebarItemEvent(ftxui::Event event);
+    void DeleteSidebarItem();
     void OpenTextProcessorsModal(bool quick = false);
     void CloseTextProcessorsModal();
     void OpenRemoteConnectionsModal();
@@ -520,6 +529,10 @@ private:
     std::string remove_project_id_;
     std::string project_name_;
     std::string rename_project_error_;
+    std::filesystem::path sidebar_item_operation_path_;
+    std::string sidebar_item_name_;
+    std::string sidebar_item_operation_error_;
+    std::shared_ptr<InputSelection> sidebar_item_name_selection_;
     std::string active_action_ = "Ready";
     TtsHeaderButton tts_header_active_button_ = TtsHeaderButton::Open;
 
@@ -550,8 +563,15 @@ private:
     ftxui::Component cancel_rename_project_button_;
     ftxui::Component rename_project_popup_;
     ftxui::Component remove_project_popup_;
+    ftxui::Component sidebar_item_name_input_;
+    ftxui::Component rename_sidebar_item_button_;
+    ftxui::Component cancel_rename_sidebar_item_button_;
+    ftxui::Component rename_sidebar_item_popup_;
+    ftxui::Component delete_sidebar_item_popup_;
     ftxui::Box remove_project_cancel_box_;
     ftxui::Box remove_project_delete_box_;
+    ftxui::Box delete_sidebar_item_cancel_box_;
+    ftxui::Box delete_sidebar_item_confirm_box_;
     ftxui::Component renderer_;
     ftxui::Component global_shortcuts_;
 };

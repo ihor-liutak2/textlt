@@ -115,6 +115,7 @@ public:
     void RegisterContentHandler(std::unique_ptr<connect::ContentHandler> handler);
     void Share(connect::TransferMetadata metadata, connect::StructuredPayload payload);
     bool SendFile(const std::filesystem::path& path, std::string& error);
+    bool CanSendCurrentFile() { return CanSendFile(); }
 
 private:
     using PeerKey = std::pair<std::string, std::string>;

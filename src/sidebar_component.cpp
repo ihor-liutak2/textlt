@@ -147,7 +147,8 @@ SidebarPanel::SidebarPanel(
     ProjectIdCallback on_project_remote,
     ProjectIdCallback on_project_assign_remote,
     ProjectIdCallback on_project_edit_remote,
-    ProjectIdCallback on_project_unlink_remote)
+    ProjectIdCallback on_project_unlink_remote,
+    ContextCommandCallback on_context_command)
     : on_file_open_(std::move(on_file_open)),
       theme_(theme),
       git_manager_(git_manager),
@@ -168,6 +169,7 @@ SidebarPanel::SidebarPanel(
       on_project_assign_remote_(std::move(on_project_assign_remote)),
       on_project_edit_remote_(std::move(on_project_edit_remote)),
       on_project_unlink_remote_(std::move(on_project_unlink_remote)),
+      on_context_command_(std::move(on_context_command)),
       project_root_(std::filesystem::current_path()),
       current_path_(project_root_) {
     ftxui::MenuOption option = ftxui::MenuOption::Vertical();
@@ -200,11 +202,12 @@ ftxui::Element SidebarPanel::OnRender() {
         std::make_shared<EntryList>(*this, theme) | yflex,
     });
     Element rendered = panel | reflect(panel_box_);
-    if (mode_ == SidebarMode::Actions && action_context_open_) {
+    if ((mode_ == SidebarMode::Actions && action_context_open_) || item_context_open_) {
         rendered = std::make_shared<SidebarActionContextLayer>(
             std::move(rendered),
             [this](ftxui::Screen& screen, const ftxui::Box& box) {
-                DrawActionContextMenu(screen, box);
+                if (item_context_open_) DrawItemContextMenu(screen, box);
+                else DrawActionContextMenu(screen, box);
             });
     }
     return rendered;
@@ -267,6 +270,9 @@ void SidebarPanel::ClearHitboxes() {
     action_context_box_ = empty;
     action_context_item_boxes_.fill(empty);
     action_context_open_ = false;
+    item_context_open_ = false;
+    item_context_item_boxes_.fill(empty);
+    item_context_box_ = empty;
 }
 
 bool SidebarPanel::OnEvent(ftxui::Event event) {
@@ -286,6 +292,25 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
     if (mode_ == SidebarMode::Actions && action_context_open_ &&
         HandleActionContextMenuEvent(event)) {
         return true;
+    }
+    if (item_context_open_ && HandleItemContextMenuEvent(event)) return true;
+    if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Right &&
+        event.mouse().motion == ftxui::Mouse::Pressed &&
+        mode_ != SidebarMode::Actions) {
+        const int entry = EntryIndexAtMouse(event.mouse());
+        const bool project_entry = entry >= 0 && mode_ == SidebarMode::Projects &&
+            entry_kinds_[entry] == EntryKind::Project;
+        const bool file_entry = entry >= 0 &&
+            (mode_ == SidebarMode::Folder || mode_ == SidebarMode::Favorites) &&
+            (entry_kinds_[entry] == EntryKind::Directory ||
+             entry_kinds_[entry] == EntryKind::File ||
+             entry_kinds_[entry] == EntryKind::FavoriteFile) &&
+            !(mode_ == SidebarMode::Folder &&
+              entry_paths_[entry] == current_path_.parent_path());
+        if (project_entry || file_entry) {
+            OpenItemContextMenu(entry, event.mouse().x, event.mouse().y);
+            return true;
+        }
     }
     if (mode_ != SidebarMode::Actions && event.is_mouse() &&
         HandleScrollbarMouse(event, event.mouse())) {
@@ -474,6 +499,7 @@ void SidebarPanel::SetMode(SidebarMode mode) {
 
     mode_ = mode;
     action_context_open_ = false;
+    item_context_open_ = false;
     action_context_item_boxes_ = {};
     selected_entry_ = 0;
     list_scroll_offset_ = 0;
@@ -482,6 +508,136 @@ void SidebarPanel::SetMode(SidebarMode mode) {
     last_clicked_entry_ = -1;
     last_click_time_ = {};
     RebuildEntries();
+}
+
+void SidebarPanel::OpenItemContextMenu(int entry_index, int mouse_x, int mouse_y) {
+    selected_entry_ = entry_index;
+    item_context_selected_ = 0;
+    item_context_anchor_x_ = mouse_x;
+    item_context_anchor_y_ = mouse_y;
+    item_context_commands_.clear();
+    if (mode_ == SidebarMode::Projects) {
+        item_context_commands_ = {
+            ContextCommand::RenameProject, ContextCommand::RemoveProject};
+    } else if (mode_ == SidebarMode::Favorites) {
+        item_context_commands_ = {
+            ContextCommand::RemoveFavorite, ContextCommand::Rename,
+            ContextCommand::CopyPath};
+    } else {
+        item_context_commands_ = {
+            ContextCommand::Copy, ContextCommand::Cut, ContextCommand::Paste,
+            ContextCommand::Rename, ContextCommand::CopyPath,
+            ContextCommand::Delete};
+        if (entry_kinds_[static_cast<size_t>(entry_index)] == EntryKind::File)
+            item_context_commands_.push_back(ContextCommand::SendTo);
+        if (mode_ == SidebarMode::Folder &&
+            entry_kinds_[static_cast<size_t>(entry_index)] == EntryKind::File) {
+            item_context_commands_.push_back(ContextCommand::AddFavorite);
+        }
+    }
+    item_context_open_ = true;
+    FocusMenu();
+}
+
+void SidebarPanel::DrawItemContextMenu(
+    ftxui::Screen& screen, const ftxui::Box& sidebar_box) {
+    using namespace ftxui;
+    if (!item_context_open_ || item_context_commands_.empty()) return;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    const auto label_for = [](ContextCommand command) {
+        switch (command) {
+            case ContextCommand::Copy: return "Copy";
+            case ContextCommand::Cut: return "Cut";
+            case ContextCommand::Paste: return "Paste";
+            case ContextCommand::Rename:
+            case ContextCommand::RenameProject: return "Rename";
+            case ContextCommand::CopyPath: return "Copy Path";
+            case ContextCommand::Delete: return "Delete";
+            case ContextCommand::RemoveProject:
+            case ContextCommand::RemoveFavorite: return "Remove";
+            case ContextCommand::SendTo: return "Send To";
+            case ContextCommand::AddFavorite: return "Add Favorite";
+        }
+        return "";
+    };
+    const int menu_width = 16;
+    const int menu_height = static_cast<int>(item_context_commands_.size()) + 2;
+    const int sidebar_width = sidebar_box.x_max - sidebar_box.x_min + 1;
+    const int sidebar_height = sidebar_box.y_max - sidebar_box.y_min + 1;
+    if (sidebar_width < menu_width || sidebar_height < menu_height) {
+        item_context_box_ = {0, -1, 0, -1};
+        item_context_item_boxes_.fill({0, -1, 0, -1});
+        return;
+    }
+    int x = item_context_anchor_x_ + 1;
+    if (x + menu_width - 1 > sidebar_box.x_max) x = item_context_anchor_x_ - menu_width;
+    x = std::clamp(x, sidebar_box.x_min, sidebar_box.x_max - menu_width + 1);
+    const int y = std::clamp(item_context_anchor_y_, sidebar_box.y_min,
+        sidebar_box.y_max - menu_height + 1);
+    item_context_box_ = {x, x + menu_width - 1, y, y + menu_height - 1};
+    item_context_item_boxes_.fill({0, -1, 0, -1});
+    Elements rows;
+    for (size_t index = 0; index < item_context_commands_.size(); ++index) {
+        item_context_item_boxes_[index] = {
+            x + 1, x + menu_width - 2,
+            y + 1 + static_cast<int>(index), y + 1 + static_cast<int>(index)};
+        Element row = hbox({
+            text(" " + std::string(label_for(item_context_commands_[index])) + " "),
+            filler()});
+        row = index == item_context_selected_
+            ? row | bgcolor(theme.modal_selected_item_bg) | color(theme.modal_selected_item_fg)
+            : row | color(theme.modal_text_color);
+        rows.push_back(std::move(row));
+    }
+    Element menu = vbox(std::move(rows)) | borderStyled(LIGHT, theme.modal_border) |
+        bgcolor(theme.menu_background) | clear_under;
+    menu->ComputeRequirement();
+    menu->SetBox(item_context_box_);
+    menu->Render(screen);
+}
+
+bool SidebarPanel::HandleItemContextMenuEvent(ftxui::Event event) {
+    if (event == ftxui::Event::Escape) {
+        item_context_open_ = false;
+        return true;
+    }
+    const int last = static_cast<int>(item_context_commands_.size()) - 1;
+    if (event == ftxui::Event::ArrowUp || event == ftxui::Event::ArrowDown) {
+        const int delta = event == ftxui::Event::ArrowDown ? 1 : -1;
+        item_context_selected_ = static_cast<size_t>(std::clamp(
+            static_cast<int>(item_context_selected_) + delta, 0, std::max(0, last)));
+        return true;
+    }
+    if (event == ftxui::Event::Return) {
+        ExecuteItemContextCommand(item_context_selected_);
+        return true;
+    }
+    if (!event.is_mouse()) return true;
+    const auto mouse = event.mouse();
+    if (mouse.button != ftxui::Mouse::Left || mouse.motion != ftxui::Mouse::Pressed)
+        return true;
+    for (size_t index = 0; index < item_context_commands_.size(); ++index) {
+        if (item_context_item_boxes_[index].Contain(mouse.x, mouse.y)) {
+            ExecuteItemContextCommand(index);
+            return true;
+        }
+    }
+    item_context_open_ = false;
+    return false;
+}
+
+void SidebarPanel::ExecuteItemContextCommand(size_t command_index) {
+    if (command_index >= item_context_commands_.size()) return;
+    const ContextCommand command = item_context_commands_[command_index];
+    const std::filesystem::path path =
+        selected_entry_ >= 0 && selected_entry_ < static_cast<int>(entry_paths_.size())
+            ? entry_paths_[static_cast<size_t>(selected_entry_)] : std::filesystem::path{};
+    const std::string id =
+        selected_entry_ >= 0 && selected_entry_ < static_cast<int>(entry_ids_.size())
+            ? entry_ids_[static_cast<size_t>(selected_entry_)] : std::string{};
+    item_context_open_ = false;
+    item_context_item_boxes_.fill({0, -1, 0, -1});
+    if (on_context_command_) on_context_command_(command, path, id);
 }
 
 void SidebarPanel::OpenSelectedEntry() {
