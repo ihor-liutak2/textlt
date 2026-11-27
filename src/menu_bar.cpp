@@ -149,6 +149,12 @@ MenuBarComponent::MenuBarComponent(
               {" Numbered List ", "notes.numbered_list"},
               {" Checklist ", "notes.checklist"},
               {" Send via Connect… ", "notes.share_connect"},
+              {" ───────────────────────── ", "", true},
+              {" Open Project Notes ", "notes.open_project_notes"},
+              {" Keep Orphan Group as General ", "notes.group_to_general"},
+              {" Relink Group to Active Project ", "notes.relink_group"},
+              {" Restore Note ", "notes.restore_selected"},
+              {" Empty Trash ", "notes.empty_trash"},
           },
           {
                {" New Group ", "actions.new_group"},

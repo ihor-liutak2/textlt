@@ -101,6 +101,25 @@ TopBarRowComponent::TopBarRowComponent(const Theme* theme, Callbacks callbacks)
         actions_move_down_button_,
     });
     Add(actions_button_container_);
+
+    notes_new_button_ = ftxui::Button(MakeCommandButtonOption(
+        "New", "notes.new", ButtonRole::Primary));
+    notes_delete_button_ = ftxui::Button(MakeCommandButtonOption(
+        "Delete", "notes.delete_selected", ButtonRole::Danger));
+    notes_new_group_button_ = ftxui::Button(MakeCommandButtonOption(
+        "New", "notes.new_group", ButtonRole::Primary));
+    notes_rename_group_button_ = ftxui::Button(MakeCommandButtonOption(
+        "Rename", "notes.rename_group", ButtonRole::Utility));
+    notes_delete_group_button_ = ftxui::Button(MakeCommandButtonOption(
+        "Delete", "notes.delete_group", ButtonRole::Danger));
+    notes_button_container_ = ftxui::Container::Horizontal({
+        notes_new_button_,
+        notes_delete_button_,
+        notes_new_group_button_,
+        notes_rename_group_button_,
+        notes_delete_group_button_,
+    });
+    Add(notes_button_container_);
 }
 
 ftxui::ButtonOption TopBarRowComponent::MakeTtsButtonOption(
@@ -176,6 +195,9 @@ TopBarRowComponent::Mode TopBarRowComponent::CurrentMode() const {
     if (callbacks_.is_actions_mode && callbacks_.is_actions_mode()) {
         return Mode::Actions;
     }
+    if (callbacks_.is_notes_mode && callbacks_.is_notes_mode()) {
+        return Mode::Notes;
+    }
     return Mode::Normal;
 }
 
@@ -185,6 +207,9 @@ ftxui::Component TopBarRowComponent::ActiveButtonContainer() const {
     }
     if (CurrentMode() == Mode::Actions) {
         return actions_button_container_;
+    }
+    if (CurrentMode() == Mode::Notes) {
+        return notes_button_container_;
     }
     return tts_button_container_;
 }
@@ -285,6 +310,24 @@ ftxui::Element TopBarRowComponent::RenderActionControls() {
     });
 }
 
+ftxui::Element TopBarRowComponent::RenderNotesControls() {
+    using namespace ftxui;
+
+    const Theme& theme = ResolveTheme(theme_);
+    return hbox({
+        text(" Notes: ") | bold | color(theme.menu_foreground),
+        notes_new_button_ ? notes_new_button_->Render() : text("[New]"),
+        text(" "),
+        notes_delete_button_ ? notes_delete_button_->Render() : text("[Delete]"),
+        text("  Groups: ") | bold | color(theme.menu_foreground),
+        notes_new_group_button_ ? notes_new_group_button_->Render() : text("[New]"),
+        text(" "),
+        notes_rename_group_button_ ? notes_rename_group_button_->Render() : text("[Rename]"),
+        text(" "),
+        notes_delete_group_button_ ? notes_delete_group_button_->Render() : text("[Delete]"),
+    });
+}
+
 ftxui::Element TopBarRowComponent::OnRender() {
     using namespace ftxui;
 
@@ -302,13 +345,15 @@ ftxui::Element TopBarRowComponent::OnRender() {
             bold |
             color(theme.menu_foreground),
         filler(),
-        CurrentMode() == Mode::Actions ? RenderActionControls() : RenderTtsControls(),
+        CurrentMode() == Mode::Actions ? RenderActionControls() :
+            CurrentMode() == Mode::Notes ? RenderNotesControls() : RenderTtsControls(),
     }) | reflect(box_);
 }
 
 bool TopBarRowComponent::Focusable() const {
     return CurrentMode() == Mode::Distraction ||
         CurrentMode() == Mode::Actions ||
+        CurrentMode() == Mode::Notes ||
         ShouldShowTtsControls();
 }
 

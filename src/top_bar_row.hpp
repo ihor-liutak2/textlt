@@ -19,6 +19,7 @@ public:
         Normal,
         Distraction,
         Actions,
+        Notes,
     };
 
     struct Callbacks {
@@ -30,6 +31,7 @@ public:
         std::function<DistractionTopBarState()> distraction_state;
         std::function<void()> open_distraction_page_popup;
         std::function<bool()> is_actions_mode;
+        std::function<bool()> is_notes_mode;
     };
 
     TopBarRowComponent(const Theme* theme, Callbacks callbacks);
@@ -68,12 +70,14 @@ private:
     ftxui::Element RenderTtsControls();
     ftxui::Element RenderDistractionControls();
     ftxui::Element RenderActionControls();
+    ftxui::Element RenderNotesControls();
 
     const Theme* theme_ = nullptr;
     Callbacks callbacks_;
     ftxui::Component tts_button_container_;
     ftxui::Component distraction_button_container_;
     ftxui::Component actions_button_container_;
+    ftxui::Component notes_button_container_;
     ftxui::Component open_tts_button_;
     ftxui::Component tts_play_button_;
     ftxui::Component tts_pause_button_;
@@ -84,6 +88,11 @@ private:
     ftxui::Component actions_delete_button_;
     ftxui::Component actions_move_up_button_;
     ftxui::Component actions_move_down_button_;
+    ftxui::Component notes_new_button_;
+    ftxui::Component notes_delete_button_;
+    ftxui::Component notes_new_group_button_;
+    ftxui::Component notes_rename_group_button_;
+    ftxui::Component notes_delete_group_button_;
     ftxui::Component distraction_prev_button_;
     ftxui::Component distraction_next_button_;
     ftxui::Component distraction_page_button_;

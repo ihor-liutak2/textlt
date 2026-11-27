@@ -168,6 +168,17 @@ void TextltApp::InitializeCommands() {
         [this] { CommandNotesImportMarkdown(); });
     add("notes.edit_selected", "Edit Note", "Notes", "", [this] { CommandNotesEditSelected(); });
     add("notes.delete_selected", "Delete Note", "Notes", "", [this] { CommandNotesDeleteSelected(); });
+    add("notes.restore_selected", "Restore Note", "Notes", "", [this] { CommandNotesRestoreSelected(); });
+    add("notes.empty_trash", "Empty Trash", "Notes", "", [this] { CommandNotesEmptyTrash(); });
+    add("notes.new_group", "New Group", "Notes", "", [this] { CommandNotesNewGroup(); });
+    add("notes.rename_group", "Rename Group", "Notes", "", [this] { CommandNotesRenameGroup(); });
+    add("notes.delete_group", "Delete Group", "Notes", "", [this] { CommandNotesDeleteGroup(); });
+    add("notes.open_project_notes", "Open Project Notes", "Notes", "",
+        [this] { CommandNotesOpenProjectNotes(); });
+    add("notes.group_to_general", "Keep Orphan Group as General", "Notes", "",
+        [this] { CommandNotesGroupToGeneral(); });
+    add("notes.relink_group", "Relink Group to Active Project", "Notes", "",
+        [this] { CommandNotesRelinkGroup(); });
     add("notes.heading_1", "Heading 1", "Notes", "", [this] { CommandNotesHeading1(); });
     add("notes.heading_2", "Heading 2", "Notes", "", [this] { CommandNotesHeading2(); });
     add("notes.heading_3", "Heading 3", "Notes", "", [this] { CommandNotesHeading3(); });

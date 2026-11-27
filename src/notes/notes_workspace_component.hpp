@@ -89,6 +89,14 @@ public:
     // Trash-aware delete used by the Notes menu: trashed notes are deleted
     // permanently, everything else is moved to Trash.
     void DeleteSelection();
+    void RestoreSelection() { TakeFocus(); RestoreSelectedNote(); }
+    void EmptyTrashSelection() { TakeFocus(); EmptyTrash(); }
+    void NewGroup() { TakeFocus(); StartCreateSection(); }
+    void RenameSelectedGroup() { TakeFocus(); StartRenameSection(); }
+    void DeleteSelectedGroup() { TakeFocus(); RequestDeleteSelectedSection(); }
+    void OpenProjectNotes();
+    bool ConvertSelectedGroupToGeneral();
+    void RelinkSelectedGroupToActiveProject();
 
     // Structured note-body search used by the shared Find/Replace sidebar.
     struct NoteSearchResult {
@@ -156,9 +164,6 @@ private:
     void RestoreSelectedNote();
     void PermanentlyDeleteSelectedNote();
     void EmptyTrash();
-    void OpenProjectNotes();
-    bool ConvertSelectedGroupToGeneral();
-    void RelinkSelectedGroupToActiveProject();
     void RequestConfirmation(ConfirmAction action, std::string title, std::string message);
     void AcceptConfirmation();
     void CloseConfirmation();
@@ -267,17 +272,6 @@ private:
     ftxui::Box sidebar_notes_tab_box_;
     ftxui::Box sidebar_content_tab_box_;
     ftxui::Box sidebar_content_box_;
-    ftxui::Box footer_new_note_box_;
-    ftxui::Box footer_delete_note_box_;
-    ftxui::Box footer_restore_note_box_;
-    ftxui::Box footer_permanent_delete_box_;
-    ftxui::Box footer_empty_trash_box_;
-    ftxui::Box footer_new_group_box_;
-    ftxui::Box footer_rename_group_box_;
-    ftxui::Box footer_delete_group_box_;
-    ftxui::Box footer_project_notes_box_;
-    ftxui::Box footer_orphan_general_box_;
-    ftxui::Box footer_orphan_relink_box_;
     ftxui::Box confirm_yes_box_;
     ftxui::Box confirm_cancel_box_;
     std::vector<ftxui::Box> group_picker_boxes_;

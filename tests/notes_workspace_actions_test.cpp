@@ -109,10 +109,10 @@ public:
         component.sort_box_ = stale;
     }
     static void SetStaleSidebarHotspot(NotesWorkspaceComponent& component) {
-        component.footer_new_note_box_ = ftxui::Box{10, 20, 10, 10};
+        component.sidebar_notes_tab_box_ = ftxui::Box{10, 20, 10, 10};
     }
     static void ClearStaleSidebarHotspot(NotesWorkspaceComponent& component) {
-        component.footer_new_note_box_ = ftxui::Box{1, 0, 1, 0};
+        component.sidebar_notes_tab_box_ = ftxui::Box{1, 0, 1, 0};
     }
     static bool Click(NotesWorkspaceComponent& component, int x, int y) {
         ftxui::Mouse mouse;

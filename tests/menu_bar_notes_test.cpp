@@ -226,6 +226,12 @@ int main() {
         "The Notes menu should expose Heading 2.");
     Expect(menu_bar.CommandIdAt(notes_index, 7) == "notes.heading_3",
         "The Notes menu should expose Heading 3.");
+    Expect(menu_bar.CommandIdAt(notes_index, 15) == "notes.open_project_notes",
+        "The Notes menu should expose the project-notes action moved from the sidebar.");
+    Expect(menu_bar.CommandIdAt(notes_index, 16) == "notes.group_to_general",
+        "The Notes menu should expose the orphan-group action moved from the sidebar.");
+    Expect(menu_bar.CommandIdAt(notes_index, 17) == "notes.relink_group",
+        "The Notes menu should expose the relink action moved from the sidebar.");
 
     menu_bar.OpenDropdown(notes_index);
     Expect(menu_bar.IsDropdownOpen(), "The Notes dropdown did not open.");

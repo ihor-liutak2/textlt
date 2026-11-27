@@ -396,6 +396,14 @@ private:
     void CommandNotesImportMarkdown();
     void CommandNotesEditSelected();
     void CommandNotesDeleteSelected();
+    void CommandNotesRestoreSelected();
+    void CommandNotesEmptyTrash();
+    void CommandNotesNewGroup();
+    void CommandNotesRenameGroup();
+    void CommandNotesDeleteGroup();
+    void CommandNotesOpenProjectNotes();
+    void CommandNotesGroupToGeneral();
+    void CommandNotesRelinkGroup();
     void CommandNotesHeading1();
     void CommandNotesHeading2();
     void CommandNotesHeading3();

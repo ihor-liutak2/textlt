@@ -154,17 +154,6 @@ void NotesWorkspaceComponent::SetSidebarVisible(bool visible) {
     sidebar_notes_tab_box_ = empty_box;
     sidebar_content_tab_box_ = empty_box;
     sidebar_content_box_ = empty_box;
-    footer_new_note_box_ = empty_box;
-    footer_delete_note_box_ = empty_box;
-    footer_restore_note_box_ = empty_box;
-    footer_permanent_delete_box_ = empty_box;
-    footer_empty_trash_box_ = empty_box;
-    footer_new_group_box_ = empty_box;
-    footer_rename_group_box_ = empty_box;
-    footer_delete_group_box_ = empty_box;
-    footer_project_notes_box_ = empty_box;
-    footer_orphan_general_box_ = empty_box;
-    footer_orphan_relink_box_ = empty_box;
     sidebar_row_boxes_.clear();
 }
 
@@ -580,6 +569,7 @@ void NotesWorkspaceComponent::DeleteSelectedSection() {
 }
 
 void NotesWorkspaceComponent::OpenProjectNotes() {
+    TakeFocus();
     if (!project_context_) {
         Notify("No active project");
         return;
@@ -601,6 +591,7 @@ void NotesWorkspaceComponent::OpenProjectNotes() {
 }
 
 bool NotesWorkspaceComponent::ConvertSelectedGroupToGeneral() {
+    TakeFocus();
     if (selected_sidebar_ < 0 || selected_sidebar_ >= static_cast<int>(sidebar_entries_.size())) return false;
     const SidebarEntry entry = sidebar_entries_[selected_sidebar_];
     if (entry.kind != SidebarEntryKind::Section || !entry.orphaned) return false;
@@ -619,6 +610,7 @@ bool NotesWorkspaceComponent::ConvertSelectedGroupToGeneral() {
 }
 
 void NotesWorkspaceComponent::RelinkSelectedGroupToActiveProject() {
+    TakeFocus();
     if (!project_context_) {
         Notify("No active project");
         return;
@@ -799,6 +791,7 @@ void NotesWorkspaceComponent::FinishCreateSection() {
 }
 
 void NotesWorkspaceComponent::NewNote() {
+    TakeFocus();
     NoteDocument note = MakeNewNote(repository_.DeviceId());
     if (!selected_section_id_.empty() && !trash_selected_) note.section_id = selected_section_id_;
     repository_.Notes().insert(repository_.Notes().begin(), std::move(note)); active_note_id_ = repository_.Notes().front().id;
@@ -850,6 +843,7 @@ bool NotesWorkspaceComponent::ImportNoteTo(std::string title, std::vector<NoteBl
 }
 
 void NotesWorkspaceComponent::EditSelectedNote() {
+    TakeFocus();
     if (editing_) return;
     if (trash_selected_) {
         Notify("Restore the note before editing");
@@ -865,6 +859,7 @@ void NotesWorkspaceComponent::EditSelectedNote() {
 }
 
 void NotesWorkspaceComponent::DeleteSelection() {
+    TakeFocus();
     if (trash_selected_ && !editing_) {
         PermanentlyDeleteSelectedNote();
     } else {
@@ -1314,20 +1309,6 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
             if (sidebar_content_selected_ && sidebar_box_.Contain(mouse.x, mouse.y)) {
                 return true;
             }
-            if (footer_new_note_box_.Contain(mouse.x, mouse.y)) { NewNote(); return true; }
-            if (footer_delete_note_box_.Contain(mouse.x, mouse.y)) { DeleteSelectedNote(); return true; }
-            if (footer_restore_note_box_.Contain(mouse.x, mouse.y)) { RestoreSelectedNote(); return true; }
-            if (footer_permanent_delete_box_.Contain(mouse.x, mouse.y)) { PermanentlyDeleteSelectedNote(); return true; }
-            if (footer_empty_trash_box_.Contain(mouse.x, mouse.y)) { EmptyTrash(); return true; }
-            if (footer_new_group_box_.Contain(mouse.x, mouse.y)) { StartCreateSection(); return true; }
-            if (footer_rename_group_box_.Contain(mouse.x, mouse.y)) { StartRenameSection(); return true; }
-            if (footer_delete_group_box_.Contain(mouse.x, mouse.y)) {
-                RequestDeleteSelectedSection();
-                return true;
-            }
-            if (footer_project_notes_box_.Contain(mouse.x, mouse.y)) { OpenProjectNotes(); return true; }
-            if (footer_orphan_general_box_.Contain(mouse.x, mouse.y)) { ConvertSelectedGroupToGeneral(); return true; }
-            if (footer_orphan_relink_box_.Contain(mouse.x, mouse.y)) { RelinkSelectedGroupToActiveProject(); return true; }
             for (size_t i = 0; i < sidebar_row_boxes_.size(); ++i) if (sidebar_row_boxes_[i].Contain(mouse.x, mouse.y)) { focus_ = FocusArea::Sidebar; SelectSidebarEntry(static_cast<int>(i)); return true; }
         }
         if (!editing_) {
@@ -1565,83 +1546,14 @@ ftxui::Element NotesWorkspaceComponent::RenderSidebar() {
         rows.push_back(RenderSidebarContents(theme));
         return render();
     }
-    footer_new_note_box_ = {};
-    footer_delete_note_box_ = {};
-    footer_restore_note_box_ = {};
-    footer_permanent_delete_box_ = {};
-    footer_empty_trash_box_ = {};
-    footer_new_group_box_ = {};
-    footer_rename_group_box_ = {};
-    footer_delete_group_box_ = {};
-    footer_project_notes_box_ = {};
-    footer_orphan_general_box_ = {};
-    footer_orphan_relink_box_ = {};
-    const bool can_delete_note = editing_
-        ? session_.Note() && !session_.Note()->deleted_at
-        : !trash_selected_ && !visible_notes_.empty();
-    const bool section_selected = selected_sidebar_ >= 0 &&
-        selected_sidebar_ < static_cast<int>(sidebar_entries_.size()) &&
-        sidebar_entries_[selected_sidebar_].kind == SidebarEntryKind::Section;
-    const bool project_group_selected = section_selected &&
-        sidebar_entries_[selected_sidebar_].project;
-    const bool orphaned_group_selected = section_selected &&
-        sidebar_entries_[selected_sidebar_].orphaned;
-    const bool custom_group_selected = section_selected && !project_group_selected;
-    auto footer_button = [&](const std::string& label, ButtonRole role, bool enabled, Box& box) {
-        ButtonSpec spec = ButtonSpecFromLabel(
-            label, role, ButtonVariant::Minimal, ButtonSize::Compact);
-        spec.enabled = enabled;
-        return RenderModalFlatButton(theme, spec) | reflect(box);
-    };
-    rows.push_back(text(" Notes:") | bold | color(theme.foreground));
-    if (trash_selected_ && !editing_) {
-        const bool has_trash = !visible_notes_.empty();
-        rows.push_back(hbox({
-            footer_button("Restore", ButtonRole::Success, has_trash, footer_restore_note_box_),
-            text(" "),
-            footer_button("Delete", ButtonRole::Danger, has_trash, footer_permanent_delete_box_),
-        }));
-        rows.push_back(footer_button(
-            "Empty Trash", ButtonRole::Danger, has_trash, footer_empty_trash_box_));
-    } else {
-        rows.push_back(hbox({
-            footer_button("New", ButtonRole::Primary, true, footer_new_note_box_),
-            text(" "),
-            footer_button("Delete", ButtonRole::Danger, can_delete_note, footer_delete_note_box_),
-        }));
-    }
-    rows.push_back(text(" Group:") | bold | color(theme.foreground));
-    rows.push_back(hbox({
-        footer_button("New", ButtonRole::Primary, true, footer_new_group_box_),
-        text(" "),
-        footer_button("Rename", ButtonRole::Utility, custom_group_selected, footer_rename_group_box_),
-        text(" "),
-        footer_button("Delete", ButtonRole::Danger,
-            custom_group_selected || orphaned_group_selected, footer_delete_group_box_),
-    }));
-    if (orphaned_group_selected) {
-        if (project_context_) {
-            rows.push_back(hbox({
-                footer_button("To General", ButtonRole::Utility, true, footer_orphan_general_box_),
-                text(" "),
-                footer_button("Relink", ButtonRole::Primary, true, footer_orphan_relink_box_),
-            }));
-        } else {
-            rows.push_back(footer_button(
-                "To General", ButtonRole::Utility, true, footer_orphan_general_box_));
-        }
-    }
-    if (project_context_) {
-        rows.push_back(text(" Project:") | bold | color(theme.foreground));
-        rows.push_back(hbox({
-            footer_button("Open Notes", ButtonRole::Primary, true, footer_project_notes_box_),
-        }));
-    }
-    rows.push_back(text(""));
-
     sidebar_row_boxes_.resize(sidebar_entries_.size());
     for (size_t i = 0; i < sidebar_entries_.size(); ++i) {
         const auto& entry = sidebar_entries_[i];
+        if (entry.kind == SidebarEntryKind::Section) rows.push_back(text(""));
+        if (entry.kind == SidebarEntryKind::Trash) {
+            rows.push_back(text(""));
+            rows.push_back(text(""));
+        }
         std::string label = "  ";
         if (entry.project) label += entry.orphaned ? "! " : "P ";
         label += entry.label;

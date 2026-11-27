@@ -98,6 +98,59 @@ void TextltApp::CommandNotesDeleteSelected() {
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
+void TextltApp::CommandNotesRestoreSelected() {
+    if (workspace_mode_ != WorkspaceMode::Notes) ShowNotesWorkspace();
+    auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_);
+    if (notes) notes->RestoreSelection();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::CommandNotesEmptyTrash() {
+    if (workspace_mode_ != WorkspaceMode::Notes) ShowNotesWorkspace();
+    auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_);
+    if (notes) notes->EmptyTrashSelection();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::CommandNotesNewGroup() {
+    if (workspace_mode_ != WorkspaceMode::Notes) ShowNotesWorkspace();
+    auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_);
+    if (notes) notes->NewGroup();
+}
+
+void TextltApp::CommandNotesRenameGroup() {
+    if (workspace_mode_ != WorkspaceMode::Notes) ShowNotesWorkspace();
+    auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_);
+    if (notes) notes->RenameSelectedGroup();
+}
+
+void TextltApp::CommandNotesDeleteGroup() {
+    if (workspace_mode_ != WorkspaceMode::Notes) ShowNotesWorkspace();
+    auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_);
+    if (notes) notes->DeleteSelectedGroup();
+}
+
+void TextltApp::CommandNotesOpenProjectNotes() {
+    if (workspace_mode_ != WorkspaceMode::Notes) ShowNotesWorkspace();
+    auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_);
+    if (notes) notes->OpenProjectNotes();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::CommandNotesGroupToGeneral() {
+    if (workspace_mode_ != WorkspaceMode::Notes) ShowNotesWorkspace();
+    auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_);
+    if (notes) notes->ConvertSelectedGroupToGeneral();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
+void TextltApp::CommandNotesRelinkGroup() {
+    if (workspace_mode_ != WorkspaceMode::Notes) ShowNotesWorkspace();
+    auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_);
+    if (notes) notes->RelinkSelectedGroupToActiveProject();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
+
 void TextltApp::CommandNotesHeading1() {
     if (workspace_mode_ == WorkspaceMode::Notes) std::static_pointer_cast<notes::NotesWorkspaceComponent>(notes_workspace_component_)->ToggleHeading(1);
 }

@@ -484,6 +484,7 @@ TextltApp::TextltApp()
             [this] { return CurrentDistractionTopBarState(); },
             [this] { OpenDistractionPagePanel(); },
             [this] { return workspace_mode_ == WorkspaceMode::Actions; },
+            [this] { return workspace_mode_ == WorkspaceMode::Notes; },
         });
 
     bottom_bar_row_ = ftxui::Make<BottomBarRowComponent>(
