@@ -201,6 +201,57 @@
       </div>
     </section>
 
+    <section id="docker" class="section-pad pt-0" aria-labelledby="dockerHeading">
+      <div class="container">
+        <div class="row justify-content-center text-center mb-4">
+          <div class="col-lg-8">
+            <span class="badge rounded-pill badge-soft mb-3">Docker</span>
+            <h2 id="dockerHeading" class="display-6 fw-bold">Run TextLT with Docker</h2>
+            <p class="text-secondary fs-5">Pull the latest stable image once, then copy the run command for your platform. Docker Engine or Docker Desktop must be running.</p>
+          </div>
+        </div>
+
+        <div class="install-card p-3 p-lg-4">
+          <div class="row g-4">
+            <div class="col-lg-5">
+              <div class="p-4 rounded-4 bg-black bg-opacity-25 border border-secondary-subtle h-100">
+                <span class="badge rounded-pill badge-soft mb-3">Step 1</span>
+                <h3 class="h4 mb-2">Pull the latest image</h3>
+                <p class="text-secondary mb-3">This public image is updated when a stable release is published. No registry login is needed.</p>
+                <div class="script-box">
+                  <button id="copyDockerPull" type="button" class="btn btn-sm btn-outline-accent copy-btn">Copy</button>
+                  <pre tabindex="0" aria-label="Docker pull command"><code id="dockerPullCode">docker pull --platform linux/amd64 ghcr.io/ihor-liutak2/textlt:latest</code></pre>
+                </div>
+                <p id="dockerPullCopyStatus" class="visually-hidden" role="status"></p>
+              </div>
+            </div>
+            <div class="col-lg-7">
+              <div class="p-4 rounded-4 bg-black bg-opacity-25 border border-secondary-subtle h-100">
+                <span class="badge rounded-pill badge-soft mb-3">Step 2</span>
+                <h3 class="h4 mb-2">Run TextLT</h3>
+                <p id="dockerRunDescription" class="text-secondary mb-3">Run from Linux Bash. The current directory opens in TextLT; app settings and data persist in the <code>textlt-state</code> Docker volume.</p>
+                <div class="btn-group flex-wrap mb-3" role="group" aria-label="Choose Docker host platform">
+                  <button type="button" class="btn platform-pill active" data-docker-platform="linux" aria-pressed="true" aria-controls="dockerRunCode">Linux</button>
+                  <button type="button" class="btn platform-pill" data-docker-platform="wsl" aria-pressed="false" aria-controls="dockerRunCode">WSL</button>
+                  <button type="button" class="btn platform-pill" data-docker-platform="windows" aria-pressed="false" aria-controls="dockerRunCode">Windows</button>
+                  <button type="button" class="btn platform-pill" data-docker-platform="macos" aria-pressed="false" aria-controls="dockerRunCode">macOS</button>
+                </div>
+                <div class="script-box">
+                  <button id="copyDockerRun" type="button" class="btn btn-sm btn-outline-accent copy-btn">Copy</button>
+                  <pre tabindex="0" aria-label="Docker run command"><code id="dockerRunCode">docker run --rm -it \
+  --mount "type=bind,src=$PWD,dst=/work" \
+  --mount "type=volume,src=textlt-state,dst=/state" \
+  ghcr.io/ihor-liutak2/textlt:latest</code></pre>
+                </div>
+                <p id="dockerRunCopyStatus" class="visually-hidden" role="status"></p>
+                <small class="text-secondary d-block mt-3">The container is removed on exit; your workspace and named state volume are kept.</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="registries" class="section-pad pt-0">
       <div class="container">
         <div class="row g-4 align-items-center">
@@ -269,8 +320,40 @@ bash "$INSTALLER" "$TEXTLT_VERSION"`
       }
     };
 
-    const platformButtons = document.querySelectorAll(".platform-pill");
+    const dockerRunScripts = {
+      linux: {
+        description: "Run in Linux Bash. The current directory opens at /work in TextLT.",
+        code: `docker run --rm -it \\
+  --mount "type=bind,src=$PWD,dst=/work" \\
+  --mount "type=volume,src=textlt-state,dst=/state" \\
+  ghcr.io/ihor-liutak2/textlt:latest`
+      },
+      wsl: {
+        description: "Run in your WSL distro with Docker Desktop integration enabled. This opens your WSL home; set workspace to /mnt/c/Users/YourWindowsName to work in your Windows profile.",
+        code: `workspace="$HOME"
+# To work in your Windows profile, use: workspace="/mnt/c/Users/YourWindowsName"
+docker run --rm -it \\
+  --mount "type=bind,src=$workspace,dst=/work" \\
+  --mount "type=volume,src=textlt-state,dst=/state" \\
+  ghcr.io/ihor-liutak2/textlt:latest`
+      },
+      windows: {
+        description: "Run in PowerShell with Docker Desktop running. TextLT opens a new TextLT-workspace folder in your Windows profile.",
+        code: `$workspace = Join-Path $PWD.Path "TextLT-workspace"; New-Item -ItemType Directory -Force -Path $workspace | Out-Null; docker run --rm -it --mount "type=bind,source=$workspace,target=/work" --mount "type=volume,source=textlt-state,target=/state" ghcr.io/ihor-liutak2/textlt:latest`
+      },
+      macos: {
+        description: "Run in Terminal with Docker Desktop running. The current directory opens at /work. The published image is linux/amd64 and runs under Docker Desktop emulation on Apple Silicon.",
+        code: `docker run --platform linux/amd64 --rm -it \\
+  --mount "type=bind,src=$PWD,dst=/work" \\
+  --mount "type=volume,src=textlt-state,dst=/state" \\
+  ghcr.io/ihor-liutak2/textlt:latest`
+      }
+    };
+
+    const platformButtons = document.querySelectorAll(".platform-pill[data-platform]");
     let copyFeedbackTimer;
+    let dockerPullFeedbackTimer;
+    let dockerRunFeedbackTimer;
 
     const titleEl = document.getElementById("installTitle");
     const descEl = document.getElementById("installDescription");
@@ -281,6 +364,14 @@ bash "$INSTALLER" "$TEXTLT_VERSION"`
     const installReleaseBadge = document.getElementById("installReleaseBadge");
     const releaseButton = document.getElementById("releaseButton");
     const footerReleaseLink = document.getElementById("footerReleaseLink");
+    const dockerPlatformButtons = document.querySelectorAll("[data-docker-platform]");
+    const dockerRunDescription = document.getElementById("dockerRunDescription");
+    const dockerRunCode = document.getElementById("dockerRunCode");
+    const copyDockerPullButton = document.getElementById("copyDockerPull");
+    const dockerPullCode = document.getElementById("dockerPullCode");
+    const dockerPullCopyStatus = document.getElementById("dockerPullCopyStatus");
+    const copyDockerRunButton = document.getElementById("copyDockerRun");
+    const dockerRunCopyStatus = document.getElementById("dockerRunCopyStatus");
 
     function updateReleaseLabels() {
       heroReleaseBadge.textContent = `Latest release ${release}`;
@@ -304,8 +395,24 @@ bash "$INSTALLER" "$TEXTLT_VERSION"`
       }
     }
 
+    function updateDockerRunPanel(selectedPlatform) {
+      const item = dockerRunScripts[selectedPlatform];
+      dockerRunDescription.textContent = item.description;
+      dockerRunCode.textContent = item.code;
+
+      for (const button of dockerPlatformButtons) {
+        const active = button.dataset.dockerPlatform === selectedPlatform;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+      }
+    }
+
     for (const button of platformButtons) {
       button.addEventListener("click", () => updateInstallPanel(button.dataset.platform));
+    }
+
+    for (const button of dockerPlatformButtons) {
+      button.addEventListener("click", () => updateDockerRunPanel(button.dataset.dockerPlatform));
     }
 
     copyBtn.addEventListener("click", async () => {
@@ -324,8 +431,41 @@ bash "$INSTALLER" "$TEXTLT_VERSION"`
       }, 2000);
     });
 
+    copyDockerPullButton.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(dockerPullCode.textContent);
+        copyDockerPullButton.textContent = "Copied";
+        dockerPullCopyStatus.textContent = "Docker pull command copied.";
+      } catch {
+        copyDockerPullButton.textContent = "Select + copy";
+        dockerPullCopyStatus.textContent = "Select and copy the Docker pull command manually.";
+      }
+      clearTimeout(dockerPullFeedbackTimer);
+      dockerPullFeedbackTimer = setTimeout(() => {
+        copyDockerPullButton.textContent = "Copy";
+        dockerPullCopyStatus.textContent = "";
+      }, 2000);
+    });
+
+    copyDockerRunButton.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(dockerRunCode.textContent);
+        copyDockerRunButton.textContent = "Copied";
+        dockerRunCopyStatus.textContent = "Docker run command copied.";
+      } catch {
+        copyDockerRunButton.textContent = "Select + copy";
+        dockerRunCopyStatus.textContent = "Select and copy the Docker run command manually.";
+      }
+      clearTimeout(dockerRunFeedbackTimer);
+      dockerRunFeedbackTimer = setTimeout(() => {
+        copyDockerRunButton.textContent = "Copy";
+        dockerRunCopyStatus.textContent = "";
+      }, 2000);
+    });
+
     updateReleaseLabels();
     updateInstallPanel("linux");
+    updateDockerRunPanel("linux");
 
     async function setupScreenshotBrowser() {
       const controls = document.getElementById("screenshotControls");
