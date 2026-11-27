@@ -39,7 +39,7 @@ UnsavedChangesDialog::UnsavedChangesDialog(const Theme* theme,
     modal_window_ = std::make_shared<ModalWindow>(
         content_impl_,
         theme_,
-        std::move(on_cancel));
+        on_cancel);
     modal_window_->SetBodyFrameScrolling(false);
     modal_window_->SetFooterText("Choose how to continue.");
     modal_window_->SetFooterButtons({

@@ -87,7 +87,6 @@ void TextltApp::CommandFileNew() {
     document_file_controller_.NewSession();
     CloseGitCompare();
     BindEditorComponentsToWorkspace();
-    RefreshOpenedDocumentsSidebar();
     active_action_ = "New file";
     CloseDropdown();
     FocusEditor();

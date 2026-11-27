@@ -97,6 +97,7 @@ struct Theme {
 std::vector<Theme> LoadThemesFromDirectory(const std::filesystem::path& directory);
 std::vector<Theme> LoadThemesFromConfiguredLocations();
 Theme FallbackTheme();
+ftxui::Color FileListTextColor(const Theme& theme);
 Theme FindThemeByName(const std::vector<Theme>& themes, const std::string& name);
 bool ParseThemeColor(const std::string& value, ftxui::Color& color);
 std::string ThemeColorToString(const ftxui::Color& color);

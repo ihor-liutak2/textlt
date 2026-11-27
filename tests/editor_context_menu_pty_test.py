@@ -32,7 +32,8 @@ def mouse(button, point, suffix="M"):
 class Terminal:
     def __init__(self, binary, root, path, environment):
         self.rows = []
-        self.process, self.fd = start_pty([binary, str(path)], root, environment, WIDTH, HEIGHT)
+        paths = path if isinstance(path, (list, tuple)) else [path]
+        self.process, self.fd = start_pty([binary, *map(str, paths)], root, environment, WIDTH, HEIGHT)
         try:
             self.read(timeout=5, settle=0.8)
         except BaseException:

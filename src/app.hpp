@@ -51,6 +51,7 @@
 #include "remote/modal_remote_files.hpp"
 #include "remote/remote_config_store.hpp"
 #include "sidebar_component.hpp"
+#include "open_files_bar.hpp"
 #include "top_bar_row.hpp"
 #include "bottom_bar_row.hpp"
 #include "modals/theme_dialog.hpp"
@@ -207,27 +208,27 @@ private:
     void CloseThemeDialog();
     void OpenThemeColorsModal();
     void CloseThemeColorsModal();
-    void ShowExitConfirmationDialog();
-    void CloseExitConfirmationDialog();
+    void ShowUnsavedChangesDialog(const std::string& title);
+    void CancelUnsavedChanges();
     void RequestExit();
-    void SaveAndExit();
-    void DiscardAndExit();
+    void SavePendingChanges();
+    void FinishPendingClose();
     void ActivateTopMenu();
     void SwitchEditorFocus();
     void FocusEditor();
     void FocusSidebar();
-    bool SaveFile(const std::string& path, std::string& error);
+    bool SaveFile(const std::shared_ptr<DocumentSession>& document,
+        const std::filesystem::path& path, std::string& error);
     bool OpenFile(const std::string& path, std::string& error);
     void ActivateOpenSession(size_t index);
     void AddOpenSession(std::shared_ptr<DocumentSession> doc);
     void EnsureOneOpenSession();
-    void RemoveOpenSession(size_t index);
     void CloseCurrentFile();
     void CloseAllOpenedFiles();
-    void CloseSidebarOpenedFile(size_t index);
+    void RequestCloseOpenSession(size_t index);
+    void CloseOpenSession(const std::shared_ptr<DocumentSession>& document);
     void PersistOpenedSessions();
     void RestoreOpenedSessions();
-    void RefreshOpenedDocumentsSidebar();
     std::shared_ptr<DocumentSession> ActiveSessionPtr() const;
     std::shared_ptr<EditorComponent> ActiveEditor() const;
     size_t VisibleEditorPaneCount() const;
@@ -285,7 +286,7 @@ private:
     void CloseGoToLinePanel();
     void SubmitGoToLine();
     void ToggleFileExplorer();
-    void ShowOpenedFilesSidebar();
+    void ShowOpenFileList();
     void ShowProjectSidebar();
     void ShowProjectsSidebar();
     void ShowFavoritesSidebar();
@@ -307,7 +308,7 @@ private:
     void ShowDocumentsWorkspace();
     void RefreshActionsSidebar();
     void SyncActionsProjectContext();
-    void ToggleSidebarOpenedProject();
+    void ToggleOpenFilesAndFolder();
     void CopySidebarSelectedPath();
     void InitializeProjects();
     void SyncNotesProjectContext();
@@ -465,6 +466,7 @@ private:
     ftxui::Component editor_workspace_three_;
     ftxui::Component editor_workspace_container_;
     ftxui::Component sidebar_panel_;
+    OpenFilesBar open_files_bar_;
     ftxui::Component notes_workspace_component_;
     ftxui::Component actions_workspace_component_;
     std::shared_ptr<connect_ui::ConnectWorkspace> connect_workspace_;
@@ -520,6 +522,7 @@ private:
     bool show_goto_line_bar_ = false;
     NavigationPopupMode navigation_popup_mode_ = NavigationPopupMode::GoToLine;
     bool exit_after_save_as_ = false;
+    std::shared_ptr<DocumentSession> pending_close_session_;
     WorkspaceMode workspace_mode_ = WorkspaceMode::Documents;
     int workspace_mode_index_ = static_cast<int>(WorkspaceMode::Documents);
     std::string workspace_project_id_;

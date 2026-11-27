@@ -196,6 +196,10 @@ bool AppEventDispatcher::RestoreClosedModalFocus() {
     // closed itself from one of its controls, restore the main layer before
     // handling the next event.
     if (app_.ActiveLayer() != TextltApp::UiLayer::Main && !app_.ActiveModalIsOpen()) {
+        if (app_.ActiveLayer() == TextltApp::UiLayer::Files) {
+            app_.pending_close_session_.reset();
+            app_.exit_after_save_as_ = false;
+        }
         app_.FocusEditor();
         return true;
     }
@@ -252,6 +256,11 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
         const auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(
             app_.notes_workspace_component_);
         if (notes && notes->HasOpenContextMenu() && notes->HandleContextMenuEvent(event)) return true;
+    }
+
+    if (app_.workspace_mode_ == WorkspaceMode::Documents && app_.open_files_bar_.IsFileListOpen() &&
+        app_.open_files_bar_.OnEvent(event)) {
+        return true;
     }
 
     if (app_.workspace_mode_ == WorkspaceMode::Documents) {
@@ -317,6 +326,9 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
     }
 
     if (app_.workspace_mode_ == WorkspaceMode::Documents) {
+        if (!app_.open_files_bar_.IsFileListOpen() && app_.open_files_bar_.OnEvent(event)) {
+            return true;
+        }
         if (const auto text = ClipboardController::PastedText(event)) {
             if (!app_.find_panel_focus_) {
                 auto editor = std::static_pointer_cast<EditorComponent>(app_.text_editor_);
@@ -349,9 +361,7 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
         return true;
     }
 
-    // Mouse input on the main screen is routed exclusively by FTXUI through
-    // root_container_. Manual dispatch here competes with Container hit-testing
-    // and can consume a menu click before it reaches MenuBarComponent.
+    // Let FTXUI route remaining mouse input through the component tree.
     if (event.is_mouse()) {
         return false;
     }

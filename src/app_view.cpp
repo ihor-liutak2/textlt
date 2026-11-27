@@ -92,11 +92,14 @@ ftxui::Element TextltApp::Render() {
         : emptyElement();
     UpdateFileMenuLabels();
     UpdateNotesMenuLabels();
-    if (!connect_selected) RefreshOpenedDocumentsSidebar();
 
     Element editor_workspace = workspace_mode_ != WorkspaceMode::Documents ? emptyElement()
         : editor_workspace_container_ ? editor_workspace_container_->Render() | xflex
         : text_editor_->Render() | xflex;
+
+    if (workspace_mode_ == WorkspaceMode::Documents && !distraction_mode) {
+        editor_workspace = editor_workspace | yflex | xflex;
+    }
 
     Element workspace = connect_selected ? connect_workspace_->Render()
         : workspace_mode_ == WorkspaceMode::Notes && notes_workspace_component_
@@ -121,7 +124,7 @@ ftxui::Element TextltApp::Render() {
           })
         : show_sidebar
         ? hbox({
-              sidebar_panel_->Render() | size(WIDTH, EQUAL, 28),
+              sidebar_panel_->Render() | yflex | size(WIDTH, EQUAL, 28),
               text("  "),
               editor_workspace | xflex,
           })
@@ -138,6 +141,12 @@ ftxui::Element TextltApp::Render() {
         base_rows.push_back(menu_bar_->Render());
     } else {
         menu_bar_->ClearHitboxes();
+    }
+
+    if (workspace_mode_ == WorkspaceMode::Documents && !distraction_mode) {
+        base_rows.push_back(open_files_bar_.Render());
+    } else {
+        open_files_bar_.ClearHitboxes();
     }
 
     base_rows.push_back(workspace | yflex);
@@ -166,6 +175,11 @@ ftxui::Element TextltApp::Render() {
     }
     if (!distraction_mode && menu_bar_->IsDropdownOpen()) {
         layers.push_back(menu_bar_->RenderDropdown());
+    }
+    if (workspace_mode_ != WorkspaceMode::Documents) {
+        open_files_bar_.CloseFileList();
+    } else if (open_files_bar_.IsFileListOpen()) {
+        layers.push_back(open_files_bar_.RenderFileList());
     }
     if (workspace_mode_ == WorkspaceMode::Documents && editor_context_menu_.IsOpen()) {
         layers.push_back(editor_context_menu_.Render());
@@ -309,6 +323,7 @@ ftxui::Element TextltApp::RenderRenameProjectPanel() {
 void TextltApp::SetActiveLayer(UiLayer layer) {
     if (layer != UiLayer::Main) {
         editor_context_menu_.Close();
+        open_files_bar_.CloseFileList();
         if (connect_workspace_) connect_workspace_->CloseMessageMenu();
     }
     active_layer_ = layer;

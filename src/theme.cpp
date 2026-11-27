@@ -421,6 +421,19 @@ namespace textlt {
         return {FallbackTheme()};
     }
 
+    ftxui::Color FileListTextColor(const Theme& theme) {
+        if (theme.name == "Solarized Light") {
+            return ftxui::Color::RGB(7, 54, 66);
+        }
+        if (theme.name == "GitHub Light") {
+            return ftxui::Color::RGB(12, 18, 28);
+        }
+        if (theme.name == "Pantone Peach Fuzz") {
+            return ftxui::Color::RGB(43, 27, 18);
+        }
+        return theme.foreground;
+    }
+
     Theme FallbackTheme() {
         return {};
     }

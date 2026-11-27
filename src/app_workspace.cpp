@@ -181,7 +181,6 @@ void TextltApp::SetActiveEditorPane(size_t pane_index) {
     if (editor_layer_is_active && text_editor_) {
         text_editor_->TakeFocus();
     }
-    RefreshOpenedDocumentsSidebar();
     UpdateFileMenuLabels();
 }
 
@@ -226,7 +225,6 @@ void TextltApp::AssignSessionToEditorPane(size_t pane_index, size_t session_inde
 
     active_action_ = "Pane " + std::to_string(pane_index + 1) + " document: " +
         ShortDocumentTitle(document_workspace_.SessionPtrAt(session_index));
-    RefreshOpenedDocumentsSidebar();
     UpdateFileMenuLabels();
     screen_.PostEvent(ftxui::Event::Custom);
 }
@@ -343,10 +341,8 @@ ftxui::Element TextltApp::RenderEditorPane(size_t pane_index) {
         ? body | bgcolor(theme.background) | xflex
         : vbox({
               header,
-              separator() | color(active ? theme.modal_accent : theme.gutter),
               body | flex,
           }) |
-              borderStyled(active ? HEAVY : LIGHT, active ? theme.modal_accent : theme.gutter) |
               bgcolor(theme.background) |
               xflex;
 

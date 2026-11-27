@@ -20,7 +20,6 @@ namespace textlt {
 class SidebarPanel : public ftxui::ComponentBase {
 private:
     enum class SidebarMode {
-        Opened,
         Folder,
         Projects,
         Favorites,
@@ -28,7 +27,6 @@ private:
     };
 
     enum class EntryKind {
-        OpenedFile,
         Directory,
         File,
         FavoriteFile,
@@ -38,13 +36,6 @@ private:
     };
 
 public:
-    struct OpenedFileEntry {
-        std::filesystem::path path;
-        std::string label;
-        bool dirty = false;
-        bool active = false;
-    };
-
     struct ProjectEntry {
         std::string id;
         std::string name;
@@ -61,12 +52,9 @@ public:
     };
 
     using FileOpenCallback = std::function<void(const std::filesystem::path&)>;
-    using OpenedFileSelectCallback = std::function<void(size_t index)>;
     using FavoriteFilesProvider = std::function<std::vector<std::filesystem::path>()>;
     using RemoveFavoriteCallback = std::function<void(const std::filesystem::path&)>;
     using AddCurrentFavoriteCallback = std::function<void()>;
-    using CloseOpenedFileCallback = std::function<void(size_t index)>;
-    using CloseAllOpenedFilesCallback = std::function<void()>;
     using OpenFilesModalCallback = std::function<void()>;
     using CopyPathCallback = std::function<void(const std::filesystem::path&)>;
     using ShortcutLabelProvider = std::function<std::string(const std::string& command_id)>;
@@ -81,14 +69,11 @@ public:
 
     SidebarPanel(
         FileOpenCallback on_file_open,
-        OpenedFileSelectCallback on_opened_file_select,
         const Theme* theme,
         GitManager* git_manager,
         FavoriteFilesProvider favorite_files_provider,
         RemoveFavoriteCallback on_remove_favorite,
         AddCurrentFavoriteCallback on_add_current_favorite,
-        CloseOpenedFileCallback on_close_opened_file,
-        CloseAllOpenedFilesCallback on_close_all_opened_files,
         OpenFilesModalCallback on_open_files_modal,
         CopyPathCallback on_copy_path,
         ShortcutLabelProvider shortcut_label_provider,
@@ -113,16 +98,12 @@ public:
     // temporarily replaces the sidebar and its last layout must not capture
     // clicks in the reused area.
     void ClearHitboxes();
-    void SetOpenedFiles(std::vector<OpenedFileEntry> opened_files, size_t active_index);
-    void ShowOpenedFiles();
     void ShowProject();
     void ShowProjects();
     void ShowFavorites();
     void ShowActions();
     void SetActionGroups(std::vector<ActionGroupEntry> groups,
         const std::string& selected_id);
-    void ToggleOpenedProject();
-    bool IsOpenedMode() const { return mode_ == SidebarMode::Opened; }
     bool IsProjectMode() const { return mode_ == SidebarMode::Folder; }
     bool IsProjectsMode() const { return mode_ == SidebarMode::Projects; }
     bool IsFavoritesMode() const { return mode_ == SidebarMode::Favorites; }
@@ -199,7 +180,6 @@ private:
     bool HandleScrollbarMouse(const ftxui::Event& event, const ftxui::Mouse& mouse);
     ftxui::Element RenderEntry(size_t index, int width, const Theme& theme) const;
     void RebuildEntries();
-    void RebuildOpenedEntries();
     void RebuildProjectEntries();
     void RebuildProjectsEntries();
     void RebuildFavoriteEntries();
@@ -219,19 +199,14 @@ private:
     bool HandleActionButtonMouse(const ftxui::Mouse& mouse);
     void AddCurrentFavorite();
     void RemoveSelectedFavorite();
-    void CloseSelectedOpenedFile();
-    void CloseAllOpenedFiles();
     void OpenFilesModal();
 
     FileOpenCallback on_file_open_;
-    OpenedFileSelectCallback on_opened_file_select_;
     const Theme* theme_ = nullptr;
     GitManager* git_manager_ = nullptr;
     FavoriteFilesProvider favorite_files_provider_;
     RemoveFavoriteCallback on_remove_favorite_;
     AddCurrentFavoriteCallback on_add_current_favorite_;
-    CloseOpenedFileCallback on_close_opened_file_;
-    CloseAllOpenedFilesCallback on_close_all_opened_files_;
     OpenFilesModalCallback on_open_files_modal_;
     CopyPathCallback on_copy_path_;
     ShortcutLabelProvider shortcut_label_provider_;
@@ -248,8 +223,6 @@ private:
     ProjectIdCallback on_project_unlink_remote_;
     std::filesystem::path project_root_;
     std::filesystem::path current_path_;
-    std::vector<OpenedFileEntry> opened_files_;
-    size_t active_opened_file_index_ = 0;
     std::vector<std::filesystem::path> entry_paths_;
     std::vector<std::string> entry_labels_;
     std::vector<EntryKind> entry_kinds_;
@@ -266,7 +239,6 @@ private:
     int last_clicked_entry_ = -1;
     SidebarMode mode_ = SidebarMode::Folder;
     std::chrono::steady_clock::time_point last_click_time_{};
-    ftxui::Box opened_tab_box_;
     ftxui::Box project_tab_box_;
     ftxui::Box projects_tab_box_;
     ftxui::Box favorites_tab_box_;

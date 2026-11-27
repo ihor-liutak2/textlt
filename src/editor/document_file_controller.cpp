@@ -93,6 +93,7 @@ bool DocumentFileController::RemoveSession(size_t index, size_t visible_pane_cou
     workspace_.RemoveSession(index);
     EnsureOneSession(visible_pane_count);
     workspace_.SyncEditorPaneSessions(visible_pane_count);
+    PersistOpenedSessions();
     return true;
 }
 
@@ -171,18 +172,13 @@ bool DocumentFileController::SaveActiveSession(std::string& error) {
         error = "Save As required.";
         return false;
     }
-    if (!file_manager_.SaveAs(document, session.path, error)) {
-        return false;
-    }
-    AddRecentFile(session.path);
-    PersistOpenedSessions();
-    return true;
+    return SaveSessionAs(document, session.path, error);
 }
 
-bool DocumentFileController::SaveActiveSessionAs(
+bool DocumentFileController::SaveSessionAs(
+    const std::shared_ptr<DocumentSession>& document,
     const std::filesystem::path& path,
     std::string& error) {
-    const auto document = workspace_.ActiveSessionPtr();
     if (!document) {
         error = "No active document.";
         return false;
@@ -229,22 +225,6 @@ DocumentFileController::SaveAllResult DocumentFileController::SaveAllDirtySessio
 
     PersistOpenedSessions();
     return result;
-}
-
-bool DocumentFileController::CloseActiveSession(
-    size_t visible_pane_count,
-    std::string& closed_name) {
-    if (workspace_.Empty()) {
-        EnsureOneSession(visible_pane_count);
-        closed_name.clear();
-        return false;
-    }
-
-    const auto closed_document = workspace_.ActiveSessionPtr();
-    closed_name = DisplayName(closed_document);
-    RemoveSession(workspace_.ActiveSessionIndex(), visible_pane_count);
-    PersistOpenedSessions();
-    return true;
 }
 
 void DocumentFileController::CloseAllSessions(size_t visible_pane_count) {
@@ -827,18 +807,6 @@ DocumentFileController::RecentFileEntry DocumentFileController::MakeRecentEntry(
     entry.folder_path = path.parent_path();
     entry.file_name = Utf8FromPath(path.filename());
     return entry;
-}
-
-std::string DocumentFileController::DisplayName(const std::shared_ptr<DocumentSession>& document) {
-    if (!document) {
-        return {};
-    }
-
-    std::string name = Utf8FromPath(document->path.filename());
-    if (name.empty()) {
-        name = Utf8FromPath(document->path);
-    }
-    return name;
 }
 
 } // namespace textlt

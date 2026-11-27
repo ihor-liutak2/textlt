@@ -2,6 +2,7 @@
 
 #include "connect_workspace.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -127,15 +128,9 @@ void TextltApp::ToggleFileExplorer() {
 }
 
 
-void TextltApp::ShowOpenedFilesSidebar() {
-    if (!editor_config_.show_file_explorer) {
-        editor_config_.show_file_explorer = true;
-        SaveConfig();
-    }
-
-    auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
-    sidebar->ShowOpenedFiles();
-    FocusSidebar();
+void TextltApp::ShowOpenFileList() {
+    CloseDropdown();
+    open_files_bar_.OpenFileList();
     active_action_ = "Opened files";
     screen_.PostEvent(ftxui::Event::Custom);
 }
@@ -179,17 +174,14 @@ void TextltApp::ShowFavoritesSidebar() {
 }
 
 
-void TextltApp::ToggleSidebarOpenedProject() {
-    if (!editor_config_.show_file_explorer) {
-        editor_config_.show_file_explorer = true;
-        SaveConfig();
+void TextltApp::ToggleOpenFilesAndFolder() {
+    const auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
+    if (sidebar_has_focus_ && sidebar->IsProjectMode()) {
+        ShowOpenFileList();
+    } else {
+        CloseDropdown();
+        ShowProjectSidebar();
     }
-
-    auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
-    sidebar->ToggleOpenedProject();
-    FocusSidebar();
-    active_action_ = "Switched File Explorer tab";
-    screen_.PostEvent(ftxui::Event::Custom);
 }
 
 
@@ -228,40 +220,17 @@ void TextltApp::AddOpenSession(std::shared_ptr<DocumentSession> doc) {
 
     document_file_controller_.AddSession(std::move(doc));
     BindEditorComponentsToWorkspace();
-    RefreshOpenedDocumentsSidebar();
 }
 
 
 void TextltApp::EnsureOneOpenSession() {
     document_file_controller_.EnsureOneSession(VisibleEditorPaneCount());
     BindEditorComponentsToWorkspace();
-    RefreshOpenedDocumentsSidebar();
-}
-
-
-void TextltApp::RemoveOpenSession(size_t index) {
-    document_file_controller_.RemoveSession(index, VisibleEditorPaneCount());
-    BindEditorComponentsToWorkspace();
-    RefreshOpenedDocumentsSidebar();
 }
 
 
 void TextltApp::CloseCurrentFile() {
-    if (IsGitCompareSession(document_workspace_.ActiveSessionPtr())) {
-        CloseGitCompare();
-        CloseDropdown();
-        FocusEditor();
-        return;
-    }
-    std::string closed_name;
-    document_file_controller_.CloseActiveSession(VisibleEditorPaneCount(), closed_name);
-    BindEditorComponentsToWorkspace();
-    RefreshOpenedDocumentsSidebar();
-    UpdateFileMenuLabels();
-    active_action_ = "Closed " + (closed_name.empty() ? "file" : closed_name);
-    CloseDropdown();
-    FocusEditor();
-    screen_.PostEvent(ftxui::Event::Custom);
+    RequestCloseOpenSession(document_workspace_.ActiveSessionIndex());
 }
 
 
@@ -269,7 +238,6 @@ void TextltApp::CloseAllOpenedFiles() {
     CloseGitCompare();
     document_file_controller_.CloseAllSessions(VisibleEditorPaneCount());
     BindEditorComponentsToWorkspace();
-    RefreshOpenedDocumentsSidebar();
     UpdateFileMenuLabels();
     active_action_ = "Closed all files";
     CloseDropdown();
@@ -277,18 +245,37 @@ void TextltApp::CloseAllOpenedFiles() {
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
-void TextltApp::CloseSidebarOpenedFile(size_t index) {
-    if (IsGitCompareSession(document_workspace_.SessionPtrAt(index))) {
-        CloseGitCompare();
+void TextltApp::RequestCloseOpenSession(size_t index) {
+    const auto document = document_workspace_.SessionPtrAt(index);
+    if (!document) return;
+
+    if (document->is_dirty) {
+        pending_close_session_ = document;
+        ShowUnsavedChangesDialog(document->DisplayTitle());
     } else {
-        RemoveOpenSession(index);
-        UpdateFileMenuLabels();
-        active_action_ = "Closed opened file";
+        CloseOpenSession(document);
     }
-    FocusSidebar();
-    screen_.PostEvent(ftxui::Event::Custom);
 }
 
+void TextltApp::CloseOpenSession(const std::shared_ptr<DocumentSession>& document) {
+    const auto& sessions = document_workspace_.OpenSessions();
+    const auto found = std::find(sessions.begin(), sessions.end(), document);
+    if (found == sessions.end()) return;
+
+    if (IsGitCompareSession(document)) {
+        CloseGitCompare();
+    } else {
+        document_file_controller_.RemoveSession(
+            static_cast<size_t>(found - sessions.begin()), VisibleEditorPaneCount());
+        BindEditorComponentsToWorkspace();
+        active_action_ = "Closed " + document->DisplayTitle();
+    }
+    UpdateFileMenuLabels();
+    // During Save As, the file picker finishes processing the event before
+    // the dispatcher restores focus to the editor.
+    if (ActiveLayer() != UiLayer::Files) CloseDropdown();
+    screen_.PostEvent(ftxui::Event::Custom);
+}
 
 void TextltApp::PersistOpenedSessions() {
     document_file_controller_.PersistOpenedSessions();
@@ -298,7 +285,6 @@ void TextltApp::PersistOpenedSessions() {
 void TextltApp::RestoreOpenedSessions() {
     if (document_file_controller_.RestoreOpenedSessions(VisibleEditorPaneCount())) {
         BindEditorComponentsToWorkspace();
-        RefreshOpenedDocumentsSidebar();
     }
 }
 
@@ -311,31 +297,9 @@ void TextltApp::ActivateOpenSession(size_t index) {
     if (!IsGitCompareSession(document_workspace_.ActiveSessionPtr())) CloseGitCompare();
     BindEditorComponentsToWorkspace();
     const auto editor_ptr = ActiveEditor();
-    RefreshOpenedDocumentsSidebar();
     UpdateFileMenuLabels();
     active_action_ = "Switched to " + (editor_ptr ? editor_ptr->CurrentFilePath() : "file");
     screen_.PostEvent(ftxui::Event::Custom);
-}
-
-
-void TextltApp::RefreshOpenedDocumentsSidebar() {
-    auto sidebar = std::static_pointer_cast<SidebarPanel>(sidebar_panel_);
-    std::vector<SidebarPanel::OpenedFileEntry> entries;
-    entries.reserve(document_workspace_.OpenSessions().size());
-
-    for (size_t index = 0; index < document_workspace_.OpenSessions().size(); ++index) {
-        const auto& doc = document_workspace_.OpenSessions()[index];
-        if (!doc) continue;
-
-        const DocumentSession& session = *doc;
-        entries.push_back({
-            session.path,
-            session.DisplayTitle(),
-            doc->is_dirty,
-            index == document_workspace_.ActiveSessionIndex()});
-    }
-
-    sidebar->SetOpenedFiles(std::move(entries), document_workspace_.ActiveSessionIndex());
 }
 
 

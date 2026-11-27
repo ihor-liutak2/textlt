@@ -93,7 +93,6 @@ TextltApp::TextltApp()
       text_editor_(ftxui::Make<EditorComponent>(&editor_config_, &current_theme_)),
       sidebar_panel_(ftxui::Make<SidebarPanel>(
           [this](const std::filesystem::path& path) { OpenSidebarFile(path); },
-          [this](size_t index) { ActivateOpenSession(index); },
           &current_theme_,
           &git_manager_,
           [this] { return document_file_controller_.FavoriteFilePaths(); },
@@ -104,8 +103,6 @@ TextltApp::TextltApp()
               screen_.PostEvent(ftxui::Event::Custom);
           },
           [this] { AddActiveFavoriteFromSidebar(); },
-          [this](size_t index) { CloseSidebarOpenedFile(index); },
-          [this] { CloseAllOpenedFiles(); },
           [this] { OpenFilesModal(FilesModalMode::Open); },
           [this](const std::filesystem::path& path) {
               if (path.empty()) {
@@ -174,6 +171,12 @@ TextltApp::TextltApp()
           [this](const std::string& id) { AssignProjectConnection(id); },
           [this](const std::string& id) { EditProjectConnection(id); },
           [this](const std::string& id) { UnlinkProjectConnection(id); })),
+      open_files_bar_(document_workspace_, current_theme_,
+          [this](size_t index) {
+              ActivateOpenSession(index);
+              FocusEditor();
+          },
+          [this](size_t index) { RequestCloseOpenSession(index); }),
       help_dialog_(&current_theme_),
       keyboard_shortcuts_modal_(
           &current_theme_,
@@ -398,9 +401,9 @@ TextltApp::TextltApp()
           [this] { CloseThemeDialog(); }),
       unsaved_changes_dialog_(
           &current_theme_,
-          [this] { SaveAndExit(); },
-          [this] { DiscardAndExit(); },
-          [this] { CloseExitConfirmationDialog(); }) {
+          [this] { SavePendingChanges(); },
+          [this] { FinishPendingClose(); },
+          [this] { CancelUnsavedChanges(); }) {
     menu_bar_ = ftxui::Make<MenuBarComponent>(
         [this](int menu_index, int item_index) {
             this->RunDropdownAction(menu_index, item_index);

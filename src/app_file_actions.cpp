@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 #include "editor/document_session.hpp"
@@ -21,16 +22,16 @@ namespace textlt {
     
     
     
-bool TextltApp::SaveFile(const std::string& path, std::string& error) {
+bool TextltApp::SaveFile(const std::shared_ptr<DocumentSession>& document,
+    const std::filesystem::path& path, std::string& error) {
     try {
-        if (!document_file_controller_.SaveActiveSessionAs(PathFromUtf8(path), error)) {
+        if (!document_file_controller_.SaveSessionAs(document, path, error)) {
             throw std::runtime_error(error);
         }
-        RefreshOpenedDocumentsSidebar();
         RefreshProjectSidebar();
         git_manager_.Invalidate();
 
-        active_action_ = "Saved " + path;
+        active_action_ = "Saved " + Utf8FromPath(path);
         return true;
     } catch (const std::exception& exception) {
         error = exception.what();
@@ -48,7 +49,6 @@ bool TextltApp::OpenFile(const std::string& path, std::string& error) {
 
         CloseGitCompare();
         BindEditorComponentsToWorkspace();
-        RefreshOpenedDocumentsSidebar();
         UpdateFileMenuLabels();
         active_action_ = "Opened " + path;
         return true;
@@ -78,7 +78,6 @@ void TextltApp::InitializeWithFiles(const std::vector<std::string>& files_to_ope
     }
 
     BindEditorComponentsToWorkspace();
-    RefreshOpenedDocumentsSidebar();
     UpdateFileMenuLabels();
     FocusEditor();
 }
@@ -107,7 +106,6 @@ void TextltApp::SaveCurrentFile() {
         return;
     }
 
-    RefreshOpenedDocumentsSidebar();
     RefreshProjectSidebar();
     git_manager_.Invalidate();
     active_action_ = "Saved " + Utf8FromPath(document->path);
@@ -117,7 +115,6 @@ void TextltApp::SaveCurrentFile() {
 void TextltApp::SaveAllOpenedFiles() {
     const auto result = document_file_controller_.SaveAllDirtySessions();
 
-    RefreshOpenedDocumentsSidebar();
     git_manager_.Invalidate();
 
     if (!result.first_error.empty()) {
@@ -146,7 +143,12 @@ bool TextltApp::ConfirmFilesModalAction(
     } else if (mode == FilesModalMode::Open) {
         success = OpenFile(Utf8FromPath(path), error);
     } else if (mode == FilesModalMode::SaveAs) {
-        success = SaveFile(Utf8FromPath(path), error);
+        const auto document = pending_close_session_ ? pending_close_session_
+                                                     : document_workspace_.ActiveSessionPtr();
+        success = SaveFile(document, path, error);
+        if (success && pending_close_session_) {
+            CloseOpenSession(std::exchange(pending_close_session_, {}));
+        }
     } else if (mode == FilesModalMode::Import) {
         TextImporter importer;
         TextImportResult result = importer.ImportFile(path);

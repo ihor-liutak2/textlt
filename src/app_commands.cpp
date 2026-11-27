@@ -157,8 +157,8 @@ void TextltApp::InitializeCommands() {
     add("sidebar.show_project", "Folder Sidebar", "Options", "", [this] { ShowProjectSidebar(); });
     add("sidebar.show_projects", "Projects Sidebar", "Options", "", [this] { ShowProjectsSidebar(); });
     add("sidebar.show_favorites", "Favorites Sidebar", "Options", "", [this] { ShowFavoritesSidebar(); });
-    add("sidebar.show_opened_files", "Opened Files Sidebar", "Options", "", [this] { ShowOpenedFilesSidebar(); });
-    add("sidebar.toggle_opened_project", "Toggle File Explorer Tab", "Options", "", [this] { ToggleSidebarOpenedProject(); });
+    add("sidebar.show_opened_files", "Opened Files", "Options", "", [this] { ShowOpenFileList(); });
+    add("sidebar.toggle_opened_project", "Toggle File Explorer Tab", "Options", "", [this] { ToggleOpenFilesAndFolder(); });
     add("sidebar.copy_selected_path", "Copy Selected Project Path", "Options", "", [this] { CopySidebarSelectedPath(); });
     add("notes.toggle", "Notes", "Options", "", [this] { CommandNotesToggle(); });
     add("docs.open", "Text", "Options", "", [this] { ShowDocumentsWorkspace(); });

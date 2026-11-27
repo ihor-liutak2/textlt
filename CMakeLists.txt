@@ -344,6 +344,7 @@ add_executable(textlt
   src/remote/modal_remote_connections.cpp
   src/remote/modal_remote_files.cpp
   src/sidebar_component.cpp
+  src/open_files_bar.cpp
   src/syntax_highlighter.cpp
   src/telegram/telegram_http_api.cpp
   src/telegram/telegram_provider.cpp
@@ -468,6 +469,25 @@ add_executable(textlt_editor_context_menu_test
 )
 target_include_directories(textlt_editor_context_menu_test PRIVATE src)
 target_link_libraries(textlt_editor_context_menu_test PRIVATE ftxui::component)
+
+add_executable(textlt_open_files_bar_test
+  tests/open_files_bar_test.cpp
+  src/open_files_bar.cpp
+  src/context_menu_component.cpp
+  src/editor/document_workspace.cpp
+  src/editor/editor_viewport.cpp
+  src/editor/document_session.cpp
+  src/editor/document_session_content.cpp
+  src/editor/document_session_cursor.cpp
+  src/editor/document_session_history.cpp
+  src/editor/document_session_selection.cpp
+  src/editor/text_buffer.cpp
+  src/editor_utils.cpp
+  src/history_manager.cpp
+  src/theme.cpp
+)
+target_include_directories(textlt_open_files_bar_test PRIVATE src third_party)
+target_link_libraries(textlt_open_files_bar_test PRIVATE ftxui::component)
 
 add_executable(textlt_theme_customization_test
   tests/theme_customization_test.cpp
@@ -900,9 +920,14 @@ add_test(NAME textlt_document_navigation_test COMMAND textlt_document_navigation
 add_test(NAME textlt_connect_workspace_layout_test COMMAND textlt_connect_workspace_layout_test)
 add_test(NAME textlt_telegram_provider_test COMMAND textlt_telegram_provider_test)
 add_test(NAME textlt_editor_context_menu_test COMMAND textlt_editor_context_menu_test)
+add_test(NAME textlt_open_files_bar_test COMMAND textlt_open_files_bar_test)
 if(UNIX)
   find_package(Python3 QUIET COMPONENTS Interpreter)
   if(Python3_Interpreter_FOUND)
+    add_test(NAME textlt_open_files_bar_pty_test
+      COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/open_files_bar_pty_test.py $<TARGET_FILE:textlt>)
+    set_tests_properties(textlt_open_files_bar_pty_test PROPERTIES TIMEOUT 60)
     set(pty_scenarios
       editing
       read_only

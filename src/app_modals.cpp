@@ -6,6 +6,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "app_resources.hpp"
@@ -296,8 +297,8 @@ void TextltApp::OpenFilesModal(FilesModalMode mode) {
     std::filesystem::path start_path = CurrentSidebarDirectory();
     std::string suggested_file_name;
     if (mode == FilesModalMode::SaveAs) {
-        const std::string current_path =
-            std::static_pointer_cast<EditorComponent>(text_editor_)->CurrentFilePath();
+        const auto document = pending_close_session_ ? pending_close_session_ : ActiveSessionPtr();
+        const std::string current_path = document ? document->CurrentFilePath() : std::string{};
         if (!current_path.empty() &&
             current_path != "Untitled" &&
             current_path != "untitled.txt") {
@@ -699,7 +700,6 @@ bool TextltApp::OpenGitCompareDocuments(
     active_action_ = right_title.empty()
         ? "Opened Git diff"
         : "Opened Git side-by-side compare";
-    RefreshOpenedDocumentsSidebar();
     UpdateFileMenuLabels();
     FocusEditor();
     screen_.PostEvent(ftxui::Event::Custom);
@@ -971,25 +971,20 @@ void TextltApp::SaveConfig() {
 }
 
 
-void TextltApp::ShowExitConfirmationDialog() {
+void TextltApp::ShowUnsavedChangesDialog(const std::string& title) {
     if (menu_bar_) {
         menu_bar_->CloseDropdown();
     }
 
-    const auto editor = std::static_pointer_cast<EditorComponent>(text_editor_);
-    const std::string file_path = editor->CurrentFilePath();
-    const std::string filename = Utf8FromPath(PathFromUtf8(file_path).filename());
-    const std::string display_name = filename.empty() ? file_path : filename;
-
-    unsaved_changes_dialog_.Open(display_name);
+    unsaved_changes_dialog_.Open(title);
     SetActiveLayer(UiLayer::UnsavedChanges);
     active_action_ = "Unsaved changes";
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
-
-void TextltApp::CloseExitConfirmationDialog() {
+void TextltApp::CancelUnsavedChanges() {
     unsaved_changes_dialog_.Close();
+    pending_close_session_.reset();
     exit_after_save_as_ = false;
     FocusEditor();
     screen_.PostEvent(ftxui::Event::Custom);
@@ -1009,7 +1004,8 @@ void TextltApp::RequestExit() {
     }
 
     if (editor_ptr->IsDirty()) {
-        ShowExitConfirmationDialog();
+        const auto document = ActiveSessionPtr();
+        ShowUnsavedChangesDialog(document ? document->DisplayTitle() : "Untitled");
         return;
     }
     PersistActiveFavoriteCursor();
@@ -1017,20 +1013,18 @@ void TextltApp::RequestExit() {
 }
 
 
-void TextltApp::SaveAndExit() {
-    auto editor_ptr = std::static_pointer_cast<EditorComponent>(text_editor_);
-    const std::string current_path = editor_ptr->CurrentFilePath();
-    if (current_path.empty() || current_path == "Untitled" || current_path == "untitled.txt") {
+void TextltApp::SavePendingChanges() {
+    const auto document = pending_close_session_ ? pending_close_session_ : ActiveSessionPtr();
+    if (DocumentWorkspace::IsMemoryOnlySession(document)) {
         unsaved_changes_dialog_.Close();
-        exit_after_save_as_ = true;
+        exit_after_save_as_ = !pending_close_session_;
         OpenFilesModal(FilesModalMode::SaveAs);
         return;
     }
 
     std::string error;
-    if (SaveFile(current_path, error)) {
-        PersistActiveFavoriteCursor();
-        screen_.Exit();
+    if (document && SaveFile(document, document->path, error)) {
+        FinishPendingClose();
         return;
     }
 
@@ -1038,8 +1032,13 @@ void TextltApp::SaveAndExit() {
     screen_.PostEvent(ftxui::Event::Custom);
 }
 
+void TextltApp::FinishPendingClose() {
+    if (pending_close_session_) {
+        unsaved_changes_dialog_.Close();
+        CloseOpenSession(std::exchange(pending_close_session_, {}));
+        return;
+    }
 
-void TextltApp::DiscardAndExit() {
     PersistActiveFavoriteCursor();
     screen_.Exit();
 }

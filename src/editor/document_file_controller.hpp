@@ -62,10 +62,10 @@ public:
     bool OpenSession(const std::filesystem::path& path, std::string& error);
     bool OpenOrCreateSession(const std::filesystem::path& path, std::string& error);
     bool SaveActiveSession(std::string& error);
-    bool SaveActiveSessionAs(const std::filesystem::path& path, std::string& error);
+    bool SaveSessionAs(const std::shared_ptr<DocumentSession>& document,
+        const std::filesystem::path& path, std::string& error);
     SaveAllResult SaveAllDirtySessions();
 
-    bool CloseActiveSession(size_t visible_pane_count, std::string& closed_name);
     void CloseAllSessions(size_t visible_pane_count);
 
     void PersistOpenedSessions();
@@ -121,7 +121,6 @@ private:
     static std::filesystem::path NormalizePath(const std::filesystem::path& path);
     static std::filesystem::path NormalizeDocumentPath(const std::filesystem::path& path);
     static RecentFileEntry MakeRecentEntry(const std::filesystem::path& path);
-    static std::string DisplayName(const std::shared_ptr<DocumentSession>& document);
 
     FileManager& file_manager_;
     DocumentWorkspace& workspace_;
