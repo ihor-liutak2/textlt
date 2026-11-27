@@ -15,7 +15,6 @@
 #include "network_diagnostics.hpp"
 #include "textlt/connect/localsend_provider.hpp"
 #include "textlt/connect/service.hpp"
-#include "workspace_tabs.hpp"
 
 namespace textlt {
 
@@ -62,7 +61,7 @@ struct NativeConnectionProfile {
 
 class ConnectWorkspace : public ftxui::ComponentBase {
 public:
-    ConnectWorkspace(const Theme& theme, std::function<void()> redraw, WorkspaceTabs::Callbacks workspaces,
+    ConnectWorkspace(const Theme& theme, std::function<void()> redraw,
                      std::function<void()> pick_file, std::function<std::filesystem::path()> downloads,
                      std::filesystem::path localsend_identity, std::function<void()> open_textlt_config,
                      std::function<void()> open_telegram_settings,
@@ -226,7 +225,6 @@ private:
     ftxui::Element RenderChat(int width);
 
     const Theme& theme_;
-    WorkspaceTabs workspace_tabs_;
     std::function<void()> redraw_;
     std::function<void()> pick_file_;
     std::function<std::filesystem::path()> downloads_;

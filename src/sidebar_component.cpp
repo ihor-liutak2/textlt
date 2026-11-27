@@ -123,9 +123,6 @@ SidebarPanel::SidebarPanel(
     OpenFilesModalCallback on_open_files_modal,
     CopyPathCallback on_copy_path,
     ShortcutLabelProvider shortcut_label_provider,
-    OpenNotesCallback on_open_notes,
-    OpenActionsCallback on_open_actions,
-    OpenDocumentsCallback on_open_documents,
     ProjectIdCallback on_action_group_select,
     ActionCommandCallback on_action_command,
     ProjectsProvider projects_provider,
@@ -149,8 +146,6 @@ SidebarPanel::SidebarPanel(
       on_open_files_modal_(std::move(on_open_files_modal)),
       on_copy_path_(std::move(on_copy_path)),
       shortcut_label_provider_(std::move(shortcut_label_provider)),
-      workspace_tabs_({std::move(on_open_documents), std::move(on_open_notes),
-                       std::move(on_open_actions), {}}),
       on_action_group_select_(std::move(on_action_group_select)),
       on_action_command_(std::move(on_action_command)),
       projects_provider_(std::move(projects_provider)),
@@ -178,9 +173,6 @@ ftxui::Element SidebarPanel::OnRender() {
     const ftxui::Color sidebar_text = SidebarTextColor(theme);
 
     return vbox({
-        workspace_tabs_.Render(theme, mode_ == SidebarMode::Actions
-            ? WorkspaceTab::Actions : WorkspaceTab::Documents),
-        separator() | color(SidebarBorderColor(theme)),
         mode_ == SidebarMode::Actions
             ? emptyElement()
             : hbox({
@@ -238,7 +230,6 @@ void SidebarPanel::ClearHitboxes() {
     project_tab_box_ = empty;
     projects_tab_box_ = empty;
     favorites_tab_box_ = empty;
-    workspace_tabs_.ClearHitboxes();
     action_primary_box_ = empty;
     action_secondary_box_ = empty;
     action_tertiary_box_ = empty;
@@ -264,9 +255,7 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
         return true;
     }
 
-    // Action-view controls share the sidebar with the workspace tabs. Handle
-    // their hitboxes first so a stale/overlapping tab box cannot turn a Delete
-    // click into a Documents workspace switch.
+    // Action controls take priority over the retained document sidebar hitboxes.
     if (mode_ == SidebarMode::Actions &&
         event.is_mouse() &&
         event.mouse().button == ftxui::Mouse::Left &&
@@ -275,11 +264,6 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
         return true;
     }
 
-    if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left &&
-        event.mouse().motion == ftxui::Mouse::Pressed &&
-        workspace_tabs_.ActivateAt(event.mouse().x, event.mouse().y)) {
-        return true;
-    }
     if (event == ftxui::Event::ArrowDown) {
         if (selected_entry_ + 1 < static_cast<int>(entry_labels_.size())) {
             ++selected_entry_;
@@ -357,7 +341,8 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
         return true;
     }
 
-    if (event.is_mouse() &&
+    if (mode_ != SidebarMode::Actions &&
+        event.is_mouse() &&
         event.mouse().button == ftxui::Mouse::Left &&
         event.mouse().motion == ftxui::Mouse::Pressed &&
         HandleActionButtonMouse(event.mouse())) {

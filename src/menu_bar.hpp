@@ -8,6 +8,7 @@
 #include "ftxui/component/component_base.hpp"
 #include "ftxui/dom/elements.hpp"
 #include "theme.hpp"
+#include "workspace_tabs.hpp"
 
 namespace textlt {
 
@@ -18,6 +19,7 @@ public:
 
     MenuBarComponent(
         ActionCallback on_action,
+        WorkspaceTabs workspace_tabs,
         const Theme* theme = nullptr,
         ShortcutProvider shortcut_provider = {});
 
@@ -42,6 +44,7 @@ public:
         int tab_size);
     void CloseDropdown();
     void OpenDropdown(int menu_index);
+    void ClearHitboxes();
 
     bool IsDropdownOpen() const { return active_dropdown_ >= 0; }
     int ActiveDropdown() const { return active_dropdown_; }
@@ -81,6 +84,7 @@ private:
     ActionCallback on_action_;
     ShortcutProvider shortcut_provider_;
     const Theme* theme_ = nullptr;
+    WorkspaceTabs workspace_tabs_;
 
     int selected_menu_item_ = 0;
     int active_dropdown_ = -1;
@@ -90,8 +94,9 @@ private:
     bool connect_menu_visible_ = true;
     bool notes_trash_selected_ = false;
 
-    std::vector<ftxui::Box> menu_boxes_;
-    std::vector<ftxui::Box> dropdown_boxes_;
+    ftxui::Box menu_box_{1, 0, 1, 0};
+    ftxui::Box top_menu_box_{1, 0, 1, 0};
+    ftxui::Box dropdown_box_{1, 0, 1, 0};
     ftxui::Component top_menu_;
     ftxui::Component dropdown_menu_;
     ftxui::Component menu_container_;

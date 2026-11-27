@@ -121,9 +121,6 @@ TextltApp::TextltApp()
           [this](const std::string& command_id) {
               return shortcut_registry_.EffectiveShortcut(ShortcutContext::Menu, command_id);
           },
-          [this] { ShowNotesWorkspace(); },
-          [this] { ShowActionsWorkspace(); },
-          [this] { ShowDocumentsWorkspace(); },
           [this](const std::string& id) {
               if (actions_workspace_component_)
                   std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_)->SelectGroup(id);
@@ -408,6 +405,12 @@ TextltApp::TextltApp()
         [this](int menu_index, int item_index) {
             this->RunDropdownAction(menu_index, item_index);
         },
+        WorkspaceTabs(workspace_mode_, {
+            [this] { ShowDocumentsWorkspace(); },
+            [this] { ShowNotesWorkspace(); },
+            [this] { ShowActionsWorkspace(); },
+            [this] { ShowConnectWorkspace(); },
+        }),
         &current_theme_);
     InitializeCommands();
     InitializeMenuShortcuts();
@@ -425,14 +428,9 @@ TextltApp::TextltApp()
             active_action_ = message;
             screen_.PostEvent(ftxui::Event::Custom);
         },
-        [this] { ShowDocumentsWorkspace(); },
-        [this] { ShowActionsWorkspace(); },
         [this](const std::string& text) { return clipboard_controller_.WriteText(text); });
     auto notes_component = std::static_pointer_cast<notes::NotesWorkspaceComponent>(
         notes_workspace_component_);
-    notes_component->SetConnectCallback([this] { RunCommand("connect.open"); });
-    std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->SetConnectCallback(
-        [this] { RunCommand("connect.open"); });
     notes_component->SetClipboardReader([this](ClipboardController::PasteCallback deliver) {
         clipboard_controller_.ReadText(std::move(deliver));
     });
@@ -574,12 +572,6 @@ TextltApp::TextltApp()
     }, &workspace_mode_index_);
     connect_workspace_ = ftxui::Make<connect_ui::ConnectWorkspace>(
         current_theme_, [this] { screen_.PostEvent(ftxui::Event::Custom); },
-        WorkspaceTabs::Callbacks{
-            [this] { RunCommand("docs.open"); },
-            [this] { RunCommand("notes.toggle"); },
-            [this] { RunCommand("actions.open"); },
-            {},
-        },
         [this] { OpenFilesModal(FilesModalMode::SendConnectFile); },
         [] { return FileManager::UserDownloadsDirectory(false); },
         EditorConfig::DefaultConfigPath().parent_path() / "localsend.pem",

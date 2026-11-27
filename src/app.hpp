@@ -78,13 +78,6 @@ public:
     void Run();
 
 private:
-    enum class WorkspaceMode {
-        Documents,
-        Notes,
-        Actions,
-        Connect,
-    };
-
     enum class NavigationPopupMode {
         GoToLine,
         GoToPage,

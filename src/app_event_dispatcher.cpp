@@ -89,15 +89,15 @@ bool AppEventDispatcher::HandleBodyEvent(ftxui::Event event) {
         }
     }
 
-    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Notes ||
-        app_.workspace_mode_ == TextltApp::WorkspaceMode::Connect) {
+    if (app_.workspace_mode_ == WorkspaceMode::Notes ||
+        app_.workspace_mode_ == WorkspaceMode::Connect) {
         return false;
     }
     if (IsPrimaryMousePress(event) && app_.ActiveLayer() == TextltApp::UiLayer::Main) {
         auto sidebar = std::static_pointer_cast<SidebarPanel>(app_.sidebar_panel_);
         const bool distraction_mode = app_.layout_controller_.IsDistractionModeActive();
         const bool sidebar_visible =
-            app_.workspace_mode_ == TextltApp::WorkspaceMode::Actions
+            app_.workspace_mode_ == WorkspaceMode::Actions
                 ? app_.editor_config_.show_actions_sidebar
                 : app_.editor_config_.show_file_explorer;
         const bool inside_sidebar = !distraction_mode &&
@@ -231,7 +231,7 @@ bool AppEventDispatcher::HandleActiveModalEvent(const ftxui::Event& event) {
 }
 
 bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
-    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Actions &&
+    if (app_.workspace_mode_ == WorkspaceMode::Actions &&
         !app_.menu_bar_->IsDropdownOpen()) {
         const auto workspace = std::static_pointer_cast<actions::ActionsWorkspaceComponent>(
             app_.actions_workspace_component_);
@@ -248,13 +248,13 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
         }
     }
 
-    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Notes) {
+    if (app_.workspace_mode_ == WorkspaceMode::Notes) {
         const auto notes = std::static_pointer_cast<notes::NotesWorkspaceComponent>(
             app_.notes_workspace_component_);
         if (notes && notes->HasOpenContextMenu() && notes->HandleContextMenuEvent(event)) return true;
     }
 
-    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Documents) {
+    if (app_.workspace_mode_ == WorkspaceMode::Documents) {
         if (app_.editor_context_menu_.OnEvent(event)) return true;
         if (event.is_mouse()) {
             auto mouse_event = event;
@@ -278,7 +278,7 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
         return event.is_mouse() ? false : app_.menu_bar_->OnEvent(event);
     }
 
-    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Connect) {
+    if (app_.workspace_mode_ == WorkspaceMode::Connect) {
         if (app_.connect_workspace_->HandleMessageMenuEvent(event)) return true;
         if (app_.connect_workspace_->Paste(event)) return true;
         if (app_.connect_workspace_->HandleSendEnter(event)) return true;
@@ -316,7 +316,7 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
         }
     }
 
-    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Documents) {
+    if (app_.workspace_mode_ == WorkspaceMode::Documents) {
         if (const auto text = ClipboardController::PastedText(event)) {
             if (!app_.find_panel_focus_) {
                 auto editor = std::static_pointer_cast<EditorComponent>(app_.text_editor_);
@@ -331,7 +331,7 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
         return app_.RunCommand("ai.quick");
     }
 
-    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Notes) {
+    if (app_.workspace_mode_ == WorkspaceMode::Notes) {
         if (app_.notes_workspace_component_ && app_.notes_workspace_component_->OnEvent(event)) {
             // Do not answer a redraw request with another redraw request:
             // components that swallow every event would otherwise keep the
@@ -342,7 +342,7 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
             return true;
         }
     }
-    if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Actions &&
+    if (app_.workspace_mode_ == WorkspaceMode::Actions &&
         !app_.sidebar_has_focus_ && app_.actions_workspace_component_ &&
         app_.actions_workspace_component_->OnEvent(event)) {
         if (event != ftxui::Event::Custom) app_.screen_.PostEvent(ftxui::Event::Custom);
@@ -357,7 +357,7 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
     }
 
     if (IsAltRightShortcut(event)) {
-        if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Notes) {
+        if (app_.workspace_mode_ == WorkspaceMode::Notes) {
             return false;
         }
         app_.FocusNextEditorPane();
@@ -365,7 +365,7 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
     }
 
     if (IsAltLeftShortcut(event)) {
-        if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Notes) {
+        if (app_.workspace_mode_ == WorkspaceMode::Notes) {
             return false;
         }
         app_.FocusPreviousEditorPane();
@@ -389,9 +389,9 @@ bool AppEventDispatcher::HandleMainEvent(const ftxui::Event& event) {
 
 bool AppEventDispatcher::HandleSidebarEvent(const ftxui::Event& event) {
     const bool sidebar_visible =
-        app_.workspace_mode_ == TextltApp::WorkspaceMode::Actions
+        app_.workspace_mode_ == WorkspaceMode::Actions
             ? app_.editor_config_.show_actions_sidebar
-            : app_.workspace_mode_ == TextltApp::WorkspaceMode::Documents
+            : app_.workspace_mode_ == WorkspaceMode::Documents
             ? app_.editor_config_.show_file_explorer
             : false;
     const bool sidebar_is_focused =
@@ -404,7 +404,7 @@ bool AppEventDispatcher::HandleSidebarEvent(const ftxui::Event& event) {
     }
 
     if (event == ftxui::Event::Escape) {
-        if (app_.workspace_mode_ == TextltApp::WorkspaceMode::Actions) {
+        if (app_.workspace_mode_ == WorkspaceMode::Actions) {
             app_.sidebar_has_focus_ = false;
             app_.actions_workspace_component_->TakeFocus();
             return true;
@@ -424,7 +424,7 @@ bool AppEventDispatcher::HandleSidebarEvent(const ftxui::Event& event) {
 }
 
 bool AppEventDispatcher::HandleEditorEvent(const ftxui::Event& event) {
-    if (app_.workspace_mode_ != TextltApp::WorkspaceMode::Documents) return false;
+    if (app_.workspace_mode_ != WorkspaceMode::Documents) return false;
     const bool editor_is_focused = app_.ActiveLayer() == TextltApp::UiLayer::Main && !app_.sidebar_has_focus_;
     if (!editor_is_focused) {
         return false;

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "workspace_tabs.hpp"
 
 #include "editor/clipboard_controller.hpp"
 
@@ -29,14 +28,10 @@ struct ProjectContext {
 class NotesWorkspaceComponent : public ftxui::ComponentBase {
 public:
     using StatusCallback = std::function<void(const std::string&)>;
-    using DocumentsCallback = std::function<void()>;
-    using ActionsCallback = std::function<void()>;
     using ClipboardWriteCallback = ClipboardController::WriteCallback;
     NotesWorkspaceComponent(
         const Theme* theme,
         StatusCallback on_status,
-        DocumentsCallback on_documents,
-        ActionsCallback on_actions,
         ClipboardWriteCallback write_clipboard,
         std::filesystem::path root = {});
     ftxui::Element OnRender() override;
@@ -56,9 +51,6 @@ public:
     bool IsEditing() const { return editing_; }
     bool HasOpenContextMenu() const { return context_menu_.IsOpen(); }
     bool HandleContextMenuEvent(ftxui::Event event);
-    void SetConnectCallback(std::function<void()> callback) {
-        workspace_tabs_.SetConnectCallback(std::move(callback));
-    }
     void SetClipboardReader(ClipboardController::ReadCallback reader) {
         read_clipboard_ = std::move(reader);
     }
@@ -215,7 +207,6 @@ private:
 
     const Theme* theme_ = nullptr;
     StatusCallback on_status_;
-    WorkspaceTabs workspace_tabs_;
     ClipboardWriteCallback write_clipboard_;
     ClipboardController::ReadCallback read_clipboard_;
     NoteRepository repository_;

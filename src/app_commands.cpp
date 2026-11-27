@@ -161,7 +161,7 @@ void TextltApp::InitializeCommands() {
     add("sidebar.toggle_opened_project", "Toggle File Explorer Tab", "Options", "", [this] { ToggleSidebarOpenedProject(); });
     add("sidebar.copy_selected_path", "Copy Selected Project Path", "Options", "", [this] { CopySidebarSelectedPath(); });
     add("notes.toggle", "Notes", "Options", "", [this] { CommandNotesToggle(); });
-    add("docs.open", "Docs", "Options", "", [this] { ShowDocumentsWorkspace(); });
+    add("docs.open", "Text", "Options", "", [this] { ShowDocumentsWorkspace(); });
     add("notes.new", "New Note", "Notes", "", [this] { CommandNotesNew(); });
     add("notes.share_connect", "Send via Connect…", "Notes", "", [this] { ShareNoteViaConnect(); });
     add("notes.import_markdown", "Import Markdown", "Notes", "",

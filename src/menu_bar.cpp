@@ -56,21 +56,21 @@ std::string ShortcutMenuLabel(std::string base_label, const std::string& shortcu
 } // namespace
 
 MenuBarComponent::MenuBarComponent(
-
     ActionCallback on_action,
+    WorkspaceTabs workspace_tabs,
     const Theme* theme,
     ShortcutProvider shortcut_provider)
     : menu_entries_({
-          " File ",
-          " Project ",
-          " Edit ",
-          " Options ",
-          " Notes ",
-          " Actions ",
-          " Connect ",
-          " Tools ",
-          " Help ",
-          " Exit ",
+          "File",
+          "Project",
+          "Edit",
+          "Options",
+          "Notes",
+          "Actions",
+          "Connect",
+          "Tools",
+          "Help",
+          "Exit",
       }),
       dropdown_items_({
           {
@@ -120,7 +120,7 @@ MenuBarComponent::MenuBarComponent(
               {" Toggle Line Numbers ", "view.toggle_line_numbers"},
               {" Quick Commands ", "sidebar.ctrl_b_file_explorer"},
               {" Quick Text Formatting ", "text_processors.quick"},
-              {" Docs ", "docs.open"},
+              {" Text ", "docs.open"},
               {" Notes ", "notes.toggle"},
               {" Actions ", "actions.open"},
               {" Connect ", "connect.open"},
@@ -203,7 +203,8 @@ MenuBarComponent::MenuBarComponent(
       }),
       on_action_(std::move(on_action)),
       shortcut_provider_(std::move(shortcut_provider)),
-      theme_(theme) {
+      theme_(theme),
+      workspace_tabs_(std::move(workspace_tabs)) {
     for (auto& menu : dropdown_items_) {
         for (DropdownItem& item : menu) {
             if (!item.separator) {
@@ -216,7 +217,7 @@ MenuBarComponent::MenuBarComponent(
     RefreshCurrentDropdownEntries();
 
     // Configure the top horizontal menu
-    ftxui::MenuOption top_menu_option = ftxui::MenuOption::Toggle();
+    ftxui::MenuOption top_menu_option = ftxui::MenuOption::Horizontal();
     top_menu_option.on_enter = [this] { ActivateTopMenu(); };
     top_menu_option.on_change = [this] { ActivateTopMenu(); };
     
@@ -237,13 +238,13 @@ MenuBarComponent::MenuBarComponent(
         dropdown_menu_,
     });
     Add(menu_container_);
-    const int notes_index = MenuIndex(" Notes ");
+    const int notes_index = MenuIndex("Notes");
     if (notes_index >= 0) {
         notes_dropdown_items_ = dropdown_items_[static_cast<size_t>(notes_index)];
     }
-    const int actions_index = MenuIndex(" Actions ");
+    const int actions_index = MenuIndex("Actions");
     if (actions_index >= 0) actions_dropdown_items_ = dropdown_items_[static_cast<size_t>(actions_index)];
-    const int connect_index = MenuIndex(" Connect ");
+    const int connect_index = MenuIndex("Connect");
     if (connect_index >= 0) connect_dropdown_items_ = dropdown_items_[static_cast<size_t>(connect_index)];
     SetConnectMenuVisible(false);
     SetActionsMenuVisible(false);
@@ -295,31 +296,27 @@ ftxui::Element MenuBarComponent::OnRender() {
     using namespace ftxui;
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
 
-    // Ensure we have at least one box allocated
-    if (menu_boxes_.empty()) {
-        menu_boxes_.resize(1);
-    }
+    return vbox({
+        text(""),
+        hbox({
+            // Scroll the menu with keyboard focus when the terminal is too narrow.
+            top_menu_->Render() | xframe | xflex_shrink | reflect(top_menu_box_),
+            filler(),
+            workspace_tabs_.Render(theme),
+        }) | bgcolor(theme.menu_background) | color(theme.menu_foreground),
+        text(""),
+    }) | reflect(menu_box_);
+}
 
-    return top_menu_->Render() |
-           bgcolor(theme.menu_background) |
-           color(theme.menu_foreground) |
-           reflect(menu_boxes_[0]);
+void MenuBarComponent::ClearHitboxes() {
+    menu_box_ = top_menu_box_ = dropdown_box_ = {1, 0, 1, 0};
+    workspace_tabs_.ClearHitboxes();
 }
 
 ftxui::Element MenuBarComponent::RenderDropdown() {
     using namespace ftxui;
     if (active_dropdown_ < 0) {
         return emptyElement();
-    }
-
-    // Safety: ensure menu_boxes_ exists
-    if (menu_boxes_.empty()) {
-        menu_boxes_.resize(1);
-    }
-
-    // Ensure dropdown_boxes_ has enough capacity
-    if (static_cast<int>(dropdown_boxes_.size()) <= active_dropdown_) {
-        dropdown_boxes_.resize(active_dropdown_ + 1);
     }
 
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
@@ -329,14 +326,13 @@ ftxui::Element MenuBarComponent::RenderDropdown() {
         borderStyled(ftxui::LIGHT, MenuBorderColor(theme)) |
         bgcolor(theme.menu_background) |
         color(theme.menu_foreground) |
-        reflect(dropdown_boxes_[active_dropdown_]) |
+        reflect(dropdown_box_) |
         clear_under;
 
     return vbox({
-        // Safe access to menu_boxes_[0]
-        emptyElement() | size(HEIGHT, EQUAL, menu_boxes_[0].y_max + 1),
+        emptyElement() | size(HEIGHT, EQUAL, menu_box_.y_max + 1),
         hbox({
-            emptyElement() | size(WIDTH, EQUAL, std::max(0, DropdownX())),
+            emptyElement() | size(WIDTH, EQUAL, DropdownX()) | xflex_shrink,
             dropdown,
         }),
     });
@@ -375,39 +371,36 @@ bool MenuBarComponent::OnEvent(ftxui::Event event) {
     }
 
     const auto& mouse = event.mouse();
+    const bool pressed = mouse.button == ftxui::Mouse::Left &&
+                         mouse.motion == ftxui::Mouse::Pressed;
+    if (pressed && CaptureMouse(event) && workspace_tabs_.ActivateAt(mouse.x, mouse.y)) {
+        CloseDropdown();
+        return true;
+    }
+
+    const bool in_top_menu = top_menu_box_.Contain(mouse.x, mouse.y);
     if (active_dropdown_ >= 0) {
         if (dropdown_menu_->OnEvent(event)) {
             return true;
         }
 
-        if (top_menu_->OnEvent(event)) {
-            if (mouse.button == ftxui::Mouse::Left &&
-                mouse.motion == ftxui::Mouse::Pressed) {
+        if (in_top_menu && top_menu_->OnEvent(event)) {
+            if (pressed) {
                 OpenDropdown(selected_menu_item_);
             }
             return true;
         }
 
-        if (mouse.button == ftxui::Mouse::Left &&
-            mouse.motion == ftxui::Mouse::Pressed) {
-            const bool in_top_menu =
-                !menu_boxes_.empty() && menu_boxes_[0].Contain(mouse.x, mouse.y);
-            const bool in_dropdown =
-                active_dropdown_ < static_cast<int>(dropdown_boxes_.size()) &&
-                dropdown_boxes_[active_dropdown_].Contain(mouse.x, mouse.y);
-            if (!in_top_menu && !in_dropdown) {
-                CloseDropdown();
-            }
+        if (pressed && !in_top_menu && !dropdown_box_.Contain(mouse.x, mouse.y)) {
+            CloseDropdown();
         }
         return true;
     }
 
-    if (!top_menu_->OnEvent(event)) {
+    if (!in_top_menu || !top_menu_->OnEvent(event)) {
         return false;
     }
-    if (mouse.button == ftxui::Mouse::Left &&
-        mouse.motion == ftxui::Mouse::Pressed &&
-        active_dropdown_ < 0) {
+    if (pressed && active_dropdown_ < 0) {
         OpenDropdown(selected_menu_item_);
     }
     return true;
@@ -477,15 +470,15 @@ void MenuBarComponent::SetFileMenuLabels(bool is_favorite, bool comparing) {
 }
 
 void MenuBarComponent::SetNotesMenuVisible(bool visible) {
-    SetContextualMenu(" Notes ", notes_dropdown_items_, notes_menu_visible_, visible);
+    SetContextualMenu("Notes", notes_dropdown_items_, notes_menu_visible_, visible);
 }
 
 void MenuBarComponent::SetActionsMenuVisible(bool visible) {
-    SetContextualMenu(" Actions ", actions_dropdown_items_, actions_menu_visible_, visible);
+    SetContextualMenu("Actions", actions_dropdown_items_, actions_menu_visible_, visible);
 }
 
 void MenuBarComponent::SetConnectMenuVisible(bool visible) {
-    SetContextualMenu(" Connect ", connect_dropdown_items_, connect_menu_visible_, visible);
+    SetContextualMenu("Connect", connect_dropdown_items_, connect_menu_visible_, visible);
 }
 
 void MenuBarComponent::SetContextualMenu(const std::string& label,
@@ -495,7 +488,7 @@ void MenuBarComponent::SetContextualMenu(const std::string& label,
     CloseDropdown();
     const int index = MenuIndex(label);
     if (visible && index < 0) {
-        const int tools = MenuIndex(" Tools ");
+        const int tools = MenuIndex("Tools");
         const auto insertion = tools < 0 ? static_cast<std::ptrdiff_t>(menu_entries_.size()) : tools;
         menu_entries_.insert(menu_entries_.begin() + insertion, label);
         dropdown_items_.insert(dropdown_items_.begin() + insertion, items);
@@ -674,12 +667,7 @@ bool MenuBarComponent::IsCurrentSeparator(int item_index) const {
 
 // Returns the X-coordinate for the current active dropdown
 int MenuBarComponent::DropdownX() const {
-    // Ensure we have at least one menu box to reference
-    if (menu_boxes_.empty()) {
-        return 0;
-    }
-
-    int dropdown_x = menu_boxes_[0].x_min;
+    int dropdown_x = top_menu_box_.x_min;
     for (int i = 0; i < active_dropdown_ && i < static_cast<int>(menu_entries_.size()); ++i) {
         dropdown_x += static_cast<int>(menu_entries_[i].size()) + 1;
     }

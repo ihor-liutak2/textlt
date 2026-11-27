@@ -1,6 +1,5 @@
 #pragma once
 
-#include "workspace_tabs.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -71,9 +70,6 @@ public:
     using OpenFilesModalCallback = std::function<void()>;
     using CopyPathCallback = std::function<void(const std::filesystem::path&)>;
     using ShortcutLabelProvider = std::function<std::string(const std::string& command_id)>;
-    using OpenNotesCallback = std::function<void()>;
-    using OpenActionsCallback = std::function<void()>;
-    using OpenDocumentsCallback = std::function<void()>;
     using ProjectsProvider = std::function<std::vector<ProjectEntry>()>;
     using ProjectIdCallback = std::function<void(const std::string&)>;
     using AddProjectCallback = std::function<void(const std::filesystem::path&)>;
@@ -96,9 +92,6 @@ public:
         OpenFilesModalCallback on_open_files_modal,
         CopyPathCallback on_copy_path,
         ShortcutLabelProvider shortcut_label_provider,
-        OpenNotesCallback on_open_notes,
-        OpenActionsCallback on_open_actions,
-        OpenDocumentsCallback on_open_documents,
         ProjectIdCallback on_action_group_select,
         ActionCommandCallback on_action_command,
         ProjectsProvider projects_provider,
@@ -120,9 +113,6 @@ public:
     // temporarily replaces the sidebar and its last layout must not capture
     // clicks in the reused area.
     void ClearHitboxes();
-    void SetConnectCallback(std::function<void()> callback) {
-        workspace_tabs_.SetConnectCallback(std::move(callback));
-    }
     void SetOpenedFiles(std::vector<OpenedFileEntry> opened_files, size_t active_index);
     void ShowOpenedFiles();
     void ShowProject();
@@ -245,7 +235,6 @@ private:
     OpenFilesModalCallback on_open_files_modal_;
     CopyPathCallback on_copy_path_;
     ShortcutLabelProvider shortcut_label_provider_;
-    WorkspaceTabs workspace_tabs_;
     ProjectIdCallback on_action_group_select_;
     ActionCommandCallback on_action_command_;
     ProjectsProvider projects_provider_;

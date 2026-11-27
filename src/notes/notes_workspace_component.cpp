@@ -125,13 +125,10 @@ std::string FitText(const std::string& value, size_t max_columns) {
 NotesWorkspaceComponent::NotesWorkspaceComponent(
     const Theme* theme,
     StatusCallback on_status,
-    DocumentsCallback on_documents,
-    ActionsCallback on_actions,
     ClipboardWriteCallback write_clipboard,
     std::filesystem::path root)
     : theme_(theme),
       on_status_(std::move(on_status)),
-      workspace_tabs_({std::move(on_documents), {}, std::move(on_actions), {}}),
       write_clipboard_(std::move(write_clipboard)),
       repository_(std::move(root)),
       session_(nullptr),
@@ -154,7 +151,6 @@ void NotesWorkspaceComponent::SetSidebarVisible(bool visible) {
     // hidden sidebar used to be do not trigger stale sidebar controls.
     const ftxui::Box empty_box{1, 0, 1, 0};
     sidebar_box_ = empty_box;
-    workspace_tabs_.ClearHitboxes();
     sidebar_notes_tab_box_ = empty_box;
     sidebar_content_tab_box_ = empty_box;
     sidebar_content_box_ = empty_box;
@@ -1305,7 +1301,6 @@ bool NotesWorkspaceComponent::OnEvent(ftxui::Event event) {
     if (event.is_mouse() && event.mouse().button == ftxui::Mouse::Left && event.mouse().motion == ftxui::Mouse::Pressed) {
         const auto& mouse = event.mouse();
         if (sidebar_visible_) {
-            if (workspace_tabs_.ActivateAt(mouse.x, mouse.y)) return true;
             if (sidebar_notes_tab_box_.Contain(mouse.x, mouse.y)) {
                 sidebar_content_selected_ = false;
                 if (!editing_) focus_ = FocusArea::Sidebar;
@@ -1555,8 +1550,6 @@ ftxui::Element NotesWorkspaceComponent::RenderSidebar() {
         return RenderModalFlatButton(theme, spec, selected) | reflect(box);
     };
     Elements rows = {
-        workspace_tabs_.Render(theme, WorkspaceTab::Notes),
-        separator() | color(theme.gutter),
         hbox({
             tab("Notes", !sidebar_content_selected_, sidebar_notes_tab_box_),
             text(" "),

@@ -93,7 +93,6 @@ int ScrollDelta(Event event) {
 } // namespace
 
 ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> redraw,
-                                   WorkspaceTabs::Callbacks workspaces,
                                    std::function<void()> pick_file,
                                    std::function<std::filesystem::path()> downloads,
                                    std::filesystem::path localsend_identity,
@@ -101,7 +100,7 @@ ConnectWorkspace::ConnectWorkspace(const Theme& theme, std::function<void()> red
                                    std::function<void()> open_telegram_settings,
                                    std::function<void()> open_irc_settings,
                                    std::function<bool(const std::string&)> write_clipboard)
-    : theme_(theme), workspace_tabs_(std::move(workspaces)), redraw_(std::move(redraw)),
+    : theme_(theme), redraw_(std::move(redraw)),
       pick_file_(std::move(pick_file)), downloads_(std::move(downloads)),
       write_clipboard_(std::move(write_clipboard)),
       open_telegram_settings_(std::move(open_telegram_settings)),
@@ -1165,7 +1164,6 @@ void ConnectWorkspace::ExecuteMessageCommand(const std::string& command) {
 bool ConnectWorkspace::OnEvent(Event event) {
     if (event.is_mouse()) {
         const auto mouse = event.mouse();
-        if (Pressed(event) && workspace_tabs_.ActivateAt(mouse.x, mouse.y)) return true;
         if (navigator_box_.Contain(mouse.x, mouse.y)) return NavigatorEvent(event);
         if (messenger_box_.Contain(mouse.x, mouse.y)) return MessengerNavigatorEvent(event);
     }
@@ -1843,10 +1841,7 @@ Element ConnectWorkspace::OnRender() {
             RenderChat(layout.conversation_width) | flex | reflect(conversation_box_),
         }) | flex;
     }
-    return vbox({
-        workspace_tabs_.Render(theme_, WorkspaceTab::Connect),
-        std::move(columns) | flex,
-    }) | flex | reflect(workspace_box_);
+    return columns | reflect(workspace_box_);
 }
 
 } // namespace textlt::connect_ui

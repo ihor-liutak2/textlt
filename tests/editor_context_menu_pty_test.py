@@ -182,7 +182,7 @@ def test_editing(term, path, clipboard):
 
 
 def open_compare(term):
-    term.click(" Tools ")
+    term.click("Tools")
     term.click_at(term.wait_for("Git..."))
     # Opening the Git modal refreshes repository status before its first frame.
     term.click_at(term.wait_for("Compare"))
@@ -215,7 +215,7 @@ def require_compare_closed(term):
 
 
 def test_compare_exit(term):
-    term.click(" Options ")
+    term.click("Options")
     term.click_at(term.wait_for("View Layout..."))
     term.click_at(term.wait_for("Three columns"))
     term.wait_for("Set pane 3")
@@ -224,13 +224,13 @@ def test_compare_exit(term):
     term.position("3: sample.txt")
 
     open_compare(term)
-    term.click(" File ")
+    term.click("File")
     term.click_at(term.wait_for("Close Git Compare"))
     require_compare_closed(term)
     term.position("3: sample.txt")
 
     open_compare(term)
-    term.click(" File ")
+    term.click("File")
     term.click_at(term.wait_for("Recent Files"))
     term.wait_for("Enter or double-click opens selected file")
     term.send("\r")
@@ -238,7 +238,7 @@ def test_compare_exit(term):
     term.position("3: sample.txt")
 
     open_compare(term)
-    term.click(" Options ")
+    term.click("Options")
     term.click_at(term.wait_for("View Layout..."))
     term.click_at(term.wait_for(" Single "))
     term.send(ESC)

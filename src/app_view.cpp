@@ -58,7 +58,7 @@ BottomBarRowState TextltApp::CurrentBottomBarRowState() {
     } else if (workspace_mode_ == WorkspaceMode::Connect) {
         state.workspace_label = "Connect";
     } else {
-        state.workspace_label = "Docs";
+        state.workspace_label = "Text";
         state.line_ending = editor ? editor->ActiveLineEndingLabel() : "LF";
     }
 
@@ -94,8 +94,6 @@ ftxui::Element TextltApp::Render() {
     UpdateNotesMenuLabels();
     if (!connect_selected) RefreshOpenedDocumentsSidebar();
 
-    Element top_menu_element = distraction_mode ? emptyElement() : menu_bar_->Render();
-        
     Element editor_workspace = workspace_mode_ != WorkspaceMode::Documents ? emptyElement()
         : editor_workspace_container_ ? editor_workspace_container_->Render() | xflex
         : text_editor_->Render() | xflex;
@@ -137,9 +135,9 @@ ftxui::Element TextltApp::Render() {
     };
 
     if (!distraction_mode) {
-        base_rows.push_back(separator() | color(MainWindowSeparatorColor(current_theme_)));
-        base_rows.push_back(top_menu_element);
-        base_rows.push_back(separator() | color(MainWindowSeparatorColor(current_theme_)));
+        base_rows.push_back(menu_bar_->Render());
+    } else {
+        menu_bar_->ClearHitboxes();
     }
 
     base_rows.push_back(workspace | yflex);
@@ -149,7 +147,7 @@ ftxui::Element TextltApp::Render() {
         base_rows.push_back(
             bottom_bar_row_
                 ? bottom_bar_row_->Render()
-                : text(" Ln 1, Col 1 | Docs | LF | 100% | Theme: " + current_theme_.name) |
+                : text(" Ln 1, Col 1 | Text | LF | 100% | Theme: " + current_theme_.name) |
                       color(current_theme_.menu_foreground));
     }
 
