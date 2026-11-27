@@ -198,7 +198,9 @@ int main() {
     Expect(actions_index >= 0, "The Actions menu was not inserted.");
     Expect(menu_bar.CommandIdAt(actions_index, 0) == "actions.new_group",
         "The Actions menu should expose New Group first.");
-    Expect(menu_bar.CommandIdAt(actions_index, 11) == "actions.import",
+    Expect(menu_bar.CommandIdAt(actions_index, 3) == "actions.merge_group",
+        "The Actions menu should expose Merge Group in the group section.");
+    Expect(menu_bar.CommandIdAt(actions_index, 12) == "actions.import",
         "The Actions menu should expose file import after Add Action.");
     menu_bar.SetActionsMenuVisible(false);
 

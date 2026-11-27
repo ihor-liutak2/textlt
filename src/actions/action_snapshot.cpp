@@ -9,8 +9,8 @@ namespace textlt::actions {
 using Json = nlohmann::json;
 
 std::string EncodeActionSnapshot(const ActionItem& action) {
-    if (action.title.empty() || action.tabs.empty() || action.tabs.size() > 4) {
-        throw std::invalid_argument("An action needs a title and one to four tabs.");
+    if (action.title.empty() || action.tabs.empty() || action.tabs.size() > kMaxActionTabs) {
+        throw std::invalid_argument("An action needs a title and one to eight tabs.");
     }
     auto tabs = Json::array();
     for (const auto& tab : action.tabs) {
@@ -32,7 +32,8 @@ std::optional<ActionItem> DecodeActionSnapshot(std::string_view json) {
         ActionItem action;
         action.title = object.at("title").get<std::string>();
         const auto& tabs = object.at("tabs");
-        if (action.title.empty() || !tabs.is_array() || tabs.empty() || tabs.size() > 4) return std::nullopt;
+        if (action.title.empty() || !tabs.is_array() || tabs.empty() ||
+            tabs.size() > kMaxActionTabs) return std::nullopt;
         for (const auto& item : tabs) {
             ActionTab tab{
                 item.at("caption").get<std::string>(), item.at("content").get<std::string>(),

@@ -10,6 +10,7 @@ namespace textlt::actions {
 
 constexpr std::size_t kActionMetadataCharacterLimit = 30;
 constexpr std::size_t kActionCaptionCharacterLimit = 12;
+constexpr std::size_t kMaxActionTabs = 8;
 
 std::string LimitUtf8Characters(
     const std::string& value, std::size_t max_characters);
@@ -35,7 +36,7 @@ struct ActionItem {
 
     // Convenience constructor for the common single-tab action. It keeps
     // existing call sites and tests that provide a caption/content pair
-    // readable while the model supports up to four tabs.
+    // readable while the model supports multiple tabs.
     ActionItem(std::string id, std::string title, std::string caption,
         std::string content, bool hide_text = false)
         : id(std::move(id)), title(std::move(title)),

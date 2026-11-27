@@ -95,7 +95,7 @@ bool ActionSerializer::Load(const std::filesystem::path& path,
                     if (schema_version >= 2 && has_tabs) {
                         const Json& tabs_json = item_json["tabs"];
                         if (!tabs_json.is_array() || tabs_json.empty() ||
-                            tabs_json.size() > 4) {
+                            tabs_json.size() > kMaxActionTabs) {
                             error = "Invalid action tabs."; return false;
                         }
                         for (const Json& tab_json : tabs_json) {
@@ -147,8 +147,8 @@ bool ActionSerializer::Save(const std::filesystem::path& path,
     for (const ActionGroup& group : document.groups) {
         for (const ActionPage& page : group.pages) {
             for (const ActionItem& item : page.items) {
-                if (item.tabs.size() > 4) {
-                    error = "An action can have at most four tabs.";
+                if (item.tabs.size() > kMaxActionTabs) {
+                    error = "An action can have at most eight tabs.";
                     return false;
                 }
             }

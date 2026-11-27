@@ -243,7 +243,7 @@ bool ActionRepository::CreateItem(const std::string& group_id, const std::string
     std::string_view after_item_id) {
     if (item.title.empty()) { error = "Action title is required."; return false; }
     if (item.tabs.empty()) item.tabs.push_back({});
-    if (item.tabs.size() > 4) { error = "An action can have at most four tabs."; return false; }
+    if (item.tabs.size() > kMaxActionTabs) { error = "An action can have at most eight tabs."; return false; }
     for (const ActionTab& tab : item.tabs) {
         if (LimitActionCaption(tab.caption).size() != tab.caption.size()) {
             error = "Action captions are limited to 12 characters.";
@@ -282,7 +282,7 @@ bool ActionRepository::AppendItems(const std::string& group_id,
     for (ActionItem& item : items) {
         if (item.title.empty()) { error = "Imported action title is empty."; return false; }
         if (item.tabs.empty()) item.tabs.push_back({});
-        if (item.tabs.size() > 4) { error = "An action can have at most four tabs."; return false; }
+        if (item.tabs.size() > kMaxActionTabs) { error = "An action can have at most eight tabs."; return false; }
         for (const ActionTab& tab : item.tabs) {
             if (LimitActionCaption(tab.caption).size() != tab.caption.size()) {
                 error = "Action captions are limited to 12 characters.";
@@ -297,8 +297,8 @@ bool ActionRepository::AppendItems(const std::string& group_id,
 
 bool ActionRepository::UpdateItem(const std::string& group_id, const std::string& page_id, const ActionItem& item, std::string& error) {
     if (item.title.empty()) { error = "Action title is required."; return false; }
-    if (item.tabs.empty() || item.tabs.size() > 4) {
-        error = "An action must have one to four tabs.";
+    if (item.tabs.empty() || item.tabs.size() > kMaxActionTabs) {
+        error = "An action must have one to eight tabs.";
         return false;
     }
     for (const ActionTab& tab : item.tabs) {

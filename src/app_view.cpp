@@ -112,8 +112,8 @@ ftxui::Element TextltApp::Render() {
               ? hbox({find_panel_element, text("  "),
                       actions_workspace_component_->Render() | xflex})
               : show_sidebar
-              ? hbox({sidebar_panel_->Render() | size(WIDTH, EQUAL, 28),
-                      text("  "),
+              ? hbox({sidebar_panel_->Render() | size(WIDTH, EQUAL, 36),
+                      text("    "),
                       actions_workspace_component_->Render() | xflex})
               : hbox({actions_workspace_component_->Render() | xflex}))
         : find_open

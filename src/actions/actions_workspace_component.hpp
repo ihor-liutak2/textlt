@@ -55,7 +55,9 @@ public:
 
     std::vector<ActionGroup> Groups() const { return repository_.Data().groups; }
     std::string SelectedGroupId() const { return selected_group_id_; }
+    std::string SelectedPageId() const { return selected_page_id_; }
     void SelectGroup(const std::string& id);
+    void SelectPage(const std::string& group_id, const std::string& page_id);
 
     void NewGroup();
     void RenameGroup();
@@ -102,8 +104,6 @@ public:
 
 private:
     friend class ActionsWorkspaceModalTestAccess;
-    enum class NavigatorTab { Groups, Pages };
-    enum class FocusArea { Navigator, Items };
     enum class Dialog { None, NewGroup, RenameGroup, NewPage, RenamePage, RenameAction,
         DeleteGroup, DeletePage, DeleteAction, MergeGroup };
     const ActionGroup* SelectedGroup() const;
@@ -119,7 +119,6 @@ private:
     void AcceptDialog();
     void CloseDialog();
     void AfterMutation(const std::string& status);
-    ftxui::Element RenderNavigator();
     ftxui::Element RenderItems();
     void UpdateItemsVisibleCountFromLayout();
     void ScrollItems(int delta);
@@ -142,11 +141,9 @@ private:
     std::string selected_group_id_;
     std::string selected_page_id_;
     std::string selected_item_id_;
+    std::string previewed_item_id_;
+    size_t previewed_tab_index_ = 0;
     std::string merge_target_id_;
-    NavigatorTab navigator_tab_ = NavigatorTab::Pages;
-    FocusArea focus_ = FocusArea::Navigator;
-    size_t group_scroll_ = 0;
-    size_t page_scroll_ = 0;
     size_t item_scroll_ = 0;
     Dialog dialog_ = Dialog::None;
     std::optional<ActionsContextMenu::Target> rename_action_target_;
@@ -155,28 +152,16 @@ private:
     std::shared_ptr<InputSelection> name_selection_;
     ftxui::Component name_component_;
     std::unique_ptr<textlt::ActionEditorModal> action_editor_modal_;
-    ftxui::Box pages_box_;
     ftxui::Box items_box_;
     ftxui::Box add_action_box_;
-    ftxui::Box groups_tab_box_;
-    ftxui::Box pages_tab_box_;
-    ftxui::Box navigator_new_box_;
-    ftxui::Box navigator_rename_box_;
-    ftxui::Box navigator_delete_box_;
-    ftxui::Box pages_view_box_;
     ftxui::Box items_view_box_;
     ftxui::Box items_scrollbar_box_;
-    std::vector<ftxui::Box> group_boxes_;
-    std::vector<ftxui::Box> page_boxes_;
     std::vector<ftxui::Box> item_boxes_;
     std::vector<std::string> item_box_ids_;
-    std::vector<std::array<ftxui::Box, 4>> copy_boxes_;
+    std::vector<std::array<ftxui::Box, kMaxActionTabs>> copy_boxes_;
     std::map<std::pair<std::string, size_t>, std::chrono::steady_clock::time_point>
         copy_caption_deadlines_;
-    bool pages_view_known_ = false;
     bool items_view_known_ = false;
-    size_t groups_visible_count_ = 0;
-    size_t pages_visible_count_ = 0;
     size_t items_visible_rows_ = 0;
     size_t items_visible_count_ = 0;
     std::string items_layout_page_id_;

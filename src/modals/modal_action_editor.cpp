@@ -3,31 +3,79 @@
 #include "modals/modal_action_editor.hpp"
 
 #include <algorithm>
+#include <limits>
 #include <utility>
 
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/mouse.hpp"
+#include "ftxui/screen/string.hpp"
 #include "ui_button.hpp"
+#include "ui_scrollbar.hpp"
 
 namespace textlt {
 namespace {
 
+constexpr int kActionContentInputHeight = 16;
+constexpr int kActionContentViewportColumns = 96;
+
+int WidestLineWidth(const std::string& content) {
+    int widest = 0;
+    size_t start = 0;
+    while (start <= content.size()) {
+        const size_t end = content.find('\n', start);
+        widest = std::max(widest, ftxui::string_width(
+            content.substr(start, end == std::string::npos
+                ? std::string::npos : end - start)));
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+    return widest;
+}
+
+struct CursorLine {
+    size_t start = 0;
+    int column = 0;
+};
+
+CursorLine FindCursorLine(const std::string& content, size_t cursor) {
+    cursor = std::min(cursor, content.size());
+    size_t start = cursor == 0
+        ? std::string::npos : content.rfind('\n', cursor - 1);
+    start = start == std::string::npos ? 0 : start + 1;
+    return {start, ftxui::string_width(
+        content.substr(start, cursor - start))};
+}
+
+size_t ByteOffsetAtColumn(const std::string& line, int column) {
+    const auto glyphs = ftxui::Utf8ToGlyphs(line);
+    int current_column = 0;
+    size_t byte_offset = 0;
+    for (const std::string& glyph : glyphs) {
+        if (current_column >= column) break;
+        current_column += ftxui::string_width(glyph);
+        byte_offset += glyph.size();
+    }
+    return std::min(byte_offset, line.size());
+}
+
 ftxui::Element InputField(const std::string& label,
     const ftxui::Component& input, const Theme& theme, ftxui::Box& clear_box,
-    int height = 3) {
+    int height = 3, ftxui::Box* input_box = nullptr) {
     using namespace ftxui;
     ButtonSpec clear_spec = ButtonSpecFromLabel(
         "Clear", ButtonRole::Warning, ButtonVariant::Minimal, ButtonSize::Compact);
+    Element input_element = input->Render() |
+        color(theme.modal_input_fg) |
+        bgcolor(theme.modal_input_bg) |
+        borderStyled(LIGHT, theme.modal_border) |
+        size(HEIGHT, EQUAL, height);
+    if (input_box) input_element = input_element | reflect(*input_box);
     return vbox({
         hbox({
             text(label) | bold | color(theme.modal_accent) | xflex,
             RenderModalFlatButton(theme, clear_spec) | reflect(clear_box),
         }),
-        input->Render() |
-            color(theme.modal_input_fg) |
-            bgcolor(theme.modal_input_bg) |
-            borderStyled(LIGHT, theme.modal_border) |
-            size(HEIGHT, EQUAL, height),
+        std::move(input_element),
     });
 }
 
@@ -61,7 +109,7 @@ ActionEditorModalContent::ActionEditorModalContent(
     title_input_ = ClipboardController::MakeInput(&title_, "Short descriptive title",
         make_options(&title_, &title_cursor_, false,
             actions::kActionMetadataCharacterLimit));
-    for (int index = 0; index < 4; ++index) {
+    for (int index = 0; index < static_cast<int>(actions::kMaxActionTabs); ++index) {
         const size_t tab = static_cast<size_t>(index);
         caption_inputs_[tab] = ClipboardController::MakeInput(&captions_[tab], "Optional caption",
             make_options(&captions_[tab], &caption_cursors_[tab], false,
@@ -103,7 +151,7 @@ ActionEditorModalContent::ActionEditorModalContent(
     };
     std::vector<ftxui::Component> tab_button_components;
     std::vector<ftxui::Component> tab_form_components;
-    for (int index = 0; index < 4; ++index) {
+    for (int index = 0; index < static_cast<int>(actions::kMaxActionTabs); ++index) {
         tab_buttons_[static_cast<size_t>(index)] = make_tab_button(index);
         tab_button_components.push_back(tab_buttons_[static_cast<size_t>(index)]);
         tab_form_components.push_back(tab_forms_[static_cast<size_t>(index)]);
@@ -117,7 +165,8 @@ ActionEditorModalContent::ActionEditorModalContent(
 }
 
 void ActionEditorModalContent::SelectTab(int index) {
-    active_tab_ = std::clamp(index, 0, 3);
+    active_tab_ = std::clamp(index, 0,
+        static_cast<int>(actions::kMaxActionTabs) - 1);
 }
 
 void ActionEditorModalContent::Begin(const actions::ActionItem* item) {
@@ -126,8 +175,13 @@ void ActionEditorModalContent::Begin(const actions::ActionItem* item) {
     captions_ = {};
     contents_ = {};
     hide_text_ = {};
+    content_scroll_offsets_ = {};
+    content_input_boxes_ = {};
+    content_scrollbar_boxes_ = {};
+    content_scrollbar_dragging_ = false;
     if (item && !item->tabs.empty()) {
-        for (size_t index = 0; index < std::min<size_t>(4, item->tabs.size()); ++index) {
+        for (size_t index = 0;
+             index < std::min(actions::kMaxActionTabs, item->tabs.size()); ++index) {
             captions_[index] = actions::LimitActionCaption(item->tabs[index].caption);
             contents_[index] = item->tabs[index].content;
             hide_text_[index] = item->tabs[index].hide_text;
@@ -136,7 +190,7 @@ void ActionEditorModalContent::Begin(const actions::ActionItem* item) {
     active_tab_ = 0;
     status_.clear();
     title_cursor_ = static_cast<int>(title_.size());
-    for (size_t index = 0; index < 4; ++index) {
+    for (size_t index = 0; index < actions::kMaxActionTabs; ++index) {
         caption_cursors_[index] = static_cast<int>(captions_[index].size());
         content_cursors_[index] = static_cast<int>(contents_[index].size());
     }
@@ -159,6 +213,8 @@ ftxui::Element ActionEditorModalContent::Render() {
     title_clear_box_ = {1, 0, 1, 0};
     caption_clear_boxes_ = {};
     content_clear_boxes_ = {};
+    content_input_boxes_ = {};
+    content_scrollbar_boxes_ = {};
     tab_boxes_ = {};
     Elements tab_buttons;
     for (size_t index = 0; index < tab_boxes_.size(); ++index) {
@@ -168,7 +224,7 @@ ftxui::Element ActionEditorModalContent::Render() {
             active_tab_ == static_cast<int>(index)) | reflect(tab_boxes_[index]));
     }
     tab_buttons.push_back(filler());
-    tab_buttons.push_back(text("Tabs 2–4 are optional") |
+    tab_buttons.push_back(text("Tabs 2–8 are optional") |
         dim | color(theme.modal_text_color));
     return vbox({
         text("Action details") | bold | color(theme.modal_text_color),
@@ -180,16 +236,140 @@ ftxui::Element ActionEditorModalContent::Render() {
             theme, caption_clear_boxes_[static_cast<size_t>(active_tab_)]),
         text(""),
         InputField("Content", content_inputs_[static_cast<size_t>(active_tab_)],
-            theme, content_clear_boxes_[static_cast<size_t>(active_tab_)], 10) | flex,
+            theme, content_clear_boxes_[static_cast<size_t>(active_tab_)],
+            kActionContentInputHeight,
+            &content_input_boxes_[static_cast<size_t>(active_tab_)]),
+        RenderContentHorizontalScrollbar(
+            static_cast<size_t>(active_tab_), theme),
+        text(""),
         hide_text_checkboxes_[static_cast<size_t>(active_tab_)]->Render(),
-    }) | size(WIDTH, EQUAL, 78) | color(theme.modal_text_color);
+    }) | size(WIDTH, EQUAL, 98) | color(theme.modal_text_color);
+}
+
+ftxui::Element ActionEditorModalContent::RenderContentHorizontalScrollbar(
+    size_t tab, const Theme& theme) {
+    using namespace ftxui;
+    const int content_width = WidestLineWidth(contents_[tab]);
+    if (content_width <= kActionContentViewportColumns) {
+        content_scrollbar_boxes_[tab] = {1, 0, 1, 0};
+        content_scroll_offsets_[tab] = 0;
+        return emptyElement();
+    }
+
+    const int max_offset = content_width - kActionContentViewportColumns;
+    const CursorLine cursor_line = FindCursorLine(
+        contents_[tab], static_cast<size_t>(
+            std::max(0, content_cursors_[tab])));
+    content_scroll_offsets_[tab] = std::clamp(
+        cursor_line.column - kActionContentViewportColumns + 1, 0, max_offset);
+    const ScrollbarMetrics metrics(kActionContentViewportColumns,
+        content_width, static_cast<int>(content_scroll_offsets_[tab]));
+    Elements cells;
+    cells.reserve(static_cast<size_t>(kActionContentViewportColumns));
+    for (int column = 0; column < kActionContentViewportColumns; ++column) {
+        if (column >= metrics.thumb_start &&
+            column < metrics.thumb_start + metrics.thumb_length) {
+            cells.push_back(text("━") | color(theme.button_primary));
+        } else {
+            cells.push_back(text("─") | color(theme.gutter) | dim);
+        }
+    }
+    return hbox(std::move(cells)) |
+        reflect(content_scrollbar_boxes_[tab]);
+}
+
+void ActionEditorModalContent::ScrollContentToOffset(
+    size_t tab, size_t offset) {
+    const std::string& content = contents_[tab];
+    size_t line_start = 0;
+    size_t longest_start = 0;
+    std::string longest_line;
+    int longest_width = -1;
+    while (line_start <= content.size()) {
+        const size_t line_end = content.find('\n', line_start);
+        const std::string line = content.substr(line_start,
+            line_end == std::string::npos
+                ? std::string::npos : line_end - line_start);
+        const int width = ftxui::string_width(line);
+        if (width > longest_width) {
+            longest_width = width;
+            longest_start = line_start;
+            longest_line = line;
+        }
+        if (line_end == std::string::npos) break;
+        line_start = line_end + 1;
+    }
+    const int max_offset = std::max(
+        0, longest_width - kActionContentViewportColumns);
+    const int clamped_offset = std::clamp(
+        static_cast<int>(std::min<size_t>(offset,
+            static_cast<size_t>(std::numeric_limits<int>::max()))),
+        0, max_offset);
+    const int target_column = clamped_offset <
+            static_cast<int>(content_scroll_offsets_[tab])
+        ? clamped_offset
+        : std::min(longest_width,
+              clamped_offset + kActionContentViewportColumns - 1);
+    content_cursors_[tab] = static_cast<int>(
+        longest_start + ByteOffsetAtColumn(longest_line, target_column));
+    content_scroll_offsets_[tab] = static_cast<size_t>(clamped_offset);
+    content_inputs_[tab]->TakeFocus();
 }
 
 bool ActionEditorModalContent::HandleEvent(ftxui::Event event) {
     if (!event.is_mouse()) return false;
     const ftxui::Mouse mouse = event.mouse();
+    if (content_scrollbar_dragging_ &&
+        mouse.motion == ftxui::Mouse::Released) {
+        content_scrollbar_dragging_ = false;
+        return true;
+    }
+    if (content_scrollbar_dragging_ &&
+        mouse.motion == ftxui::Mouse::Moved) {
+        const size_t tab = content_scrollbar_drag_tab_;
+        const int content_width = WidestLineWidth(contents_[tab]);
+        const int max_offset = std::max(
+            0, content_width - kActionContentViewportColumns);
+        const ScrollbarMetrics metrics(kActionContentViewportColumns,
+            content_width, static_cast<int>(content_scroll_offsets_[tab]));
+        if (metrics.Travel() > 0) {
+            const int thumb_start = std::clamp(
+                mouse.x - content_scrollbar_boxes_[tab].x_min -
+                    content_scrollbar_drag_thumb_start_,
+                0, metrics.Travel());
+            const size_t offset = static_cast<size_t>(std::clamp(
+                metrics.OffsetForThumb(thumb_start), 0, max_offset));
+            ScrollContentToOffset(tab, offset);
+        }
+        return true;
+    }
     if (mouse.button != ftxui::Mouse::Left ||
         mouse.motion != ftxui::Mouse::Pressed) return false;
+    for (size_t tab = 0; tab < content_scrollbar_boxes_.size(); ++tab) {
+        const ftxui::Box& box = content_scrollbar_boxes_[tab];
+        if (!box.Contain(mouse.x, mouse.y)) continue;
+        const int content_width = WidestLineWidth(contents_[tab]);
+        const int max_offset = std::max(
+            0, content_width - kActionContentViewportColumns);
+        const ScrollbarMetrics metrics(kActionContentViewportColumns,
+            content_width, static_cast<int>(content_scroll_offsets_[tab]));
+        const int relative_x = mouse.x - box.x_min;
+        int thumb_start = metrics.thumb_start;
+        if (relative_x >= metrics.thumb_start &&
+            relative_x < metrics.thumb_start + metrics.thumb_length) {
+            content_scrollbar_dragging_ = true;
+            content_scrollbar_drag_tab_ = tab;
+            content_scrollbar_drag_thumb_start_ =
+                relative_x - metrics.thumb_start;
+        } else {
+            thumb_start = std::clamp(relative_x - metrics.thumb_length / 2,
+                0, metrics.Travel());
+        }
+        const size_t offset = static_cast<size_t>(std::clamp(
+            metrics.OffsetForThumb(thumb_start), 0, max_offset));
+        ScrollContentToOffset(tab, offset);
+        return true;
+    }
     for (size_t index = 0; index < tab_boxes_.size(); ++index) {
         if (tab_boxes_[index].Contain(mouse.x, mouse.y)) {
             SelectTab(static_cast<int>(index));
@@ -225,7 +405,7 @@ bool ActionEditorModalContent::Submit() {
         return false;
     }
     size_t last_populated_tab = 0;
-    for (size_t index = 1; index < 4; ++index) {
+    for (size_t index = 1; index < actions::kMaxActionTabs; ++index) {
         if (!captions_[index].empty() || !contents_[index].empty() ||
             hide_text_[index]) last_populated_tab = index;
     }

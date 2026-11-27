@@ -34,6 +34,27 @@ ftxui::Color SidebarBorderColor(const Theme& theme) {
     return theme.gutter;
 }
 
+class SidebarActionContextLayer final : public ftxui::Node {
+public:
+    using Paint = std::function<void(ftxui::Screen&, const ftxui::Box&)>;
+
+    SidebarActionContextLayer(ftxui::Element sidebar, Paint paint)
+        : Node({std::move(sidebar)}), paint_(std::move(paint)) {}
+
+    void SetBox(ftxui::Box box) override {
+        Node::SetBox(box);
+        children_.front()->SetBox(box);
+    }
+
+    void Render(ftxui::Screen& screen) override {
+        Node::Render(screen);
+        paint_(screen, box_);
+    }
+
+private:
+    Paint paint_;
+};
+
 } // namespace
 
 class SidebarPanel::EntryList final : public ftxui::Node {
@@ -47,7 +68,8 @@ public:
         Node::SetBox(box);
         sidebar_.scrollbar_box_ = {box.x_min, box.x_max, box.y_max, box.y_max};
         sidebar_.menu_box_ = box;
-        --sidebar_.menu_box_.y_max;
+        if (sidebar_.mode_ != SidebarMode::Actions)
+            --sidebar_.menu_box_.y_max;
         children_.clear();
 
         if (box.IsEmpty()) {
@@ -61,8 +83,16 @@ public:
         sidebar_.ClampScrollOffset();
 
         size_t index = sidebar_.list_scroll_offset_;
-        for (int y = box.y_min; y < box.y_max && index < sidebar_.entry_labels_.size(); ++y, ++index) {
+        const int row_limit = sidebar_.mode_ == SidebarMode::Actions
+            ? box.y_max + 1 : box.y_max;
+        for (int y = box.y_min; y < row_limit &&
+             index < sidebar_.entry_labels_.size(); ++y, ++index) {
             AddRow(sidebar_.RenderEntry(index, width, theme_), y);
+        }
+
+        if (sidebar_.mode_ == SidebarMode::Actions) {
+            sidebar_.scrollbar_drag_.reset();
+            return;
         }
 
         const ScrollbarMetrics scrollbar(width, sidebar_.widest_label_, sidebar_.label_scroll_offset_);
@@ -107,7 +137,7 @@ SidebarPanel::SidebarPanel(
     OpenFilesModalCallback on_open_files_modal,
     CopyPathCallback on_copy_path,
     ShortcutLabelProvider shortcut_label_provider,
-    ProjectIdCallback on_action_group_select,
+    ActionNavigationCallback on_action_navigation,
     ActionCommandCallback on_action_command,
     ProjectsProvider projects_provider,
     ProjectIdCallback on_project_select,
@@ -127,7 +157,7 @@ SidebarPanel::SidebarPanel(
       on_open_files_modal_(std::move(on_open_files_modal)),
       on_copy_path_(std::move(on_copy_path)),
       shortcut_label_provider_(std::move(shortcut_label_provider)),
-      on_action_group_select_(std::move(on_action_group_select)),
+      on_action_navigation_(std::move(on_action_navigation)),
       on_action_command_(std::move(on_action_command)),
       projects_provider_(std::move(projects_provider)),
       on_project_select_(std::move(on_project_select)),
@@ -166,20 +196,26 @@ ftxui::Element SidebarPanel::OnRender() {
             ? text(" " + DisplayName(project_root_) + "/") | bold | color(sidebar_text)
             : emptyElement(),
         RenderActionRow(),
-        mode_ == SidebarMode::Actions ? emptyElement() : text(""),
-        mode_ == SidebarMode::Actions
-            ? separatorLight() | color(SidebarBorderColor(theme))
-            : emptyElement(),
+        text(""),
         std::make_shared<EntryList>(*this, theme) | yflex,
     });
-    if (mode_ == SidebarMode::Actions) {
-        panel = panel | borderStyled(LIGHT, SidebarBorderColor(theme));
+    Element rendered = panel | reflect(panel_box_);
+    if (mode_ == SidebarMode::Actions && action_context_open_) {
+        rendered = std::make_shared<SidebarActionContextLayer>(
+            std::move(rendered),
+            [this](ftxui::Screen& screen, const ftxui::Box& box) {
+                DrawActionContextMenu(screen, box);
+            });
     }
-    return panel | reflect(panel_box_);
+    return rendered;
 }
 
 ftxui::Element SidebarPanel::RenderEntry(size_t index, int width, const Theme& theme) const {
     using namespace ftxui;
+    if (mode_ == SidebarMode::Actions &&
+        entry_kinds_[index] == EntryKind::ActionSpacer) {
+        return text("");
+    }
     Color label_color = FileListTextColor(theme);
     if (mode_ == SidebarMode::Folder &&
         (entry_kinds_[index] == EntryKind::Directory || entry_kinds_[index] == EntryKind::File)) {
@@ -191,6 +227,22 @@ ftxui::Element SidebarPanel::RenderEntry(size_t index, int width, const Theme& t
         }
     }
     Element row = text(VisibleLabel(entry_labels_[index], label_scroll_offset_, width));
+    if (mode_ == SidebarMode::Actions) {
+        const bool selected_group = entry_kinds_[index] == EntryKind::ActionGroup &&
+            entry_ids_[index] == selected_action_group_id_ &&
+            selected_action_page_id_.empty();
+        const bool active_group = entry_kinds_[index] == EntryKind::ActionGroup &&
+            entry_ids_[index] == selected_action_group_id_ &&
+            !selected_action_page_id_.empty();
+        const bool selected_page = entry_kinds_[index] == EntryKind::ActionPage &&
+            entry_parent_ids_[index] == selected_action_group_id_ &&
+            entry_ids_[index] == selected_action_page_id_;
+        if (selected_group || selected_page)
+            return row | bgcolor(theme.modal_selected_item_bg) |
+                color(theme.modal_selected_item_fg);
+        if (active_group)
+            return row | bold | color(theme.modal_accent);
+    }
     if (static_cast<int>(index) == selected_entry_) {
         return row | bgcolor(theme.modal_selected_item_bg) | color(theme.modal_selected_item_fg);
     }
@@ -212,48 +264,66 @@ void SidebarPanel::ClearHitboxes() {
     action_quaternary_box_ = empty;
     action_quinary_box_ = empty;
     project_rename_box_ = empty;
-    group_new_box_ = empty;
-    group_rename_box_ = empty;
-    group_delete_box_ = empty;
-    group_merge_box_ = empty;
-    page_new_box_ = empty;
-    page_rename_box_ = empty;
-    page_delete_box_ = empty;
-    item_add_box_ = empty;
-    item_edit_box_ = empty;
-    item_delete_box_ = empty;
-    item_move_up_box_ = empty;
-    item_move_down_box_ = empty;
+    action_context_box_ = empty;
+    action_context_item_boxes_.fill(empty);
+    action_context_open_ = false;
 }
 
 bool SidebarPanel::OnEvent(ftxui::Event event) {
-    if (event.is_mouse() && HandleScrollbarMouse(event, event.mouse())) {
+    if (mode_ == SidebarMode::Actions && event.is_mouse()) {
+        const auto& mouse = event.mouse();
+        if (mouse.button == ftxui::Mouse::Right &&
+            mouse.motion == ftxui::Mouse::Pressed) {
+            const int entry = EntryIndexAtMouse(mouse);
+            if (entry >= 0 &&
+                (entry_kinds_[entry] == EntryKind::ActionGroup ||
+                 entry_kinds_[entry] == EntryKind::ActionPage)) {
+                OpenActionContextMenu(entry, mouse.x, mouse.y);
+                return true;
+            }
+        }
+    }
+    if (mode_ == SidebarMode::Actions && action_context_open_ &&
+        HandleActionContextMenuEvent(event)) {
         return true;
     }
-
-    // Action controls take priority over the retained document sidebar hitboxes.
-    if (mode_ == SidebarMode::Actions &&
-        event.is_mouse() &&
-        event.mouse().button == ftxui::Mouse::Left &&
-        event.mouse().motion == ftxui::Mouse::Pressed &&
-        HandleActionButtonMouse(event.mouse())) {
+    if (mode_ != SidebarMode::Actions && event.is_mouse() &&
+        HandleScrollbarMouse(event, event.mouse())) {
         return true;
     }
 
     if (event == ftxui::Event::ArrowDown) {
-        if (selected_entry_ + 1 < static_cast<int>(entry_labels_.size())) {
+        if (mode_ == SidebarMode::Actions) {
+            int next = selected_entry_ + 1;
+            while (next < static_cast<int>(entry_labels_.size()) &&
+                   entry_kinds_[next] == EntryKind::ActionSpacer) ++next;
+            if (next < static_cast<int>(entry_labels_.size())) {
+                selected_entry_ = next;
+                EnsureSelectedEntryVisible();
+            }
+        } else if (selected_entry_ + 1 < static_cast<int>(entry_labels_.size())) {
             ++selected_entry_;
             EnsureSelectedEntryVisible();
         }
+        if (mode_ == SidebarMode::Actions) OpenSelectedEntry();
         FocusMenu();
         return true;
     }
 
     if (event == ftxui::Event::ArrowUp) {
-        if (selected_entry_ > 0) {
+        if (mode_ == SidebarMode::Actions) {
+            int next = selected_entry_ - 1;
+            while (next >= 0 &&
+                   entry_kinds_[next] == EntryKind::ActionSpacer) --next;
+            if (next >= 0) {
+                selected_entry_ = next;
+                EnsureSelectedEntryVisible();
+            }
+        } else if (selected_entry_ > 0) {
             --selected_entry_;
             EnsureSelectedEntryVisible();
         }
+        if (mode_ == SidebarMode::Actions) OpenSelectedEntry();
         FocusMenu();
         return true;
     }
@@ -324,6 +394,9 @@ bool SidebarPanel::OnEvent(ftxui::Event event) {
         event.mouse().motion == ftxui::Mouse::Pressed) {
         const int clicked_entry = EntryIndexAtMouse(event.mouse());
         if (clicked_entry >= 0) {
+            if (mode_ == SidebarMode::Actions &&
+                entry_kinds_[clicked_entry] == EntryKind::ActionSpacer)
+                return true;
             const auto now = std::chrono::steady_clock::now();
             const auto duration =
                 std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -387,9 +460,10 @@ void SidebarPanel::ShowFavorites() {
 void SidebarPanel::ShowActions() { SetMode(SidebarMode::Actions); }
 
 void SidebarPanel::SetActionGroups(std::vector<ActionGroupEntry> groups,
-    const std::string& selected_id) {
+    const std::string& selected_id, const std::string& selected_page_id) {
     action_group_entries_ = std::move(groups);
     selected_action_group_id_ = selected_id;
+    selected_action_page_id_ = selected_page_id;
     if (mode_ == SidebarMode::Actions) RebuildEntries();
 }
 
@@ -399,6 +473,8 @@ void SidebarPanel::SetMode(SidebarMode mode) {
     }
 
     mode_ = mode;
+    action_context_open_ = false;
+    action_context_item_boxes_ = {};
     selected_entry_ = 0;
     list_scroll_offset_ = 0;
     label_scroll_offset_ = 0;
@@ -418,9 +494,21 @@ void SidebarPanel::OpenSelectedEntry() {
     const std::filesystem::path selected_path = entry_paths_[selected_entry_];
     const EntryKind selected_kind = entry_kinds_[selected_entry_];
     if (selected_kind == EntryKind::ActionGroup) {
-        if (on_action_group_select_ && selected_entry_ < static_cast<int>(entry_ids_.size())) {
+        if (on_action_navigation_ && selected_entry_ < static_cast<int>(entry_ids_.size())) {
             selected_action_group_id_ = entry_ids_[selected_entry_];
-            on_action_group_select_(selected_action_group_id_);
+            selected_action_page_id_.clear();
+            on_action_navigation_(selected_action_group_id_, {});
+        }
+        return;
+    }
+    if (selected_kind == EntryKind::ActionPage) {
+        if (on_action_navigation_ &&
+            selected_entry_ < static_cast<int>(entry_ids_.size()) &&
+            selected_entry_ < static_cast<int>(entry_parent_ids_.size())) {
+            selected_action_group_id_ = entry_parent_ids_[selected_entry_];
+            selected_action_page_id_ = entry_ids_[selected_entry_];
+            on_action_navigation_(selected_action_group_id_,
+                selected_action_page_id_);
         }
         return;
     }
@@ -456,6 +544,121 @@ void SidebarPanel::OpenSelectedEntry() {
         std::filesystem::is_regular_file(selected_path, error) && on_file_open_) {
         on_file_open_(selected_path);
     }
+}
+
+void SidebarPanel::OpenActionContextMenu(
+    int entry_index, int mouse_x, int mouse_y) {
+    if (entry_index < 0 ||
+        entry_index >= static_cast<int>(entry_kinds_.size()) ||
+        (entry_kinds_[entry_index] != EntryKind::ActionGroup &&
+         entry_kinds_[entry_index] != EntryKind::ActionPage)) {
+        return;
+    }
+    selected_entry_ = entry_index;
+    action_context_page_ = entry_kinds_[entry_index] == EntryKind::ActionPage;
+    action_context_selected_ = 0;
+    action_context_anchor_x_ = mouse_x;
+    action_context_anchor_y_ = mouse_y;
+    OpenSelectedEntry();
+    action_context_open_ = true;
+    FocusMenu();
+}
+
+void SidebarPanel::DrawActionContextMenu(
+    ftxui::Screen& screen, const ftxui::Box& sidebar_box) {
+    using namespace ftxui;
+    if (!action_context_open_) return;
+    const Theme& theme = theme_ ? *theme_ : FallbackTheme();
+    const std::array<std::string, 3> labels = {"New", "Rename", "Delete"};
+    constexpr int menu_width = 12;
+    constexpr int menu_height = 5;
+    const int sidebar_width = sidebar_box.x_max - sidebar_box.x_min + 1;
+    const int sidebar_height = sidebar_box.y_max - sidebar_box.y_min + 1;
+    if (sidebar_width < menu_width || sidebar_height < menu_height) {
+        action_context_box_ = {0, -1, 0, -1};
+        action_context_item_boxes_ = {};
+        return;
+    }
+    int x = action_context_anchor_x_ + 1;
+    if (x + menu_width - 1 > sidebar_box.x_max)
+        x = action_context_anchor_x_ - menu_width;
+    x = std::clamp(x, sidebar_box.x_min,
+        sidebar_box.x_max - menu_width + 1);
+    const int y = std::clamp(action_context_anchor_y_, sidebar_box.y_min,
+        sidebar_box.y_max - menu_height + 1);
+    action_context_box_ = {
+        x, x + menu_width - 1, y, y + menu_height - 1};
+    for (size_t index = 0; index < action_context_item_boxes_.size(); ++index) {
+        action_context_item_boxes_[index] = {
+            x + 1, x + menu_width - 2,
+            y + 1 + static_cast<int>(index),
+            y + 1 + static_cast<int>(index)};
+    }
+    Elements rows;
+    for (size_t index = 0; index < labels.size(); ++index) {
+        Element row = hbox({
+            text(" " + labels[index] + " "),
+            filler(),
+        });
+        if (index == action_context_selected_) {
+            row = row | bgcolor(theme.modal_selected_item_bg) |
+                color(theme.modal_selected_item_fg);
+        } else {
+            row = row | color(theme.modal_text_color);
+        }
+        rows.push_back(row);
+    }
+    Element menu = vbox(std::move(rows)) |
+        borderStyled(ftxui::LIGHT, theme.modal_border) |
+        bgcolor(theme.menu_background) | clear_under;
+    menu->ComputeRequirement();
+    menu->SetBox(action_context_box_);
+    menu->Render(screen);
+}
+
+bool SidebarPanel::HandleActionContextMenuEvent(ftxui::Event event) {
+    if (event == ftxui::Event::Escape) {
+        action_context_open_ = false;
+        return true;
+    }
+    if (event == ftxui::Event::ArrowUp ||
+        event == ftxui::Event::ArrowDown) {
+        const int delta = event == ftxui::Event::ArrowDown ? 1 : -1;
+        action_context_selected_ = static_cast<size_t>(
+            std::clamp(static_cast<int>(action_context_selected_) + delta, 0, 2));
+        return true;
+    }
+    if (event == ftxui::Event::Return) {
+        ExecuteActionContextCommand(action_context_selected_);
+        return true;
+    }
+    if (!event.is_mouse()) return true;
+    const ftxui::Mouse mouse = event.mouse();
+    if (mouse.button != ftxui::Mouse::Left ||
+        mouse.motion != ftxui::Mouse::Pressed) return true;
+    for (size_t index = 0; index < action_context_item_boxes_.size(); ++index) {
+        if (action_context_item_boxes_[index].Contain(mouse.x, mouse.y)) {
+            ExecuteActionContextCommand(index);
+            return true;
+        }
+    }
+    action_context_open_ = false;
+    action_context_item_boxes_ = {};
+    return false;
+}
+
+void SidebarPanel::ExecuteActionContextCommand(size_t command_index) {
+    if (command_index >= 3) return;
+    const ActionCommand command = action_context_page_
+        ? (command_index == 0 ? ActionCommand::NewPage
+           : command_index == 1 ? ActionCommand::RenamePage
+                                : ActionCommand::DeletePage)
+        : (command_index == 0 ? ActionCommand::NewGroup
+           : command_index == 1 ? ActionCommand::RenameGroup
+                                : ActionCommand::DeleteGroup);
+    action_context_open_ = false;
+    action_context_item_boxes_ = {};
+    if (on_action_command_) on_action_command_(command);
 }
 
 bool SidebarPanel::OpenDirectoryEntry(int entry_index) {
@@ -673,24 +876,7 @@ ftxui::Element SidebarPanel::RenderActionRow() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     const Color label_color = FileListTextColor(theme);
 
-    action_primary_box_ = {};
-    action_secondary_box_ = {};
-    action_tertiary_box_ = {};
-    action_quaternary_box_ = {};
-    action_quinary_box_ = {};
     project_rename_box_ = {1, 0, 1, 0};
-    group_new_box_ = {};
-    group_rename_box_ = {};
-    group_delete_box_ = {};
-    group_merge_box_ = {};
-    page_new_box_ = {};
-    page_rename_box_ = {};
-    page_delete_box_ = {};
-    item_add_box_ = {};
-    item_edit_box_ = {};
-    item_delete_box_ = {};
-    item_move_up_box_ = {};
-    item_move_down_box_ = {};
 
     if (mode_ == SidebarMode::Projects) {
         const bool selected = selected_entry_ >= 0 &&
@@ -741,40 +927,7 @@ ftxui::Element SidebarPanel::RenderActionRow() {
     }
 
     if (mode_ == SidebarMode::Actions) {
-        return vbox({
-            text(" Group:") | bold | color(label_color),
-            hbox({
-                RenderFlatActionButton("New", ButtonRole::Primary, group_new_box_),
-                text(" "),
-                RenderFlatActionButton("Rename", ButtonRole::Utility, group_rename_box_),
-                text(" "),
-                RenderFlatActionButton("Delete", ButtonRole::Danger, group_delete_box_),
-            }),
-            hbox({
-                RenderFlatActionButton("Merge", ButtonRole::Warning, group_merge_box_),
-            }),
-            text(" Pages:") | bold | color(label_color),
-            hbox({
-                RenderFlatActionButton("New", ButtonRole::Primary, page_new_box_),
-                text(" "),
-                RenderFlatActionButton("Rename", ButtonRole::Utility, page_rename_box_),
-                text(" "),
-                RenderFlatActionButton("Delete", ButtonRole::Danger, page_delete_box_),
-            }),
-            text(" Actions:") | bold | color(label_color),
-            hbox({
-                RenderFlatActionButton("Add", ButtonRole::Primary, item_add_box_),
-                text(" "),
-                RenderFlatActionButton("Edit", ButtonRole::Utility, item_edit_box_),
-                text(" "),
-                RenderFlatActionButton("Delete", ButtonRole::Danger, item_delete_box_),
-            }),
-            hbox({
-                RenderFlatActionButton("Move Up", ButtonRole::Navigation, item_move_up_box_),
-                text(" "),
-                RenderFlatActionButton("Move Down", ButtonRole::Navigation, item_move_down_box_),
-            }),
-        });
+        return text("Groups / Pages") | bold | color(label_color);
     }
 
     return hbox({
@@ -785,59 +938,6 @@ ftxui::Element SidebarPanel::RenderActionRow() {
 }
 
 bool SidebarPanel::HandleActionButtonMouse(const ftxui::Mouse& mouse) {
-    if (mode_ == SidebarMode::Actions) {
-        if (on_action_command_) {
-            if (group_new_box_.Contain(mouse.x, mouse.y)) {
-                on_action_command_(ActionCommand::NewGroup);
-                return true;
-            }
-            if (group_rename_box_.Contain(mouse.x, mouse.y)) {
-                on_action_command_(ActionCommand::RenameGroup);
-                return true;
-            }
-            if (group_delete_box_.Contain(mouse.x, mouse.y)) {
-                on_action_command_(ActionCommand::DeleteGroup);
-                return true;
-            }
-            if (group_merge_box_.Contain(mouse.x, mouse.y)) {
-                on_action_command_(ActionCommand::MergeGroup);
-                return true;
-            }
-            if (page_new_box_.Contain(mouse.x, mouse.y)) {
-                on_action_command_(ActionCommand::NewPage);
-                return true;
-            }
-            if (page_rename_box_.Contain(mouse.x, mouse.y)) {
-                on_action_command_(ActionCommand::RenamePage);
-                return true;
-            }
-            if (page_delete_box_.Contain(mouse.x, mouse.y)) {
-                on_action_command_(ActionCommand::DeletePage);
-                return true;
-            }
-            if (item_add_box_.Contain(mouse.x, mouse.y)) {
-                on_action_command_(ActionCommand::AddAction);
-                return true;
-            }
-            if (item_edit_box_.Contain(mouse.x, mouse.y)) {
-                on_action_command_(ActionCommand::EditAction);
-                return true;
-            }
-            if (item_delete_box_.Contain(mouse.x, mouse.y)) {
-                on_action_command_(ActionCommand::DeleteAction);
-                return true;
-            }
-            if (item_move_up_box_.Contain(mouse.x, mouse.y)) {
-                on_action_command_(ActionCommand::MoveActionUp);
-                return true;
-            }
-            if (item_move_down_box_.Contain(mouse.x, mouse.y)) {
-                on_action_command_(ActionCommand::MoveActionDown);
-                return true;
-            }
-        }
-        return false;
-    }
     if (action_primary_box_.Contain(mouse.x, mouse.y)) {
         switch (mode_) {
             case SidebarMode::Favorites:
@@ -1009,6 +1109,7 @@ void SidebarPanel::RebuildEntries() {
     entry_labels_.clear();
     entry_kinds_.clear();
     entry_ids_.clear();
+    entry_parent_ids_.clear();
     project_entries_.clear();
     widest_label_ = 0;
 
@@ -1041,14 +1142,29 @@ void SidebarPanel::RebuildEntries() {
 
 void SidebarPanel::RebuildActionEntries() {
     for (const auto& group : action_group_entries_) {
-        AddEntry({}, std::string(group.project ? "◆ " : "  ") + group.name,
-            EntryKind::ActionGroup);
+        AddEntry({}, "", EntryKind::ActionSpacer);
+        AddEntry({}, group.name, EntryKind::ActionGroup);
         entry_ids_.back() = group.id;
+        for (const auto& [page_id, page_name] : group.pages) {
+            AddEntry({}, "    " + page_name, EntryKind::ActionPage);
+            entry_ids_.back() = page_id;
+            entry_parent_ids_.back() = group.id;
+        }
     }
-    const auto selected = std::find(entry_ids_.begin(), entry_ids_.end(),
-        selected_action_group_id_);
-    if (selected != entry_ids_.end()) {
-        selected_entry_ = static_cast<int>(std::distance(entry_ids_.begin(), selected));
+    for (size_t index = 0; index < entry_ids_.size(); ++index) {
+        if (entry_kinds_[index] == EntryKind::ActionPage &&
+            entry_parent_ids_[index] == selected_action_group_id_ &&
+            entry_ids_[index] == selected_action_page_id_) {
+            selected_entry_ = static_cast<int>(index);
+            return;
+        }
+    }
+    for (size_t index = 0; index < entry_ids_.size(); ++index) {
+        if (entry_kinds_[index] == EntryKind::ActionGroup &&
+            entry_ids_[index] == selected_action_group_id_) {
+            selected_entry_ = static_cast<int>(index);
+            return;
+        }
     }
 }
 
@@ -1135,6 +1251,7 @@ void SidebarPanel::AddEntry(std::filesystem::path path, std::string label, Entry
     entry_labels_.push_back(std::move(label));
     entry_kinds_.push_back(kind);
     entry_ids_.emplace_back();
+    entry_parent_ids_.emplace_back();
 }
 
 void SidebarPanel::SetProjectRoot(const std::filesystem::path& root) {

@@ -24,7 +24,7 @@ public:
     ftxui::Component GetMainComponent() override { return container_; }
     std::string GetTitle() override;
     ftxui::Element RenderTitle() override;
-    ModalSizePreference GetModalSizePreference() const override { return {82, 32}; }
+    ModalSizePreference GetModalSizePreference() const override { return {102, 42}; }
     ModalFrameStyle GetModalFrameStyle() const override {
         return ModalFrameStyle::TitleInBorder;
     }
@@ -41,32 +41,41 @@ public:
 private:
     friend class ActionEditorModalTestAccess;
     void SelectTab(int index);
+    ftxui::Element RenderContentHorizontalScrollbar(size_t tab,
+        const Theme& theme);
+    void ScrollContentToOffset(size_t tab, size_t offset);
 
     const Theme* theme_ = nullptr;
     SubmitCallback on_submit_;
     std::string id_;
     std::string title_;
     int active_tab_ = 0;
-    std::array<std::string, 4> captions_;
-    std::array<std::string, 4> contents_;
-    std::array<bool, 4> hide_text_{};
+    std::array<std::string, actions::kMaxActionTabs> captions_;
+    std::array<std::string, actions::kMaxActionTabs> contents_;
+    std::array<bool, actions::kMaxActionTabs> hide_text_{};
     std::string status_;
     int title_cursor_ = 0;
-    std::array<int, 4> caption_cursors_{};
-    std::array<int, 4> content_cursors_{};
+    std::array<int, actions::kMaxActionTabs> caption_cursors_{};
+    std::array<int, actions::kMaxActionTabs> content_cursors_{};
     ftxui::Component title_input_;
-    std::array<ftxui::Component, 4> caption_inputs_;
-    std::array<ftxui::Component, 4> content_inputs_;
-    std::array<ftxui::Component, 4> hide_text_checkboxes_;
-    std::array<ftxui::Component, 4> tab_forms_;
-    std::array<ftxui::Component, 4> tab_buttons_;
+    std::array<ftxui::Component, actions::kMaxActionTabs> caption_inputs_;
+    std::array<ftxui::Component, actions::kMaxActionTabs> content_inputs_;
+    std::array<ftxui::Component, actions::kMaxActionTabs> hide_text_checkboxes_;
+    std::array<ftxui::Component, actions::kMaxActionTabs> tab_forms_;
+    std::array<ftxui::Component, actions::kMaxActionTabs> tab_buttons_;
     ftxui::Component tab_button_row_;
     ftxui::Component tab_container_;
     ftxui::Component container_;
     ftxui::Box title_clear_box_;
-    std::array<ftxui::Box, 4> caption_clear_boxes_;
-    std::array<ftxui::Box, 4> content_clear_boxes_;
-    std::array<ftxui::Box, 4> tab_boxes_;
+    std::array<ftxui::Box, actions::kMaxActionTabs> caption_clear_boxes_;
+    std::array<ftxui::Box, actions::kMaxActionTabs> content_clear_boxes_;
+    std::array<ftxui::Box, actions::kMaxActionTabs> content_input_boxes_;
+    std::array<ftxui::Box, actions::kMaxActionTabs> content_scrollbar_boxes_;
+    std::array<size_t, actions::kMaxActionTabs> content_scroll_offsets_{};
+    std::array<ftxui::Box, actions::kMaxActionTabs> tab_boxes_;
+    bool content_scrollbar_dragging_ = false;
+    size_t content_scrollbar_drag_tab_ = 0;
+    int content_scrollbar_drag_thumb_start_ = 0;
 };
 
 class ActionEditorModal {

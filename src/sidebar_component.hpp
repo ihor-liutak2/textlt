@@ -1,16 +1,19 @@
 #pragma once
 
 
+#include <array>
 #include <chrono>
 #include <filesystem>
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "ftxui/component/component.hpp"
 #include "ftxui/component/mouse.hpp"
 #include "ftxui/component/component_base.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "ftxui/screen/screen.hpp"
 #include "git_manager.hpp"
 #include "theme.hpp"
 #include "ui_button.hpp"
@@ -33,6 +36,8 @@ private:
         Project,
         Placeholder,
         ActionGroup,
+        ActionPage,
+        ActionSpacer,
     };
 
 public:
@@ -48,7 +53,7 @@ public:
     struct ActionGroupEntry {
         std::string id;
         std::string name;
-        bool project = false;
+        std::vector<std::pair<std::string, std::string>> pages;
     };
 
     using FileOpenCallback = std::function<void(const std::filesystem::path&)>;
@@ -60,10 +65,11 @@ public:
     using ShortcutLabelProvider = std::function<std::string(const std::string& command_id)>;
     using ProjectsProvider = std::function<std::vector<ProjectEntry>()>;
     using ProjectIdCallback = std::function<void(const std::string&)>;
+    using ActionNavigationCallback = std::function<void(
+        const std::string& group_id, const std::string& page_id)>;
     using AddProjectCallback = std::function<void(const std::filesystem::path&)>;
     enum class ActionCommand {
-        NewGroup, RenameGroup, DeleteGroup, MergeGroup, NewPage, RenamePage, DeletePage,
-        AddAction, EditAction, DeleteAction, MoveActionUp, MoveActionDown,
+        NewGroup, RenameGroup, DeleteGroup, NewPage, RenamePage, DeletePage,
     };
     using ActionCommandCallback = std::function<void(ActionCommand)>;
 
@@ -77,7 +83,7 @@ public:
         OpenFilesModalCallback on_open_files_modal,
         CopyPathCallback on_copy_path,
         ShortcutLabelProvider shortcut_label_provider,
-        ProjectIdCallback on_action_group_select,
+        ActionNavigationCallback on_action_navigation,
         ActionCommandCallback on_action_command,
         ProjectsProvider projects_provider,
         ProjectIdCallback on_project_select,
@@ -103,7 +109,7 @@ public:
     void ShowFavorites();
     void ShowActions();
     void SetActionGroups(std::vector<ActionGroupEntry> groups,
-        const std::string& selected_id);
+        const std::string& selected_id, const std::string& selected_page_id);
     bool IsProjectMode() const { return mode_ == SidebarMode::Folder; }
     bool IsProjectsMode() const { return mode_ == SidebarMode::Projects; }
     bool IsFavoritesMode() const { return mode_ == SidebarMode::Favorites; }
@@ -179,6 +185,11 @@ private:
     void ScrollLabels(int delta);
     bool HandleScrollbarMouse(const ftxui::Event& event, const ftxui::Mouse& mouse);
     ftxui::Element RenderEntry(size_t index, int width, const Theme& theme) const;
+    void DrawActionContextMenu(ftxui::Screen& screen,
+        const ftxui::Box& sidebar_box);
+    bool HandleActionContextMenuEvent(ftxui::Event event);
+    void OpenActionContextMenu(int entry_index, int mouse_x, int mouse_y);
+    void ExecuteActionContextCommand(size_t command_index);
     void RebuildEntries();
     void RebuildProjectEntries();
     void RebuildProjectsEntries();
@@ -210,7 +221,7 @@ private:
     OpenFilesModalCallback on_open_files_modal_;
     CopyPathCallback on_copy_path_;
     ShortcutLabelProvider shortcut_label_provider_;
-    ProjectIdCallback on_action_group_select_;
+    ActionNavigationCallback on_action_navigation_;
     ActionCommandCallback on_action_command_;
     ProjectsProvider projects_provider_;
     ProjectIdCallback on_project_select_;
@@ -227,9 +238,16 @@ private:
     std::vector<std::string> entry_labels_;
     std::vector<EntryKind> entry_kinds_;
     std::vector<std::string> entry_ids_;
+    std::vector<std::string> entry_parent_ids_;
     std::vector<ProjectEntry> project_entries_;
     std::vector<ActionGroupEntry> action_group_entries_;
     std::string selected_action_group_id_;
+    std::string selected_action_page_id_;
+    bool action_context_open_ = false;
+    bool action_context_page_ = false;
+    size_t action_context_selected_ = 0;
+    int action_context_anchor_x_ = 0;
+    int action_context_anchor_y_ = 0;
     int selected_entry_ = 0;
     size_t list_scroll_offset_ = 0;
     int widest_label_ = 0;
@@ -248,18 +266,8 @@ private:
     ftxui::Box action_quaternary_box_;
     ftxui::Box action_quinary_box_;
     ftxui::Box project_rename_box_;
-    ftxui::Box group_new_box_;
-    ftxui::Box group_rename_box_;
-    ftxui::Box group_delete_box_;
-    ftxui::Box group_merge_box_;
-    ftxui::Box page_new_box_;
-    ftxui::Box page_rename_box_;
-    ftxui::Box page_delete_box_;
-    ftxui::Box item_add_box_;
-    ftxui::Box item_edit_box_;
-    ftxui::Box item_delete_box_;
-    ftxui::Box item_move_up_box_;
-    ftxui::Box item_move_down_box_;
+    std::array<ftxui::Box, 3> action_context_item_boxes_{};
+    ftxui::Box action_context_box_;
     ftxui::Box panel_box_;
     ftxui::Box menu_box_;
     ftxui::Box scrollbar_box_{1, 0, 1, 0};

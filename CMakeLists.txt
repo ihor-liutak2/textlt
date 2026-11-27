@@ -595,6 +595,7 @@ add_executable(textlt_actions_workspace_test
   src/actions/actions_workspace_component.cpp
   src/actions/action_snapshot.cpp
   src/actions/actions_context_menu.cpp
+  src/sidebar_component.cpp
   src/modals/modal_action_editor.cpp
   src/editor/clipboard_input.cpp
   src/modals/modal_window.cpp

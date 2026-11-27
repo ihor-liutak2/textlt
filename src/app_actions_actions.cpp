@@ -6,10 +6,16 @@ void TextltApp::RefreshActionsSidebar() {
     if (!sidebar_panel_ || !actions_workspace_component_) return;
     auto workspace = std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_);
     std::vector<SidebarPanel::ActionGroupEntry> entries;
-    for (const auto& group : workspace->Groups())
-        entries.push_back({group.id, group.name, group.project_id.has_value()});
+    for (const auto& group : workspace->Groups()) {
+        SidebarPanel::ActionGroupEntry entry{
+            group.id, group.name, {}};
+        for (const auto& page : group.pages)
+            entry.pages.emplace_back(page.id, page.name);
+        entries.push_back(std::move(entry));
+    }
     std::static_pointer_cast<SidebarPanel>(sidebar_panel_)->SetActionGroups(
-        std::move(entries), workspace->SelectedGroupId());
+        std::move(entries), workspace->SelectedGroupId(),
+        workspace->SelectedPageId());
 }
 
 void TextltApp::SyncActionsProjectContext() {

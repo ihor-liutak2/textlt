@@ -118,9 +118,13 @@ TextltApp::TextltApp()
           [this](const std::string& command_id) {
               return shortcut_registry_.EffectiveShortcut(ShortcutContext::Menu, command_id);
           },
-          [this](const std::string& id) {
-              if (actions_workspace_component_)
-                  std::static_pointer_cast<actions::ActionsWorkspaceComponent>(actions_workspace_component_)->SelectGroup(id);
+          [this](const std::string& group_id, const std::string& page_id) {
+              if (!actions_workspace_component_) return;
+              auto workspace = std::static_pointer_cast<
+                  actions::ActionsWorkspaceComponent>(actions_workspace_component_);
+              if (page_id.empty()) workspace->SelectGroup(group_id);
+              else workspace->SelectPage(group_id, page_id);
+              RefreshActionsSidebar();
           },
           [this](SidebarPanel::ActionCommand command) {
               switch (command) {
@@ -133,34 +137,16 @@ TextltApp::TextltApp()
                   case SidebarPanel::ActionCommand::DeleteGroup:
                       CommandActionsDeleteGroup();
                       break;
-                  case SidebarPanel::ActionCommand::MergeGroup:
-                      CommandActionsMergeGroup();
-                      break;
-                  case SidebarPanel::ActionCommand::NewPage:
-                      CommandActionsNewPage();
-                      break;
+                   case SidebarPanel::ActionCommand::NewPage:
+                       CommandActionsNewPage();
+                       break;
                   case SidebarPanel::ActionCommand::RenamePage:
                       CommandActionsRenamePage();
                       break;
-                  case SidebarPanel::ActionCommand::DeletePage:
-                      CommandActionsDeletePage();
-                      break;
-                  case SidebarPanel::ActionCommand::AddAction:
-                      CommandActionsAdd();
-                      break;
-                  case SidebarPanel::ActionCommand::EditAction:
-                      CommandActionsEdit();
-                      break;
-                  case SidebarPanel::ActionCommand::DeleteAction:
-                      CommandActionsDelete();
-                      break;
-                  case SidebarPanel::ActionCommand::MoveActionUp:
-                      CommandActionsMove(-1);
-                      break;
-                  case SidebarPanel::ActionCommand::MoveActionDown:
-                      CommandActionsMove(1);
-                      break;
-              }
+                   case SidebarPanel::ActionCommand::DeletePage:
+                       CommandActionsDeletePage();
+                       break;
+               }
           },
           [this] { return SidebarProjects(); },
           [this](const std::string& id) { ActivateProject(id); },
