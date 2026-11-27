@@ -1,7 +1,9 @@
+#include <algorithm>
 #include <cstdlib>
 #include <cstdio>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include "actions/action_serializer.hpp"
 #include "actions/action_snapshot.hpp"
@@ -10,6 +12,7 @@
 #include "ftxui/component/mouse.hpp"
 #include "ftxui/dom/node.hpp"
 #include "ftxui/screen/screen.hpp"
+#include "ftxui/screen/terminal.hpp"
 #include "modals/modal_action_editor.hpp"
 #include "sidebar_component.hpp"
 
@@ -53,6 +56,20 @@ public:
             ftxui::Dimension::Fixed(120), ftxui::Dimension::Fixed(48));
         ftxui::Render(screen, modal.content_->Render());
         return screen.ToString();
+    }
+    static std::string RenderModalText(ActionEditorModal& modal,
+        int modal_height = 37) {
+        modal.modal_->SetModalSize(102, modal_height);
+        auto screen = ftxui::Screen::Create(
+            ftxui::Dimension::Fixed(120), ftxui::Dimension::Fixed(48));
+        ftxui::Render(screen, modal.View()->Render());
+        return screen.ToString();
+    }
+    static int ExpectedPreferenceHeight(int desired_height) {
+        const int terminal_height = ftxui::Terminal::Size().dimy;
+        return terminal_height > 0
+            ? std::min(desired_height, std::max(1, terminal_height - 2))
+            : desired_height;
     }
     static bool ClickClear(ActionEditorModal& modal, const ftxui::Box& box) {
         ftxui::Mouse mouse;
@@ -820,7 +837,8 @@ int main() {
     Check(eight_tab_modal.find("Tabs 2–8 are optional") != std::string::npos);
     const auto modal_size =
         textlt::ActionEditorModalTestAccess::SizePreference(editor);
-    Check(modal_size.width >= 100 && modal_size.height >= 42);
+    Check(modal_size.width >= 100 && modal_size.height ==
+        textlt::ActionEditorModalTestAccess::ExpectedPreferenceHeight(37));
     const auto tab_eight_box = textlt::ActionEditorModalTestAccess::TabBox(editor, 7);
     ftxui::Mouse tab_eight_click;
     tab_eight_click.button = ftxui::Mouse::Left;
@@ -850,12 +868,42 @@ int main() {
     Check(textlt::ActionEditorModalTestAccess::Submit(editor));
     Check(submitted.tabs.size() == 1);
     editor.Close();
+    ActionEditorModal spacing_editor(nullptr,
+        [](const ActionItem&, std::string&) { return true; });
+    spacing_editor.Open();
+    const std::string spacing_modal =
+        ActionEditorModalTestAccess::RenderModalText(spacing_editor);
+    std::vector<std::string> modal_rows;
+    size_t row_start = 0;
+    while (row_start < spacing_modal.size()) {
+        const size_t row_end = spacing_modal.find('\n', row_start);
+        modal_rows.push_back(spacing_modal.substr(row_start,
+            row_end == std::string::npos ? std::string::npos : row_end - row_start));
+        if (row_end == std::string::npos) break;
+        row_start = row_end + 1;
+    }
+    size_t checkbox_row = modal_rows.size();
+    size_t footer_row = modal_rows.size();
+    for (size_t row = 0; row < modal_rows.size(); ++row) {
+        if (modal_rows[row].find("Hide text") != std::string::npos) checkbox_row = row;
+        if (modal_rows[row].find("Cancel") != std::string::npos) footer_row = row;
+    }
+    Check(checkbox_row < modal_rows.size() && footer_row == checkbox_row + 3);
+    const std::string compact_modal =
+        ActionEditorModalTestAccess::RenderModalText(spacing_editor, 22);
+    Check(compact_modal.find("Cancel") != std::string::npos &&
+        compact_modal.find("Add") != std::string::npos);
+    spacing_editor.Close();
+
     ActionEditorModal scrollbar_editor(nullptr,
         [](const ActionItem&, std::string&) { return true; });
     scrollbar_editor.Open();
     ActionEditorModalTestAccess::SetTab(scrollbar_editor, 0, "Long",
         std::string(180, 'x'), false);
     ActionEditorModalTestAccess::Render(scrollbar_editor);
+    Check(ActionEditorModalTestAccess::SizePreference(
+        scrollbar_editor).height ==
+        ActionEditorModalTestAccess::ExpectedPreferenceHeight(38));
     const ftxui::Box content_scrollbar =
         ActionEditorModalTestAccess::ContentScrollbarBox(scrollbar_editor, 0);
     Check(!content_scrollbar.IsEmpty());

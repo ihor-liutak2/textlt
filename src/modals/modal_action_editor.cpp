@@ -9,6 +9,7 @@
 #include "ftxui/component/component_options.hpp"
 #include "ftxui/component/mouse.hpp"
 #include "ftxui/screen/string.hpp"
+#include "ftxui/screen/terminal.hpp"
 #include "ui_button.hpp"
 #include "ui_scrollbar.hpp"
 
@@ -17,6 +18,13 @@ namespace {
 
 constexpr int kActionContentInputHeight = 16;
 constexpr int kActionContentViewportColumns = 96;
+constexpr int kActionEditorContentRowsWithoutScrollbar =
+    1 + 1 + // Heading and divider.
+    4 + 1 + // Title input and spacer.
+    1 +     // Tab buttons.
+    4 + 1 + // Caption input and spacer.
+    17 +    // Content label and input.
+    1 + 1;  // Spacer and checkbox.
 
 int WidestLineWidth(const std::string& content) {
     int widest = 0;
@@ -205,6 +213,23 @@ ftxui::Element ActionEditorModalContent::RenderTitle() {
     const Theme& theme = theme_ ? *theme_ : FallbackTheme();
     return ftxui::text(" " + GetTitle() + " ") |
         ftxui::bold | ftxui::color(theme.modal_accent);
+}
+
+ModalSizePreference ActionEditorModalContent::GetModalSizePreference() const {
+    const bool has_scrollbar = WidestLineWidth(
+        contents_[static_cast<size_t>(active_tab_)]) >
+        kActionContentViewportColumns;
+    const int footer_rows = status_.empty() ? 4 : 5;
+    const int content_height =
+        kActionEditorContentRowsWithoutScrollbar +
+        static_cast<int>(has_scrollbar) + 1 + footer_rows;
+    const int terminal_height = ftxui::Terminal::Size().dimy;
+    const int available_height = terminal_height > 0
+        ? std::max(1, terminal_height - 2) : content_height;
+    return {
+        102,
+        std::min(content_height, available_height),
+    };
 }
 
 ftxui::Element ActionEditorModalContent::Render() {
@@ -443,7 +468,7 @@ ActionEditorModal::ActionEditorModal(
         theme, std::move(on_submit));
     modal_ = std::make_shared<ModalWindow>(content_, theme, [this] { Close(); });
     modal_->SetHeaderCloseVisible(true);
-    modal_->SetBodyFrameScrolling(false);
+    modal_->SetBodyFrameScrolling(true);
     ConfigureFooter();
 }
 
